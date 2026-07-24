@@ -89,6 +89,7 @@ const NIGHT_START_HOUR := 19.0
 const DEEP_NIGHT_HOUR := 22.0
 const BASE_ENEMY_COUNT := 17
 const MAX_NIGHT_ENEMY_COUNT := 34
+const ENEMY_PAIR_SQUAD_CHANCE := 0.78
 const BASE_FIELD_LOOT_COUNT := 16
 const RAID_ENTRY_ENEMY_SAFE_RADIUS := 30.0
 const MELEE_ATTACK_COOLDOWN := 0.72
@@ -4081,7 +4082,7 @@ func _build_enemy_squad_sizes(total_count: int) -> Array[int]:
 		elif remaining == 3:
 			squad_size = 3
 		elif remaining > 4:
-			squad_size = 3 if spawn_random.randf() < 0.62 else 2
+			squad_size = 2 if spawn_random.randf() < ENEMY_PAIR_SQUAD_CHANCE else 3
 		sizes.append(squad_size)
 		remaining -= squad_size
 	return sizes
@@ -4173,6 +4174,7 @@ func _spawn_enemy(
 	enemy.set_script(ENEMY_SCRIPT)
 	enemy.position = spawn_position
 	enemy.call("configure", kind, player, {}, threat, enemy_weapon_id)
+	enemy.call("set_environment_visibility", night_intensity)
 	add_child(enemy)
 	enemy.died.connect(_on_enemy_died)
 	if enemy.has_signal("damaged"):
@@ -4412,6 +4414,7 @@ func _update_enemy_pressure(delta: float) -> void:
 			enemies.remove_at(index)
 			continue
 		enemy.call("set_threat_level", effective_threat)
+		enemy.call("set_environment_visibility", night_intensity)
 	_update_reinforcement_call(delta, effective_threat)
 	var target_count := (
 		BASE_ENEMY_COUNT
@@ -4427,7 +4430,11 @@ func _update_enemy_pressure(delta: float) -> void:
 	var squad_anchor := _find_reinforcement_position()
 	if squad_anchor != Vector3.INF:
 		var missing_count := target_count - enemies.size()
-		var squad_size := 2 if missing_count <= 2 else spawn_random.randi_range(2, 3)
+		var squad_size := (
+			2
+			if missing_count <= 2 or spawn_random.randf() < ENEMY_PAIR_SQUAD_CHANCE
+			else 3
+		)
 		var kinds: Array[String] = []
 		for member_index in squad_size:
 			var roll := spawn_random.randf()

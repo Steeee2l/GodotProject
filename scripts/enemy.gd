@@ -16,6 +16,12 @@ const PISTOL_SPEED := 2.5
 const PATROL_SPEED := 1.35
 const PATROL_RADIUS := 6.5
 const SQUAD_PATROL_RADIUS := 4.2
+const ENEMY_MAGAZINE_CAPACITY := {
+	"m1911": 6,
+	"mp5": 14,
+	"ak47": 12,
+	"double_barrel": 2,
+}
 const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const ENEMY_ANIMATION_ROOT := "res://assets/enemies/character_5"
 const ENEMY_DIRECTION_STATES := {
@@ -38,11 +44,12 @@ const MELEE_WINDUP_TIME := 0.46
 const MELEE_STRIKE_TIME := 0.16
 const MELEE_RECOVERY_TIME := 0.34
 const HIT_STAGGER_TIME := 0.13
-const MELEE_VISION_RANGE := 30.0
-const RANGED_VISION_RANGE := 38.0
-const GRENADIER_VISION_RANGE := 40.0
-const VISION_RANGE_THREAT_BONUS := 12.0
-const VISION_HALF_ANGLE_DEGREES := 60.0
+const MELEE_VISION_RANGE := 12.5
+const RANGED_VISION_RANGE := 15.0
+const GRENADIER_VISION_RANGE := 15.5
+const VISION_RANGE_THREAT_BONUS := 3.0
+const VISION_HALF_ANGLE_DEGREES := 58.0
+const NIGHT_VISION_RANGE_MULTIPLIER := 0.62
 const COMBAT_MEMORY_BASE := 20.0
 const COMBAT_MEMORY_THREAT_BONUS := 16.0
 const MELEE_DISENGAGE_DISTANCE := 52.0
@@ -111,6 +118,7 @@ var tactical_repath_timer := 0.0
 var hold_position_timer := 0.0
 var has_current_line_of_sight := false
 var lost_sight_time := 0.0
+var ambient_visibility_factor := 1.0
 var target_stationary_time := 0.0
 var health_ratio := 1.0
 var damage_trail_ratio := 1.0
@@ -139,7 +147,13 @@ func configure(
 		var no_mods: Array[String] = []
 		weapon_stats = WEAPON_SYSTEM.build_stats(weapon_id, no_mods)
 		current_weapon_spread = float(weapon_stats.get("base_spread_deg", 2.0))
-		magazine_size = maxi(1, int(weapon_stats.get("magazine_size", 7)))
+		magazine_size = maxi(
+			1,
+			int(ENEMY_MAGAZINE_CAPACITY.get(
+				weapon_id,
+				weapon_stats.get("magazine_size", 7)
+			))
+		)
 		magazine_ammo = magazine_size
 		reload_duration = maxf(0.6, float(weapon_stats.get("reload_time", 1.8)))
 	var base_health := 150 if enemy_kind == "melee" else (122 if enemy_kind == "grenadier" else 105)
@@ -152,6 +166,14 @@ func configure(
 
 func set_threat_level(value: float) -> void:
 	threat_level = clampf(value, 0.0, 1.0)
+
+
+func set_environment_visibility(night_factor: float) -> void:
+	ambient_visibility_factor = lerpf(
+		1.0,
+		NIGHT_VISION_RANGE_MULTIPLIER,
+		clampf(night_factor, 0.0, 1.0)
+	)
 
 
 func assign_squad(assigned_squad_id: int, assigned_anchor: Vector3, formation_offset: Vector3) -> void:
@@ -350,7 +372,7 @@ func _physics_process(delta: float) -> void:
 
 func _get_vision_range() -> float:
 	var base_range := MELEE_VISION_RANGE if enemy_kind == "melee" else (GRENADIER_VISION_RANGE if enemy_kind == "grenadier" else RANGED_VISION_RANGE)
-	return base_range + VISION_RANGE_THREAT_BONUS * threat_level
+	return (base_range + VISION_RANGE_THREAT_BONUS * threat_level) * ambient_visibility_factor
 
 
 func _get_disengage_distance() -> float:

@@ -21,8 +21,15 @@ func _run() -> void:
 	for initial_enemy in enemies:
 		var squad_id := int(initial_enemy.get("squad_id"))
 		initial_squad_counts[squad_id] = int(initial_squad_counts.get(squad_id, 0)) + 1
+	var pair_squads := 0
+	var triple_squads := 0
 	for squad_count in initial_squad_counts.values():
 		assert(int(squad_count) in [2, 3])
+		if int(squad_count) == 2:
+			pair_squads += 1
+		else:
+			triple_squads += 1
+	assert(pair_squads > triple_squads)
 	var initial_spawn_distances: Array[float] = []
 	for initial_enemy in enemies:
 		initial_spawn_distances.append(
@@ -44,7 +51,13 @@ func _run() -> void:
 	assert(enemies.size() == 19)
 	var enemy: Node = enemies[0]
 	assert(enemy.get_node_or_null("VisionFan") == null)
-	assert(float(enemy.call("_get_vision_range")) >= 30.0)
+	enemy.call("set_environment_visibility", 0.0)
+	var daylight_enemy_vision := float(enemy.call("_get_vision_range"))
+	enemy.call("set_environment_visibility", 1.0)
+	var night_enemy_vision := float(enemy.call("_get_vision_range"))
+	assert(daylight_enemy_vision >= 12.5 and daylight_enemy_vision <= 18.5)
+	assert(night_enemy_vision >= 7.5 and night_enemy_vision <= 11.5)
+	assert(night_enemy_vision < daylight_enemy_vision)
 	enemy.set("facing_world_direction", Vector3.FORWARD)
 	assert(enemy.call(
 		"_is_position_inside_vision_fan",
@@ -136,6 +149,19 @@ func _run() -> void:
 	assert(ranged_weapon_ids.has("mp5"))
 	assert(ranged_weapon_ids.has("ak47"))
 	assert(ranged_weapon_ids.size() >= 8)
+	var expected_enemy_magazines := {
+		"m1911": 6,
+		"mp5": 14,
+		"ak47": 12,
+		"double_barrel": 2,
+	}
+	for candidate in enemies:
+		var candidate_weapon_id := str(candidate.get("weapon_id"))
+		if expected_enemy_magazines.has(candidate_weapon_id):
+			assert(
+				int(candidate.get("magazine_size"))
+				== int(expected_enemy_magazines[candidate_weapon_id])
+			)
 	assert(pistol_enemy.get_node_or_null("EquippedWeapon_mp5") is Sprite3D)
 	pistol_enemy.call("set_threat_level", 1.0)
 	pistol_enemy.set("attack_cooldown", 0.0)
