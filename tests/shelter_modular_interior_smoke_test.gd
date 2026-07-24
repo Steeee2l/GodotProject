@@ -5,10 +5,11 @@ const FLOOR_TEXTURE_PATH := "res://assets/interiors/shelter_floor_topdown_v3.png
 const WALL_TEXTURE_PATH := "res://assets/interiors/shelter_wall_panel_v3.png"
 const BED_TEXTURE_PATH := "res://assets/interiors/shelter_bed_module_v2.png"
 const PIPE_TEXTURE_PATH := "res://assets/interiors/shelter_escape_pipe_v1.png"
-const WORKBENCH_TEXTURE_PATH := "res://assets/interiors/modules/shelter_workbench_isometric_v5.png"
-const SCRATCHER_BANK_TEXTURE_PATH := "res://assets/interiors/modules/scratcher_bank_isometric_v5.png"
+const WORKBENCH_TEXTURE_PATH := "res://assets/interiors/modules/shelter_workbench_isometric_v6.png"
+const SCRATCHER_BANK_TEXTURE_PATH := "res://assets/interiors/modules/scratcher_bank_isometric_v6.png"
 const CATNIP_SCRAPER_TEXTURE_PATH := "res://assets/interiors/modules/catnip_scraper_isometric_v5.png"
-const TRAINING_TEXTURE_PATH := "res://assets/interiors/modules/shelter_training_isometric_v5.png"
+const TRAINING_TEXTURE_PATH := "res://assets/interiors/modules/shelter_training_isometric_v6.png"
+const STORAGE_TEXTURE_PATH := "res://assets/interiors/modules/shelter_storage_wall_v1.png"
 
 
 func _initialize() -> void:
@@ -24,6 +25,7 @@ func _run() -> void:
 	assert(ResourceLoader.exists(SCRATCHER_BANK_TEXTURE_PATH))
 	assert(ResourceLoader.exists(CATNIP_SCRAPER_TEXTURE_PATH))
 	assert(ResourceLoader.exists(TRAINING_TEXTURE_PATH))
+	assert(ResourceLoader.exists(STORAGE_TEXTURE_PATH))
 	var shelter := load(SHELTER_SCENE_PATH).instantiate() as Node3D
 	root.add_child(shelter)
 	await process_frame
@@ -61,6 +63,7 @@ func _run() -> void:
 	assert(get_nodes_in_group("scratcher_bank").size() == 1)
 	assert(get_nodes_in_group("catnip_scraper").size() == 1)
 	assert(get_nodes_in_group("training_facility").size() == 1)
+	assert(get_nodes_in_group("shelter_storage").size() == 1)
 	for slot in get_nodes_in_group("shelter_module_slot"):
 		assert(bool(slot.get_meta("replaceable")))
 		assert(str(slot.get_meta("module_kind")) == "bed")
@@ -103,6 +106,17 @@ func _run() -> void:
 	assert(is_equal_approx(training_sprite.position.z, 0.02))
 	assert(training.get_node("GroundShadow") is MeshInstance3D)
 	assert(training.has_method("interact"))
+	var storage := get_nodes_in_group("shelter_storage")[0] as Node
+	var storage_sprite := storage.get_node("StorageSprite") as Sprite3D
+	assert(storage_sprite.texture.resource_path == STORAGE_TEXTURE_PATH)
+	assert(storage_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
+	assert(storage_sprite.no_depth_test)
+	assert(storage.get_node("GroundShadow") is MeshInstance3D)
+	assert(storage.has_method("interact"))
+	assert(storage.position.z == catnip_scraper.position.z)
+	assert(workbench.position.z == catnip_scraper.position.z)
+	assert(bank.position.z == catnip_scraper.position.z)
+	assert(training.position.z == catnip_scraper.position.z)
 
 	assert(shelter.get_node("ShelterPlayer") is CharacterBody3D)
 	assert(shelter.get("dash_button") is Button)

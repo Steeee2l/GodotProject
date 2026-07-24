@@ -8,6 +8,7 @@ const BED_MODULE_SCENE := preload("res://scenes/modules/shelter_bed_module.tscn"
 const WORKBENCH_MODULE_SCENE := preload("res://scenes/modules/shelter_workbench_module.tscn")
 const SCRATCHER_BANK_MODULE_SCENE := preload("res://scenes/modules/scratcher_bank_module.tscn")
 const CATNIP_SCRAPER_MODULE_SCENE := preload("res://scenes/modules/catnip_scraper_module.tscn")
+const STORAGE_MODULE_SCENE := preload("res://scenes/modules/shelter_storage_module.tscn")
 const TRAINING_MODULE_SCENE := preload("res://scenes/modules/shelter_training_module.tscn")
 const SHELTER_RESIDENT_SCRIPT := preload("res://scripts/shelter_resident_cat.gd")
 const SHELTER_MERCHANT_SCRIPT := preload("res://scripts/shelter_merchant.gd")
@@ -160,6 +161,10 @@ func _scratcher_bank_position() -> Vector3:
 
 func _catnip_scraper_position() -> Vector3:
 	return Vector3(-_room_half_extents().x + 8.0, 0.0, _north_module_z())
+
+
+func _storage_position() -> Vector3:
+	return Vector3(-9.4, 0.0, _north_module_z())
 
 
 func _training_position() -> Vector3:
@@ -377,6 +382,10 @@ func _build_stage_one_modules() -> void:
 	catnip_scraper.name = "CatnipScraper"
 	catnip_scraper.position = _catnip_scraper_position()
 	module_root.add_child(catnip_scraper)
+	var storage := STORAGE_MODULE_SCENE.instantiate() as Node3D
+	storage.name = "ShelterStorage"
+	storage.position = _storage_position()
+	module_root.add_child(storage)
 	var training := TRAINING_MODULE_SCENE.instantiate() as Node3D
 	training.name = "SurvivalTrainingFacility"
 	training.position = _training_position()
@@ -1559,6 +1568,8 @@ func _update_nearby_station() -> void:
 			interaction_icon = "scrap"
 		elif module_kind == "training":
 			interaction_icon = "fitness"
+		elif module_kind == "storage":
+			interaction_icon = "secure"
 		interact_button.icon = UI_ICONS.get_icon(interaction_icon, 32, Color("#dce8e1"))
 	elif current_station == "merchant_waiting":
 		prompt_label.text = "[E]  누군가와 대화"

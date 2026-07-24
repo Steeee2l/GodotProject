@@ -87,6 +87,8 @@ var scratcher_bank_level: int = 1
 var scratcher_multiplier: float = 1.0
 var catnip_scraper_level: int = 1
 var catnip_scraper_multiplier: float = 1.0
+var storage_level: int = 1
+var storage_inventory: Array[Dictionary] = []
 var catnip_boost_end_time: int = 0
 var shelter_last_progress_time: int = 0
 var workbench_repair_active: bool = false
@@ -233,6 +235,19 @@ const RAID_ZONES := {
 const WORKBENCH_UPGRADE_COSTS := {2: 180, 3: 420, 4: 900, 5: 1800}
 const SCRATCHER_UPGRADE_COSTS := {2: 120, 3: 320, 4: 850, 5: 1600}
 const CATNIP_SCRAPER_UPGRADE_COSTS := {2: 160, 3: 420, 4: 1050, 5: 2200}
+const STORAGE_GRID_BY_LEVEL := {
+	1: Vector2i(6, 5),
+	2: Vector2i(7, 6),
+	3: Vector2i(8, 7),
+	4: Vector2i(9, 8),
+	5: Vector2i(10, 9),
+}
+const STORAGE_UPGRADE_COSTS := {
+	2: {"scrap": 180, "churu": 0},
+	3: {"scrap": 480, "churu": 1},
+	4: {"scrap": 1200, "churu": 2},
+	5: {"scrap": 2800, "churu": 4},
+}
 const SHELTER_CAPACITY_BY_TIER := {1: 5, 2: 10, 3: 20, 4: 35, 5: 50}
 const KNEADING_SLOTS_BY_TIER := {1: 3, 2: 6, 3: 10, 4: 15, 5: 20}
 const CATNIP_SLOTS_BY_TIER := {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
@@ -388,6 +403,185 @@ func upgrade_secure_dog() -> bool:
 		return false
 	secure_dog_slots += 1
 	return true
+
+
+func get_storage_grid_size() -> Vector2i:
+	return STORAGE_GRID_BY_LEVEL.get(storage_level, STORAGE_GRID_BY_LEVEL[1])
+
+
+func get_storage_capacity() -> int:
+	var grid_size := get_storage_grid_size()
+	return grid_size.x * grid_size.y
+
+
+func get_storage_used_slots() -> int:
+	_normalize_storage_inventory()
+	return storage_inventory.size()
+
+
+func get_storage_upgrade_cost() -> Dictionary:
+	return (STORAGE_UPGRADE_COSTS.get(storage_level + 1, {}) as Dictionary).duplicate(true)
+
+
+func try_upgrade_storage() -> bool:
+	var next_level := storage_level + 1
+	var cost := STORAGE_UPGRADE_COSTS.get(next_level, {}) as Dictionary
+	if cost.is_empty():
+		return false
+	var scrap_cost := int(cost.get("scrap", 0))
+	var churu_cost := int(cost.get("churu", 0))
+	if scrap < scrap_cost or churu < churu_cost:
+		return false
+	scrap -= scrap_cost
+	churu -= churu_cost
+	storage_level = next_level
+	save_persistent_state()
+	return true
+
+
+func get_backpack_storage_count(item_type: String, item_id: String) -> int:
+	match item_type:
+		"weapon":
+			var count := int(weapon_inventory.get(item_id, 0))
+			if has_ak and equipped_weapon_id == item_id:
+				count -= 1
+			return maxi(0, count)
+		"equipment":
+			return get_equipment_count(item_id)
+		"ammo":
+			return get_ammo_count(item_id)
+		"component":
+			return get_mod_component_count(item_id)
+		"mod":
+			return get_weapon_mod_count(item_id)
+		"medkit":
+			return medkits
+		"food":
+			return canned_food
+	return 0
+
+
+func deposit_storage_item(item_type: String, item_id: String, amount: int = 1) -> Dictionary:
+	_normalize_storage_inventory()
+	var available := get_backpack_storage_count(item_type, item_id)
+	var moved := mini(maxi(amount, 0), available)
+	if moved <= 0:
+		return {"ok": false, "reason": "보관할 수 있는 소지품이 없습니다."}
+	var stack_limit := _get_storage_stack_limit(item_type)
+	var free_units := 0
+	for entry in storage_inventory:
+		if str(entry.get("type", "")) == item_type and str(entry.get("id", "")) == item_id:
+			free_units += maxi(0, stack_limit - int(entry.get("count", 0)))
+	free_units += maxi(0, get_storage_capacity() - storage_inventory.size()) * stack_limit
+	if free_units < moved:
+		return {"ok": false, "reason": "창고에 빈 슬롯이 부족합니다."}
+	if not _remove_backpack_storage_item(item_type, item_id, moved):
+		return {"ok": false, "reason": "소지품을 창고로 옮기지 못했습니다."}
+	var remaining := moved
+	for entry in storage_inventory:
+		if str(entry.get("type", "")) != item_type or str(entry.get("id", "")) != item_id:
+			continue
+		var room := maxi(0, stack_limit - int(entry.get("count", 0)))
+		var added := mini(room, remaining)
+		entry["count"] = int(entry.get("count", 0)) + added
+		remaining -= added
+		if remaining <= 0:
+			break
+	while remaining > 0:
+		var added := mini(stack_limit, remaining)
+		storage_inventory.append({"type": item_type, "id": item_id, "count": added})
+		remaining -= added
+	save_persistent_state()
+	return {"ok": true, "moved": moved}
+
+
+func withdraw_storage_item(slot_index: int, amount: int = 1) -> Dictionary:
+	_normalize_storage_inventory()
+	if slot_index < 0 or slot_index >= storage_inventory.size():
+		return {"ok": false, "reason": "선택한 창고 슬롯이 비어 있습니다."}
+	var entry := storage_inventory[slot_index]
+	var item_type := str(entry.get("type", ""))
+	var item_id := str(entry.get("id", ""))
+	var moved := mini(maxi(amount, 1), int(entry.get("count", 0)))
+	if moved <= 0:
+		return {"ok": false, "reason": "선택한 창고 슬롯이 비어 있습니다."}
+	_add_backpack_storage_item(item_type, item_id, moved)
+	entry["count"] = int(entry.get("count", 0)) - moved
+	if int(entry.get("count", 0)) <= 0:
+		storage_inventory.remove_at(slot_index)
+	save_persistent_state()
+	return {"ok": true, "moved": moved, "type": item_type, "id": item_id}
+
+
+func _get_storage_stack_limit(item_type: String) -> int:
+	match item_type:
+		"ammo":
+			return 120
+		"component":
+			return 10
+		"mod":
+			return 5
+		"medkit":
+			return 5
+		"food":
+			return 20
+	return 1
+
+
+func _remove_backpack_storage_item(item_type: String, item_id: String, amount: int) -> bool:
+	if get_backpack_storage_count(item_type, item_id) < amount:
+		return false
+	match item_type:
+		"weapon":
+			weapon_inventory[item_id] = maxi(0, int(weapon_inventory.get(item_id, 0)) - amount)
+		"equipment":
+			equipment_inventory[item_id] = maxi(0, get_equipment_count(item_id) - amount)
+		"ammo":
+			set_ammo_count(item_id, get_ammo_count(item_id) - amount)
+		"component":
+			mod_component_inventory[item_id] = maxi(0, get_mod_component_count(item_id) - amount)
+		"mod":
+			weapon_mod_inventory[item_id] = maxi(0, get_weapon_mod_count(item_id) - amount)
+		"medkit":
+			medkits = maxi(0, medkits - amount)
+		"food":
+			canned_food = maxi(0, canned_food - amount)
+		_:
+			return false
+	return true
+
+
+func _add_backpack_storage_item(item_type: String, item_id: String, amount: int) -> void:
+	match item_type:
+		"weapon":
+			add_weapon(item_id, amount)
+		"equipment":
+			add_equipment(item_id, amount)
+		"ammo":
+			set_ammo_count(item_id, get_ammo_count(item_id) + amount)
+		"component":
+			add_mod_component(item_id, amount)
+		"mod":
+			add_weapon_mod(item_id, amount)
+		"medkit":
+			medkits += amount
+		"food":
+			canned_food += amount
+
+
+func _normalize_storage_inventory() -> void:
+	var normalized: Array[Dictionary] = []
+	for value in storage_inventory:
+		if not (value is Dictionary):
+			continue
+		var entry := (value as Dictionary).duplicate(true)
+		var item_type := str(entry.get("type", ""))
+		var item_id := str(entry.get("id", ""))
+		var count := maxi(0, int(entry.get("count", 0)))
+		if item_type.is_empty() or item_id.is_empty() or count <= 0:
+			continue
+		normalized.append({"type": item_type, "id": item_id, "count": count})
+	storage_inventory = normalized
 
 
 func get_ammo_count(ammo_id: String) -> int:
@@ -1234,7 +1428,7 @@ func save_persistent_state() -> bool:
 		return false
 	save_equipped_weapon_loadout()
 	var data := {
-		"version": 3,
+		"version": 4,
 		"map_seed": map_seed,
 		"raid_serial": raid_serial,
 		"player_health": player_health,
@@ -1279,6 +1473,8 @@ func save_persistent_state() -> bool:
 		"scratcher_multiplier": scratcher_multiplier,
 		"catnip_scraper_level": catnip_scraper_level,
 		"catnip_scraper_multiplier": catnip_scraper_multiplier,
+		"storage_level": storage_level,
+		"storage_inventory": storage_inventory,
 		"catnip_boost_end_time": catnip_boost_end_time,
 		"shelter_last_progress_time": shelter_last_progress_time,
 		"workbench_repair_active": workbench_repair_active,
@@ -1375,6 +1571,9 @@ func load_persistent_state() -> bool:
 	scratcher_multiplier = float(data.get("scratcher_multiplier", scratcher_multiplier))
 	catnip_scraper_level = clampi(int(data.get("catnip_scraper_level", catnip_scraper_level)), 1, 5)
 	catnip_scraper_multiplier = float(data.get("catnip_scraper_multiplier", pow(1.8, float(catnip_scraper_level - 1))))
+	storage_level = clampi(int(data.get("storage_level", storage_level)), 1, 5)
+	storage_inventory = _to_dictionary_array(data.get("storage_inventory", []))
+	_normalize_storage_inventory()
 	catnip_boost_end_time = int(data.get("catnip_boost_end_time", catnip_boost_end_time))
 	shelter_last_progress_time = int(data.get("shelter_last_progress_time", shelter_last_progress_time))
 	workbench_repair_active = bool(data.get("workbench_repair_active", workbench_repair_active))
@@ -1402,6 +1601,15 @@ func _to_string_array(value: Variant) -> Array[String]:
 	if value is Array:
 		for item in value:
 			result.append(str(item))
+	return result
+
+
+func _to_dictionary_array(value: Variant) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	if value is Array:
+		for item in value:
+			if item is Dictionary:
+				result.append((item as Dictionary).duplicate(true))
 	return result
 
 
@@ -1495,6 +1703,8 @@ func reset_run() -> void:
 	scratcher_multiplier = 1.0
 	catnip_scraper_level = 1
 	catnip_scraper_multiplier = 1.0
+	storage_level = 1
+	storage_inventory.clear()
 	catnip_boost_end_time = 0
 	shelter_last_progress_time = 0
 	workbench_repair_active = false
