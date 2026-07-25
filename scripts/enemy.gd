@@ -50,8 +50,16 @@ const GRENADIER_VISION_RANGE := 15.5
 const VISION_RANGE_THREAT_BONUS := 3.0
 const VISION_HALF_ANGLE_DEGREES := 58.0
 const NIGHT_VISION_RANGE_MULTIPLIER := 0.62
-const COMBAT_MEMORY_BASE := 20.0
-const COMBAT_MEMORY_THREAT_BONUS := 16.0
+const DETECTION_CLOSE_RADIUS := 1.25
+const DETECTION_DECAY_PER_SECOND := 1.45
+const SUSPICION_THRESHOLD := 0.26
+const SUSPICION_HOLD_SECONDS := 2.8
+const ACTIVE_PURSUIT_BASE := 4.5
+const ACTIVE_PURSUIT_THREAT_BONUS := 2.5
+const SEARCH_DURATION_BASE := 7.0
+const SEARCH_DURATION_THREAT_BONUS := 4.0
+const COMBAT_MEMORY_BASE := 14.0
+const COMBAT_MEMORY_THREAT_BONUS := 8.0
 const MELEE_DISENGAGE_DISTANCE := 52.0
 const RANGED_DISENGAGE_DISTANCE := 76.0
 const GRENADE_WINDUP_TIME := 0.72
@@ -120,6 +128,15 @@ var has_current_line_of_sight := false
 var lost_sight_time := 0.0
 var ambient_visibility_factor := 1.0
 var target_stationary_time := 0.0
+var detection_awareness := 0.0
+var detection_range_multiplier := 1.0
+var detection_half_angle_degrees := VISION_HALF_ANGLE_DEGREES
+var detection_time_multiplier := 1.0
+var perception_state := "patrol"
+var suspicion_hold_time := 0.0
+var search_time_remaining := 0.0
+var search_look_timer := 0.0
+var search_turn_sign := 1.0
 var health_ratio := 1.0
 var damage_trail_ratio := 1.0
 var damage_trail_delay := 0.0
@@ -174,6 +191,16 @@ func set_environment_visibility(night_factor: float) -> void:
 		NIGHT_VISION_RANGE_MULTIPLIER,
 		clampf(night_factor, 0.0, 1.0)
 	)
+
+
+func set_detection_profile(
+	range_multiplier: float,
+	half_angle_degrees: float,
+	time_multiplier: float = 1.0
+) -> void:
+	detection_range_multiplier = clampf(range_multiplier, 0.55, 1.25)
+	detection_half_angle_degrees = clampf(half_angle_degrees, 32.0, 72.0)
+	detection_time_multiplier = clampf(time_multiplier, 0.55, 1.8)
 
 
 func assign_squad(assigned_squad_id: int, assigned_anchor: Vector3, formation_offset: Vector3) -> void:
@@ -323,23 +350,44 @@ func _physics_process(delta: float) -> void:
 	var distance := offset.length()
 	var vision_range := _get_vision_range()
 	var has_line_of_sight := _has_line_of_sight()
-	has_current_line_of_sight = alerted and has_line_of_sight
+	var target_inside_detection_fan := _is_position_inside_vision_fan(
+		target.global_position,
+		vision_range
+	)
+	var target_inside_combat_view := (
+		distance <= DETECTION_CLOSE_RADIUS
+		or _is_position_inside_vision_fan(target.global_position, vision_range * 1.15)
+	)
+	var has_visual_contact := has_line_of_sight and target_inside_combat_view
+	has_current_line_of_sight = alerted and has_visual_contact
 	if alerted and distance > _get_disengage_distance():
 		_clear_alert()
 		_update_patrol(delta)
 		move_and_slide()
 		return
-	var detected_in_fan := (
-		not alerted
-		and _is_position_inside_vision_fan(target.global_position, vision_range)
-		and has_line_of_sight
-	)
+	var detected_in_fan := false
+	if not alerted:
+		detected_in_fan = _update_detection_awareness(
+			delta,
+			distance,
+			has_line_of_sight,
+			vision_range
+		)
 	if detected_in_fan:
 		_become_alerted()
-	if alerted and has_line_of_sight:
+	elif not alerted and perception_state == "suspicious":
+		_update_suspicious_behavior(
+			delta,
+			has_line_of_sight and target_inside_detection_fan
+		)
+		move_and_slide()
+		return
+	if alerted and has_visual_contact:
 		last_known_position = target.global_position
 		pursuit_time = COMBAT_MEMORY_BASE + COMBAT_MEMORY_THREAT_BONUS * threat_level
 		lost_sight_time = 0.0
+		search_time_remaining = 0.0
+		perception_state = "combat"
 		if target.velocity.length_squared() <= 0.16:
 			target_stationary_time += delta
 		else:
@@ -348,7 +396,22 @@ func _physics_process(delta: float) -> void:
 		pursuit_time = maxf(0.0, pursuit_time - delta)
 		lost_sight_time += delta
 		target_stationary_time = maxf(0.0, target_stationary_time - delta * 0.35)
-		_pursue_last_known_position()
+		var active_pursuit_duration := (
+			ACTIVE_PURSUIT_BASE
+			+ ACTIVE_PURSUIT_THREAT_BONUS * threat_level
+		)
+		if lost_sight_time <= active_pursuit_duration:
+			perception_state = "combat"
+			_pursue_last_known_position()
+		else:
+			if search_time_remaining <= 0.0:
+				search_time_remaining = (
+					SEARCH_DURATION_BASE
+					+ SEARCH_DURATION_THREAT_BONUS * threat_level
+				)
+				search_look_timer = 0.0
+			perception_state = "search"
+			_update_search_behavior(delta)
 		move_and_slide()
 		return
 	else:
@@ -372,7 +435,11 @@ func _physics_process(delta: float) -> void:
 
 func _get_vision_range() -> float:
 	var base_range := MELEE_VISION_RANGE if enemy_kind == "melee" else (GRENADIER_VISION_RANGE if enemy_kind == "grenadier" else RANGED_VISION_RANGE)
-	return (base_range + VISION_RANGE_THREAT_BONUS * threat_level) * ambient_visibility_factor
+	return (
+		(base_range + VISION_RANGE_THREAT_BONUS * threat_level)
+		* ambient_visibility_factor
+		* detection_range_multiplier
+	)
 
 
 func _get_disengage_distance() -> float:
@@ -392,7 +459,96 @@ func _is_position_inside_vision_fan(world_position: Vector3, vision_range: float
 	forward.y = 0.0
 	if forward.length_squared() <= 0.0001:
 		return false
-	return forward.normalized().dot(offset.normalized()) >= cos(deg_to_rad(VISION_HALF_ANGLE_DEGREES))
+	return (
+		forward.normalized().dot(offset.normalized())
+		>= cos(deg_to_rad(detection_half_angle_degrees))
+	)
+
+
+func _update_detection_awareness(
+	delta: float,
+	distance: float,
+	has_line_of_sight: bool,
+	vision_range: float
+) -> bool:
+	if distance <= DETECTION_CLOSE_RADIUS and has_line_of_sight:
+		detection_awareness = 1.0
+		return true
+	if not has_line_of_sight or not _is_position_inside_vision_fan(target.global_position, vision_range):
+		detection_awareness = maxf(
+			0.0,
+			detection_awareness - DETECTION_DECAY_PER_SECOND * delta
+		)
+		if detection_awareness <= 0.0 and suspicion_hold_time <= 0.0:
+			perception_state = "patrol"
+		return false
+
+	var to_target := target.global_position - global_position
+	to_target.y = 0.0
+	var forward := facing_world_direction
+	forward.y = 0.0
+	var direction_dot := forward.normalized().dot(to_target.normalized())
+	var edge_dot := cos(deg_to_rad(detection_half_angle_degrees))
+	var center_factor := clampf(inverse_lerp(edge_dot, 1.0, direction_dot), 0.0, 1.0)
+	var distance_factor := clampf(1.0 - distance / maxf(vision_range, 0.01), 0.0, 1.0)
+	var detection_seconds := lerpf(
+		1.65,
+		0.38,
+		clampf(center_factor * 0.55 + distance_factor * 0.45, 0.0, 1.0)
+	)
+	detection_seconds *= detection_time_multiplier
+	detection_awareness = minf(1.0, detection_awareness + delta / maxf(0.1, detection_seconds))
+	last_known_position = target.global_position
+	if detection_awareness >= SUSPICION_THRESHOLD:
+		perception_state = "suspicious"
+		suspicion_hold_time = SUSPICION_HOLD_SECONDS
+	return detection_awareness >= 1.0
+
+
+func _update_suspicious_behavior(delta: float, has_line_of_sight: bool) -> void:
+	suspicion_hold_time = maxf(0.0, suspicion_hold_time - delta)
+	var offset := last_known_position - global_position
+	offset.y = 0.0
+	if has_line_of_sight and offset.length_squared() > 0.01:
+		velocity = velocity.move_toward(Vector3.ZERO, 8.0 * delta)
+		_set_facing_from_world_direction(offset.normalized())
+		_set_motion_state("idle")
+	elif offset.length() > 1.35 and suspicion_hold_time > 0.0:
+		var direction := _steer_around_obstacles(offset.normalized())
+		velocity = direction * PATROL_SPEED * 0.72
+		_set_facing_from_world_direction(direction)
+		_set_motion_state("walk")
+	else:
+		velocity = velocity.move_toward(Vector3.ZERO, 8.0 * delta)
+		_set_motion_state("idle")
+	if suspicion_hold_time <= 0.0 and detection_awareness <= SUSPICION_THRESHOLD * 0.45:
+		perception_state = "return"
+		patrol_target = patrol_origin
+		patrol_repath_time = 5.0
+
+
+func _update_search_behavior(delta: float) -> void:
+	search_time_remaining = maxf(0.0, search_time_remaining - delta)
+	search_look_timer = maxf(0.0, search_look_timer - delta)
+	var offset := last_known_position - global_position
+	offset.y = 0.0
+	if offset.length() > 1.2:
+		var direction := _steer_around_obstacles(offset.normalized())
+		velocity = direction * PATROL_SPEED * 1.18
+		_set_facing_from_world_direction(direction)
+		_set_motion_state("walk")
+	else:
+		velocity = velocity.move_toward(Vector3.ZERO, 8.0 * delta)
+		_set_motion_state("idle")
+		if search_look_timer <= 0.0:
+			var turn_angle := deg_to_rad(54.0 * search_turn_sign)
+			var facing_2d := Vector2(facing_world_direction.x, facing_world_direction.z)
+			facing_2d = facing_2d.rotated(turn_angle)
+			_set_facing_from_world_direction(Vector3(facing_2d.x, 0.0, facing_2d.y))
+			search_turn_sign *= -1.0
+			search_look_timer = 0.8
+	if search_time_remaining <= 0.0:
+		_clear_alert()
 
 
 func _setup_vision_fan() -> void:
@@ -698,6 +854,18 @@ func get_projectile_hit_radius() -> float:
 
 
 func _update_patrol(delta: float) -> void:
+	if perception_state == "return":
+		var return_target := squad_anchor + squad_formation_offset if squad_id >= 0 else patrol_origin
+		var return_offset := return_target - global_position
+		return_offset.y = 0.0
+		if return_offset.length() > 1.25:
+			var return_direction := _steer_around_obstacles(return_offset.normalized())
+			velocity = return_direction * PATROL_SPEED
+			_set_facing_from_world_direction(return_direction)
+			_set_motion_state("walk")
+			return
+		perception_state = "patrol"
+		_choose_patrol_target()
 	patrol_pause = maxf(0.0, patrol_pause - delta)
 	patrol_repath_time = maxf(0.0, patrol_repath_time - delta)
 	if patrol_pause > 0.0:
@@ -737,6 +905,10 @@ func _choose_patrol_target() -> void:
 func _become_alerted() -> void:
 	var newly_alerted := not alerted
 	alerted = true
+	detection_awareness = 1.0
+	perception_state = "combat"
+	suspicion_hold_time = 0.0
+	search_time_remaining = 0.0
 	visual_contact_confirmed = true
 	_update_vision_fan_visual()
 	alert_marker_time = 0.0
@@ -759,6 +931,9 @@ func receive_squad_alert(world_position: Vector3) -> void:
 	last_known_position = world_position
 	pursuit_time = COMBAT_MEMORY_BASE + COMBAT_MEMORY_THREAT_BONUS * threat_level
 	alerted = true
+	detection_awareness = 1.0
+	perception_state = "combat"
+	search_time_remaining = 0.0
 	visual_contact_confirmed = true
 	_update_vision_fan_visual()
 
@@ -778,11 +953,18 @@ func _with_player_visibility(color: Color) -> Color:
 
 func _clear_alert() -> void:
 	alerted = false
+	detection_awareness = 0.0
+	perception_state = "return"
+	suspicion_hold_time = 0.0
+	search_time_remaining = 0.0
 	visual_contact_confirmed = false
 	has_current_line_of_sight = false
 	pursuit_time = 0.0
 	lost_sight_time = 0.0
 	target_stationary_time = 0.0
+	tactical_waypoint = Vector3.INF
+	patrol_target = squad_anchor + squad_formation_offset if squad_id >= 0 else patrol_origin
+	patrol_repath_time = 5.0
 	_update_vision_fan_visual()
 	if threat_marker and combat_state not in ["melee_windup", "grenade_windup"]:
 		threat_marker.visible = false

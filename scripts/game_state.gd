@@ -81,6 +81,8 @@ var secure_dog_slots: int = 1
 var secure_dog_items: Array[Dictionary] = []
 var pending_corpse_recovery: Dictionary = {}
 var corpse_recovery_attempt_active: bool = false
+var confirmed_raid_manifest: Dictionary = {}
+var subway_story_stage: int = 0
 var shelter_workbench_level: int = 1
 var shelter_tier: int = 1
 var scratcher_bank_level: int = 1
@@ -305,6 +307,11 @@ func randomize_map() -> void:
 
 func start_new_raid() -> void:
 	process_shelter_progress()
+	if (
+		confirmed_raid_manifest.is_empty()
+		or str(confirmed_raid_manifest.get("zone_id", "")) != selected_raid_zone
+	):
+		confirm_raid_loadout(selected_raid_zone)
 	var corpse_zone := str(pending_corpse_recovery.get("raid_zone", ""))
 	var corpse_seed := int(pending_corpse_recovery.get("map_seed", 0))
 	if not pending_corpse_recovery.is_empty() and corpse_zone == selected_raid_zone and corpse_seed != 0:
@@ -316,6 +323,66 @@ func start_new_raid() -> void:
 		corpse_recovery_attempt_active = false
 	world_time_hours = 9.0
 	fatigue = 0.0
+	save_persistent_state()
+
+
+func build_raid_loadout_manifest(zone_id: String = "") -> Dictionary:
+	var resolved_zone := selected_raid_zone if zone_id.is_empty() else zone_id
+	var weapon_id := equipped_weapon_id if has_ak and not equipped_weapon_id.is_empty() else ""
+	var weapon_count := 0
+	for count in weapon_inventory.values():
+		weapon_count += maxi(0, int(count))
+	var equipment_count := 0
+	for count in equipment_inventory.values():
+		equipment_count += maxi(0, int(count))
+	for equipped_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
+		if not equipped_id.is_empty():
+			equipment_count += 1
+	var ammo_count := 0
+	for count in ammo_inventory.values():
+		ammo_count += maxi(0, int(count))
+	var component_count := 0
+	for count in mod_component_inventory.values():
+		component_count += maxi(0, int(count))
+	var mod_count := 0
+	for count in weapon_mod_inventory.values():
+		mod_count += maxi(0, int(count))
+	return {
+		"zone_id": resolved_zone,
+		"weapon_id": weapon_id,
+		"weapon_count": weapon_count,
+		"magazine_ammo": magazine_ammo if not weapon_id.is_empty() else 0,
+		"ammo_count": ammo_count,
+		"medkits": maxi(0, medkits),
+		"canned_food": maxi(0, canned_food),
+		"component_count": component_count,
+		"mod_count": mod_count,
+		"equipment_count": equipment_count,
+		"body_armor": equipped_body_armor_id,
+		"head_armor": equipped_head_armor_id,
+		"footwear": equipped_footwear_id,
+		"storage_used": get_storage_used_slots(),
+		"storage_capacity": get_storage_capacity(),
+		"corpse_recovery": (
+			not pending_corpse_recovery.is_empty()
+			and str(pending_corpse_recovery.get("raid_zone", "")) == resolved_zone
+		),
+	}
+
+
+func confirm_raid_loadout(zone_id: String = "") -> Dictionary:
+	confirmed_raid_manifest = build_raid_loadout_manifest(zone_id)
+	confirmed_raid_manifest["confirmed_at"] = int(Time.get_unix_time_from_system())
+	save_persistent_state()
+	return confirmed_raid_manifest.duplicate(true)
+
+
+func clear_confirmed_raid_manifest() -> void:
+	confirmed_raid_manifest.clear()
+
+
+func set_subway_story_stage(stage: int) -> void:
+	subway_story_stage = clampi(stage, 0, 3)
 	save_persistent_state()
 
 
@@ -336,6 +403,7 @@ func finish_corpse_recovery_attempt() -> void:
 
 func register_shelter_return() -> void:
 	shelter_return_serial += 1
+	clear_confirmed_raid_manifest()
 	save_persistent_state()
 
 
@@ -1467,6 +1535,8 @@ func save_persistent_state() -> bool:
 		"ammo_inventory": ammo_inventory,
 		"pending_corpse_recovery": pending_corpse_recovery,
 		"corpse_recovery_attempt_active": corpse_recovery_attempt_active,
+		"confirmed_raid_manifest": confirmed_raid_manifest,
+		"subway_story_stage": subway_story_stage,
 		"shelter_workbench_level": shelter_workbench_level,
 		"shelter_tier": shelter_tier,
 		"scratcher_bank_level": scratcher_bank_level,
@@ -1565,6 +1635,8 @@ func load_persistent_state() -> bool:
 	ammo_inventory = (data.get("ammo_inventory", ammo_inventory) as Dictionary).duplicate(true)
 	pending_corpse_recovery = (data.get("pending_corpse_recovery", {}) as Dictionary).duplicate(true)
 	corpse_recovery_attempt_active = bool(data.get("corpse_recovery_attempt_active", false))
+	confirmed_raid_manifest = (data.get("confirmed_raid_manifest", {}) as Dictionary).duplicate(true)
+	subway_story_stage = clampi(int(data.get("subway_story_stage", 0)), 0, 3)
 	shelter_workbench_level = clampi(int(data.get("shelter_workbench_level", shelter_workbench_level)), 1, 5)
 	shelter_tier = clampi(int(data.get("shelter_tier", shelter_tier)), 1, 5)
 	scratcher_bank_level = clampi(int(data.get("scratcher_bank_level", scratcher_bank_level)), 1, 5)
@@ -1697,6 +1769,8 @@ func reset_run() -> void:
 	secure_dog_items.clear()
 	pending_corpse_recovery.clear()
 	corpse_recovery_attempt_active = false
+	confirmed_raid_manifest.clear()
+	subway_story_stage = 0
 	shelter_workbench_level = 1
 	shelter_tier = 1
 	scratcher_bank_level = 1

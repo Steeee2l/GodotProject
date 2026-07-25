@@ -22,14 +22,15 @@ func _run() -> void:
 		var squad_id := int(initial_enemy.get("squad_id"))
 		initial_squad_counts[squad_id] = int(initial_squad_counts.get(squad_id, 0)) + 1
 	var pair_squads := 0
-	var triple_squads := 0
+	var solo_squads := 0
 	for squad_count in initial_squad_counts.values():
-		assert(int(squad_count) in [2, 3])
+		assert(int(squad_count) in [1, 2])
 		if int(squad_count) == 2:
 			pair_squads += 1
 		else:
-			triple_squads += 1
-	assert(pair_squads > triple_squads)
+			solo_squads += 1
+	assert(solo_squads > 0)
+	assert(solo_squads + pair_squads == initial_squad_counts.size())
 	var initial_spawn_distances: Array[float] = []
 	for initial_enemy in enemies:
 		initial_spawn_distances.append(
@@ -55,9 +56,11 @@ func _run() -> void:
 	var daylight_enemy_vision := float(enemy.call("_get_vision_range"))
 	enemy.call("set_environment_visibility", 1.0)
 	var night_enemy_vision := float(enemy.call("_get_vision_range"))
-	assert(daylight_enemy_vision >= 12.5 and daylight_enemy_vision <= 18.5)
-	assert(night_enemy_vision >= 7.5 and night_enemy_vision <= 11.5)
+	assert(daylight_enemy_vision >= 10.5 and daylight_enemy_vision <= 16.5)
+	assert(night_enemy_vision >= 6.5 and night_enemy_vision <= 10.5)
 	assert(night_enemy_vision < daylight_enemy_vision)
+	assert(is_equal_approx(float(enemy.get("detection_range_multiplier")), 0.88))
+	assert(is_equal_approx(float(enemy.get("detection_half_angle_degrees")), 50.0))
 	enemy.set("facing_world_direction", Vector3.FORWARD)
 	assert(enemy.call(
 		"_is_position_inside_vision_fan",
@@ -86,6 +89,7 @@ func _run() -> void:
 	enemy.call("_pursue_last_known_position")
 	assert((enemy as CharacterBody3D).velocity.length() > 0.1)
 	enemy.call("_clear_alert")
+	assert(is_zero_approx(float(enemy.get("detection_awareness"))))
 	enemy.call("receive_reinforcement_order", (enemy as Node3D).global_position + Vector3(3.0, 0.0, 0.0))
 	assert(enemy.get("alerted"))
 	assert(not enemy.get_node("ThreatMarker").visible)
@@ -201,6 +205,19 @@ func _run() -> void:
 	assert(main_scene.get("mobile_reload_button") is Button)
 	assert(main_scene.get("mobile_flashlight_button") is Button)
 	assert(main_scene.get("mobile_map_button") is Button)
+	var tactical_map := main_scene.get("tactical_map") as Control
+	assert(tactical_map.find_child("MapCloseButton", true, false) is Button)
+	main_scene.call("_on_mobile_map_pressed")
+	assert(bool(tactical_map.call("is_open")))
+	var mobile_map_button := main_scene.get("mobile_map_button") as Button
+	mobile_map_button.visible = true
+	await process_frame
+	var map_close_touch := InputEventScreenTouch.new()
+	map_close_touch.index = 70
+	map_close_touch.position = mobile_map_button.get_global_rect().get_center()
+	map_close_touch.pressed = true
+	assert(main_scene.call("_handle_mobile_action_touch", map_close_touch))
+	assert(not bool(tactical_map.call("is_open")))
 	var fire_button := main_scene.get("fire_button") as Button
 	var dash_button := main_scene.get("dash_button") as Button
 	fire_button.visible = true

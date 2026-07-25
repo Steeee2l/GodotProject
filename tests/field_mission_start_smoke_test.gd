@@ -35,7 +35,7 @@ func _run() -> void:
 	main_scene.call("_complete_field_interaction", site)
 	assert(main_scene.get("active_field_mission") == site)
 	assert(str(main_scene.get("field_mission_phase")) == "preparing")
-	assert(is_equal_approx(float(main_scene.get("field_mission_prepare_timer")), 5.0))
+	assert(is_equal_approx(float(main_scene.get("field_mission_prepare_timer")), 7.0))
 	assert(int(main_scene.get("field_mission_spawned_enemies")) == 0)
 
 	main_scene.call("_update_field_missions", 2.0)
@@ -44,12 +44,12 @@ func _run() -> void:
 	var objective_label := main_scene.get("objective_label") as Label
 	assert(objective_label != null and objective_label.text.contains("시작까지"))
 
-	main_scene.call("_update_field_missions", 3.1)
+	main_scene.call("_update_field_missions", 5.1)
 	assert(str(main_scene.get("field_mission_phase")) == "active")
 	assert(int(main_scene.get("field_mission_spawned_enemies")) == 0)
 	assert(objective_label.text.contains("다음 접근"))
 
-	main_scene.call("_update_field_missions", 1.9)
+	main_scene.call("_update_field_missions", 3.3)
 	var spawned_count := int(main_scene.get("field_mission_spawned_enemies"))
 	assert(spawned_count >= 2 and spawned_count <= 3)
 	var first_wave_interval := float(main_scene.get("field_mission_wave_timer"))

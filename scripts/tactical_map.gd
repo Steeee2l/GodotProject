@@ -1,17 +1,38 @@
 extends Control
 
 const UI_FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
+const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 var world: Node3D
 var player: Node3D
 var extraction_positions: Array[Vector3] = []
 var discovered_extraction_indices: Dictionary = {}
+var corpse_recovery_position := Vector3.INF
+var corpse_recovery_available := false
 
 
-func setup(world_node: Node3D, player_node: Node3D, extraction_world_positions: Array[Vector3]) -> void:
+func setup(
+	world_node: Node3D,
+	player_node: Node3D,
+	extraction_world_positions: Array[Vector3],
+	recovery_position: Vector3 = Vector3.INF
+) -> void:
 	world = world_node
 	player = player_node
 	extraction_positions.assign(extraction_world_positions)
 	discovered_extraction_indices.clear()
+	set_corpse_recovery(recovery_position)
+
+
+func set_corpse_recovery(world_position: Vector3) -> void:
+	corpse_recovery_position = world_position
+	corpse_recovery_available = world_position != Vector3.INF
+	queue_redraw()
+
+
+func clear_corpse_recovery() -> void:
+	corpse_recovery_position = Vector3.INF
+	corpse_recovery_available = false
+	queue_redraw()
 
 
 func discover_extraction(index: int) -> void:
@@ -31,6 +52,31 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	visible = false
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	var close_button := Button.new()
+	close_button.name = "MapCloseButton"
+	close_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	close_button.offset_left = -78.0
+	close_button.offset_top = 18.0
+	close_button.offset_right = -18.0
+	close_button.offset_bottom = 78.0
+	close_button.icon = UI_ICONS.get_icon("close", 30, Color("#e7ece8"))
+	close_button.expand_icon = true
+	close_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	close_button.tooltip_text = "지도 닫기"
+	close_button.add_theme_stylebox_override("normal", _map_button_style(
+		Color(0.035, 0.046, 0.045, 0.98),
+		Color("#6e837b")
+	))
+	close_button.add_theme_stylebox_override("hover", _map_button_style(
+		Color(0.07, 0.083, 0.078, 1.0),
+		Color("#d3bd79")
+	))
+	close_button.add_theme_stylebox_override("pressed", _map_button_style(
+		Color(0.095, 0.079, 0.044, 1.0),
+		Color("#f0cf72")
+	))
+	close_button.pressed.connect(close)
+	add_child(close_button)
 
 
 func toggle() -> void:
@@ -61,7 +107,7 @@ func _draw() -> void:
 	var panel_rect := Rect2((viewport_size - panel_size) * 0.5, panel_size)
 	draw_style_box(_panel_style(), panel_rect)
 	draw_string(UI_FONT, panel_rect.position + Vector2(28, 40), "종로 생존구역 전술 지도", HORIZONTAL_ALIGNMENT_LEFT, -1, 25, Color("#e4e1d3"))
-	draw_string(UI_FONT, panel_rect.position + Vector2(28, 65), "게임 화면과 같은 방향 · 청록: 현재 위치 · 노랑: 하수구", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#aebbb4"))
+	draw_string(UI_FONT, panel_rect.position + Vector2(28, 65), "청록: 현재 위치 · 노랑: 발견한 하수구 · 주황: 분실 장비", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#aebbb4"))
 
 	var data: Dictionary = world.call("get_map_snapshot_data")
 	var grid_size := int(data.get("grid_size", 22))
@@ -121,6 +167,41 @@ func _draw() -> void:
 		)
 		draw_circle(extraction_center, 2.5, Color("#fff0a8"))
 
+	if corpse_recovery_available:
+		var corpse_center := _world_position_to_map_point(
+			corpse_recovery_position,
+			map_rect,
+			map_size
+		)
+		var corpse_pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.01)
+		draw_circle(
+			corpse_center,
+			marker_size * (0.72 + corpse_pulse * 0.16),
+			Color(0.95, 0.35, 0.12, 0.18)
+		)
+		draw_circle(corpse_center, marker_size * 0.5, Color("#ef8b45"), false, 3.0)
+		draw_line(
+			corpse_center + Vector2(-marker_size * 0.28, -marker_size * 0.28),
+			corpse_center + Vector2(marker_size * 0.28, marker_size * 0.28),
+			Color("#ffd0a2"),
+			3.0
+		)
+		draw_line(
+			corpse_center + Vector2(marker_size * 0.28, -marker_size * 0.28),
+			corpse_center + Vector2(-marker_size * 0.28, marker_size * 0.28),
+			Color("#ffd0a2"),
+			3.0
+		)
+		draw_string(
+			UI_FONT,
+			corpse_center + Vector2(marker_size * 0.7, -marker_size * 0.55),
+			"분실 장비",
+			HORIZONTAL_ALIGNMENT_LEFT,
+			110,
+			15,
+			Color("#ffd0a2")
+		)
+
 	if is_instance_valid(player):
 		if nearest_distance < INF:
 			draw_line(player_center, nearest_extraction, Color(0.87, 0.73, 0.3, 0.34), 2.0)
@@ -155,6 +236,15 @@ func _panel_style() -> StyleBoxFlat:
 	style.bg_color = Color(0.028, 0.034, 0.034, 0.98)
 	style.border_color = Color(0.35, 0.38, 0.36, 0.94)
 	style.set_border_width_all(2)
+	style.set_corner_radius_all(5)
+	return style
+
+
+func _map_button_style(background: Color, border: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = background
+	style.border_color = border
+	style.set_border_width_all(1)
 	style.set_corner_radius_all(5)
 	return style
 

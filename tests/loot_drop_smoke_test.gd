@@ -17,7 +17,7 @@ func _run() -> void:
 	assert(bool(main_scene.get("has_ak")))
 	assert(main_scene.get("ak_pickup") == null)
 	assert(bool(game_state.get("has_ak")))
-	assert((main_scene.get("ammo_pickups") as Array).size() == 16)
+	assert((main_scene.get("ammo_pickups") as Array).size() == 22)
 	var field_scrap_before := int(game_state.get("scrap"))
 
 	var player := main_scene.get("player") as Node3D
@@ -75,7 +75,7 @@ func _run() -> void:
 	var random_drop: Node3D = main_scene.call("_spawn_enemy_loot", enemies[0])
 	assert(is_instance_valid(random_drop))
 	assert((main_scene.get("ammo_pickups") as Array).size() == pickup_count_before + 1)
-	assert(["ammo", "canned_food", "churu", "weapon", "armor"].has(str(random_drop.get_meta("loot_type"))))
+	assert(["ammo", "canned_food", "churu", "medkit", "mod_component", "weapon", "armor"].has(str(random_drop.get_meta("loot_type"))))
 
 	var boss_pickup_count_before := (main_scene.get("ammo_pickups") as Array).size()
 	enemies[0].set_meta("raid_boss", true)

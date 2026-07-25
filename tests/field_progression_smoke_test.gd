@@ -34,11 +34,17 @@ func _run() -> void:
 	var raid_boss: CharacterBody3D
 	for enemy in (main.get("enemies") as Array):
 		if is_instance_valid(enemy) and bool(enemy.get_meta("raid_boss", false)):
+			_fail("raid boss spawned before the fatigue threshold")
+			return
+	main.set("fatigue", 50.0)
+	main.call("_trigger_fatigue_boss_event")
+	for enemy in (main.get("enemies") as Array):
+		if is_instance_valid(enemy) and bool(enemy.get_meta("raid_boss", false)):
 			boss_found = true
 			raid_boss = enemy
 			break
 	if not boss_found:
-		_fail("unlocked high-risk zone did not spawn its raid boss")
+		_fail("high-risk zone did not spawn its raid boss at the fatigue threshold")
 		return
 	if not raid_boss.is_in_group("rocket_boss") or int(raid_boss.call("get_rocket_magazine_ammo")) != 4:
 		_fail("high-risk zone boss is not using the rocket boss controller")

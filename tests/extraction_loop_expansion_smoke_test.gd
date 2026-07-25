@@ -1,0 +1,156 @@
+extends SceneTree
+
+
+func _initialize() -> void:
+	call_deferred("_run")
+
+
+func _run() -> void:
+	var game_state := root.get_node("GameState")
+	game_state.set("persistence_enabled", false)
+	game_state.call("reset_run")
+
+	var preview := game_state.call("build_raid_loadout_manifest", "jongno_outskirts") as Dictionary
+	assert(str(preview.get("weapon_id", "")) == "ak47")
+	assert(int(preview.get("ammo_count", 0)) > 0)
+	assert(int(preview.get("storage_capacity", 0)) == 30)
+	var confirmed := game_state.call("confirm_raid_loadout", "jongno_outskirts") as Dictionary
+	assert(str(confirmed.get("zone_id", "")) == "jongno_outskirts")
+	assert(not (game_state.get("confirmed_raid_manifest") as Dictionary).is_empty())
+
+	var main_scene: Node = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main_scene)
+	await process_frame
+	await physics_frame
+	main_scene.process_mode = Node.PROCESS_MODE_DISABLED
+
+	var enemies: Array = main_scene.get("enemies")
+	assert(not enemies.is_empty())
+	var enemy := enemies[0] as CharacterBody3D
+	var player := main_scene.get("player") as CharacterBody3D
+	enemy.global_position = player.global_position + Vector3(0.0, 0.0, 8.0)
+	var facing_player := player.global_position - enemy.global_position
+	facing_player.y = 0.0
+	enemy.set("facing_world_direction", facing_player.normalized())
+	enemy.set("alerted", false)
+	enemy.set("detection_awareness", 0.0)
+	enemy.set("perception_state", "patrol")
+	var vision_range := float(enemy.call("_get_vision_range"))
+	for step in 3:
+		enemy.call("_update_detection_awareness", 0.16, 8.0, true, vision_range)
+	assert(str(enemy.get("perception_state")) == "suspicious")
+	assert(not bool(enemy.get("alerted")))
+	assert(float(enemy.get("detection_awareness")) < 1.0)
+	var detected := bool(enemy.call(
+		"_update_detection_awareness",
+		2.0,
+		8.0,
+		true,
+		vision_range
+	))
+	assert(detected)
+	enemy.call("_become_alerted")
+	assert(str(enemy.get("perception_state")) == "combat")
+	enemy.set("last_known_position", enemy.global_position)
+	enemy.set("search_time_remaining", 2.0)
+	enemy.set("perception_state", "search")
+	enemy.call("_update_search_behavior", 0.1)
+	assert(str(enemy.get("perception_state")) == "search")
+	enemy.call("_clear_alert")
+	assert(str(enemy.get("perception_state")) == "return")
+
+	var market_counts := _sample_district_loot(main_scene, "market_lane", 600)
+	var luxury_counts := _sample_district_loot(main_scene, "luxury_core", 600)
+	assert(int(market_counts.get("canned_food", 0)) > int(luxury_counts.get("canned_food", 0)))
+	assert(int(luxury_counts.get("armor", 0)) > int(market_counts.get("armor", 0)))
+	var world := main_scene.get_node("World") as Node3D
+	assert(not str(world.call("get_district_id", Vector3.ZERO)).is_empty())
+
+	var subway_site := main_scene.get("basic_subway_mission_site") as Node3D
+	assert(is_instance_valid(subway_site))
+	main_scene.call("_complete_field_interaction", subway_site)
+	assert(int(game_state.get("subway_story_stage")) == 1)
+	assert(_has_mission(main_scene.get("basic_raid_missions"), "subway_boss"))
+	main_scene.set("fatigue", 50.0)
+	main_scene.call("_trigger_fatigue_boss_event")
+	var story_boss: CharacterBody3D
+	for candidate in main_scene.get("enemies"):
+		if is_instance_valid(candidate) and bool(candidate.get_meta("raid_boss", false)):
+			story_boss = candidate as CharacterBody3D
+			break
+	assert(is_instance_valid(story_boss))
+	main_scene.call("_on_enemy_died", story_boss)
+	assert(int(game_state.get("subway_story_stage")) == 2)
+	assert((main_scene.get("completed_mission_titles") as Array).has("포격 신호의 주인 추적"))
+
+	var tactical_map := load("res://scripts/tactical_map.gd").new() as Control
+	var map_player := Node3D.new()
+	root.add_child(map_player)
+	root.add_child(tactical_map)
+	var extraction_positions: Array[Vector3] = []
+	var corpse_position := Vector3(24.0, 0.0, -18.0)
+	tactical_map.call("setup", world, map_player, extraction_positions, corpse_position)
+	assert(bool(tactical_map.get("corpse_recovery_available")))
+	assert((tactical_map.get("corpse_recovery_position") as Vector3).is_equal_approx(corpse_position))
+	tactical_map.call("clear_corpse_recovery")
+	assert(not bool(tactical_map.get("corpse_recovery_available")))
+	tactical_map.queue_free()
+	map_player.queue_free()
+
+	main_scene.process_mode = Node.PROCESS_MODE_INHERIT
+	main_scene.queue_free()
+	await process_frame
+
+	var return_raid: Node = load("res://scenes/main.tscn").instantiate()
+	root.add_child(return_raid)
+	await process_frame
+	await physics_frame
+	return_raid.process_mode = Node.PROCESS_MODE_DISABLED
+	assert(_has_mission(return_raid.get("basic_raid_missions"), "subway_return"))
+	var return_site := return_raid.get("basic_subway_mission_site") as Node3D
+	assert(is_instance_valid(return_site))
+	assert(str(return_site.get_meta("basic_mission_id", "")) == "subway_return")
+	return_raid.process_mode = Node.PROCESS_MODE_INHERIT
+	return_raid.queue_free()
+	await process_frame
+
+	game_state.call("reset_run")
+	var shelter := load("res://scenes/shelter_interior.tscn").instantiate() as Node3D
+	root.add_child(shelter)
+	await process_frame
+	await physics_frame
+	shelter.call("_open_raid_zone_select")
+	await process_frame
+	shelter.call("_launch_raid_zone", "jongno_outskirts")
+	await process_frame
+	var loadout_layer := root.find_child("RaidLoadoutConfirmLayer", true, false) as CanvasLayer
+	assert(is_instance_valid(loadout_layer))
+	assert(loadout_layer.find_child("ConfirmRaidLoadoutButton", true, false) is Button)
+	assert(loadout_layer.find_child("RaidLoadoutConfirmPanel", true, false) is PanelContainer)
+	shelter.call("_close_raid_zone_select")
+	shelter.queue_free()
+	await process_frame
+
+	print("EXTRACTION_LOOP_EXPANSION_OK")
+	quit(0)
+
+
+func _sample_district_loot(main_scene: Node, district: String, sample_count: int) -> Dictionary:
+	var counts := {}
+	for sample_index in sample_count:
+		var definition := main_scene.call(
+			"_roll_district_loot_definition",
+			district,
+			sample_index
+		) as Dictionary
+		var loot_type := str(definition.get("type", ""))
+		counts[loot_type] = int(counts.get(loot_type, 0)) + 1
+	return counts
+
+
+func _has_mission(missions: Array, mission_id: String) -> bool:
+	for mission_value in missions:
+		var mission := mission_value as Dictionary
+		if str(mission.get("id", "")) == mission_id:
+			return true
+	return false

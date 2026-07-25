@@ -1355,6 +1355,13 @@ func get_sector_label(world_position: Vector3) -> String:
 	return "%s-%02d" % [COLUMN_NAMES.substr(cell.x, 1), cell.y + 1]
 
 
+func get_district_id(world_position: Vector3) -> String:
+	var cell := _world_to_cell(world_position)
+	cell.x = clampi(cell.x, 0, GRID_SIZE - 1)
+	cell.y = clampi(cell.y, 0, GRID_SIZE - 1)
+	return str(cell_zones.get(cell, "street_mixed"))
+
+
 func is_position_in_safe_zone(world_position: Vector3) -> bool:
 	return false
 

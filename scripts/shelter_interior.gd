@@ -127,6 +127,8 @@ var shelter_stats_refresh_time := 0.0
 var shelter_save_time := 0.0
 var raid_zone_ui_layer: CanvasLayer
 var raid_zone_ui_open := false
+var raid_loadout_ui_layer: CanvasLayer
+var raid_loadout_ui_open := false
 var inventory_ui: Control
 
 
@@ -705,6 +707,7 @@ func _ui_blocks_player() -> bool:
 	return (
 		merchant_ui_open
 		or raid_zone_ui_open
+		or raid_loadout_ui_open
 		or not get_tree().get_nodes_in_group("shelter_modal_ui").is_empty()
 		or (inventory_ui != null and bool(inventory_ui.call("is_open")))
 	)
@@ -1852,15 +1855,235 @@ func _build_raid_zone_row(zone_id: String) -> Control:
 
 
 func _launch_raid_zone(zone_id: String) -> void:
+	if not GameState.is_raid_zone_unlocked(zone_id):
+		return
+	_open_raid_loadout_confirmation(zone_id)
+
+
+func _open_raid_loadout_confirmation(zone_id: String) -> void:
+	if raid_loadout_ui_open:
+		return
+	raid_loadout_ui_open = true
+	raid_loadout_ui_layer = CanvasLayer.new()
+	raid_loadout_ui_layer.name = "RaidLoadoutConfirmLayer"
+	raid_loadout_ui_layer.layer = 72
+	add_child(raid_loadout_ui_layer)
+	var dim := ColorRect.new()
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.003, 0.006, 0.007, 0.93)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	raid_loadout_ui_layer.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	raid_loadout_ui_layer.add_child(center)
+	var viewport_size := get_viewport().get_visible_rect().size
+	var narrow := viewport_size.x < 800.0
+	var panel := PanelContainer.new()
+	panel.name = "RaidLoadoutConfirmPanel"
+	panel.custom_minimum_size = Vector2(
+		minf(900.0, viewport_size.x - 24.0),
+		minf(680.0, viewport_size.y - 24.0)
+	)
+	panel.add_theme_stylebox_override(
+		"panel",
+		_rounded_panel_style(Color(0.018, 0.026, 0.026, 0.99), Color("#b79a55"), 7)
+	)
+	center.add_child(panel)
+	var margin := MarginContainer.new()
+	var inset := 14 if narrow else 24
+	for margin_name in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
+		margin.add_theme_constant_override(margin_name, inset)
+	panel.add_child(margin)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	margin.add_child(box)
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 12)
+	box.add_child(header)
+	var heading := VBoxContainer.new()
+	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(heading)
+	heading.add_child(_raid_loadout_label("출전 장비 확정", 28, Color("#ead69c")))
+	var zone := GameState.get_raid_zone(zone_id)
+	heading.add_child(_raid_loadout_label(
+		"%s · 사망하면 아래 휴대품은 분실 장비로 남습니다." % str(zone.get("name", zone_id)),
+		14,
+		Color("#b6c5bd")
+	))
+	var close := _shelter_close_button()
+	close.pressed.connect(_close_raid_loadout_confirmation)
+	header.add_child(close)
+
+	var manifest := GameState.build_raid_loadout_manifest(zone_id)
+	var summary_scroll := ScrollContainer.new()
+	summary_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	summary_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(summary_scroll)
+	var summary := VBoxContainer.new()
+	summary.custom_minimum_size.x = maxf(300.0, panel.custom_minimum_size.x - inset * 2.0 - 16.0)
+	summary.add_theme_constant_override("separation", 12)
+	summary_scroll.add_child(summary)
+	var cards := GridContainer.new()
+	cards.columns = 1 if narrow else 2
+	cards.add_theme_constant_override("h_separation", 10)
+	cards.add_theme_constant_override("v_separation", 10)
+	summary.add_child(cards)
+	var weapon_id := str(manifest.get("weapon_id", ""))
+	var weapon_name := "맨손" if weapon_id.is_empty() else str(WEAPON_SYSTEM.get_weapon(weapon_id).get("display_name", weapon_id))
+	cards.add_child(_raid_loadout_card(
+		"주무기",
+		"%s · 장전 %d발" % [weapon_name, int(manifest.get("magazine_ammo", 0))],
+		"weapon",
+		Color("#d9bd70") if not weapon_id.is_empty() else Color("#d77f72")
+	))
+	cards.add_child(_raid_loadout_card(
+		"탄약과 치료",
+		"예비 탄약 %d발 · 구급약 %d개" % [
+			int(manifest.get("ammo_count", 0)),
+			int(manifest.get("medkits", 0)),
+		],
+		"ammo",
+		Color("#86c8ae")
+	))
+	cards.add_child(_raid_loadout_card(
+		"착용 장비",
+		"%s · %s · %s" % [
+			_equipment_loadout_name(str(manifest.get("body_armor", "")), "몸 방어구 없음"),
+			_equipment_loadout_name(str(manifest.get("head_armor", "")), "머리 방어구 없음"),
+			_equipment_loadout_name(str(manifest.get("footwear", "")), "신발 없음"),
+		],
+		"armor",
+		Color("#8db6ce")
+	))
+	cards.add_child(_raid_loadout_card(
+		"레이드 가방",
+		"무기 %d · 장비 %d · 부품 %d · 통조림 %d" % [
+			int(manifest.get("weapon_count", 0)),
+			int(manifest.get("equipment_count", 0)),
+			int(manifest.get("component_count", 0)) + int(manifest.get("mod_count", 0)),
+			int(manifest.get("canned_food", 0)),
+		],
+		"loot",
+		Color("#c4b58a")
+	))
+	cards.add_child(_raid_loadout_card(
+		"안전 창고",
+		"%d / %d칸 · 창고 물품은 사망해도 보존" % [
+			int(manifest.get("storage_used", 0)),
+			int(manifest.get("storage_capacity", 0)),
+		],
+		"secure",
+		Color("#77cba5")
+	))
+	var recovery_active := bool(manifest.get("corpse_recovery", false))
+	cards.add_child(_raid_loadout_card(
+		"회수 작전",
+		"이 구역에 분실 장비가 표시됩니다." if recovery_active else "현재 회수할 분실 장비 없음",
+		"map",
+		Color("#ef9858") if recovery_active else Color("#778681")
+	))
+	var warning := _raid_loadout_label(
+		"휴대품과 현장에서 얻은 전리품은 사망 시 모두 잃습니다. 출정 전에 보존할 물품은 창고에 넣으십시오.",
+		14,
+		Color("#f0aa82")
+	)
+	warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	warning.custom_minimum_size.y = 42
+	summary.add_child(warning)
+
+	var actions := HBoxContainer.new()
+	actions.alignment = BoxContainer.ALIGNMENT_END
+	actions.add_theme_constant_override("separation", 10)
+	box.add_child(actions)
+	var storage_button := _merchant_button("창고 정리", false, "secure")
+	storage_button.custom_minimum_size = Vector2(150, 48)
+	storage_button.pressed.connect(_open_storage_from_raid_loadout)
+	actions.add_child(storage_button)
+	var back_button := _merchant_button("구역 다시 선택", false, "back")
+	back_button.custom_minimum_size = Vector2(170, 48)
+	back_button.pressed.connect(_close_raid_loadout_confirmation)
+	actions.add_child(back_button)
+	var confirm_button := _merchant_button("이 장비로 출정", true, "raid")
+	confirm_button.name = "ConfirmRaidLoadoutButton"
+	confirm_button.custom_minimum_size = Vector2(190, 48)
+	confirm_button.pressed.connect(_confirm_launch_raid_zone.bind(zone_id))
+	actions.add_child(confirm_button)
+
+
+func _raid_loadout_label(text: String, font_size: int, color: Color) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_override("font", FONT)
+	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_color_override("font_color", color)
+	return label
+
+
+func _raid_loadout_card(title: String, value: String, icon_name: String, accent: Color) -> Control:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(0, 82)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override(
+		"panel",
+		_rounded_panel_style(Color(0.035, 0.046, 0.045, 0.96), accent.darkened(0.35), 6)
+	)
+	var margin := MarginContainer.new()
+	for margin_name in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
+		margin.add_theme_constant_override(margin_name, 11)
+	panel.add_child(margin)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	margin.add_child(row)
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(42, 42)
+	icon.texture = UI_ICONS.get_icon(icon_name, 42, accent)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	row.add_child(icon)
+	var labels := VBoxContainer.new()
+	labels.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(labels)
+	labels.add_child(_raid_loadout_label(title, 12, Color("#93a49e")))
+	var value_label := _raid_loadout_label(value, 15, Color("#e7ece8"))
+	value_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	labels.add_child(value_label)
+	return panel
+
+
+func _equipment_loadout_name(equipment_id: String, fallback: String) -> String:
+	if equipment_id.is_empty():
+		return fallback
+	return str(GameState.get_equipment_definition(equipment_id).get("display_name", equipment_id))
+
+
+func _open_storage_from_raid_loadout() -> void:
+	_close_raid_loadout_confirmation()
+	_close_raid_zone_select()
+	var modules := get_tree().get_nodes_in_group("shelter_storage")
+	if not modules.is_empty() and is_instance_valid(modules[0]):
+		modules[0].call("interact")
+
+
+func _confirm_launch_raid_zone(zone_id: String) -> void:
 	if not GameState.select_raid_zone(zone_id):
 		return
+	GameState.confirm_raid_loadout(zone_id)
 	GameState.start_new_raid()
 	GameState.returning_from_shelter = true
 	GameState.save_persistent_state()
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 
 
+func _close_raid_loadout_confirmation() -> void:
+	raid_loadout_ui_open = false
+	if is_instance_valid(raid_loadout_ui_layer):
+		raid_loadout_ui_layer.queue_free()
+	raid_loadout_ui_layer = null
+
+
 func _close_raid_zone_select() -> void:
+	if raid_loadout_ui_open:
+		_close_raid_loadout_confirmation()
 	raid_zone_ui_open = false
 	if is_instance_valid(raid_zone_ui_layer):
 		raid_zone_ui_layer.queue_free()
@@ -1968,6 +2191,10 @@ func _input(event: InputEvent) -> void:
 	if inventory_ui != null and bool(inventory_ui.call("is_open")):
 		if event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_ESCAPE, KEY_I, KEY_B]:
 			inventory_ui.call("toggle")
+		return
+	if raid_loadout_ui_open:
+		if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+			_close_raid_loadout_confirmation()
 		return
 	if raid_zone_ui_open:
 		if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:

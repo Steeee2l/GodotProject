@@ -90,7 +90,9 @@ const DEEP_NIGHT_HOUR := 22.0
 const BASE_ENEMY_COUNT := 17
 const MAX_NIGHT_ENEMY_COUNT := 34
 const ENEMY_PAIR_SQUAD_CHANCE := 0.78
-const BASE_FIELD_LOOT_COUNT := 16
+const FIRST_STAGE_ZONE_ID := "jongno_outskirts"
+const FIRST_STAGE_SOLO_SQUAD_CHANCE := 0.62
+const BASE_FIELD_LOOT_COUNT := 22
 const RAID_ENTRY_ENEMY_SAFE_RADIUS := 30.0
 const MELEE_ATTACK_COOLDOWN := 0.72
 const MELEE_ATTACK_RANGE := 2.2
@@ -128,67 +130,74 @@ const FIELD_MISSION_TRIGGER_RADIUS := 4.6
 const FIELD_MISSION_FAIL_RADIUS := 18.0
 const FIELD_MISSION_RESULT_DURATION := 2.8
 const FIELD_MISSION_START_HOLD_DURATION := 0.65
-const FIELD_MISSION_PREPARE_DURATION := 5.0
-const FIELD_MISSION_FIRST_WAVE_DELAY := 1.8
+const FIELD_MISSION_PREPARE_DURATION := 7.0
+const FIELD_MISSION_FIRST_WAVE_DELAY := 3.2
 const FIELD_MISSION_ENEMY_MIN_PLAYER_DISTANCE := 20.0
 const FIELD_MISSION_ENEMY_MIN_SITE_DISTANCE := 22.0
 const FIELD_MISSION_ENEMY_MAX_SITE_DISTANCE := 30.0
+const FATIGUE_BOSS_TRIGGER := 50.0
+const FATIGUE_BOSS_NAME := "폐허의 포격수 묘르"
+const BASIC_PARTS_TARGET := 2
+const BASIC_PARTS_XP := 90
+const BASIC_SUBWAY_XP := 120
+const BASIC_SUBWAY_BOSS_XP := 260
+const BASIC_SUBWAY_RETURN_XP := 180
 const FIELD_MISSION_TEMPLATES := [
 	{
 		"type": "defense",
 		"title": "교차로 봉쇄선 사수",
 		"description": "현장을 지키며 몰려오는 약탈대를 버티십시오.",
-		"duration": 20.0,
-		"enemy_count": 7,
+		"duration": 14.0,
+		"enemy_count": 3,
 		"reward": {"canned_food": 2, "ammo": 24},
 	},
 	{
 		"type": "defense",
 		"title": "비상 발전기 재가동",
 		"description": "발전기가 켜질 때까지 현장을 방어하십시오.",
-		"duration": 16.0,
-		"enemy_count": 5,
+		"duration": 12.0,
+		"enemy_count": 3,
 		"reward": {"medkits": 1, "ammo": 18},
 	},
 	{
 		"type": "eliminate",
 		"title": "약탈대 거점 소탕",
 		"description": "구역을 장악한 적을 모두 제거하십시오.",
-		"target_count": 6,
-		"enemy_count": 6,
+		"target_count": 3,
+		"enemy_count": 3,
 		"reward": {"canned_food": 2, "component": 1},
 	},
 	{
 		"type": "eliminate",
 		"title": "무장 정찰조 차단",
 		"description": "지원 요청 전에 정찰조를 제압하십시오.",
-		"target_count": 5,
-		"enemy_count": 5,
+		"target_count": 2,
+		"enemy_count": 2,
 		"reward": {"ammo": 30, "component": 1},
 	},
 	{
 		"type": "collect",
 		"title": "흩어진 보급 표식 회수",
-		"description": "구역 안의 보급 표식 3개를 회수하십시오.",
-		"target_count": 3,
-		"enemy_count": 4,
+		"description": "구역 안의 보급 표식 2개를 회수하십시오.",
+		"target_count": 2,
+		"enemy_count": 2,
 		"reward": {"canned_food": 3, "ammo": 15},
 	},
 	{
 		"type": "collect",
 		"title": "통신 기록 수집",
-		"description": "파손된 기록 장치 3개를 확보하십시오.",
-		"target_count": 3,
-		"enemy_count": 5,
+		"description": "파손된 기록 장치 2개를 확보하십시오.",
+		"target_count": 2,
+		"enemy_count": 2,
 		"reward": {"medkits": 1, "component": 1},
 	},
 	{
 		"type": "stealth",
 		"title": "폐점포 잠복",
 		"description": "수색대의 시야를 피해 폐점포 주변에 몸을 숨기십시오.",
-		"duration": 15.0,
-		"guard_count": 4,
-		"detection_grace": 1.35,
+		"duration": 10.0,
+		"guard_count": 2,
+		"detection_grace": 1.8,
 		"silence_required": true,
 		"reward": {"canned_food": 3, "medkits": 1},
 	},
@@ -196,9 +205,9 @@ const FIELD_MISSION_TEMPLATES := [
 		"type": "stealth",
 		"title": "순찰대 통과 대기",
 		"description": "엄폐물 뒤에서 순찰대가 지나갈 때까지 발각되지 마십시오.",
-		"duration": 18.0,
-		"guard_count": 5,
-		"detection_grace": 1.15,
+		"duration": 12.0,
+		"guard_count": 2,
+		"detection_grace": 1.65,
 		"silence_required": true,
 		"reward": {"ammo": 32, "component": 1},
 	},
@@ -206,9 +215,9 @@ const FIELD_MISSION_TEMPLATES := [
 		"type": "investigate",
 		"title": "실종자 흔적 조사",
 		"description": "주변의 흔적을 살피고 생존자의 이동 경로를 확인하십시오.",
-		"target_count": 3,
-		"investigate_duration": 2.2,
-		"guard_count": 2,
+		"target_count": 2,
+		"investigate_duration": 1.6,
+		"guard_count": 1,
 		"silence_required": false,
 		"reward": {"canned_food": 3, "component": 1},
 	},
@@ -217,9 +226,9 @@ const FIELD_MISSION_TEMPLATES := [
 		"title": "감시 초소 기록 판독",
 		"description": "발각되지 않은 채 감시 기록을 차례로 판독하십시오.",
 		"target_count": 2,
-		"investigate_duration": 2.8,
-		"guard_count": 4,
-		"detection_grace": 1.25,
+		"investigate_duration": 1.8,
+		"guard_count": 2,
+		"detection_grace": 1.7,
 		"silence_required": true,
 		"reward": {"medkits": 1, "ammo": 24, "component": 1},
 	},
@@ -227,9 +236,9 @@ const FIELD_MISSION_TEMPLATES := [
 		"type": "stealth_reach",
 		"title": "감시망 우회",
 		"description": "총을 쏘지 말고 순찰의 시야를 피해 반대편 안전 지점에 도달하십시오.",
-		"target_distance": 13.5,
-		"guard_count": 4,
-		"detection_grace": 1.0,
+		"target_distance": 10.0,
+		"guard_count": 2,
+		"detection_grace": 1.6,
 		"silence_required": true,
 		"reward": {"canned_food": 2, "ammo": 28},
 	},
@@ -455,6 +464,18 @@ var field_mission_detection_time := 0.0
 var field_mission_investigation_hold := 0.0
 var field_mission_investigation_target: Node3D
 var field_mission_noise_breached := false
+var basic_raid_missions: Array[Dictionary] = []
+var basic_subway_mission_site: Node3D
+var completed_mission_titles: Array[String] = []
+var completed_mission_xp := 0
+var field_objective_title := ""
+var field_objective_detail := ""
+var field_objective_color := Color("#8fd0c1")
+var fatigue_boss_event_triggered := false
+var boss_alert_panel: PanelContainer
+var boss_alert_title: Label
+var boss_alert_subtitle: Label
+var boss_alert_tween: Tween
 
 
 func _ready() -> void:
@@ -517,6 +538,7 @@ func _ready() -> void:
 	_setup_aim_feedback()
 	_setup_player_combat_feedback()
 	_setup_game_over_feedback()
+	_setup_boss_alert_ui()
 	_setup_weather_effects()
 	_spawn_ammo_pickups()
 	_build_weapon_hud()
@@ -536,6 +558,7 @@ func _ready() -> void:
 	_setup_extraction_site(world)
 	_setup_field_objectives(world)
 	_setup_procedural_field_missions(world)
+	_setup_basic_raid_missions(world)
 	_setup_corpse_recovery(world)
 	_register_building_entrance_interactions()
 	_setup_tactical_map(world)
@@ -544,7 +567,7 @@ func _ready() -> void:
 		health_bar.max_value = GameState.get_max_health()
 		health_bar.value = player_health
 	_capture_raid_start_snapshot()
-	_equip_ak47()
+	_initialize_equipped_weapon()
 	if not DisplayServer.is_touchscreen_available():
 		Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
 	_apply_hud_layout()
@@ -1686,6 +1709,103 @@ func _setup_game_over_feedback() -> void:
 	game_over_canvas.add_child(game_over_label)
 
 
+func _setup_boss_alert_ui() -> void:
+	boss_alert_panel = PanelContainer.new()
+	boss_alert_panel.name = "BossArrivalAlert"
+	boss_alert_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	boss_alert_panel.offset_left = -280
+	boss_alert_panel.offset_top = 54
+	boss_alert_panel.offset_right = 280
+	boss_alert_panel.offset_bottom = 150
+	boss_alert_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	boss_alert_panel.z_index = 480
+	boss_alert_panel.modulate.a = 0.0
+	boss_alert_panel.visible = false
+	boss_alert_panel.add_theme_stylebox_override(
+		"panel",
+		_make_panel_style(Color(0.035, 0.024, 0.02, 0.96), Color("#d66a4a"), 8)
+	)
+	$HUD.add_child(boss_alert_panel)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 24)
+	margin.add_theme_constant_override("margin_top", 13)
+	margin.add_theme_constant_override("margin_right", 24)
+	margin.add_theme_constant_override("margin_bottom", 13)
+	boss_alert_panel.add_child(margin)
+	var content := VBoxContainer.new()
+	content.alignment = BoxContainer.ALIGNMENT_CENTER
+	content.add_theme_constant_override("separation", 2)
+	margin.add_child(content)
+	boss_alert_title = Label.new()
+	boss_alert_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	boss_alert_title.add_theme_font_override("font", FONT)
+	boss_alert_title.add_theme_font_size_override("font_size", 26)
+	boss_alert_title.add_theme_color_override("font_color", Color("#ffb075"))
+	content.add_child(boss_alert_title)
+	boss_alert_subtitle = Label.new()
+	boss_alert_subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	boss_alert_subtitle.add_theme_font_override("font", FONT)
+	boss_alert_subtitle.add_theme_font_size_override("font_size", 15)
+	boss_alert_subtitle.add_theme_color_override("font_color", Color("#d6c3b5"))
+	content.add_child(boss_alert_subtitle)
+
+
+func _show_boss_alert(display_name: String) -> void:
+	if boss_alert_panel == null:
+		return
+	if boss_alert_tween and boss_alert_tween.is_valid():
+		boss_alert_tween.kill()
+	boss_alert_title.text = "위험 개체 출현 · %s" % display_name
+	boss_alert_subtitle.text = (
+		"지하철 통신에서 포착한 포격 신호의 주인이 접근합니다."
+		if GameState.subway_story_stage >= 1
+		else "피로가 쌓인 생존자의 흔적을 추적해 접근합니다."
+	)
+	boss_alert_panel.visible = true
+	boss_alert_panel.modulate.a = 0.0
+	boss_alert_panel.scale = Vector2(0.96, 0.96)
+	boss_alert_panel.pivot_offset = boss_alert_panel.size * 0.5
+	boss_alert_tween = create_tween()
+	boss_alert_tween.set_parallel(true)
+	boss_alert_tween.tween_property(boss_alert_panel, "modulate:a", 1.0, 0.24)
+	boss_alert_tween.tween_property(boss_alert_panel, "scale", Vector2.ONE, 0.32).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	boss_alert_tween.set_parallel(false)
+	boss_alert_tween.tween_interval(3.2)
+	boss_alert_tween.tween_property(boss_alert_panel, "modulate:a", 0.0, 0.42)
+	boss_alert_tween.tween_callback(func() -> void:
+		if boss_alert_panel:
+			boss_alert_panel.visible = false
+	)
+
+
+func _trigger_fatigue_boss_event() -> void:
+	if fatigue_boss_event_triggered or fatigue < FATIGUE_BOSS_TRIGGER:
+		return
+	var boss: CharacterBody3D
+	for enemy in enemies:
+		if is_instance_valid(enemy) and bool(enemy.get_meta("raid_boss", false)):
+			boss = enemy
+			break
+	if boss == null:
+		var spawn_position := _find_reinforcement_position()
+		if spawn_position == Vector3.INF:
+			return
+		boss = _spawn_rocket_boss_at(
+			spawn_position,
+			maxf(0.45, float(raid_zone_data.get("threat", 0.0))),
+			"FatigueBoss_%d" % Time.get_ticks_msec()
+		)
+	var marker := boss.get_node_or_null("BossMarker") as Label3D
+	if marker:
+		marker.text = FATIGUE_BOSS_NAME
+	boss.set_meta("display_name", FATIGUE_BOSS_NAME)
+	fatigue_boss_event_triggered = true
+	_show_boss_alert(FATIGUE_BOSS_NAME)
+	if GameState.subway_story_stage == 1:
+		_show_field_notice("연속 임무 갱신 · 포격 신호의 주인을 처치하십시오.")
+
+
 func _capture_raid_start_snapshot() -> void:
 	raid_start_snapshot = {
 		"magazine_ammo": GameState.magazine_ammo,
@@ -1712,15 +1832,6 @@ func _capture_raid_start_snapshot() -> void:
 	}
 
 
-func _positive_dictionary_delta(current: Dictionary, baseline: Dictionary) -> Dictionary:
-	var delta := {}
-	for key in current.keys():
-		var gained := int(current.get(key, 0)) - int(baseline.get(key, 0))
-		if gained > 0:
-			delta[str(key)] = gained
-	return delta
-
-
 func _equipment_total_counts(inventory: Dictionary, body_id: String, head_id: String, footwear_id: String) -> Dictionary:
 	var totals := inventory.duplicate(true)
 	for equipped_id in [body_id, head_id, footwear_id]:
@@ -1731,44 +1842,24 @@ func _equipment_total_counts(inventory: Dictionary, body_id: String, head_id: St
 
 
 func _build_death_corpse_loot() -> Dictionary:
-	if raid_start_snapshot.is_empty():
-		return {}
 	var current_equipment_totals := _equipment_total_counts(
 		GameState.equipment_inventory,
 		GameState.equipped_body_armor_id,
 		GameState.equipped_head_armor_id,
 		GameState.equipped_footwear_id
 	)
-	var starting_equipment_totals := _equipment_total_counts(
-		raid_start_snapshot.get("equipment_inventory", {}) as Dictionary,
-		str(raid_start_snapshot.get("equipped_body_armor_id", "")),
-		str(raid_start_snapshot.get("equipped_head_armor_id", "")),
-		str(raid_start_snapshot.get("equipped_footwear_id", ""))
-	)
 	var loot := {
-		"ammo_inventory": _positive_dictionary_delta(
-			GameState.ammo_inventory,
-			raid_start_snapshot.get("ammo_inventory", {}) as Dictionary
-		),
-		"medkits": maxi(0, GameState.medkits - int(raid_start_snapshot.get("medkits", 0))),
-		"canned_food": maxi(0, GameState.canned_food - int(raid_start_snapshot.get("canned_food", 0))),
-		"churu": maxi(0, GameState.churu - int(raid_start_snapshot.get("churu", 0))),
-		"mod_component_inventory": _positive_dictionary_delta(
-			GameState.mod_component_inventory,
-			raid_start_snapshot.get("mod_component_inventory", {}) as Dictionary
-		),
-		"weapon_mod_inventory": _positive_dictionary_delta(
-			GameState.weapon_mod_inventory,
-			raid_start_snapshot.get("weapon_mod_inventory", {}) as Dictionary
-		),
-		"weapon_inventory": _positive_dictionary_delta(
-			GameState.weapon_inventory,
-			raid_start_snapshot.get("weapon_inventory", {}) as Dictionary
-		),
-		"equipment_inventory": _positive_dictionary_delta(
-			current_equipment_totals,
-			starting_equipment_totals
-		),
+		"ammo_inventory": GameState.ammo_inventory.duplicate(true),
+		"medkits": maxi(0, GameState.medkits),
+		"canned_food": maxi(0, GameState.canned_food),
+		"churu": maxi(0, GameState.churu),
+		"mod_component_inventory": GameState.mod_component_inventory.duplicate(true),
+		"weapon_mod_inventory": GameState.weapon_mod_inventory.duplicate(true),
+		"weapon_inventory": GameState.weapon_inventory.duplicate(true),
+		"equipment_inventory": current_equipment_totals,
+		"equipped_weapon_id": GameState.equipped_weapon_id,
+		"equipped_weapon_mods": GameState.equipped_weapon_mods.duplicate(),
+		"weapon_mod_loadouts": GameState.weapon_mod_loadouts.duplicate(true),
 	}
 	return loot
 
@@ -1803,33 +1894,35 @@ func _store_death_corpse() -> void:
 	})
 
 
-func _restore_raid_start_snapshot_after_death() -> void:
-	if raid_start_snapshot.is_empty():
-		return
-	GameState.magazine_ammo = int(raid_start_snapshot.get("magazine_ammo", 30))
-	GameState.reserve_ammo = int(raid_start_snapshot.get("reserve_ammo", 90))
-	GameState.ammo_inventory = (raid_start_snapshot.get("ammo_inventory", {}) as Dictionary).duplicate(true)
-	GameState.medkits = int(raid_start_snapshot.get("medkits", GameState.medkits))
-	GameState.canned_food = int(raid_start_snapshot.get("canned_food", GameState.canned_food))
-	GameState.churu = int(raid_start_snapshot.get("churu", GameState.churu))
-	GameState.mod_component_inventory = (raid_start_snapshot.get("mod_component_inventory", {}) as Dictionary).duplicate(true)
-	GameState.weapon_mod_inventory = (raid_start_snapshot.get("weapon_mod_inventory", {}) as Dictionary).duplicate(true)
-	GameState.weapon_inventory = (raid_start_snapshot.get("weapon_inventory", {}) as Dictionary).duplicate(true)
-	GameState.equipment_inventory = (raid_start_snapshot.get("equipment_inventory", {}) as Dictionary).duplicate(true)
-	GameState.equipped_body_armor_id = str(raid_start_snapshot.get("equipped_body_armor_id", ""))
-	GameState.equipped_head_armor_id = str(raid_start_snapshot.get("equipped_head_armor_id", ""))
-	GameState.equipped_footwear_id = str(raid_start_snapshot.get("equipped_footwear_id", ""))
-	GameState.weapon_durability = float(raid_start_snapshot.get("weapon_durability", 100.0))
-	GameState.equipped_weapon_id = str(raid_start_snapshot.get("equipped_weapon_id", "ak47"))
-	GameState.equipped_weapon_mods.assign(raid_start_snapshot.get("equipped_weapon_mods", []) as Array)
-	GameState.weapon_mod_loadouts = (raid_start_snapshot.get("weapon_mod_loadouts", {}) as Dictionary).duplicate(true)
-	GameState.equipped_magazine_id = str(raid_start_snapshot.get("equipped_magazine_id", "ak_30rnd"))
-	GameState.equipped_ammo_id = str(raid_start_snapshot.get("equipped_ammo_id", "762_fmj"))
-	GameState.has_ak = bool(raid_start_snapshot.get("has_ak", true))
-	GameState.fatigue = minf(float(raid_start_snapshot.get("fatigue", 0.0)) + 18.0, FATIGUE_MAX)
-	GameState.player_health = 82
+func _clear_carried_inventory_after_death() -> void:
+	for key in GameState.ammo_inventory.keys():
+		GameState.ammo_inventory[key] = 0
+	for key in GameState.mod_component_inventory.keys():
+		GameState.mod_component_inventory[key] = 0
+	for key in GameState.weapon_mod_inventory.keys():
+		GameState.weapon_mod_inventory[key] = 0
+	for key in GameState.equipment_inventory.keys():
+		GameState.equipment_inventory[key] = 0
+	GameState.weapon_inventory.clear()
+	GameState.weapon_mod_loadouts.clear()
+	GameState.medkits = 0
+	GameState.canned_food = 0
+	GameState.churu = 0
+	GameState.magazine_ammo = 0
+	GameState.reserve_ammo = 0
+	GameState.has_ak = false
+	GameState.equipped_weapon_id = ""
+	GameState.equipped_weapon_mods.clear()
+	GameState.equipped_magazine_id = ""
+	GameState.equipped_ammo_id = ""
+	GameState.equipped_body_armor_id = ""
+	GameState.equipped_head_armor_id = ""
+	GameState.equipped_footwear_id = ""
+	GameState.fatigue = minf(fatigue + 18.0, FATIGUE_MAX)
+	GameState.player_health = mini(82, GameState.get_max_health())
 	GameState.returning_from_shelter = false
 	GameState.world_time_hours = 9.0
+	GameState.save_persistent_state()
 
 
 func _format_survival_time() -> String:
@@ -1869,7 +1962,7 @@ func _begin_player_death_sequence() -> void:
 	tween.tween_property(game_over_fade, "color:a", 1.0, 0.6)
 	tween.tween_callback(func() -> void:
 		Engine.time_scale = 1.0
-		_restore_raid_start_snapshot_after_death()
+		_clear_carried_inventory_after_death()
 		GameState.register_shelter_return()
 		get_tree().change_scene_to_file("res://scenes/shelter_interior.tscn")
 	)
@@ -1914,12 +2007,6 @@ func _spawn_ak_pickup() -> void:
 func _spawn_ammo_pickups() -> void:
 	var world := $World as ProceduralCityMap
 	var occupied_positions: Array[Vector3] = []
-	var component_ids := ["rubber_gasket", "scope_lens", "magazine_spring"]
-	var component_names := {
-		"rubber_gasket": "소음기용 고무 패킹",
-		"scope_lens": "스코프 렌즈",
-		"magazine_spring": "탄창 스프링",
-	}
 	for index in BASE_FIELD_LOOT_COUNT:
 		var position := _find_stratified_map_position(
 			world,
@@ -1931,60 +2018,127 @@ func _spawn_ammo_pickups() -> void:
 			0.34
 		)
 		occupied_positions.append(position)
-		match index % 6:
-			0, 3:
-				_create_loot_pickup(
-					"ammo",
-					position,
-					{
-						"ammo_id": "762_fmj",
-						"amount": AMMO_PICKUP_AMOUNT,
-						"display_name": "7.62mm 탄약",
-					}
-				)
-			1:
-				_create_loot_pickup(
-					"canned_food",
-					position,
-					{"amount": 1, "display_name": "Canned Food"}
-				)
-			2:
-				var component_index := floori(float(index) / 4.0) % component_ids.size()
-				var component_id: String = component_ids[component_index]
-				_create_loot_pickup(
-					"mod_component",
-					position,
-					{
-						"component_id": component_id,
-						"amount": 1,
-						"display_name": component_names[component_id],
-					}
-				)
-			4:
-				var field_weapon_ids := ["m1911", "mp5", "double_barrel"]
-				var field_weapon_id: String = field_weapon_ids[floori(float(index) / 6.0) % field_weapon_ids.size()]
-				_create_loot_pickup(
-					"weapon",
-					position,
-					{
-						"weapon_id": field_weapon_id,
-						"amount": 1,
-						"display_name": _get_loot_weapon_name(field_weapon_id),
-					}
-				)
-			5:
-				if spawn_random.randf() < 0.26:
-					_create_loot_pickup(
-						"medkit",
-						position,
-						{"amount": 1, "display_name": "구급약"}
-					)
-				else:
-					var armor_drop := _get_random_armor_drop(index)
-					_create_loot_pickup("armor", position, armor_drop)
-			_:
-				var armor_drop := _get_random_armor_drop(index)
-				_create_loot_pickup("armor", position, armor_drop)
+		_spawn_district_loot(world, position, index)
+
+
+func _spawn_district_loot(
+	world: ProceduralCityMap,
+	position: Vector3,
+	index: int
+) -> Node3D:
+	var district := world.get_district_id(position)
+	var definition := _roll_district_loot_definition(district, index)
+	var loot_type := str(definition.get("type", "ammo"))
+	var data := (definition.get("data", {}) as Dictionary).duplicate(true)
+	data["district_id"] = district
+	var pickup := _create_loot_pickup(loot_type, position, data)
+	pickup.set_meta("district_id", district)
+	return pickup
+
+
+func _roll_district_loot_definition(district: String, index: int) -> Dictionary:
+	# Every sixth sector has a guaranteed weapon recovery point so a player who
+	# lost their raid kit can rebuild without having to win an unarmed fight.
+	if index % 6 == 4:
+		var recovery_weapons := ["m1911", "mp5", "double_barrel"]
+		var weapon_id: String = recovery_weapons[floori(float(index) / 6.0) % recovery_weapons.size()]
+		return {
+			"type": "weapon",
+			"data": {
+				"weapon_id": weapon_id,
+				"amount": 1,
+				"display_name": _get_loot_weapon_name(weapon_id),
+			},
+		}
+
+	var district_weights := {
+		"market_lane": [
+			["canned_food", 0.31], ["medkit", 0.16], ["mod_component", 0.19],
+			["ammo", 0.18], ["armor", 0.10], ["weapon", 0.06],
+		],
+		"luxury_core": [
+			["armor", 0.28], ["mod_component", 0.27], ["weapon", 0.15],
+			["medkit", 0.12], ["ammo", 0.12], ["canned_food", 0.06],
+		],
+		"multi_family": [
+			["canned_food", 0.27], ["ammo", 0.24], ["medkit", 0.17],
+			["armor", 0.14], ["mod_component", 0.12], ["weapon", 0.06],
+		],
+		"business_corner": [
+			["ammo", 0.27], ["weapon", 0.18], ["mod_component", 0.23],
+			["armor", 0.14], ["medkit", 0.10], ["canned_food", 0.08],
+		],
+		"residential_buffer": [
+			["canned_food", 0.28], ["ammo", 0.25], ["medkit", 0.16],
+			["armor", 0.13], ["mod_component", 0.12], ["weapon", 0.06],
+		],
+		"open_space_edge": [
+			["mod_component", 0.29], ["ammo", 0.25], ["armor", 0.16],
+			["canned_food", 0.12], ["medkit", 0.10], ["weapon", 0.08],
+		],
+		"street_mixed": [
+			["ammo", 0.25], ["mod_component", 0.21], ["canned_food", 0.19],
+			["weapon", 0.14], ["armor", 0.12], ["medkit", 0.09],
+		],
+	}
+	var weights: Array = district_weights.get(district, district_weights["street_mixed"])
+	var roll := spawn_random.randf()
+	var cumulative := 0.0
+	var selected_type := "ammo"
+	for entry in weights:
+		cumulative += float(entry[1])
+		if roll <= cumulative:
+			selected_type = str(entry[0])
+			break
+	return _build_district_loot_data(selected_type, district, index)
+
+
+func _build_district_loot_data(loot_type: String, district: String, index: int) -> Dictionary:
+	match loot_type:
+		"canned_food":
+			return {"type": loot_type, "data": {"amount": 1, "display_name": "통조림"}}
+		"medkit":
+			return {"type": loot_type, "data": {"amount": 1, "display_name": "구급약"}}
+		"mod_component":
+			var component_ids := ["rubber_gasket", "scope_lens", "magazine_spring"]
+			var component_names := {
+				"rubber_gasket": "소음기용 고무 패킹",
+				"scope_lens": "스코프 렌즈",
+				"magazine_spring": "탄창 스프링",
+			}
+			var component_index := posmod(index + district.hash(), component_ids.size())
+			var component_id: String = component_ids[component_index]
+			return {
+				"type": loot_type,
+				"data": {
+					"component_id": component_id,
+					"amount": 1,
+					"display_name": component_names[component_id],
+				},
+			}
+		"weapon":
+			var weapon_ids := ["m1911", "mp5", "double_barrel"]
+			var weapon_id: String = weapon_ids[posmod(index + district.hash(), weapon_ids.size())]
+			return {
+				"type": loot_type,
+				"data": {
+					"weapon_id": weapon_id,
+					"amount": 1,
+					"display_name": _get_loot_weapon_name(weapon_id),
+				},
+			}
+		"armor":
+			return {"type": loot_type, "data": _get_random_armor_drop(index)}
+		_:
+			var ammo_id := "9mm_fmj" if district in ["market_lane", "multi_family", "residential_buffer"] else "762_fmj"
+			return {
+				"type": "ammo",
+				"data": {
+					"ammo_id": ammo_id,
+					"amount": AMMO_PICKUP_AMOUNT,
+					"display_name": "9mm 탄약" if ammo_id == "9mm_fmj" else "7.62mm 탄약",
+				},
+			}
 
 
 func _create_loot_pickup(loot_type: String, world_position: Vector3, data: Dictionary = {}) -> Node3D:
@@ -2177,6 +2331,7 @@ func _collect_nearby_ammo() -> void:
 		"mod_component":
 			var component_id := str(nearby_ammo_pickup.get_meta("component_id", "rubber_gasket"))
 			GameState.add_mod_component(component_id, amount)
+			_advance_basic_mission("parts", amount)
 			ammo_notice.text = "%s +%d   보유 %d" % [
 				str(nearby_ammo_pickup.get_meta("display_name", "총기 부품")),
 				amount,
@@ -2315,7 +2470,12 @@ func _apply_hud_layout() -> void:
 	var side_margin := clampf(viewport_size.x * 0.02, 10.0, 26.0)
 	var safe_left_width := clampf(viewport_size.x * 0.33 * ui_scale, 205.0, 460.0)
 	var status_height := clampf(88.0 * ui_scale, 80.0, 108.0)
-	var objective_height := clampf(72.0 * ui_scale, 68.0, 94.0)
+	var objective_line_count := objective_label.text.count("\n") + 1
+	var objective_height := clampf(
+		28.0 + float(objective_line_count) * 22.0 * ui_scale,
+		92.0,
+		220.0
+	)
 	var hud_blocked := _is_inventory_open() or _is_tactical_map_open()
 
 	var health_bar := top_left_status_panel.get_node_or_null("Margin/VBox/Health")
@@ -2414,7 +2574,7 @@ func _apply_hud_layout() -> void:
 		var fatigue_w := minf(300.0, maxf(230.0, viewport_size.x * 0.22))
 		fatigue_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		fatigue_panel.offset_left = side_margin
-		fatigue_panel.offset_top = objective_panel.offset_bottom + 8.0 if top_left_status_panel.visible else top_margin
+		fatigue_panel.offset_top = objective_panel.offset_bottom + 8.0 if objective_panel.visible else top_margin
 		fatigue_panel.offset_right = side_margin + fatigue_w
 		fatigue_panel.offset_bottom = fatigue_panel.offset_top + 72.0
 
@@ -2485,7 +2645,11 @@ func _apply_hud_layout() -> void:
 		mobile_flashlight_button.offset_top = utility_base_bottom - utility_size
 		mobile_flashlight_button.custom_minimum_size = Vector2(utility_size, utility_size)
 	if mobile_map_button:
-		mobile_map_button.visible = touch_available and not hud_blocked
+		mobile_map_button.visible = (
+			touch_available
+			and not _is_inventory_open()
+			and not extraction_transition_active
+		)
 		mobile_map_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 		mobile_map_button.offset_right = mobile_flashlight_button.offset_left - utility_gap if mobile_flashlight_button else -side_margin - utility_size * 3.0
 		mobile_map_button.offset_left = mobile_map_button.offset_right - utility_size
@@ -3009,6 +3173,7 @@ func _on_mobile_map_pressed() -> void:
 		_toggle_inventory()
 	if is_instance_valid(tactical_map):
 		tactical_map.call("toggle")
+	_apply_hud_layout()
 
 
 func _refresh_mobile_context_button() -> void:
@@ -3144,6 +3309,29 @@ func _equip_ak47() -> void:
 	equipment_panel.visible = true
 	fire_button.visible = true
 	fire_button.tooltip_text = "%s 발사" % str(weapon_stats.get("display_name", "AK-47"))
+	_update_equipment_ui()
+
+
+func _initialize_equipped_weapon() -> void:
+	var weapon_available := (
+		has_ak
+		and not equipped_weapon_id.is_empty()
+		and GameState.get_weapon_count(equipped_weapon_id) > 0
+	)
+	if not weapon_available:
+		has_ak = false
+		GameState.has_ak = false
+		magazine_ammo = 0
+		reserve_ammo = 0
+		if weapon_sprite:
+			weapon_sprite.visible = false
+		_update_equipment_ui()
+		return
+	_refresh_weapon_stats()
+	_rebuild_player_weapon_frames()
+	if weapon_sprite:
+		weapon_sprite.visible = true
+	_update_weapon_pose()
 	_update_equipment_ui()
 
 
@@ -3884,6 +4072,10 @@ func _play_gunshot() -> void:
 	audio.play()
 
 
+func _is_first_stage_zone() -> bool:
+	return GameState.selected_raid_zone == FIRST_STAGE_ZONE_ID
+
+
 func _spawn_enemies() -> void:
 	var world := $World as ProceduralCityMap
 	var enemy_multiplier := float(raid_zone_data.get("enemy_multiplier", 1.0))
@@ -3909,8 +4101,8 @@ func _spawn_enemies() -> void:
 			maxf(night_intensity, zone_threat)
 		)
 		spawned_count += squad_sizes[squad_index]
-	if bool(raid_zone_data.get("boss", false)):
-		_spawn_zone_boss(world, total_enemies, zone_threat)
+	# Bosses enter only after fatigue reaches the raid threshold. This keeps the
+	# opening route readable and makes the arrival alert match the actual spawn.
 
 
 func _spawn_zone_boss(world: ProceduralCityMap, spawn_index: int, zone_threat: float) -> void:
@@ -4077,7 +4269,10 @@ func _build_enemy_squad_sizes(total_count: int) -> Array[int]:
 	var remaining := maxi(0, total_count)
 	while remaining > 0:
 		var squad_size := 1
-		if remaining == 2 or remaining == 4:
+		if _is_first_stage_zone():
+			if remaining >= 2 and spawn_random.randf() >= FIRST_STAGE_SOLO_SQUAD_CHANCE:
+				squad_size = 2
+		elif remaining == 2 or remaining == 4:
 			squad_size = 2
 		elif remaining == 3:
 			squad_size = 3
@@ -4174,6 +4369,11 @@ func _spawn_enemy(
 	enemy.set_script(ENEMY_SCRIPT)
 	enemy.position = spawn_position
 	enemy.call("configure", kind, player, {}, threat, enemy_weapon_id)
+	if enemy.has_method("set_detection_profile"):
+		if _is_first_stage_zone():
+			enemy.call("set_detection_profile", 0.88, 50.0, 1.12)
+		else:
+			enemy.call("set_detection_profile", 1.0, 58.0, 1.0)
 	enemy.call("set_environment_visibility", night_intensity)
 	add_child(enemy)
 	enemy.died.connect(_on_enemy_died)
@@ -4197,6 +4397,8 @@ func _on_enemy_died(enemy: CharacterBody3D) -> void:
 		field_mission_kills += 1
 	if bool(enemy.get_meta("raid_boss", false)):
 		run_boss_kills += 1
+		if GameState.subway_story_stage == 1:
+			_advance_basic_mission("subway_boss")
 	if enemy == active_reinforcement_caller:
 		active_reinforcement_caller = null
 		sustained_combat_time = REINFORCEMENT_CALL_TRIGGER_TIME * 0.2
@@ -4237,33 +4439,61 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 			}
 		)
 		return boss_drop
+	if (
+		not has_ak
+		and enemy_weapon_id != "baseball_bat"
+		and spawn_random.randf() < 0.58
+	):
+		return _create_loot_pickup(
+			"weapon",
+			drop_position,
+			{
+				"weapon_id": enemy_weapon_id,
+				"amount": 1,
+				"display_name": _get_loot_weapon_name(enemy_weapon_id),
+			}
+		)
 	var roll := spawn_random.randf()
 	var churu_chance := 0.01 + night_intensity * 0.015 + float(raid_zone_data.get("threat", 0.0)) * 0.018
-	if roll < 0.03 + churu_chance * 0.4:
-		return _create_loot_pickup(
-			"medkit",
-			drop_position,
-			{"amount": 1, "display_name": "구급약"}
-		)
 	if roll < churu_chance:
 		return _create_loot_pickup(
 			"churu",
 			drop_position,
 			{"amount": 1, "display_name": "희귀 츄르"}
 		)
-	if roll < 0.42 + churu_chance:
+	if roll < churu_chance + 0.05:
+		return _create_loot_pickup(
+			"medkit",
+			drop_position,
+			{"amount": 1, "display_name": "구급약"}
+		)
+	if roll < 0.34 + churu_chance:
 		return _create_loot_pickup(
 			"ammo",
 			drop_position,
 			_get_enemy_ammo_drop(enemy_weapon_id)
 		)
-	if roll < 0.67 + churu_chance:
+	if roll < 0.52 + churu_chance:
 		return _create_loot_pickup(
 			"canned_food",
 			drop_position,
 			{"amount": 2 if spawn_random.randf() < 0.12 else 1, "display_name": "Canned Food"}
 		)
-	if roll < 0.85 + churu_chance:
+	if roll < 0.68 + churu_chance:
+		var component_ids := ["rubber_gasket", "scope_lens", "magazine_spring"]
+		var component_names := ["소음기용 고무 패킹", "스코프 렌즈", "탄창 스프링"]
+		var component_index := spawn_random.randi_range(0, component_ids.size() - 1)
+		return _create_loot_pickup(
+			"mod_component",
+			drop_position,
+			{
+				"amount": 1,
+				"component_id": component_ids[component_index],
+				"display_name": component_names[component_index],
+			}
+		)
+	var weapon_drop_threshold := 0.94 if _is_first_stage_zone() else 0.88
+	if roll < weapon_drop_threshold + churu_chance:
 		return _create_loot_pickup(
 			"weapon",
 			drop_position,
@@ -5111,7 +5341,12 @@ func _setup_tactical_map(world: ProceduralCityMap) -> void:
 	var positions: Array[Vector3] = []
 	for site in extraction_sites:
 		positions.append(site.global_position)
-	tactical_map.call("setup", world, player, positions)
+	var recovery_position := (
+		corpse_recovery_point.global_position
+		if is_instance_valid(corpse_recovery_point)
+		else Vector3.INF
+	)
+	tactical_map.call("setup", world, player, positions, recovery_position)
 	for discovered_index in discovered_extraction_indices.keys():
 		tactical_map.call("discover_extraction", int(discovered_index))
 
@@ -5234,13 +5469,20 @@ func _build_extraction_progress_ui() -> void:
 
 
 func _show_extraction_result(rescued_count: int) -> void:
-	var xp_reward := GameState.get_raid_experience_reward(run_kills, run_boss_kills)
+	var combat_xp := GameState.get_raid_experience_reward(run_kills, run_boss_kills)
+	var xp_reward := combat_xp + completed_mission_xp
 	pending_extraction_xp_result = GameState.add_raid_experience(xp_reward)
 	extraction_result_title.text = "탈출 성공 · Lv.%d" % int(pending_extraction_xp_result.get("new_level", GameState.player_level))
-	extraction_result_summary.text = "처치 %d명 · 보스 %d명 · 주민 후송 %d명 · 경험치 +%d\n획득품은 쉘터 창고에 보관되었습니다." % [
+	var mission_summary := "완료한 임무 없음"
+	if not completed_mission_titles.is_empty():
+		mission_summary = "완료 임무 · %s" % ", ".join(completed_mission_titles)
+	extraction_result_summary.text = "처치 %d명 · 보스 %d명 · 주민 후송 %d명\n%s\n전투 XP +%d · 임무 XP +%d · 총 경험치 +%d\n획득품은 가방에 보존됩니다." % [
 		run_kills,
 		run_boss_kills,
 		rescued_count,
+		mission_summary,
+		combat_xp,
+		completed_mission_xp,
 		xp_reward,
 	]
 	var new_xp := int(pending_extraction_xp_result.get("new_xp", GameState.player_xp))
@@ -5432,6 +5674,225 @@ func _setup_field_objectives(world: ProceduralCityMap) -> void:
 	_setup_rescue_points(world)
 
 
+func _setup_basic_raid_missions(world: ProceduralCityMap) -> void:
+	basic_raid_missions = [
+		{
+			"id": "parts",
+			"title": "기초 부품 확보",
+			"detail": "총기 개조 부품",
+			"progress": 0,
+			"target": BASIC_PARTS_TARGET,
+			"xp": BASIC_PARTS_XP,
+			"completed": false,
+		},
+	]
+	var story_stage := GameState.subway_story_stage
+	match story_stage:
+		0:
+			basic_raid_missions.append({
+				"id": "subway",
+				"title": "지하철역 입구 조사",
+				"detail": "정체불명의 포격 신호 확인",
+				"progress": 0,
+				"target": 1,
+				"xp": BASIC_SUBWAY_XP,
+				"completed": false,
+			})
+		1:
+			basic_raid_missions.append({
+				"id": "subway_boss",
+				"title": "포격 신호의 주인 추적",
+				"detail": "피로 50% 이후 출현하는 묘르 처치",
+				"progress": 0,
+				"target": 1,
+				"xp": BASIC_SUBWAY_BOSS_XP,
+				"completed": false,
+			})
+		2:
+			basic_raid_missions.append({
+				"id": "subway_return",
+				"title": "지하 보급로 봉쇄",
+				"detail": "묘르가 사용한 지하철 통로 확인",
+				"progress": 0,
+				"target": 1,
+				"xp": BASIC_SUBWAY_RETURN_XP,
+				"completed": false,
+			})
+		_:
+			basic_raid_missions.append({
+				"id": "subway_complete",
+				"title": "종로 지하선 확보",
+				"detail": "연속 임무 완료",
+				"progress": 1,
+				"target": 1,
+				"xp": 0,
+				"completed": true,
+			})
+	if story_stage == 1 or story_stage >= 3:
+		_refresh_objective_panel()
+		return
+	var occupied_positions: Array[Vector3] = []
+	for interaction in field_interactions:
+		if is_instance_valid(interaction):
+			occupied_positions.append(interaction.global_position)
+	var mission_position := _find_basic_subway_survey_position(world, occupied_positions)
+	basic_subway_mission_site = Node3D.new()
+	basic_subway_mission_site.name = "BasicMission_SubwaySurvey"
+	add_child(basic_subway_mission_site)
+	basic_subway_mission_site.global_position = mission_position
+	basic_subway_mission_site.set_meta("interaction_type", "basic_mission_subway")
+	var subway_mission_id := "subway_return" if story_stage == 2 else "subway"
+	var subway_display_name := "지하 보급로 봉쇄" if story_stage == 2 else "지하철역 입구 조사"
+	basic_subway_mission_site.set_meta("basic_mission_id", subway_mission_id)
+	basic_subway_mission_site.set_meta("display_name", subway_display_name)
+	basic_subway_mission_site.set_meta("hold_duration", 1.35)
+	basic_subway_mission_site.set_meta("interaction_distance", FIELD_INTERACTION_DISTANCE + 0.35)
+	basic_subway_mission_site.add_to_group("field_interaction")
+	field_interactions.append(basic_subway_mission_site)
+	_build_basic_subway_marker(basic_subway_mission_site)
+	_refresh_objective_panel()
+
+
+func _find_basic_subway_survey_position(
+	world: ProceduralCityMap,
+	occupied_positions: Array[Vector3]
+) -> Vector3:
+	var landmarks := get_tree().get_nodes_in_group("urban_subway_entrance")
+	if not landmarks.is_empty():
+		var landmark := landmarks[spawn_random.randi_range(0, landmarks.size() - 1)] as Node3D
+		if landmark:
+			for attempt in 16:
+				var angle := TAU * float(attempt) / 16.0
+				var requested := landmark.global_position + Vector3(cos(angle), 0.0, sin(angle)) * 5.4
+				var candidate := world.find_nearest_physically_open_position(
+					requested,
+					0.62,
+					[player.get_rid()]
+				)
+				candidate.y = 0.08
+				var separated := true
+				for occupied in occupied_positions:
+					if candidate.distance_to(occupied) < 8.0:
+						separated = false
+						break
+				if (
+					separated
+					and candidate.distance_to(player.global_position) >= 24.0
+					and candidate.distance_to(landmark.global_position) <= 9.0
+				):
+					return candidate
+	return _find_stratified_map_position(
+		world,
+		1,
+		3,
+		28.0,
+		24.0,
+		occupied_positions,
+		0.08
+	)
+
+
+func _build_basic_subway_marker(site: Node3D) -> void:
+	var signal_color := Color("#6fc8b4")
+	_add_interaction_marker(site, signal_color, 0.9, true)
+	var label := Label3D.new()
+	label.name = "BasicMissionLabel"
+	label.text = "조사 지점"
+	label.position = Vector3(0.0, 1.18, 0.0)
+	label.font = FONT
+	label.font_size = 26
+	label.modulate = signal_color.lightened(0.2)
+	label.outline_size = 7
+	label.outline_modulate = Color(0.01, 0.02, 0.018, 0.95)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	site.add_child(label)
+
+
+func _advance_basic_mission(mission_id: String, amount: int = 1) -> void:
+	for mission in basic_raid_missions:
+		if str(mission.get("id", "")) != mission_id or bool(mission.get("completed", false)):
+			continue
+		var target_count := maxi(1, int(mission.get("target", 1)))
+		mission["progress"] = mini(target_count, int(mission.get("progress", 0)) + maxi(0, amount))
+		if int(mission["progress"]) >= target_count:
+			mission["completed"] = true
+			var mission_title := str(mission.get("title", "기본 목표"))
+			var xp_reward := maxi(0, int(mission.get("xp", 0)))
+			if not completed_mission_titles.has(mission_title):
+				completed_mission_titles.append(mission_title)
+				completed_mission_xp += xp_reward
+			_show_field_notice("기본 목표 완료 · %s · 경험치 +%d" % [mission_title, xp_reward])
+			_handle_basic_mission_chain_completion(mission_id)
+		_refresh_objective_panel()
+		return
+
+
+func _handle_basic_mission_chain_completion(mission_id: String) -> void:
+	match mission_id:
+		"subway":
+			GameState.set_subway_story_stage(1)
+			var has_boss_objective := false
+			for mission in basic_raid_missions:
+				if str(mission.get("id", "")) == "subway_boss":
+					has_boss_objective = true
+					break
+			if not has_boss_objective:
+				basic_raid_missions.append({
+					"id": "subway_boss",
+					"title": "포격 신호의 주인 추적",
+					"detail": "피로 50% 이후 출현하는 묘르 처치",
+					"progress": 0,
+					"target": 1,
+					"xp": BASIC_SUBWAY_BOSS_XP,
+					"completed": false,
+				})
+			_show_field_notice("연속 임무 해금 · 폐허의 포격수 묘르의 신호를 추적합니다.")
+		"subway_boss":
+			GameState.set_subway_story_stage(2)
+			_show_field_notice("묘르 처치 · 다음 탐사에서 지하 보급로를 봉쇄할 수 있습니다.")
+		"subway_return":
+			GameState.set_subway_story_stage(3)
+			_show_field_notice("연속 임무 완료 · 종로 지하선 생존 통로를 확보했습니다.")
+
+
+func _get_basic_mission_lines() -> Array[String]:
+	var lines: Array[String] = []
+	for mission in basic_raid_missions:
+		var completed := bool(mission.get("completed", false))
+		var progress := int(mission.get("progress", 0))
+		var target_count := maxi(1, int(mission.get("target", 1)))
+		lines.append("%s %s  %d/%d" % [
+			"✓" if completed else "·",
+			str(mission.get("title", "기본 목표")),
+			progress,
+			target_count,
+		])
+	return lines
+
+
+func _refresh_objective_panel() -> void:
+	if objective_panel == null or objective_label == null:
+		return
+	var lines: Array[String] = []
+	if not field_objective_title.is_empty():
+		lines.append(field_objective_title)
+		for detail_line in field_objective_detail.split("\n", false):
+			lines.append("  %s" % detail_line)
+	if not basic_raid_missions.is_empty():
+		if not lines.is_empty():
+			lines.append("")
+		lines.append("기본 목표")
+		lines.append_array(_get_basic_mission_lines())
+	objective_label.text = "\n".join(lines)
+	objective_label.add_theme_color_override(
+		"font_color",
+		field_objective_color if not field_objective_title.is_empty() else Color("#d9cfab")
+	)
+	objective_panel.visible = not lines.is_empty()
+	_apply_hud_layout()
+
+
 func _setup_procedural_field_missions(world: ProceduralCityMap) -> void:
 	field_mission_sites.clear()
 	active_field_mission = null
@@ -5541,7 +6002,9 @@ func _update_field_missions(delta: float) -> void:
 	if field_mission_result_timer > 0.0:
 		field_mission_result_timer = maxf(0.0, field_mission_result_timer - delta)
 		if field_mission_result_timer <= 0.0 and not is_instance_valid(active_field_mission):
-			objective_panel.visible = false
+			field_objective_title = ""
+			field_objective_detail = ""
+			_refresh_objective_panel()
 	if not is_instance_valid(active_field_mission):
 		return
 
@@ -6168,10 +6631,14 @@ func _complete_field_mission() -> void:
 	var reward_text := _grant_field_mission_reward(
 		completed_site.get_meta("reward", {}) as Dictionary
 	)
+	var mission_title := str(completed_site.get_meta("title", "현장 임무"))
+	if not completed_mission_titles.has(mission_title):
+		completed_mission_titles.append(mission_title)
+		completed_mission_xp += 70
 	_set_field_mission_site_state(completed_site, "completed")
 	_set_field_mission_objective(
-		"임무 완료 · %s" % str(completed_site.get_meta("title", "현장 임무")),
-		"보상  %s" % reward_text,
+		"임무 완료 · %s" % mission_title,
+		"보상  %s · 경험치 +70" % reward_text,
 		Color("#7de0a8")
 	)
 	_show_field_notice("임무 완료 · %s" % reward_text)
@@ -6256,7 +6723,6 @@ func _set_field_mission_site_state(site: Node3D, state: String) -> void:
 
 
 func _set_field_mission_objective(title: String, detail: String, color: Color) -> void:
-	objective_panel.visible = true
 	var objective_detail := detail
 	if (
 		is_instance_valid(active_field_mission)
@@ -6266,8 +6732,10 @@ func _set_field_mission_objective(title: String, detail: String, color: Color) -
 		var wave_status := _get_field_mission_wave_status()
 		if not wave_status.is_empty():
 			objective_detail += "\n  %s" % wave_status
-	objective_label.text = "  %s\n  %s" % [title, objective_detail]
-	objective_label.add_theme_color_override("font_color", color)
+	field_objective_title = title
+	field_objective_detail = objective_detail
+	field_objective_color = color
+	_refresh_objective_panel()
 
 
 func _clear_active_mission_collectibles() -> void:
@@ -6755,6 +7223,14 @@ func _complete_field_interaction(point: Node3D) -> void:
 			_add_fatigue(FATIGUE_SALVAGE_GAIN)
 			_spawn_salvage_rewards(point.global_position)
 			_show_field_notice("분해 완료 · 총기 개조 부품이 떨어졌습니다.")
+		"basic_mission_subway":
+			var subway_mission_id := str(point.get_meta("basic_mission_id", "subway"))
+			_advance_basic_mission(subway_mission_id)
+			_show_field_notice(
+				"지하 보급로 확인 완료 · 종로 지하선을 확보했습니다."
+				if subway_mission_id == "subway_return"
+				else "지하철역 진입로 조사 완료 · 포격 신호를 기록했습니다."
+			)
 		"rescue":
 			_add_fatigue(FATIGUE_RESCUE_GAIN)
 			_add_rescued_follower(point.global_position)
@@ -6804,13 +7280,25 @@ func _recover_previous_corpse() -> void:
 	var recovered_weapons := loot.get("weapon_inventory", {}) as Dictionary
 	for weapon_id in recovered_weapons.keys():
 		GameState.add_weapon(str(weapon_id), maxi(0, int(recovered_weapons[weapon_id])))
+	var recovered_loadouts := loot.get("weapon_mod_loadouts", {}) as Dictionary
+	for weapon_id in recovered_loadouts.keys():
+		GameState.weapon_mod_loadouts[str(weapon_id)] = (recovered_loadouts[weapon_id] as Array).duplicate()
 	var recovered_equipment := loot.get("equipment_inventory", {}) as Dictionary
 	for equipment_id in recovered_equipment.keys():
 		GameState.add_equipment(str(equipment_id), maxi(0, int(recovered_equipment[equipment_id])))
+	var recovered_weapon_id := str(loot.get("equipped_weapon_id", ""))
+	if (
+		not recovered_weapon_id.is_empty()
+		and GameState.get_weapon_count(recovered_weapon_id) > 0
+		and not has_ak
+	):
+		_on_inventory_weapon_equipped(recovered_weapon_id)
 	reserve_ammo = GameState.get_ammo_count(GameState.equipped_ammo_id)
 	GameState.reserve_ammo = reserve_ammo
 	GameState.clear_pending_corpse_recovery()
 	GameState.save_persistent_state()
+	if is_instance_valid(tactical_map) and tactical_map.has_method("clear_corpse_recovery"):
+		tactical_map.call("clear_corpse_recovery")
 	_show_field_notice("분실 장비 회수 완료 · %d개 품목을 되찾았습니다." % recovered_count)
 	_update_medkit_button()
 
@@ -6860,6 +7348,7 @@ func _update_fatigue(delta: float, is_moving: bool) -> void:
 	_add_fatigue(rate * delta)
 	GameState.fatigue = fatigue
 	_refresh_fatigue_hud()
+	_trigger_fatigue_boss_event()
 
 
 func _add_fatigue(amount: float) -> void:
@@ -6868,6 +7357,7 @@ func _add_fatigue(amount: float) -> void:
 	fatigue = clampf(fatigue + amount * GameState.get_fatigue_gain_multiplier(), 0.0, FATIGUE_MAX)
 	GameState.fatigue = fatigue
 	_refresh_fatigue_hud()
+	_trigger_fatigue_boss_event()
 
 
 func _refresh_fatigue_hud() -> void:
@@ -7008,6 +7498,9 @@ func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
 	if _is_inventory_button_at(touch.position):
 		_toggle_inventory()
 		return true
+	if _mobile_button_contains(mobile_map_button, touch.position):
+		_on_mobile_map_pressed()
+		return true
 	if _is_inventory_open() or _is_tactical_map_open() or extraction_transition_active:
 		return false
 	if _mobile_button_contains(fire_button, touch.position):
@@ -7033,9 +7526,6 @@ func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
 		var enabled := not mobile_flashlight_button.button_pressed
 		mobile_flashlight_button.set_pressed_no_signal(enabled)
 		_on_mobile_flashlight_toggled(enabled)
-		return true
-	if _mobile_button_contains(mobile_map_button, touch.position):
-		_on_mobile_map_pressed()
 		return true
 	if _mobile_button_contains(mobile_medkit_button, touch.position):
 		_use_quick_medkit()
