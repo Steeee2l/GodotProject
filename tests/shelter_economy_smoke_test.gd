@@ -111,13 +111,17 @@ func _run() -> void:
 		if str(resident.get_meta("assignment_kind", "")) == "catnip":
 			catnip_workers += 1
 			var catnip_resident_id := str(resident.get_meta("resident_id", ""))
-			worker_catnip_rate_total += float(
-				game_state.call(
-					"get_worker_production_per_second",
-					catnip_resident_id,
-					"catnip"
-				)
-			)
+			var resident_catnip_rate := float(game_state.call(
+				"get_worker_production_per_second",
+				catnip_resident_id,
+				"catnip"
+			))
+			worker_catnip_rate_total += resident_catnip_rate
+			if (
+				resident_catnip_rate < 1.0
+				or not is_equal_approx(resident_catnip_rate, roundf(resident_catnip_rate))
+			):
+				_fail("catnip workers must produce whole units at a minimum rate of one per second")
 			var work_indicator := resident.get_node_or_null("WorkIndicator") as Label3D
 			if (
 				work_indicator == null
@@ -126,8 +130,28 @@ func _run() -> void:
 			):
 				_fail("catnip worker does not display its live production rate")
 			resident.call("emit_production_feedback_now")
-			if resident.find_child("ProductionGain", false, false) == null:
+			var production_gain := resident.find_child(
+				"ProductionGain",
+				false,
+				false
+			) as Label3D
+			if production_gain == null:
 				_fail("catnip worker did not emit a floating production number")
+			elif (
+				production_gain.font_size < 40
+				or float(production_gain.get_meta("rise_height", 0.0)) < 1.0
+				or production_gain.text.contains(".")
+			):
+				_fail("floating production number must be large, animated, and integer-only")
+			else:
+				var initial_gain_y := production_gain.position.y
+				await create_timer(0.2).timeout
+				if (
+					not is_instance_valid(production_gain)
+					or production_gain.position.y <= initial_gain_y + 0.05
+					or production_gain.scale.x <= 0.8
+				):
+					_fail("floating production number does not pop and rise")
 	if catnip_workers != 1 or int(game_state.call("get_active_catnip_workers")) != 1:
 		_fail("visible catnip worker does not match assigned worker data")
 	if not is_equal_approx(
@@ -312,7 +336,7 @@ func _run() -> void:
 	if float(game_state.call("get_catnip_per_hour")) <= catnip_rate_before:
 		_fail("catnip scraper upgrade did not improve production")
 
-	game_state.set("catnip", 25.0)
+	game_state.set("catnip", 25)
 	if not bool(game_state.call("activate_catnip_boost")) or float(game_state.call("get_production_multiplier")) != 10.0:
 		_fail("catnip production boost failed")
 	game_state.set("scrap", 2000)
@@ -322,7 +346,7 @@ func _run() -> void:
 	if int(game_state.call("get_resident_capacity")) != 10 or int(game_state.call("get_scratcher_worker_slots")) != 6 or int(game_state.call("get_catnip_worker_slots")) != 2:
 		_fail("tier 2 capacity table is inconsistent")
 
-	print("SHELTER_ECONOMY_OK scrap=%d catnip=%.1f durability=%.1f workers=%d" % [
+	print("SHELTER_ECONOMY_OK scrap=%d catnip=%d durability=%.1f workers=%d" % [
 		game_state.get("scrap"),
 		game_state.get("catnip"),
 		game_state.get("weapon_durability"),

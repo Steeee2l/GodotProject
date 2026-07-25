@@ -80,7 +80,10 @@ func _run() -> void:
 	var workbench_sprite := workbench.get_node("WorkbenchSprite") as Sprite3D
 	assert(workbench_sprite.texture.resource_path == WORKBENCH_TEXTURE_PATH)
 	assert(workbench_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
+	assert(is_equal_approx(workbench_sprite.position.y, 1.95))
 	assert(is_equal_approx(workbench_sprite.position.z, 0.02))
+	assert(is_equal_approx(workbench_sprite.pixel_size, 0.0042))
+	assert(workbench_sprite.scale == Vector3.ONE)
 	assert(workbench_sprite.no_depth_test)
 	assert(workbench.get_node("GroundShadow") is MeshInstance3D)
 	assert(workbench.has_method("interact"))
@@ -88,6 +91,7 @@ func _run() -> void:
 	var bank_sprite := bank.get_node("BankSprite") as Sprite3D
 	assert(bank_sprite.texture.resource_path == SCRATCHER_BANK_TEXTURE_PATH)
 	assert(bank_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
+	assert(is_equal_approx(bank_sprite.position.y, 1.98))
 	assert(is_equal_approx(bank_sprite.position.z, 0.02))
 	assert(bank_sprite.no_depth_test)
 	assert(bank.get_node("GroundShadow") is MeshInstance3D)
@@ -103,6 +107,7 @@ func _run() -> void:
 	var training_sprite := training.get_node("TrainingSprite") as Sprite3D
 	assert(training_sprite.texture.resource_path == TRAINING_TEXTURE_PATH)
 	assert(training_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
+	assert(is_equal_approx(training_sprite.position.y, 2.02))
 	assert(is_equal_approx(training_sprite.position.z, 0.02))
 	assert(training.get_node("GroundShadow") is MeshInstance3D)
 	assert(training.has_method("interact"))
@@ -110,6 +115,9 @@ func _run() -> void:
 	var storage_sprite := storage.get_node("StorageSprite") as Sprite3D
 	assert(storage_sprite.texture.resource_path == STORAGE_TEXTURE_PATH)
 	assert(storage_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
+	assert(is_equal_approx(storage_sprite.position.y, 1.89))
+	assert(is_equal_approx(storage_sprite.pixel_size, 0.0041))
+	assert(storage_sprite.scale == Vector3.ONE)
 	assert(storage_sprite.no_depth_test)
 	assert(storage.get_node("GroundShadow") is MeshInstance3D)
 	assert(storage.has_method("interact"))

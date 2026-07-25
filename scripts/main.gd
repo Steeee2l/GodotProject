@@ -73,6 +73,7 @@ const ROLL_COOLDOWN_INDICATOR_SCRIPT := preload("res://scripts/roll_cooldown_ind
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const TACTICAL_MAP_SCRIPT := preload("res://scripts/tactical_map.gd")
 const RESCUED_CAT_FOLLOWER_SCRIPT := preload("res://scripts/rescued_cat_follower.gd")
+const LORE_POSTER_TEXTURE := preload("res://assets/lore/forgotten_notice_board_v1.png")
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
 const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
 const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/magazine_spring.png")
@@ -127,7 +128,7 @@ const FATIGUE_SPEED_MIN := 0.58
 const ESCORT_SPEED_PENALTY := 0.07
 const FIELD_MISSION_COUNT := 6
 const FIELD_MISSION_TRIGGER_RADIUS := 4.6
-const FIELD_MISSION_FAIL_RADIUS := 18.0
+const FIELD_MISSION_FAIL_RADIUS := 32.0
 const FIELD_MISSION_RESULT_DURATION := 2.8
 const FIELD_MISSION_START_HOLD_DURATION := 0.65
 const FIELD_MISSION_PREPARE_DURATION := 7.0
@@ -142,6 +143,45 @@ const BASIC_PARTS_XP := 90
 const BASIC_SUBWAY_XP := 120
 const BASIC_SUBWAY_BOSS_XP := 260
 const BASIC_SUBWAY_RETURN_XP := 180
+const LORE_CLUE_COUNT := 6
+const LORE_ENTRIES := [
+	{
+		"id": "last_quarantine",
+		"title": "서울 최종 방역령",
+		"source": "찢어진 인간 대피 포스터",
+		"body": "인간들은 ‘회색 새벽’이라 불린 전염 사태가 시작되자 지하철과 한강 교량을 봉쇄했다. 마지막 방송은 사람을 구하지 못했고, 도시는 며칠 만에 주인을 잃었다. 이상하게도 길고양이들은 발병하지 않았다.",
+	},
+	{
+		"id": "glass_claw",
+		"title": "유리발톱 의회의 통치 선언",
+		"source": "붉은 왕관 선전물",
+		"body": "살아남은 고양이 중 가장 먼저 인간의 창고와 정수 시설을 차지한 세력이 유리발톱 의회였다. 그들은 목줄 없는 고양이를 하층민으로 분류하고, 츄르 배급권과 안전 구역 출입증으로 서울을 지배한다.",
+	},
+	{
+		"id": "ration_47b",
+		"title": "배급표 47-B",
+		"source": "물에 젖은 보급 명세서",
+		"body": "통조림은 일상 화폐지만 츄르는 다르다. 오래 보관할 수 있고 열량이 높으며 인간 시대의 생산 시설이 사라져 더 만들 수도 없다. 그래서 츄르 한 봉지는 쉘터의 벽을 넓히고 충성을 사는 금괴처럼 취급된다.",
+	},
+	{
+		"id": "catnip_engine",
+		"title": "캣닢 교대근무 지침",
+		"source": "생산소 안전 수칙",
+		"body": "캣닢은 사치품이자 노동 촉진제다. 소량을 태우면 지친 일꾼들이 짧은 시간 동안 놀라운 집중력을 보인다. 의회는 이를 ‘녹색 축복’이라 부르지만, 골목의 고양이들은 생산량을 뽑아내기 위한 족쇄라고 말한다.",
+	},
+	{
+		"id": "alley_union",
+		"title": "골목연합의 낙서",
+		"source": "지하 통로의 덧칠된 벽보",
+		"body": "왕관은 창고를 가졌지만 골목까지 가지지는 못했다. 구조된 주민, 떠돌이 상인, 폐역의 정비공들은 골목연합이라는 느슨한 저항망을 만들었다. 이들의 표식은 부러진 생선뼈이며, 안전한 하수구 근처에 남겨진다.",
+	},
+	{
+		"id": "vet_record",
+		"title": "수의사 윤 박사의 마지막 기록",
+		"source": "파손된 음성 기록 전사본",
+		"body": "고양이의 생존은 우연이 아니었다. 인간이 개발하던 실험용 항바이러스제가 사료 공장을 통해 서울의 길고양이에게 먼저 퍼졌다는 정황이 있다. 누가 약을 유출했는지, 왜 인간에게는 늦었는지는 기록에서 지워져 있다.",
+	},
+]
 const FIELD_MISSION_TEMPLATES := [
 	{
 		"type": "defense",
@@ -236,7 +276,7 @@ const FIELD_MISSION_TEMPLATES := [
 		"type": "stealth_reach",
 		"title": "감시망 우회",
 		"description": "총을 쏘지 말고 순찰의 시야를 피해 반대편 안전 지점에 도달하십시오.",
-		"target_distance": 10.0,
+		"target_distance": 20.0,
 		"guard_count": 2,
 		"detection_grace": 1.6,
 		"silence_required": true,
@@ -447,6 +487,7 @@ var corpse_recovery_point: Node3D
 var game_over_canvas: CanvasLayer
 var game_over_fade: ColorRect
 var game_over_label: Label
+var game_over_loss_label: Label
 var raid_zone_data: Dictionary = {}
 var field_mission_sites: Array[Node3D] = []
 var active_field_mission: Node3D
@@ -466,6 +507,14 @@ var field_mission_investigation_target: Node3D
 var field_mission_noise_breached := false
 var basic_raid_missions: Array[Dictionary] = []
 var basic_subway_mission_site: Node3D
+var lore_clues: Array[Node3D] = []
+var lore_clues_discovered := 0
+var lore_ui_layer: CanvasLayer
+var lore_ui_panel: PanelContainer
+var lore_title_label: Label
+var lore_source_label: Label
+var lore_body_label: Label
+var lore_progress_label: Label
 var completed_mission_titles: Array[String] = []
 var completed_mission_xp := 0
 var field_objective_title := ""
@@ -538,6 +587,7 @@ func _ready() -> void:
 	_setup_aim_feedback()
 	_setup_player_combat_feedback()
 	_setup_game_over_feedback()
+	_setup_lore_reader_ui()
 	_setup_boss_alert_ui()
 	_setup_weather_effects()
 	_spawn_ammo_pickups()
@@ -559,6 +609,7 @@ func _ready() -> void:
 	_setup_field_objectives(world)
 	_setup_procedural_field_missions(world)
 	_setup_basic_raid_missions(world)
+	_setup_world_lore_clues(world)
 	_setup_corpse_recovery(world)
 	_register_building_entrance_interactions()
 	_setup_tactical_map(world)
@@ -632,7 +683,7 @@ func _physics_process(delta: float) -> void:
 	_update_field_interactions(delta)
 	_update_extraction_discovery()
 	_update_combat_overlay_visibility()
-	if _is_inventory_open() or _is_tactical_map_open() or extraction_transition_active:
+	if _is_inventory_open() or _is_tactical_map_open() or _is_lore_open() or extraction_transition_active:
 		player.velocity = Vector3.ZERO
 		player.move_and_slide()
 		_update_building_overlays()
@@ -1324,6 +1375,7 @@ func _update_scope_camera(delta: float) -> void:
 		and scope_zoom > 1.0
 		and not _is_inventory_open()
 		and not _is_tactical_map_open()
+		and not _is_lore_open()
 	)
 	var target_offset := Vector3.ZERO
 	var target_camera_size := BASE_CAMERA_SIZE
@@ -1504,7 +1556,11 @@ func _update_aim_feedback(delta: float) -> void:
 	recoil_reticle_offset = recoil_reticle_offset.lerp(Vector2.ZERO, 1.0 - exp(-10.0 * delta))
 	_update_laser_beam(aim_direction)
 	if aim_reticle:
-		aim_reticle.visible = _uses_mouse_aim() and not _is_inventory_open()
+		aim_reticle.visible = (
+			_uses_mouse_aim()
+			and not _is_inventory_open()
+			and not _is_lore_open()
+		)
 		if aim_reticle.visible:
 			aim_reticle.call(
 				"update_feedback",
@@ -1514,7 +1570,12 @@ func _update_aim_feedback(delta: float) -> void:
 				laser_aim_held
 			)
 	if reload_reticle_indicator:
-		var show_reload := weapon_reloading and _uses_mouse_aim() and not _is_inventory_open()
+		var show_reload := (
+			weapon_reloading
+			and _uses_mouse_aim()
+			and not _is_inventory_open()
+			and not _is_lore_open()
+		)
 		var reload_progress := 0.0
 		if show_reload:
 			var reload_duration := maxf(0.01, float(weapon_stats.get("reload_time", 2.15)))
@@ -1707,6 +1768,170 @@ func _setup_game_over_feedback() -> void:
 	game_over_label.add_theme_constant_override("outline_size", 8)
 	game_over_label.modulate.a = 0.0
 	game_over_canvas.add_child(game_over_label)
+	game_over_loss_label = Label.new()
+	game_over_loss_label.name = "GameOverLossLabel"
+	game_over_loss_label.set_anchors_preset(Control.PRESET_CENTER)
+	game_over_loss_label.offset_left = -410
+	game_over_loss_label.offset_top = 126
+	game_over_loss_label.offset_right = 410
+	game_over_loss_label.offset_bottom = 300
+	game_over_loss_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	game_over_loss_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	game_over_loss_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	game_over_loss_label.add_theme_font_override("font", preload("res://assets/fonts/Pretendard-Regular.otf"))
+	game_over_loss_label.add_theme_font_size_override("font_size", 19)
+	game_over_loss_label.add_theme_color_override("font_color", Color("#e0b58b"))
+	game_over_loss_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.95))
+	game_over_loss_label.add_theme_constant_override("outline_size", 5)
+	game_over_loss_label.modulate.a = 0.0
+	game_over_canvas.add_child(game_over_loss_label)
+
+
+func _setup_lore_reader_ui() -> void:
+	lore_ui_layer = CanvasLayer.new()
+	lore_ui_layer.name = "LoreReaderLayer"
+	lore_ui_layer.layer = 165
+	lore_ui_layer.visible = false
+	add_child(lore_ui_layer)
+
+	var dim := ColorRect.new()
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.004, 0.007, 0.008, 0.92)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	lore_ui_layer.add_child(dim)
+
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	lore_ui_layer.add_child(center)
+	lore_ui_panel = PanelContainer.new()
+	lore_ui_panel.name = "LoreReaderPanel"
+	lore_ui_panel.add_theme_stylebox_override(
+		"panel",
+		_make_panel_style(Color(0.025, 0.031, 0.03, 0.99), Color("#8f7a4b"), 6)
+	)
+	center.add_child(lore_ui_panel)
+
+	var margin := MarginContainer.new()
+	margin.name = "LoreReaderMargin"
+	for margin_name in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
+		margin.add_theme_constant_override(margin_name, 24)
+	lore_ui_panel.add_child(margin)
+	var root_box := VBoxContainer.new()
+	root_box.add_theme_constant_override("separation", 16)
+	margin.add_child(root_box)
+
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 12)
+	root_box.add_child(header)
+	var heading := VBoxContainer.new()
+	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(heading)
+	var eyebrow := Label.new()
+	eyebrow.text = "종로 생존 기록"
+	eyebrow.add_theme_font_override("font", FONT)
+	eyebrow.add_theme_font_size_override("font_size", 13)
+	eyebrow.add_theme_color_override("font_color", Color("#8faaa0"))
+	heading.add_child(eyebrow)
+	lore_title_label = Label.new()
+	lore_title_label.add_theme_font_override("font", FONT)
+	lore_title_label.add_theme_font_size_override("font_size", 29)
+	lore_title_label.add_theme_color_override("font_color", Color("#ead39a"))
+	heading.add_child(lore_title_label)
+	var close_button := Button.new()
+	close_button.name = "LoreCloseButton"
+	close_button.custom_minimum_size = Vector2(52, 52)
+	close_button.icon = UI_ICONS.get_icon("close", 28, Color("#dce6df"))
+	close_button.expand_icon = true
+	close_button.tooltip_text = "기록 닫기"
+	close_button.pressed.connect(_close_lore_reader)
+	header.add_child(close_button)
+
+	var content := HBoxContainer.new()
+	content.name = "LoreReaderContent"
+	content.add_theme_constant_override("separation", 22)
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root_box.add_child(content)
+	var preview := TextureRect.new()
+	preview.name = "LorePosterPreview"
+	preview.texture = LORE_POSTER_TEXTURE
+	preview.custom_minimum_size = Vector2(330, 250)
+	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	content.add_child(preview)
+
+	var text_box := VBoxContainer.new()
+	text_box.name = "LoreReaderText"
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	text_box.add_theme_constant_override("separation", 12)
+	content.add_child(text_box)
+	lore_source_label = Label.new()
+	lore_source_label.add_theme_font_override("font", FONT)
+	lore_source_label.add_theme_font_size_override("font_size", 15)
+	lore_source_label.add_theme_color_override("font_color", Color("#8eb7a6"))
+	text_box.add_child(lore_source_label)
+	var separator := HSeparator.new()
+	text_box.add_child(separator)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	text_box.add_child(scroll)
+	lore_body_label = Label.new()
+	lore_body_label.custom_minimum_size = Vector2(360, 190)
+	lore_body_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lore_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lore_body_label.add_theme_font_override("font", FONT)
+	lore_body_label.add_theme_font_size_override("font_size", 18)
+	lore_body_label.add_theme_color_override("font_color", Color("#d6ddd7"))
+	lore_body_label.add_theme_constant_override("line_spacing", 7)
+	scroll.add_child(lore_body_label)
+	lore_progress_label = Label.new()
+	lore_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	lore_progress_label.add_theme_font_override("font", FONT)
+	lore_progress_label.add_theme_font_size_override("font_size", 14)
+	lore_progress_label.add_theme_color_override("font_color", Color("#a89970"))
+	text_box.add_child(lore_progress_label)
+
+
+func _is_lore_open() -> bool:
+	return is_instance_valid(lore_ui_layer) and lore_ui_layer.visible
+
+
+func _show_lore_entry(point: Node3D) -> void:
+	if not is_instance_valid(point):
+		return
+	var entry_index := clampi(int(point.get_meta("lore_index", 0)), 0, LORE_ENTRIES.size() - 1)
+	var entry := LORE_ENTRIES[entry_index] as Dictionary
+	if not bool(point.get_meta("read", false)):
+		point.set_meta("read", true)
+		lore_clues_discovered += 1
+		var marker_label := point.get_node_or_null("LoreMarkerLabel") as Label3D
+		if marker_label:
+			marker_label.text = "확인한 기록"
+			marker_label.modulate = Color("#8eb7a6")
+	lore_title_label.text = str(entry.get("title", "이름 없는 기록"))
+	lore_source_label.text = str(entry.get("source", "출처 불명"))
+	lore_body_label.text = str(entry.get("body", "기록이 심하게 훼손되어 있습니다."))
+	lore_progress_label.text = "발견한 세계 기록  %d / %d" % [
+		lore_clues_discovered,
+		LORE_ENTRIES.size(),
+	]
+	lore_ui_layer.visible = true
+	_release_mobile_held_actions()
+	if not DisplayServer.is_touchscreen_available():
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	_apply_hud_layout()
+	_update_combat_overlay_visibility()
+
+
+func _close_lore_reader() -> void:
+	if not is_instance_valid(lore_ui_layer):
+		return
+	lore_ui_layer.visible = false
+	if not DisplayServer.is_touchscreen_available():
+		Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
+	_apply_hud_layout()
+	_update_combat_overlay_visibility()
 
 
 func _setup_boss_alert_ui() -> void:
@@ -1881,17 +2106,71 @@ func _corpse_loot_item_count(loot: Dictionary) -> int:
 	return total
 
 
-func _store_death_corpse() -> void:
+func _store_death_corpse() -> Dictionary:
 	var loot := _build_death_corpse_loot()
 	if _corpse_loot_item_count(loot) <= 0:
 		GameState.clear_pending_corpse_recovery()
-		return
+		return loot
 	GameState.set_pending_corpse_recovery({
 		"map_seed": GameState.map_seed,
 		"raid_zone": GameState.selected_raid_zone,
 		"position": [player.global_position.x, player.global_position.y, player.global_position.z],
 		"loot": loot,
 	})
+	return loot
+
+
+func _format_death_loss_summary(loot: Dictionary) -> String:
+	if _corpse_loot_item_count(loot) <= 0:
+		return "분실한 휴대품 없음"
+	var gear_entries: Array[String] = []
+	var weapon_inventory := loot.get("weapon_inventory", {}) as Dictionary
+	for weapon_id_value in weapon_inventory.keys():
+		var weapon_amount := maxi(0, int(weapon_inventory.get(weapon_id_value, 0)))
+		if weapon_amount > 0:
+			gear_entries.append("%s x%d" % [_get_loot_weapon_name(str(weapon_id_value)), weapon_amount])
+	var equipment_inventory := loot.get("equipment_inventory", {}) as Dictionary
+	for equipment_id_value in equipment_inventory.keys():
+		var equipment_amount := maxi(0, int(equipment_inventory.get(equipment_id_value, 0)))
+		if equipment_amount <= 0:
+			continue
+		var equipment_id := str(equipment_id_value)
+		var equipment_name := str(
+			GameState.get_equipment_definition(equipment_id).get("display_name", equipment_id)
+		)
+		gear_entries.append("%s x%d" % [equipment_name, equipment_amount])
+
+	var ammo_count := 0
+	for amount in (loot.get("ammo_inventory", {}) as Dictionary).values():
+		ammo_count += maxi(0, int(amount))
+	var component_count := 0
+	for amount in (loot.get("mod_component_inventory", {}) as Dictionary).values():
+		component_count += maxi(0, int(amount))
+	var mod_count := 0
+	for amount in (loot.get("weapon_mod_inventory", {}) as Dictionary).values():
+		mod_count += maxi(0, int(amount))
+
+	var lines: Array[String] = ["분실한 장비 및 소모품"]
+	if not gear_entries.is_empty():
+		lines.append("장비 · %s" % "  /  ".join(gear_entries))
+	var supply_entries: Array[String] = []
+	if ammo_count > 0:
+		supply_entries.append("탄약 %d발" % ammo_count)
+	var medkit_count := maxi(0, int(loot.get("medkits", 0)))
+	if medkit_count > 0:
+		supply_entries.append("구급약 %d개" % medkit_count)
+	var canned_food_count := maxi(0, int(loot.get("canned_food", 0)))
+	if canned_food_count > 0:
+		supply_entries.append("통조림 %d개" % canned_food_count)
+	var churu_count := maxi(0, int(loot.get("churu", 0)))
+	if churu_count > 0:
+		supply_entries.append("츄르 %d개" % churu_count)
+	if component_count + mod_count > 0:
+		supply_entries.append("부품 %d개" % (component_count + mod_count))
+	if not supply_entries.is_empty():
+		lines.append("휴대품 · %s" % "  /  ".join(supply_entries))
+	lines.append("다음 탐사에서 사망 지점의 가방을 한 번 회수할 수 있습니다.")
+	return "\n".join(lines)
 
 
 func _clear_carried_inventory_after_death() -> void:
@@ -1936,7 +2215,7 @@ func _begin_player_death_sequence() -> void:
 	if player_death_sequence_active:
 		return
 	player_death_sequence_active = true
-	_store_death_corpse()
+	var corpse_loot := _store_death_corpse()
 	fire_button_held = false
 	mouse_fire_held = false
 	laser_aim_held = false
@@ -1949,6 +2228,7 @@ func _begin_player_death_sequence() -> void:
 		run_kills,
 		run_damage_dealt,
 	]
+	game_over_loss_label.text = _format_death_loss_summary(corpse_loot)
 	Engine.time_scale = 0.18
 	var tween := create_tween()
 	tween.set_ignore_time_scale(true)
@@ -1956,9 +2236,10 @@ func _begin_player_death_sequence() -> void:
 	tween.tween_property(camera, "size", maxf(8.5, camera.size * 0.46), 1.15).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tween.tween_property(survivor, "modulate", Color(1, 1, 1, 0), 1.25).set_delay(0.45)
 	tween.tween_property(game_over_label, "modulate:a", 1.0, 0.55).set_delay(0.65)
+	tween.tween_property(game_over_loss_label, "modulate:a", 1.0, 0.55).set_delay(0.78)
 	tween.tween_property(game_over_fade, "color:a", 0.62, 0.85).set_delay(1.15)
 	tween.set_parallel(false)
-	tween.tween_interval(1.25)
+	tween.tween_interval(2.0)
 	tween.tween_property(game_over_fade, "color:a", 1.0, 0.6)
 	tween.tween_callback(func() -> void:
 		Engine.time_scale = 1.0
@@ -2476,7 +2757,50 @@ func _apply_hud_layout() -> void:
 		92.0,
 		220.0
 	)
-	var hud_blocked := _is_inventory_open() or _is_tactical_map_open()
+	var hud_blocked := _is_inventory_open() or _is_tactical_map_open() or _is_lore_open()
+
+	if lore_ui_panel:
+		var lore_compact := viewport_size.x < 760.0 or viewport_size.y < 540.0
+		var lore_margin := 12 if lore_compact else 24
+		lore_ui_panel.custom_minimum_size = Vector2(
+			maxf(280.0, minf(900.0, viewport_size.x - 20.0)),
+			maxf(260.0, minf(540.0, viewport_size.y - 20.0))
+		)
+		var lore_margin_container := lore_ui_panel.get_node_or_null(
+			"LoreReaderMargin"
+		) as MarginContainer
+		if lore_margin_container:
+			for margin_name in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
+				lore_margin_container.add_theme_constant_override(margin_name, lore_margin)
+		var lore_content := lore_ui_panel.find_child(
+			"LoreReaderContent",
+			true,
+			false
+		) as HBoxContainer
+		if lore_content:
+			lore_content.add_theme_constant_override("separation", 10 if lore_compact else 22)
+		var lore_preview := lore_ui_panel.find_child(
+			"LorePosterPreview",
+			true,
+			false
+		) as TextureRect
+		if lore_preview:
+			lore_preview.custom_minimum_size = (
+				Vector2(clampf(viewport_size.x * 0.25, 90.0, 180.0), 150.0)
+				if lore_compact
+				else Vector2(330.0, 250.0)
+			)
+		if lore_body_label:
+			lore_body_label.custom_minimum_size = (
+				Vector2(clampf(viewport_size.x * 0.38, 130.0, 250.0), 130.0)
+				if lore_compact
+				else Vector2(360.0, 190.0)
+			)
+		if lore_title_label:
+			lore_title_label.add_theme_font_size_override(
+				"font_size",
+				22 if lore_compact else 29
+			)
 
 	var health_bar := top_left_status_panel.get_node_or_null("Margin/VBox/Health")
 	var status_stats := top_left_status_panel.get_node_or_null("Margin/VBox/Stats")
@@ -2648,6 +2972,7 @@ func _apply_hud_layout() -> void:
 		mobile_map_button.visible = (
 			touch_available
 			and not _is_inventory_open()
+			and not _is_lore_open()
 			and not extraction_transition_active
 		)
 		mobile_map_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
@@ -2683,6 +3008,15 @@ func _apply_hud_layout() -> void:
 		game_over_label.offset_right = over_w * 0.5
 		game_over_label.offset_top = -over_h * 0.5
 		game_over_label.offset_bottom = over_h * 0.5
+	if game_over_loss_label:
+		var loss_w := minf(viewport_size.x * 0.88, 840.0)
+		var loss_top := minf(viewport_size.y * 0.15, 130.0)
+		var loss_bottom := minf(viewport_size.y * 0.38, 310.0)
+		game_over_loss_label.set_anchors_preset(Control.PRESET_CENTER)
+		game_over_loss_label.offset_left = -loss_w * 0.5
+		game_over_loss_label.offset_right = loss_w * 0.5
+		game_over_loss_label.offset_top = loss_top
+		game_over_loss_label.offset_bottom = loss_bottom
 
 	if extraction_result_panel:
 		var panel_w := clampf(minf(viewport_size.x * 0.94, 920.0), 520.0, 1000.0)
@@ -3200,7 +3534,12 @@ func _refresh_mobile_context_button() -> void:
 		if distance <= PICKUP_DISTANCE:
 			label = "무기 획득"
 			icon_name = "weapon"
-	mobile_context_button.visible = not label.is_empty() and not _is_inventory_open() and not _is_tactical_map_open()
+	mobile_context_button.visible = (
+		not label.is_empty()
+		and not _is_inventory_open()
+		and not _is_tactical_map_open()
+		and not _is_lore_open()
+	)
 	if not mobile_context_button.visible:
 		return
 	mobile_context_button.text = label
@@ -3803,6 +4142,7 @@ func _update_combat_overlay_visibility() -> void:
 		aim_canvas.visible = (
 			not _is_inventory_open()
 			and not _is_tactical_map_open()
+			and not _is_lore_open()
 			and not extraction_transition_active
 			and not player_death_sequence_active
 		)
@@ -4131,6 +4471,7 @@ func _spawn_rocket_boss_at(
 	boss.name = boss_name
 	boss.set_meta("raid_boss", true)
 	boss.set_meta("zone_id", GameState.selected_raid_zone)
+	boss.set_meta("display_name", "로켓 약탈대장")
 	var marker := Label3D.new()
 	marker.name = "BossMarker"
 	marker.text = "로켓 약탈대장"
@@ -4145,6 +4486,8 @@ func _spawn_rocket_boss_at(
 	marker.outline_modulate = Color(0.08, 0.02, 0.01, 0.95)
 	marker.outline_size = 10
 	boss.add_child(marker)
+	if is_instance_valid(tactical_map) and tactical_map.has_method("register_boss"):
+		tactical_map.call("register_boss", boss)
 	return boss
 
 
@@ -4313,8 +4656,56 @@ func _spawn_enemy_squad(
 			enemy.set_meta(str(metadata_key), metadata[metadata_key])
 		if order_position != Vector3.INF and enemy.has_method("receive_reinforcement_order"):
 			enemy.call("receive_reinforcement_order", order_position)
+		elif enemy.has_method("configure_patrol"):
+			var patrol_mode := (
+				"sentry"
+				if posmod(assigned_squad_id + member_index, 3) == 0
+				else "route"
+			)
+			enemy.call(
+				"configure_patrol",
+				patrol_mode,
+				_build_enemy_patrol_route(
+					world,
+					spawn_position,
+					assigned_squad_id * 7 + member_index,
+					patrol_mode
+				)
+			)
 		spawned.append(enemy)
 	return spawned
+
+
+func _build_enemy_patrol_route(
+	world: ProceduralCityMap,
+	origin: Vector3,
+	route_seed: int,
+	patrol_mode: String
+) -> Array[Vector3]:
+	var points: Array[Vector3] = [origin]
+	var point_count := 3 if patrol_mode == "sentry" else 5
+	var route_radius := 4.2 if patrol_mode == "sentry" else 8.5
+	var base_angle := deg_to_rad(float(posmod(route_seed * 67, 360)))
+	for point_index in range(1, point_count):
+		var angle := base_angle + TAU * float(point_index) / float(point_count - 1)
+		var requested := origin + Vector3(cos(angle), 0.0, sin(angle)) * route_radius
+		var candidate := world.find_nearest_physically_open_position(
+			requested,
+			0.58,
+			[player.get_rid()]
+		)
+		candidate.y = origin.y
+		var duplicate_point := false
+		for existing in points:
+			if existing.distance_to(candidate) < 1.4:
+				duplicate_point = true
+				break
+		if (
+			not duplicate_point
+			and candidate.distance_to(origin) <= route_radius * 1.55
+		):
+			points.append(candidate)
+	return points
 
 
 func _find_squad_member_position(
@@ -5347,8 +5738,20 @@ func _setup_tactical_map(world: ProceduralCityMap) -> void:
 		else Vector3.INF
 	)
 	tactical_map.call("setup", world, player, positions, recovery_position)
+	tactical_map.connect(
+		"open_state_changed",
+		Callable(self, "_on_tactical_map_open_state_changed")
+	)
 	for discovered_index in discovered_extraction_indices.keys():
 		tactical_map.call("discover_extraction", int(discovered_index))
+	for enemy in enemies:
+		if is_instance_valid(enemy) and bool(enemy.get_meta("raid_boss", false)):
+			tactical_map.call("register_boss", enemy)
+
+
+func _on_tactical_map_open_state_changed(_is_open: bool) -> void:
+	_apply_hud_layout()
+	_refresh_mobile_context_button()
 
 
 func _is_tactical_map_open() -> bool:
@@ -5599,7 +6002,8 @@ func _find_random_field_position(world: ProceduralCityMap, minimum_player_distan
 		0.62,
 		[player.get_rid()]
 	)
-	for attempt in 48:
+	var fallback_distance := fallback.distance_to(player.global_position)
+	for attempt in 96:
 		var requested := Vector3(
 			spawn_random.randf_range(-map_limit, map_limit),
 			0.08,
@@ -5611,8 +6015,14 @@ func _find_random_field_position(world: ProceduralCityMap, minimum_player_distan
 			[player.get_rid()]
 		)
 		candidate.y = 0.08
-		fallback = candidate
-		if candidate.distance_to(player.global_position) >= minimum_player_distance:
+		var player_distance := candidate.distance_to(player.global_position)
+		if not world.is_position_in_safe_zone(candidate) and player_distance > fallback_distance:
+			fallback = candidate
+			fallback_distance = player_distance
+		if (
+			player_distance >= minimum_player_distance
+			and not world.is_position_in_safe_zone(candidate)
+		):
 			return candidate
 	return fallback
 
@@ -5636,13 +6046,9 @@ func _find_stratified_map_position(
 		world_y,
 		-map_limit + (float(sector_z) + 0.5) * sector_size
 	)
-	var fallback := world.find_nearest_physically_open_position(
-		sector_center,
-		0.62,
-		[player.get_rid()]
-	)
-	fallback.y = world_y
-	for attempt in 24:
+	var distant_fallback := Vector3.INF
+	var distant_fallback_separation := -1.0
+	for attempt in 72:
 		var jitter_scale := sector_size * (0.12 + 0.015 * float(attempt % 8))
 		var angle := spawn_random.randf_range(0.0, TAU)
 		var requested := sector_center + Vector3(cos(angle), 0.0, sin(angle)) * jitter_scale
@@ -5654,11 +6060,21 @@ func _find_stratified_map_position(
 			[player.get_rid()]
 		)
 		candidate.y = world_y
-		fallback = candidate
 		if candidate.distance_to(player.global_position) < minimum_player_distance:
 			continue
 		if world.is_position_in_safe_zone(candidate):
 			continue
+		var nearest_occupied_distance := INF
+		for occupied_position in occupied_positions:
+			nearest_occupied_distance = minf(
+				nearest_occupied_distance,
+				occupied_position.distance_to(candidate)
+			)
+		if occupied_positions.is_empty():
+			nearest_occupied_distance = minimum_separation
+		if nearest_occupied_distance > distant_fallback_separation:
+			distant_fallback = candidate
+			distant_fallback_separation = nearest_occupied_distance
 		var separated := true
 		for occupied_position in occupied_positions:
 			if occupied_position.distance_to(candidate) < minimum_separation:
@@ -5666,7 +6082,9 @@ func _find_stratified_map_position(
 				break
 		if separated:
 			return candidate
-	return fallback
+	if distant_fallback != Vector3.INF:
+		return distant_fallback
+	return _find_random_field_position(world, minimum_player_distance)
 
 
 func _setup_field_objectives(world: ProceduralCityMap) -> void:
@@ -5777,7 +6195,7 @@ func _find_basic_subway_survey_position(
 						break
 				if (
 					separated
-					and candidate.distance_to(player.global_position) >= 24.0
+					and candidate.distance_to(player.global_position) >= 48.0
 					and candidate.distance_to(landmark.global_position) <= 9.0
 				):
 					return candidate
@@ -5785,8 +6203,8 @@ func _find_basic_subway_survey_position(
 		world,
 		1,
 		3,
-		28.0,
-		24.0,
+		52.0,
+		36.0,
 		occupied_positions,
 		0.08
 	)
@@ -5807,6 +6225,91 @@ func _build_basic_subway_marker(site: Node3D) -> void:
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
 	site.add_child(label)
+
+
+func _setup_world_lore_clues(world: ProceduralCityMap) -> void:
+	lore_clues.clear()
+	lore_clues_discovered = 0
+	var occupied_positions: Array[Vector3] = []
+	for interaction in field_interactions:
+		if is_instance_valid(interaction):
+			occupied_positions.append(interaction.global_position)
+	for index in LORE_CLUE_COUNT:
+		var position := _find_stratified_map_position(
+			world,
+			index,
+			LORE_CLUE_COUNT,
+			30.0,
+			34.0,
+			occupied_positions,
+			0.08
+		)
+		occupied_positions.append(position)
+		var point := Node3D.new()
+		point.name = "WorldLore_%02d" % (index + 1)
+		add_child(point)
+		point.global_position = position
+		point.set_meta("interaction_type", "lore_clue")
+		point.set_meta("lore_index", index % LORE_ENTRIES.size())
+		point.set_meta("read", false)
+		point.set_meta(
+			"display_name",
+			"기록 조사 · %s" % str(
+				(LORE_ENTRIES[index % LORE_ENTRIES.size()] as Dictionary).get(
+					"title",
+					"훼손된 벽보"
+				)
+			)
+		)
+		point.set_meta("hold_duration", 0.8)
+		point.set_meta("interaction_distance", FIELD_INTERACTION_DISTANCE + 0.55)
+		point.add_to_group("field_interaction")
+		point.add_to_group("world_lore_clue")
+		field_interactions.append(point)
+		lore_clues.append(point)
+		_build_world_lore_board(point)
+
+
+func _build_world_lore_board(point: Node3D) -> void:
+	var poster := Sprite3D.new()
+	poster.name = "LoreNoticeBoard"
+	poster.texture = LORE_POSTER_TEXTURE
+	poster.position = Vector3(0.0, 1.48, 0.0)
+	poster.pixel_size = 0.00245
+	poster.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	poster.shaded = true
+	poster.transparent = false
+	poster.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
+	poster.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	poster.render_priority = 8
+	point.add_child(poster)
+
+	var base_material := StandardMaterial3D.new()
+	base_material.albedo_color = Color("#232a28")
+	base_material.metallic = 0.45
+	base_material.roughness = 0.72
+	for x_offset in [-1.34, 1.34]:
+		var support_mesh := BoxMesh.new()
+		support_mesh.size = Vector3(0.1, 1.35, 0.1)
+		support_mesh.material = base_material
+		var support := MeshInstance3D.new()
+		support.position = Vector3(x_offset, 0.58, 0.1)
+		support.mesh = support_mesh
+		point.add_child(support)
+
+	_add_interaction_marker(point, Color("#c9ad68"), 0.74, false)
+	var label := Label3D.new()
+	label.name = "LoreMarkerLabel"
+	label.text = "기록 단서"
+	label.position = Vector3(0.0, 2.92, 0.0)
+	label.font = FONT
+	label.font_size = 23
+	label.modulate = Color("#e4cb8d")
+	label.outline_size = 7
+	label.outline_modulate = Color(0.01, 0.018, 0.016, 0.96)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	point.add_child(label)
 
 
 func _advance_basic_mission(mission_id: String, amount: int = 1) -> void:
@@ -5862,11 +6365,15 @@ func _get_basic_mission_lines() -> Array[String]:
 		var completed := bool(mission.get("completed", false))
 		var progress := int(mission.get("progress", 0))
 		var target_count := maxi(1, int(mission.get("target", 1)))
-		lines.append("%s %s  %d/%d" % [
-			"✓" if completed else "·",
+		lines.append("%s [주요] %s  %d/%d" % [
+			"✓" if completed else "□",
 			str(mission.get("title", "기본 목표")),
 			progress,
 			target_count,
+		])
+		lines.append("    목적 · %s  /  보상 · 경험치 %d" % [
+			str(mission.get("detail", "현장 목표 수행")),
+			maxi(0, int(mission.get("xp", 0))),
 		])
 	return lines
 
@@ -5882,7 +6389,7 @@ func _refresh_objective_panel() -> void:
 	if not basic_raid_missions.is_empty():
 		if not lines.is_empty():
 			lines.append("")
-		lines.append("기본 목표")
+		lines.append("레이드 주요 목표")
 		lines.append_array(_get_basic_mission_lines())
 	objective_label.text = "\n".join(lines)
 	objective_label.add_theme_color_override(
@@ -5910,8 +6417,8 @@ func _setup_procedural_field_missions(world: ProceduralCityMap) -> void:
 			world,
 			index,
 			FIELD_MISSION_COUNT,
-			24.0,
-			22.0,
+			38.0,
+			36.0,
 			occupied_positions,
 			0.08
 		)
@@ -5924,7 +6431,13 @@ func _setup_procedural_field_missions(world: ProceduralCityMap) -> void:
 		mission_site.set_meta("mission_id", index + 1)
 		mission_site.set_meta("status", "waiting")
 		mission_site.set_meta("interaction_type", "mission_start")
-		mission_site.set_meta("display_name", "작전 수락 · %s" % str(definition.get("title", "현장 임무")))
+		mission_site.set_meta(
+			"display_name",
+			"현장 작전 · %s · %s" % [
+				_get_field_mission_category(str(definition.get("type", "defense"))),
+				str(definition.get("title", "현장 임무")),
+			]
+		)
 		mission_site.set_meta("hold_duration", FIELD_MISSION_START_HOLD_DURATION)
 		mission_site.set_meta("interaction_distance", FIELD_INTERACTION_DISTANCE + 0.45)
 		mission_site.set_meta("completed", false)
@@ -5950,20 +6463,62 @@ func _pick_field_mission_definition(index: int) -> Dictionary:
 	return candidates[spawn_random.randi_range(0, candidates.size() - 1)].duplicate(true)
 
 
+func _get_field_mission_category(mission_type: String) -> String:
+	match mission_type:
+		"stealth":
+			return "은신"
+		"investigate":
+			return "조사"
+		"stealth_reach":
+			return "우회"
+		"defense":
+			return "방어"
+		"eliminate":
+			return "제압"
+		"collect":
+			return "회수"
+		_:
+			return "현장"
+
+
+func _get_field_mission_rules(site: Node3D) -> String:
+	var mission_type := str(site.get_meta("type", "defense"))
+	var rules: Array[String] = ["작전 중심에서 %.0fm 이상 이탈 시 실패" % FIELD_MISSION_FAIL_RADIUS]
+	if bool(site.get_meta("silence_required", false)):
+		rules.append("총성 발생 시 실패")
+	if mission_type in ["stealth", "stealth_reach"]:
+		rules.append("적에게 발각되면 실패")
+	elif mission_type == "investigate" and bool(site.get_meta("silence_required", false)):
+		rules.append("조사 중 발각되면 실패")
+	return " / ".join(rules)
+
+
+func _format_field_mission_reward(reward: Dictionary) -> String:
+	var parts: Array[String] = []
+	var labels := {
+		"canned_food": "통조림",
+		"medkits": "구급약",
+		"ammo": "탄약",
+		"component": "총기 부품",
+	}
+	for key in ["canned_food", "medkits", "ammo", "component"]:
+		var amount := maxi(0, int(reward.get(key, 0)))
+		if amount > 0:
+			parts.append("%s %d" % [str(labels[key]), amount])
+	return " / ".join(parts) if not parts.is_empty() else "현장 보급품"
+
+
 func _build_field_mission_marker(site: Node3D) -> void:
 	var mission_type := str(site.get_meta("type", "defense"))
 	var marker_color := Color("#5eb9ad")
-	var marker_text := "E · 작전 수락"
+	var marker_text := "E · %s 작전" % _get_field_mission_category(mission_type)
 	match mission_type:
 		"stealth":
 			marker_color = Color("#6aa8b9")
-			marker_text = "E · 은신 작전"
 		"investigate":
 			marker_color = Color("#c5a964")
-			marker_text = "E · 조사 작전"
 		"stealth_reach":
 			marker_color = Color("#78b59a")
-			marker_text = "E · 우회 작전"
 	var marker_material := StandardMaterial3D.new()
 	marker_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	marker_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -6457,7 +7012,7 @@ func _spawn_field_mission_investigation_points(count: int) -> void:
 			TAU * float(index) / float(maxi(1, count))
 			+ spawn_random.randf_range(-0.42, 0.42)
 		)
-		var distance := spawn_random.randf_range(3.2, 5.1)
+		var distance := spawn_random.randf_range(7.5, 15.5)
 		var requested := (
 			active_field_mission.global_position
 			+ Vector3(cos(angle), 0.0, sin(angle)) * distance
@@ -6526,7 +7081,7 @@ func _spawn_field_mission_reach_target(target_distance: float) -> void:
 	var angle := spawn_random.randf_range(0.0, TAU)
 	var requested := (
 		active_field_mission.global_position
-		+ Vector3(cos(angle), 0.0, sin(angle)) * target_distance
+			+ Vector3(cos(angle), 0.0, sin(angle)) * maxf(18.0, target_distance)
 	)
 	var position := world.find_nearest_physically_open_position(
 		requested,
@@ -6578,7 +7133,11 @@ func _spawn_field_mission_collectibles(count: int) -> void:
 	var world := $World as ProceduralCityMap
 	for index in count:
 		var angle := TAU * float(index) / float(maxi(1, count)) + spawn_random.randf_range(-0.35, 0.35)
-		var requested := active_field_mission.global_position + Vector3(cos(angle), 0.0, sin(angle)) * 3.4
+		var requested := (
+			active_field_mission.global_position
+			+ Vector3(cos(angle), 0.0, sin(angle))
+			* spawn_random.randf_range(6.5, 13.5)
+		)
 		var position := world.find_nearest_physically_open_position(
 			requested,
 			0.52,
@@ -6724,15 +7283,25 @@ func _set_field_mission_site_state(site: Node3D, state: String) -> void:
 
 func _set_field_mission_objective(title: String, detail: String, color: Color) -> void:
 	var objective_detail := detail
-	if (
-		is_instance_valid(active_field_mission)
-		and str(active_field_mission.get_meta("status", "")) == "active"
-		and field_mission_phase == "active"
-	):
-		var wave_status := _get_field_mission_wave_status()
-		if not wave_status.is_empty():
-			objective_detail += "\n  %s" % wave_status
-	field_objective_title = title
+	var objective_title := title
+	if is_instance_valid(active_field_mission):
+		var category := _get_field_mission_category(
+			str(active_field_mission.get_meta("type", "defense"))
+		)
+		if not objective_title.begins_with("["):
+			objective_title = "[%s 작전] %s" % [category, objective_title]
+		objective_detail += "\n실패 조건 · %s" % _get_field_mission_rules(active_field_mission)
+		objective_detail += "\n보상 · %s" % _format_field_mission_reward(
+			active_field_mission.get_meta("reward", {}) as Dictionary
+		)
+		if (
+			str(active_field_mission.get_meta("status", "")) == "active"
+			and field_mission_phase == "active"
+		):
+			var wave_status := _get_field_mission_wave_status()
+			if not wave_status.is_empty():
+				objective_detail += "\n위협 · %s" % wave_status
+	field_objective_title = objective_title
 	field_objective_detail = objective_detail
 	field_objective_color = color
 	_refresh_objective_panel()
@@ -7143,6 +7712,7 @@ func _update_field_interactions(delta: float) -> void:
 		and not extraction_transition_active
 		and not _is_inventory_open()
 		and not _is_tactical_map_open()
+		and not _is_lore_open()
 	)
 	if field_interaction_panel:
 		field_interaction_panel.visible = can_show
@@ -7210,6 +7780,12 @@ func _complete_field_interaction(point: Node3D) -> void:
 			if field_interaction_panel:
 				field_interaction_panel.visible = false
 			_start_field_mission(point)
+		return
+	if interaction_type == "lore_clue":
+		field_interaction_hold_time = 0.0
+		field_interaction_keyboard_held = false
+		field_interaction_touch_held = false
+		_show_lore_entry(point)
 		return
 	if interaction_type == "rescue":
 		var occupied_after_escort: int = GameState.rescued_workers + rescued_followers.size()
@@ -7501,7 +8077,7 @@ func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
 	if _mobile_button_contains(mobile_map_button, touch.position):
 		_on_mobile_map_pressed()
 		return true
-	if _is_inventory_open() or _is_tactical_map_open() or extraction_transition_active:
+	if _is_inventory_open() or _is_tactical_map_open() or _is_lore_open() or extraction_transition_active:
 		return false
 	if _mobile_button_contains(fire_button, touch.position):
 		if fire_touch_id != -1:
@@ -7539,6 +8115,12 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and not event.echo:
 		var key_event := event as InputEventKey
 		var key := key_event.keycode if key_event.keycode != 0 else key_event.physical_keycode
+		if key == KEY_ESCAPE and key_event.pressed and _is_lore_open():
+			_close_lore_reader()
+			get_viewport().set_input_as_handled()
+			return
+		if _is_lore_open():
+			return
 		if key == KEY_TAB and key_event.pressed:
 			if _is_inventory_open():
 				_toggle_inventory()
@@ -7556,7 +8138,12 @@ func _input(event: InputEvent) -> void:
 			_toggle_inventory()
 			get_viewport().set_input_as_handled()
 			return
-		if _is_inventory_open() or _is_tactical_map_open() or extraction_transition_active:
+		if (
+			_is_inventory_open()
+			or _is_tactical_map_open()
+			or _is_lore_open()
+			or extraction_transition_active
+		):
 			return
 		if key_event.pressed and key == KEY_F5:
 			_spawn_test_boss_near_player()
@@ -7590,7 +8177,12 @@ func _input(event: InputEvent) -> void:
 			GameState.randomize_map()
 			get_tree().reload_current_scene()
 	elif event is InputEventMouseButton:
-		if _is_inventory_open() or _is_tactical_map_open() or extraction_transition_active:
+		if (
+			_is_inventory_open()
+			or _is_tactical_map_open()
+			or _is_lore_open()
+			or extraction_transition_active
+		):
 			return
 		var mouse_event := event as InputEventMouseButton
 		if _is_emulated_touch_mouse_event(mouse_event):
@@ -7607,7 +8199,12 @@ func _input(event: InputEvent) -> void:
 		if _handle_mobile_action_touch(touch):
 			get_viewport().set_input_as_handled()
 			return
-		if _is_inventory_open() or _is_tactical_map_open() or extraction_transition_active:
+		if (
+			_is_inventory_open()
+			or _is_tactical_map_open()
+			or _is_lore_open()
+			or extraction_transition_active
+		):
 			return
 		if touch.pressed:
 			if touch_id == -1 and touch.position.x < get_viewport().get_visible_rect().size.x * 0.55:

@@ -21,6 +21,23 @@ func _run() -> void:
 	assert(objective_panel.visible)
 	assert(objective_label.text.contains("기초 부품 확보"))
 	assert(objective_label.text.contains("지하철역 입구 조사"))
+	assert(objective_label.text.contains("목적"))
+	assert(objective_label.text.contains("보상"))
+
+	var lore_clues: Array[Node3D] = main_scene.get("lore_clues")
+	assert(lore_clues.size() == 6)
+	var player := main_scene.get("player") as CharacterBody3D
+	for lore_point in lore_clues:
+		assert(is_instance_valid(lore_point))
+		assert(lore_point.global_position.distance_to(player.global_position) >= 24.0)
+		assert(lore_point.get_node_or_null("LoreNoticeBoard") is Sprite3D)
+	main_scene.call("_complete_field_interaction", lore_clues[0])
+	var lore_layer := main_scene.get("lore_ui_layer") as CanvasLayer
+	assert(is_instance_valid(lore_layer) and lore_layer.visible)
+	assert(not (main_scene.get("lore_title_label") as Label).text.is_empty())
+	assert(int(main_scene.get("lore_clues_discovered")) == 1)
+	main_scene.call("_close_lore_reader")
+	assert(not lore_layer.visible)
 
 	main_scene.call("_advance_basic_mission", "parts", 2)
 	assert(bool(missions[0].get("completed", false)))
@@ -40,6 +57,8 @@ func _run() -> void:
 		if is_instance_valid(enemy) and bool(enemy.get_meta("raid_boss", false)):
 			found_boss = true
 			assert(str(enemy.get_meta("display_name", "")).contains("묘르"))
+			var tactical_map := main_scene.get("tactical_map") as Control
+			assert((tactical_map.get("boss_targets") as Array).has(enemy))
 			break
 	assert(found_boss)
 

@@ -213,7 +213,7 @@ func _rebuild_ui() -> void:
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	actions.add_child(spacer)
 	actions.add_child(_label("보유 자원", 13, Color("#8fa096")))
-	actions.add_child(_label("고철 %d   캣닢 %.1f\n통조림 %d   츄르 %d" % [
+	actions.add_child(_label("고철 %d   캣닢 %d\n통조림 %d   츄르 %d" % [
 		GameState.scrap,
 		GameState.catnip,
 		GameState.canned_food,

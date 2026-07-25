@@ -1,13 +1,23 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=7 format=3 uid="uid://ba71fq0o4bon3"]
 
-[ext_resource type="Script" path="res://scripts/shelter_workbench_module.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/interiors/modules/shelter_workbench_isometric_v6.png" id="2_texture"]
+[ext_resource type="Script" uid="uid://yeja3jlhrnfx" path="res://scripts/shelter_workbench_module.gd" id="1_script"]
+[ext_resource type="Texture2D" uid="uid://dd4vkciy3phjx" path="res://assets/interiors/modules/shelter_workbench_isometric_v6.png" id="2_texture"]
 
 [sub_resource type="BoxShape3D" id="BoxShape_workbench"]
 size = Vector3(5.4, 1.25, 1.95)
 
 [sub_resource type="Shader" id="Shader_shadow"]
-code = "shader_type spatial;\nrender_mode unshaded, cull_disabled, depth_draw_never;\n\nvoid fragment() {\n\tvec2 centered = (UV - vec2(0.5)) * vec2(2.0, 2.0);\n\tfloat ellipse = dot(centered * vec2(0.72, 1.0), centered * vec2(0.72, 1.0));\n\tfloat alpha = (1.0 - smoothstep(0.16, 1.0, ellipse)) * 0.28;\n\tALBEDO = vec3(0.0);\n\tALPHA = alpha;\n}\n"
+code = "shader_type spatial;
+render_mode unshaded, cull_disabled, depth_draw_never;
+
+void fragment() {
+	vec2 centered = (UV - vec2(0.5)) * vec2(2.0, 2.0);
+	float ellipse = dot(centered * vec2(0.72, 1.0), centered * vec2(0.72, 1.0));
+	float alpha = (1.0 - smoothstep(0.16, 1.0, ellipse)) * 0.28;
+	ALBEDO = vec3(0.0);
+	ALPHA = alpha;
+}
+"
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_shadow"]
 render_priority = -1
@@ -21,25 +31,21 @@ size = Vector2(6.15, 1.85)
 script = ExtResource("1_script")
 
 [node name="WorkbenchBody" type="StaticBody3D" parent="."]
-collision_layer = 1
 collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="WorkbenchBody"]
-position = Vector3(0, 0.5, 0.82)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0.82)
 shape = SubResource("BoxShape_workbench")
 
 [node name="WorkbenchSprite" type="Sprite3D" parent="."]
-position = Vector3(0, 2.28, 0.02)
-scale = Vector3(1.25, 1, 1)
-texture = ExtResource("2_texture")
-pixel_size = 0.00365
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.95, 0.02)
+pixel_size = 0.0042
 billboard = 1
-shaded = false
-transparent = true
 no_depth_test = true
 render_priority = 22
+texture = ExtResource("2_texture")
 
 [node name="GroundShadow" type="MeshInstance3D" parent="."]
-position = Vector3(0, 0.045, 0.88)
-mesh = SubResource("PlaneMesh_shadow")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.045, 0.88)
 cast_shadow = 0
+mesh = SubResource("PlaneMesh_shadow")

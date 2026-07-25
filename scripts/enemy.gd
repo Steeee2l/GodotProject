@@ -50,7 +50,10 @@ const GRENADIER_VISION_RANGE := 15.5
 const VISION_RANGE_THREAT_BONUS := 3.0
 const VISION_HALF_ANGLE_DEGREES := 58.0
 const NIGHT_VISION_RANGE_MULTIPLIER := 0.62
-const DETECTION_CLOSE_RADIUS := 1.25
+const DETECTION_CLOSE_RADIUS := 2.6
+const DETECTION_PROXIMITY_RADIUS := 5.25
+const PROXIMITY_DETECTION_SECONDS_FAR := 1.6
+const PROXIMITY_DETECTION_SECONDS_NEAR := 0.5
 const DETECTION_DECAY_PER_SECOND := 1.45
 const SUSPICION_THRESHOLD := 0.26
 const SUSPICION_HOLD_SECONDS := 2.8
@@ -64,6 +67,10 @@ const MELEE_DISENGAGE_DISTANCE := 52.0
 const RANGED_DISENGAGE_DISTANCE := 76.0
 const GRENADE_WINDUP_TIME := 0.72
 const GRENADE_RECOVERY_TIME := 0.9
+const STEERING_LOCK_MSEC := 220
+const FACING_STABILITY_MSEC := 120
+const SENTRY_LOOK_INTERVAL_MIN := 0.75
+const SENTRY_LOOK_INTERVAL_MAX := 1.25
 
 var enemy_kind := "melee"
 var target: CharacterBody3D
@@ -85,6 +92,10 @@ var patrol_origin := Vector3.ZERO
 var patrol_target := Vector3.ZERO
 var patrol_pause := 0.0
 var patrol_repath_time := 0.0
+var patrol_mode := "route"
+var patrol_route: Array[Vector3] = []
+var patrol_route_index := 0
+var patrol_look_timer := 0.0
 var squad_id := -1
 var squad_anchor := Vector3.ZERO
 var squad_formation_offset := Vector3.ZERO
@@ -112,6 +123,7 @@ var health_bar_background: Sprite3D
 var health_bar_damage_trail: Sprite3D
 var health_bar_fill: Sprite3D
 var reload_indicator: Sprite3D
+var detection_indicator: Sprite3D
 var shot_audio_player: AudioStreamPlayer3D
 var magazine_size := 1
 var magazine_ammo := 1
@@ -142,9 +154,14 @@ var damage_trail_ratio := 1.0
 var damage_trail_delay := 0.0
 var grenade_cooldown := 0.0
 var grenade_target_position := Vector3.ZERO
+var steering_direction_cache := Vector3.ZERO
+var steering_lock_until_msec := 0
+var pending_facing := ""
+var pending_facing_since_msec := 0
 static var weapon_texture_cache: Dictionary = {}
 static var health_bar_texture_cache: Dictionary = {}
 static var reload_texture_cache: Dictionary = {}
+static var detection_texture_cache: Dictionary = {}
 static var reinforcement_call_texture_cache: Dictionary = {}
 static var enemy_gunshot_stream_cache: AudioStreamWAV
 
@@ -211,6 +228,20 @@ func assign_squad(assigned_squad_id: int, assigned_anchor: Vector3, formation_of
 	_choose_patrol_target()
 
 
+func configure_patrol(mode: String, route_points: Array[Vector3]) -> void:
+	patrol_mode = "sentry" if mode == "sentry" else "route"
+	patrol_route.clear()
+	patrol_route.assign(route_points)
+	patrol_route_index = 0
+	if patrol_route.is_empty():
+		patrol_route.append(global_position)
+	patrol_origin = patrol_route[0]
+	patrol_target = patrol_route[0]
+	patrol_pause = weapon_random.randf_range(0.4, 1.2)
+	patrol_look_timer = 0.0
+	patrol_repath_time = 8.0
+
+
 func set_player_visibility_factor(value: float) -> void:
 	player_visibility_factor = clampf(value, 0.0, 1.0)
 	if sprite:
@@ -229,6 +260,10 @@ func set_player_visibility_factor(value: float) -> void:
 		var reload_color := reload_indicator.modulate
 		reload_color.a = player_visibility_factor
 		reload_indicator.modulate = reload_color
+	if detection_indicator:
+		var detection_color := detection_indicator.modulate
+		detection_color.a = player_visibility_factor
+		detection_indicator.modulate = detection_color
 	if reinforcement_call_indicator:
 		var call_color := reinforcement_call_indicator.modulate
 		call_color.a = player_visibility_factor
@@ -286,6 +321,7 @@ func _ready() -> void:
 	_setup_enemy_audio()
 	_setup_enemy_health_bar()
 	_setup_reload_indicator()
+	_setup_detection_indicator()
 	_setup_reinforcement_call_indicator()
 
 	threat_marker = Label3D.new()
@@ -311,6 +347,7 @@ func _physics_process(delta: float) -> void:
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
 	grenade_cooldown = maxf(0.0, grenade_cooldown - delta)
 	_update_alert_marker(delta)
+	_update_detection_indicator()
 	_update_enemy_health_bar(delta)
 	tactical_repath_timer = maxf(0.0, tactical_repath_timer - delta)
 	hold_position_timer = maxf(0.0, hold_position_timer - delta)
@@ -473,8 +510,44 @@ func _update_detection_awareness(
 ) -> bool:
 	if distance <= DETECTION_CLOSE_RADIUS and has_line_of_sight:
 		detection_awareness = 1.0
+		last_known_position = target.global_position
+		perception_state = "suspicious"
 		return true
-	if not has_line_of_sight or not _is_position_inside_vision_fan(target.global_position, vision_range):
+	if not has_line_of_sight:
+		detection_awareness = maxf(
+			0.0,
+			detection_awareness - DETECTION_DECAY_PER_SECOND * delta
+		)
+		if detection_awareness <= 0.0 and suspicion_hold_time <= 0.0:
+			perception_state = "patrol"
+		return false
+
+	var inside_vision_fan := _is_position_inside_vision_fan(
+		target.global_position,
+		vision_range
+	)
+	if not inside_vision_fan and distance <= DETECTION_PROXIMITY_RADIUS:
+		var proximity_factor := clampf(
+			inverse_lerp(DETECTION_PROXIMITY_RADIUS, DETECTION_CLOSE_RADIUS, distance),
+			0.0,
+			1.0
+		)
+		var proximity_seconds := lerpf(
+			PROXIMITY_DETECTION_SECONDS_FAR,
+			PROXIMITY_DETECTION_SECONDS_NEAR,
+			proximity_factor
+		)
+		proximity_seconds *= detection_time_multiplier
+		detection_awareness = minf(
+			1.0,
+			detection_awareness + delta / maxf(0.1, proximity_seconds)
+		)
+		last_known_position = target.global_position
+		if detection_awareness >= SUSPICION_THRESHOLD:
+			perception_state = "suspicious"
+			suspicion_hold_time = SUSPICION_HOLD_SECONDS
+		return detection_awareness >= 1.0
+	if not inside_vision_fan:
 		detection_awareness = maxf(
 			0.0,
 			detection_awareness - DETECTION_DECAY_PER_SECOND * delta
@@ -491,11 +564,12 @@ func _update_detection_awareness(
 	var edge_dot := cos(deg_to_rad(detection_half_angle_degrees))
 	var center_factor := clampf(inverse_lerp(edge_dot, 1.0, direction_dot), 0.0, 1.0)
 	var distance_factor := clampf(1.0 - distance / maxf(vision_range, 0.01), 0.0, 1.0)
-	var detection_seconds := lerpf(
-		1.65,
-		0.38,
-		clampf(center_factor * 0.55 + distance_factor * 0.45, 0.0, 1.0)
+	var certainty_factor := clampf(
+		pow(center_factor, 1.15) * 0.52 + pow(distance_factor, 0.82) * 0.48,
+		0.0,
+		1.0
 	)
+	var detection_seconds := lerpf(3.4, 0.55, certainty_factor)
 	detection_seconds *= detection_time_multiplier
 	detection_awareness = minf(1.0, detection_awareness + delta / maxf(0.1, detection_seconds))
 	last_known_position = target.global_position
@@ -868,19 +942,45 @@ func _update_patrol(delta: float) -> void:
 		_choose_patrol_target()
 	patrol_pause = maxf(0.0, patrol_pause - delta)
 	patrol_repath_time = maxf(0.0, patrol_repath_time - delta)
+	patrol_look_timer = maxf(0.0, patrol_look_timer - delta)
 	if patrol_pause > 0.0:
 		velocity = velocity.move_toward(Vector3.ZERO, 8.0 * delta)
 		_set_motion_state("idle")
+		if patrol_mode == "sentry" and patrol_look_timer <= 0.0:
+			var look_angle := deg_to_rad(weapon_random.randf_range(48.0, 112.0))
+			if weapon_random.randf() < 0.5:
+				look_angle *= -1.0
+			_set_facing_from_world_direction(
+				facing_world_direction.rotated(Vector3.UP, look_angle)
+			)
+			patrol_look_timer = weapon_random.randf_range(
+				SENTRY_LOOK_INTERVAL_MIN,
+				SENTRY_LOOK_INTERVAL_MAX
+			)
 		return
 
 	var offset := patrol_target - global_position
 	offset.y = 0.0
-	if offset.length() <= 0.65 or patrol_repath_time <= 0.0 or is_on_wall():
+	if offset.length() <= 0.65 or is_on_wall():
 		velocity = Vector3.ZERO
-		patrol_pause = randf_range(0.25, 0.75)
-		_choose_patrol_target()
+		if not patrol_route.is_empty():
+			patrol_route_index = (patrol_route_index + 1) % patrol_route.size()
+			patrol_target = patrol_route[patrol_route_index]
+			patrol_repath_time = 8.0
+			if patrol_mode == "sentry":
+				patrol_pause = weapon_random.randf_range(2.4, 4.8)
+				patrol_look_timer = 0.08
+			else:
+				patrol_pause = weapon_random.randf_range(0.2, 0.65)
+		else:
+			patrol_pause = randf_range(0.25, 0.75)
+			_choose_patrol_target()
 		_set_motion_state("idle")
 		return
+	if patrol_repath_time <= 0.0:
+		patrol_repath_time = 8.0
+		if patrol_route.is_empty():
+			_choose_patrol_target()
 
 	var direction := _steer_around_obstacles(offset.normalized())
 	velocity = direction * PATROL_SPEED
@@ -889,6 +989,11 @@ func _update_patrol(delta: float) -> void:
 
 
 func _choose_patrol_target() -> void:
+	if not patrol_route.is_empty():
+		patrol_route_index = clampi(patrol_route_index, 0, patrol_route.size() - 1)
+		patrol_target = patrol_route[patrol_route_index]
+		patrol_repath_time = 8.0
+		return
 	if squad_id >= 0:
 		var patrol_epoch := int(Time.get_ticks_msec() / 4500)
 		var angle := deg_to_rad(float(posmod(squad_id * 73 + patrol_epoch * 137, 360)))
@@ -911,7 +1016,7 @@ func _become_alerted() -> void:
 	search_time_remaining = 0.0
 	visual_contact_confirmed = true
 	_update_vision_fan_visual()
-	alert_marker_time = 0.0
+	alert_marker_time = 0.8
 	if newly_alerted and squad_id >= 0:
 		var shared_position := target.global_position if is_instance_valid(target) else global_position
 		for squad_member in get_tree().get_nodes_in_group("raid_enemy"):
@@ -968,6 +1073,8 @@ func _clear_alert() -> void:
 	_update_vision_fan_visual()
 	if threat_marker and combat_state not in ["melee_windup", "grenade_windup"]:
 		threat_marker.visible = false
+	if detection_indicator:
+		detection_indicator.visible = false
 
 
 func _update_alert_marker(delta: float) -> void:
@@ -975,6 +1082,72 @@ func _update_alert_marker(delta: float) -> void:
 		alert_marker_time = maxf(0.0, alert_marker_time - delta)
 	if threat_marker and combat_state not in ["melee_windup", "grenade_windup"]:
 		threat_marker.visible = false
+
+
+func _setup_detection_indicator() -> void:
+	detection_indicator = Sprite3D.new()
+	detection_indicator.name = "DetectionIndicator"
+	detection_indicator.position = Vector3(0, THREAT_MARKER_Y + 0.18, 0)
+	detection_indicator.pixel_size = 0.0115
+	detection_indicator.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	detection_indicator.shaded = false
+	detection_indicator.transparent = true
+	detection_indicator.no_depth_test = true
+	detection_indicator.render_priority = 126
+	detection_indicator.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	detection_indicator.visible = false
+	add_child(detection_indicator)
+
+
+func _update_detection_indicator() -> void:
+	if detection_indicator == null:
+		return
+	var show_alert_confirmation := alerted and alert_marker_time > 0.0
+	var show_suspicion := not alerted and detection_awareness > 0.025
+	detection_indicator.visible = (
+		(show_alert_confirmation or show_suspicion)
+		and player_visibility_factor > 0.02
+		and not dying
+	)
+	if not detection_indicator.visible:
+		return
+	var progress := 1.0 if show_alert_confirmation else detection_awareness
+	detection_indicator.texture = _get_detection_texture(roundi(progress * 20.0))
+	var pulse := 1.0
+	if show_alert_confirmation:
+		pulse += 0.11 * sin(Time.get_ticks_msec() * 0.024)
+	detection_indicator.scale = Vector3.ONE * pulse
+
+
+func _get_detection_texture(step: int) -> Texture2D:
+	step = clampi(step, 0, 20)
+	if detection_texture_cache.has(step):
+		return detection_texture_cache[step]
+	var image := Image.create(72, 72, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	var center := Vector2(35.5, 35.5)
+	var progress := float(step) / 20.0
+	var active_color := Color("#ff9a4f").lerp(Color("#ff3434"), progress)
+	for y in 72:
+		for x in 72:
+			var offset := Vector2(x, y) - center
+			var radius := offset.length()
+			if radius <= 19.0:
+				image.set_pixel(x, y, Color(0.03, 0.025, 0.022, 0.94))
+			elif radius >= 25.0 and radius <= 31.0:
+				var angle := fposmod(atan2(offset.y, offset.x) + PI * 0.5, TAU)
+				image.set_pixel(
+					x,
+					y,
+					active_color
+					if angle <= progress * TAU
+					else Color(0.24, 0.22, 0.2, 0.92)
+				)
+	image.fill_rect(Rect2i(32, 17, 7, 25), Color("#fff1c4"))
+	image.fill_rect(Rect2i(33, 48, 6, 6), active_color)
+	var texture := ImageTexture.create_from_image(image)
+	detection_texture_cache[step] = texture
+	return texture
 
 
 func _pursue_last_known_position() -> void:
@@ -1058,18 +1231,40 @@ func _resolve_tactical_waypoint(requested_position: Vector3) -> Vector3:
 
 func _steer_around_obstacles(desired_direction: Vector3) -> Vector3:
 	if desired_direction.length_squared() <= 0.01:
+		steering_direction_cache = Vector3.ZERO
 		return Vector3.ZERO
 	var desired := desired_direction.normalized()
+	var now_msec := Time.get_ticks_msec()
+	if (
+		now_msec < steering_lock_until_msec
+		and steering_direction_cache.length_squared() > 0.01
+		and steering_direction_cache.dot(desired) >= 0.35
+		and _is_steering_direction_clear(steering_direction_cache, 2.15)
+	):
+		return steering_direction_cache
 	var angles := [0.0, 24.0, -24.0, 48.0, -48.0, 76.0, -76.0, 112.0, -112.0]
-	var from := global_position + Vector3(0, 0.32, 0)
 	for angle in angles:
 		var candidate := desired.rotated(Vector3.UP, deg_to_rad(angle))
 		var probe_distance := 3.1 if is_zero_approx(angle) else 2.35
-		var query := PhysicsRayQueryParameters3D.create(from, from + candidate * probe_distance, 1)
-		query.exclude = [get_rid()]
-		if get_world_3d().direct_space_state.intersect_ray(query).is_empty():
+		if _is_steering_direction_clear(candidate, probe_distance):
+			steering_direction_cache = candidate
+			steering_lock_until_msec = now_msec + STEERING_LOCK_MSEC
 			return candidate
+	steering_direction_cache = Vector3.ZERO
 	return Vector3.ZERO
+
+
+func _is_steering_direction_clear(direction: Vector3, probe_distance: float) -> bool:
+	if direction.length_squared() <= 0.01:
+		return false
+	var from := global_position + Vector3(0, 0.32, 0)
+	var query := PhysicsRayQueryParameters3D.create(
+		from,
+		from + direction.normalized() * probe_distance,
+		1
+	)
+	query.exclude = [get_rid()]
+	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 
 
 func _create_sprite_frames() -> SpriteFrames:
@@ -1225,7 +1420,15 @@ func _set_facing_from_world_direction(world_direction: Vector3) -> void:
 	).normalized()
 	var angle := fposmod(rad_to_deg(atan2(screen_direction.x, -screen_direction.y)), 360.0)
 	var index := int(round(angle / 45.0)) % 8
-	_set_facing(SCREEN_DIRECTION_NAMES[index])
+	var next_facing: String = SCREEN_DIRECTION_NAMES[index]
+	if next_facing == facing:
+		pending_facing = ""
+	elif next_facing != pending_facing:
+		pending_facing = next_facing
+		pending_facing_since_msec = Time.get_ticks_msec()
+	elif Time.get_ticks_msec() - pending_facing_since_msec >= FACING_STABILITY_MSEC:
+		_set_facing(next_facing)
+		pending_facing = ""
 	_update_weapon_visual()
 
 
@@ -1801,6 +2004,8 @@ func _start_death(hit_direction: Vector3) -> void:
 	_cancel_reinforcement_call()
 	if reload_indicator:
 		reload_indicator.visible = false
+	if detection_indicator:
+		detection_indicator.visible = false
 	backstab_stunned = false
 	combat_state = "dying"
 	threat_marker.visible = false

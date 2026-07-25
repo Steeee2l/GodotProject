@@ -32,7 +32,10 @@ func _run() -> void:
 	assert(ui.inventory_panel.custom_minimum_size.x <= 560.0, "The default inventory panel must remain compact.")
 	assert(not ui.weapon_panel.visible, "Weapon detail must stay hidden until the weapon is selected.")
 	assert(ui.equipped_grid.get_child_count() == 4, "Primary, body, head, and footwear equipment slots should be visible.")
+	assert(ui.bag_grid.get_child_count() == 15, "The bag must always render all 15 physical slots, including empty slots.")
+	assert(ui.bag_slot_usage_label.text.ends_with("/ 15칸"), "The bag header must expose used slots against total capacity.")
 	for equipment in ui.equipped_grid.get_children():
+		assert(((equipment as Control).size_flags_horizontal & Control.SIZE_EXPAND) != 0, "Equipment slots must share the full panel width.")
 		assert(not (equipment as Button).text.contains("하수구"), "Extraction objectives do not belong in equipment.")
 		assert((equipment as Button).text.is_empty(), "Equipment slot labels must not overlap centered icons.")
 	for empty_slot_name in ["몸 방어구", "머리 방어구", "신발"]:
@@ -41,6 +44,7 @@ func _run() -> void:
 		assert(empty_slot.icon == null, "Empty equipment slots must use text only.")
 		assert(empty_slot.get_child_count() == 1 and (empty_slot.get_child(0) as Label).text == empty_slot_name, "Empty equipment slots must show their category name.")
 	for bag_item in ui.bag_grid.get_children():
+		assert(((bag_item as Control).size_flags_horizontal & Control.SIZE_EXPAND) != 0, "Bag slots must share the full panel width.")
 		if bag_item is Button:
 			assert((bag_item as Button).text.is_empty(), "Bag slots must show only an icon and quantity badge.")
 			if str((bag_item as Button).name).begins_with("BagItem_"):

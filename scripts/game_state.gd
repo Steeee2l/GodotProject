@@ -30,7 +30,7 @@ var scrap: int = 80
 var weapon_level: int = 1
 var medkits: int = 0
 var canned_food: int = 0
-var catnip: float = 0.0
+var catnip: int = 0
 var churu: int = 0
 var fatigue: float = 0.0
 var rescued_workers: int = 0
@@ -96,7 +96,7 @@ var shelter_last_progress_time: int = 0
 var workbench_repair_active: bool = false
 var workbench_repair_weapon_id: String = "ak47"
 var shelter_offline_scrap_pending: int = 0
-var shelter_offline_catnip_pending: float = 0.0
+var shelter_offline_catnip_pending: int = 0
 var shelter_offline_repair_pending: float = 0.0
 var workbench_starter_parts_claimed: bool = false
 var shelter_scrap_fraction: float = 0.0
@@ -259,11 +259,11 @@ const SHELTER_UPGRADE_COSTS := {
 	4: {"scrap": 30000, "churu": 4},
 	5: {"scrap": 160000, "churu": 8},
 }
-const CATNIP_BOOST_COST := 25.0
+const CATNIP_BOOST_COST := 25
 const CATNIP_BOOST_DURATION_SECONDS := 600
 const CATNIP_BOOST_MULTIPLIER := 10.0
 const BASE_SCRAP_PER_WORKER_HOUR := 72.0
-const BASE_CATNIP_PER_WORKER_HOUR := 3.0
+const BASE_CATNIP_PER_WORKER_SECOND := 1.0
 const WORKER_HOURS_PER_CANNED_FOOD := 6.0
 const RESIDENT_TRAIT_PRESETS := [
 	{"name": "말랑 앞발", "kneading": 1.15, "catnip": 1.00},
@@ -896,12 +896,14 @@ func get_worker_production_per_second(worker_id: String, production_kind: String
 		"catnip":
 			if not assigned_catnip_worker_ids.has(worker_id):
 				return 0.0
-			return (
-				float(trait_data.get("catnip", 1.0))
-				* BASE_CATNIP_PER_WORKER_HOUR
-				* catnip_scraper_multiplier
-				/ 3600.0
-			)
+			return float(maxi(
+				1,
+				roundi(
+					float(trait_data.get("catnip", 1.0))
+					* BASE_CATNIP_PER_WORKER_SECOND
+					* catnip_scraper_multiplier
+				)
+			))
 	return 0.0
 
 
@@ -941,13 +943,16 @@ func get_scrap_per_second() -> float:
 
 
 func get_catnip_per_hour() -> float:
-	if get_active_catnip_workers() > 0 and canned_food <= 0:
-		return 0.0
-	return get_catnip_efficiency_total() * BASE_CATNIP_PER_WORKER_HOUR * catnip_scraper_multiplier
+	return get_catnip_per_second() * 3600.0
 
 
 func get_catnip_per_second() -> float:
-	return get_catnip_per_hour() / 3600.0
+	if get_active_catnip_workers() > 0 and canned_food <= 0:
+		return 0.0
+	var total := 0.0
+	for worker_id in assigned_catnip_worker_ids:
+		total += get_worker_production_per_second(worker_id, "catnip")
+	return total
 
 
 func tick_shelter_live(delta: float) -> int:
@@ -959,9 +964,10 @@ func tick_shelter_live(delta: float) -> int:
 	var catnip_gain := catnip_rate * work_delta
 	shelter_scrap_fraction += gain
 	shelter_catnip_fraction += catnip_gain
-	if shelter_catnip_fraction >= 0.01:
-		catnip += shelter_catnip_fraction
-		shelter_catnip_fraction = 0.0
+	var whole_catnip := int(floor(shelter_catnip_fraction))
+	if whole_catnip > 0:
+		shelter_catnip_fraction -= float(whole_catnip)
+		catnip += whole_catnip
 	var whole := int(floor(shelter_scrap_fraction))
 	if whole <= 0:
 		return 0
@@ -1100,7 +1106,7 @@ func process_shelter_progress() -> Dictionary:
 	var now := int(Time.get_unix_time_from_system())
 	if shelter_last_progress_time <= 0:
 		shelter_last_progress_time = now
-		return {"scrap": 0, "catnip": 0.0, "repair": 0.0, "elapsed": 0}
+		return {"scrap": 0, "catnip": 0, "repair": 0.0, "elapsed": 0}
 	var progress_start := shelter_last_progress_time
 	var elapsed := maxi(0, now - shelter_last_progress_time)
 	shelter_last_progress_time = now
@@ -1113,7 +1119,9 @@ func process_shelter_progress() -> Dictionary:
 	shelter_scrap_fraction += base_scrap_gain + boosted_extra
 	var scrap_gain := int(floor(shelter_scrap_fraction))
 	shelter_scrap_fraction -= float(scrap_gain)
-	var catnip_gain := catnip_rate * work_seconds / 3600.0
+	shelter_catnip_fraction += catnip_rate * work_seconds / 3600.0
+	var catnip_gain := int(floor(shelter_catnip_fraction))
+	shelter_catnip_fraction -= float(catnip_gain)
 	catnip += catnip_gain
 	var repair_gain := 0.0
 	if workbench_repair_active and weapon_durability < 100.0:
@@ -1155,7 +1163,7 @@ func consume_offline_progress_notice() -> Dictionary:
 		"repair": shelter_offline_repair_pending,
 	}
 	shelter_offline_scrap_pending = 0
-	shelter_offline_catnip_pending = 0.0
+	shelter_offline_catnip_pending = 0
 	shelter_offline_repair_pending = 0.0
 	return notice
 
@@ -1601,7 +1609,7 @@ func load_persistent_state() -> bool:
 	scrap = int(data.get("scrap", scrap))
 	medkits = int(data.get("medkits", medkits))
 	canned_food = int(data.get("canned_food", canned_food))
-	catnip = float(data.get("catnip", catnip))
+	catnip = maxi(0, roundi(float(data.get("catnip", catnip))))
 	churu = int(data.get("churu", churu))
 	fatigue = float(data.get("fatigue", fatigue))
 	rescued_workers = int(data.get("rescued_workers", rescued_workers))
@@ -1718,7 +1726,7 @@ func reset_run() -> void:
 	weapon_level = 1
 	medkits = 0
 	canned_food = 0
-	catnip = 0.0
+	catnip = 0
 	churu = 0
 	fatigue = 0.0
 	rescued_workers = 0
@@ -1784,7 +1792,7 @@ func reset_run() -> void:
 	workbench_repair_active = false
 	workbench_repair_weapon_id = "ak47"
 	shelter_offline_scrap_pending = 0
-	shelter_offline_catnip_pending = 0.0
+	shelter_offline_catnip_pending = 0
 	shelter_offline_repair_pending = 0.0
 	workbench_starter_parts_claimed = false
 	shelter_scrap_fraction = 0.0

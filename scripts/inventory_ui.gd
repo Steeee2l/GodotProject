@@ -72,6 +72,7 @@ var weapon_stats: Label
 var weapon_state_action_button: Button
 var mod_slot_grid: GridContainer
 var weight_label: Label
+var bag_slot_usage_label: Label
 var item_detail_icon: TextureRect
 var item_detail_title: Label
 var item_detail_description: Label
@@ -107,6 +108,8 @@ var visible_bag_items := 0
 var responsive_compact := false
 const BAG_WEIGHT_LIMIT := 49.0
 const BAG_WEIGHT_WARNING := 44.0
+const BAG_SLOT_CAPACITY := 15
+const BAG_GRID_COLUMNS := 5
 
 
 func setup(
@@ -287,6 +290,7 @@ func _build_inventory_panel() -> Control:
 	equipped_grid = GridContainer.new()
 	equipped_grid.name = "EquipmentGrid"
 	equipped_grid.columns = 2
+	equipped_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	equipped_grid.add_theme_constant_override("h_separation", 6)
 	equipped_grid.add_theme_constant_override("v_separation", 6)
 	box.add_child(equipped_grid)
@@ -296,9 +300,11 @@ func _build_inventory_panel() -> Control:
 	var bag_title := _section("가방")
 	bag_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bag_header.add_child(bag_title)
-	var bag_help := _label("아이콘 선택 시 아래에 상세 정보가 표시됩니다.", 11, Color("#8fa59b"))
-	bag_help.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	bag_header.add_child(bag_help)
+	bag_slot_usage_label = _label("0 / %d칸" % BAG_SLOT_CAPACITY, 12, Color("#b7c8c0"))
+	bag_slot_usage_label.name = "BagSlotUsage"
+	bag_slot_usage_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	bag_slot_usage_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	bag_header.add_child(bag_slot_usage_label)
 
 	inventory_feedback = _label("", 11, Color("#f2d27a"))
 	inventory_feedback.visible = false
@@ -309,12 +315,13 @@ func _build_inventory_panel() -> Control:
 	bag_scroll = ScrollContainer.new()
 	bag_scroll.name = "BagScroll"
 	bag_scroll.custom_minimum_size = Vector2(0, 174)
+	bag_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bag_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	bag_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	box.add_child(bag_scroll)
 	bag_grid = GridContainer.new()
 	bag_grid.name = "BagGrid"
-	bag_grid.columns = 5
+	bag_grid.columns = BAG_GRID_COLUMNS
 	bag_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bag_grid.add_theme_constant_override("h_separation", 6)
 	bag_grid.add_theme_constant_override("v_separation", 6)
@@ -942,9 +949,16 @@ func _refresh_contents() -> void:
 			"texture": component_textures.get(component_id) as Texture2D,
 		})
 
-	var remainder := posmod(15 - bag_grid.get_child_count(), 5)
-	for index in range(remainder):
+	var occupied_slots := visible_bag_items
+	var empty_slots := maxi(0, BAG_SLOT_CAPACITY - occupied_slots)
+	for index in range(empty_slots):
 		bag_grid.add_child(_empty_slot())
+	if bag_slot_usage_label:
+		bag_slot_usage_label.text = "%d / %d칸" % [occupied_slots, BAG_SLOT_CAPACITY]
+		bag_slot_usage_label.add_theme_color_override(
+			"font_color",
+			Color("#ff9595") if occupied_slots > BAG_SLOT_CAPACITY else Color("#b7c8c0")
+		)
 
 	var equipment_weight := 0.0
 	for equipment_id_variant in game_state.equipment_inventory:
@@ -985,41 +999,11 @@ func _add_bag_item(item: Dictionary) -> void:
 func _update_bag_empty_hint() -> void:
 	if bag_empty_hint == null:
 		return
-	var empty := visible_bag_items <= 0
-	if empty:
-		bag_empty_hint.text = "가방에 보관 중인 아이템이 없습니다."
-		if not bag_empty_hint.visible:
-			bag_empty_hint.modulate = Color(1, 1, 1, 0)
-			bag_empty_hint.scale = Vector2(0.98, 0.98)
-			bag_empty_hint.visible = true
-			var old_tween := bag_empty_hint_tween
-			if old_tween is Tween and is_instance_valid(old_tween):
-				old_tween.kill()
-			bag_empty_hint_tween = create_tween()
-			bag_empty_hint_tween.tween_property(bag_empty_hint, "modulate", Color(1, 1, 1, 1), 0.16).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-			bag_empty_hint_tween.parallel().tween_property(bag_empty_hint, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-		else:
-			var old_tween := bag_empty_hint_tween
-			if old_tween is Tween and is_instance_valid(old_tween):
-				old_tween.kill()
-			bag_empty_hint_tween = null
-			bag_empty_hint.scale = Vector2.ONE
-	else:
-		if bag_empty_hint.visible:
-			var old_tween := bag_empty_hint_tween
-			if old_tween is Tween and is_instance_valid(old_tween):
-				old_tween.kill()
-			bag_empty_hint_tween = create_tween()
-			bag_empty_hint_tween.tween_property(bag_empty_hint, "modulate", Color(1, 1, 1, 0), 0.14).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-			bag_empty_hint_tween.parallel().tween_property(bag_empty_hint, "scale", Vector2(0.98, 0.98), 0.14).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-			bag_empty_hint_tween.finished.connect(func() -> void:
-				if is_instance_valid(bag_empty_hint):
-					bag_empty_hint.visible = false
-					bag_empty_hint.text = ""
-				)
-		else:
-			bag_empty_hint.text = ""
-			bag_empty_hint_tween = null
+	if bag_empty_hint_tween is Tween and is_instance_valid(bag_empty_hint_tween):
+		bag_empty_hint_tween.kill()
+	bag_empty_hint_tween = null
+	bag_empty_hint.visible = false
+	bag_empty_hint.text = ""
 
 func _show_weapon_detail() -> void:
 	if not has_weapon_state:
@@ -1349,6 +1333,7 @@ func _equipment_button(slot_name: String, texture: Texture2D, active: bool, call
 	var button := _tile_button("", active)
 	button.name = "Equipment_%s" % slot_name
 	button.custom_minimum_size = Vector2(132, 74)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.tooltip_text = slot_name
 	button.icon = (texture if texture != null else UI_ICONS.get_icon(_equipment_icon_name(slot_name), 38, Color("#8fa49a"))) if active else null
 	button.expand_icon = active
@@ -1442,8 +1427,8 @@ func _apply_responsive_layout() -> void:
 	if bag_grid:
 		var slot_min := 82.0
 		var gap := 6.0
-		bag_grid.columns = 5
-		if panel_width < (slot_min * 5.0 + gap * 4.0):
+		bag_grid.columns = BAG_GRID_COLUMNS
+		if panel_width < (slot_min * BAG_GRID_COLUMNS + gap * (BAG_GRID_COLUMNS - 1)):
 			bag_grid.columns = 4
 		if panel_width < (slot_min * 4.0 + gap * 3.0):
 			bag_grid.columns = 3
@@ -1470,6 +1455,7 @@ func _bag_item_button(item: Dictionary) -> Button:
 	button.disabled = not has_quantity
 	button.name = "BagItem_%s" % str(item.get("id", "item"))
 	button.custom_minimum_size = Vector2(82, 74)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.tooltip_text = "%s  x%d" % [str(item.get("title", "")), quantity]
 	if not has_quantity:
 		button.tooltip_text += " (보유하지 않음)"
@@ -1504,6 +1490,7 @@ func _empty_slot() -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.name = "EmptyBagSlot"
 	panel.custom_minimum_size = Vector2(82, 74)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.025, 0.031, 0.036, 0.6), Color(0.46, 0.52, 0.5, 0.25), 7))
 	return panel
 

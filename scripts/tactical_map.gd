@@ -1,5 +1,7 @@
 extends Control
 
+signal open_state_changed(is_open: bool)
+
 const UI_FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 var world: Node3D
@@ -8,6 +10,7 @@ var extraction_positions: Array[Vector3] = []
 var discovered_extraction_indices: Dictionary = {}
 var corpse_recovery_position := Vector3.INF
 var corpse_recovery_available := false
+var boss_targets: Array[Node3D] = []
 
 
 func setup(
@@ -32,6 +35,13 @@ func set_corpse_recovery(world_position: Vector3) -> void:
 func clear_corpse_recovery() -> void:
 	corpse_recovery_position = Vector3.INF
 	corpse_recovery_available = false
+	queue_redraw()
+
+
+func register_boss(boss: Node3D) -> void:
+	if not is_instance_valid(boss) or boss_targets.has(boss):
+		return
+	boss_targets.append(boss)
 	queue_redraw()
 
 
@@ -81,12 +91,16 @@ func _ready() -> void:
 
 func toggle() -> void:
 	visible = not visible
+	open_state_changed.emit(visible)
 	if visible:
 		queue_redraw()
 
 
 func close() -> void:
+	if not visible:
+		return
 	visible = false
+	open_state_changed.emit(false)
 
 
 func is_open() -> bool:
@@ -107,7 +121,7 @@ func _draw() -> void:
 	var panel_rect := Rect2((viewport_size - panel_size) * 0.5, panel_size)
 	draw_style_box(_panel_style(), panel_rect)
 	draw_string(UI_FONT, panel_rect.position + Vector2(28, 40), "종로 생존구역 전술 지도", HORIZONTAL_ALIGNMENT_LEFT, -1, 25, Color("#e4e1d3"))
-	draw_string(UI_FONT, panel_rect.position + Vector2(28, 65), "청록: 현재 위치 · 노랑: 발견한 하수구 · 주황: 분실 장비", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#aebbb4"))
+	draw_string(UI_FONT, panel_rect.position + Vector2(28, 65), "청록: 현재 위치 · 노랑: 발견한 하수구 · 주황: 분실 장비 · 빨강: 보스", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#aebbb4"))
 
 	var data: Dictionary = world.call("get_map_snapshot_data")
 	var grid_size := int(data.get("grid_size", 22))
@@ -200,6 +214,37 @@ func _draw() -> void:
 			110,
 			15,
 			Color("#ffd0a2")
+		)
+
+	for boss in boss_targets.duplicate():
+		if not is_instance_valid(boss) or bool(boss.get("dying")):
+			boss_targets.erase(boss)
+			continue
+		var boss_center := _world_position_to_map_point(
+			boss.global_position,
+			map_rect,
+			map_size
+		)
+		var boss_pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.013)
+		var boss_radius := marker_size * (0.72 + boss_pulse * 0.18)
+		draw_circle(boss_center, boss_radius, Color(1.0, 0.14, 0.08, 0.18))
+		draw_circle(boss_center, marker_size * 0.5, Color("#ff5747"), false, 3.0)
+		var diamond := PackedVector2Array([
+			boss_center + Vector2(0, -marker_size * 0.42),
+			boss_center + Vector2(marker_size * 0.36, 0),
+			boss_center + Vector2(0, marker_size * 0.42),
+			boss_center + Vector2(-marker_size * 0.36, 0),
+		])
+		draw_colored_polygon(diamond, Color("#ff6a52"))
+		draw_polyline(_closed_polygon(diamond), Color("#fff0d2"), 2.0)
+		draw_string(
+			UI_FONT,
+			boss_center + Vector2(marker_size * 0.68, -marker_size * 0.52),
+			str(boss.get_meta("display_name", "위험 개체")),
+			HORIZONTAL_ALIGNMENT_LEFT,
+			160,
+			15,
+			Color("#ffc4a8")
 		)
 
 	if is_instance_valid(player):

@@ -41,6 +41,11 @@ func _run() -> void:
 	assert(str(enemy.get("perception_state")) == "suspicious")
 	assert(not bool(enemy.get("alerted")))
 	assert(float(enemy.get("detection_awareness")) < 1.0)
+	var detection_indicator := enemy.get("detection_indicator") as Sprite3D
+	assert(is_instance_valid(detection_indicator))
+	enemy.call("set_player_visibility_factor", 1.0)
+	enemy.call("_update_detection_indicator")
+	assert(detection_indicator.visible)
 	var detected := bool(enemy.call(
 		"_update_detection_awareness",
 		2.0,
@@ -51,6 +56,9 @@ func _run() -> void:
 	assert(detected)
 	enemy.call("_become_alerted")
 	assert(str(enemy.get("perception_state")) == "combat")
+	assert(float(enemy.get("alert_marker_time")) > 0.0)
+	enemy.call("_update_detection_indicator")
+	assert(detection_indicator.visible)
 	enemy.set("last_known_position", enemy.global_position)
 	enemy.set("search_time_remaining", 2.0)
 	enemy.set("perception_state", "search")
@@ -58,6 +66,78 @@ func _run() -> void:
 	assert(str(enemy.get("perception_state")) == "search")
 	enemy.call("_clear_alert")
 	assert(str(enemy.get("perception_state")) == "return")
+	enemy.global_position = player.global_position + Vector3(0.0, 0.0, 2.4)
+	enemy.set("facing_world_direction", Vector3.BACK)
+	enemy.set("detection_awareness", 0.0)
+	enemy.set("perception_state", "patrol")
+	var instant_close_detection := bool(enemy.call(
+		"_update_detection_awareness",
+		0.01,
+		2.4,
+		true,
+		vision_range
+	))
+	assert(instant_close_detection)
+	assert(is_equal_approx(float(enemy.get("detection_awareness")), 1.0))
+	enemy.call("_clear_alert")
+	enemy.global_position = player.global_position + Vector3(0.0, 0.0, 4.0)
+	enemy.set("facing_world_direction", Vector3.BACK)
+	enemy.set("detection_awareness", 0.0)
+	enemy.set("perception_state", "patrol")
+	var proximity_detection := bool(enemy.call(
+		"_update_detection_awareness",
+		0.4,
+		4.0,
+		true,
+		vision_range
+	))
+	assert(not proximity_detection)
+	assert(float(enemy.get("detection_awareness")) > 0.0)
+	assert(str(enemy.get("perception_state")) == "suspicious")
+	proximity_detection = bool(enemy.call(
+		"_update_detection_awareness",
+		2.0,
+		4.0,
+		true,
+		vision_range
+	))
+	assert(proximity_detection)
+	enemy.call("_clear_alert")
+	enemy.global_position = player.global_position + Vector3(0.0, 0.0, 1.0)
+	enemy.set("detection_awareness", 0.0)
+	var blocked_close_detection := bool(enemy.call(
+		"_update_detection_awareness",
+		0.5,
+		1.0,
+		false,
+		vision_range
+	))
+	assert(not blocked_close_detection)
+	assert(is_zero_approx(float(enemy.get("detection_awareness"))))
+	var first_steering := enemy.call(
+		"_steer_around_obstacles",
+		Vector3(1.0, 0.0, 0.06)
+	) as Vector3
+	var second_steering := enemy.call(
+		"_steer_around_obstacles",
+		Vector3(1.0, 0.0, -0.06)
+	) as Vector3
+	assert(first_steering.dot(second_steering) > 0.98)
+	enemy.call("_set_facing", "s")
+	enemy.call("_set_facing_from_world_direction", Vector3.RIGHT)
+	assert(str(enemy.get("facing")) == "s")
+	enemy.set("pending_facing_since_msec", Time.get_ticks_msec() - 200)
+	enemy.call("_set_facing_from_world_direction", Vector3.RIGHT)
+	assert(str(enemy.get("facing")) == "se")
+	var patrol_modes: Array[String] = []
+	for patrol_enemy in enemies:
+		if is_instance_valid(patrol_enemy):
+			var patrol_mode := str(patrol_enemy.get("patrol_mode"))
+			if not patrol_modes.has(patrol_mode):
+				patrol_modes.append(patrol_mode)
+			assert(not (patrol_enemy.get("patrol_route") as Array).is_empty())
+	assert(patrol_modes.has("sentry"))
+	assert(patrol_modes.has("route"))
 
 	var market_counts := _sample_district_loot(main_scene, "market_lane", 600)
 	var luxury_counts := _sample_district_loot(main_scene, "luxury_core", 600)
@@ -79,6 +159,9 @@ func _run() -> void:
 			story_boss = candidate as CharacterBody3D
 			break
 	assert(is_instance_valid(story_boss))
+	var main_tactical_map := main_scene.get("tactical_map") as Control
+	assert(is_instance_valid(main_tactical_map))
+	assert((main_tactical_map.get("boss_targets") as Array).has(story_boss))
 	main_scene.call("_on_enemy_died", story_boss)
 	assert(int(game_state.get("subway_story_stage")) == 2)
 	assert((main_scene.get("completed_mission_titles") as Array).has("포격 신호의 주인 추적"))
@@ -119,13 +202,19 @@ func _run() -> void:
 	root.add_child(shelter)
 	await process_frame
 	await physics_frame
+	assert(not bool(shelter.call("_raid_requires_unarmed_confirmation", "jongno_outskirts")))
+	game_state.set("has_ak", false)
+	game_state.set("equipped_weapon_id", "")
+	assert(bool(shelter.call("_raid_requires_unarmed_confirmation", "jongno_outskirts")))
 	shelter.call("_open_raid_zone_select")
 	await process_frame
 	shelter.call("_launch_raid_zone", "jongno_outskirts")
 	await process_frame
 	var loadout_layer := root.find_child("RaidLoadoutConfirmLayer", true, false) as CanvasLayer
 	assert(is_instance_valid(loadout_layer))
-	assert(loadout_layer.find_child("ConfirmRaidLoadoutButton", true, false) is Button)
+	var unarmed_confirm := loadout_layer.find_child("ConfirmRaidLoadoutButton", true, false) as Button
+	assert(unarmed_confirm is Button)
+	assert(unarmed_confirm.text == "맨손으로 출정")
 	assert(loadout_layer.find_child("RaidLoadoutConfirmPanel", true, false) is PanelContainer)
 	shelter.call("_close_raid_zone_select")
 	shelter.queue_free()

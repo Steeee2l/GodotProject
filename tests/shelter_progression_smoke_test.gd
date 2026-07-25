@@ -91,18 +91,18 @@ func _run() -> void:
 	game_state.set("persistence_enabled", true)
 	game_state.set("persistence_path", test_save_path)
 	game_state.set("scrap", 123456)
-	game_state.set("catnip", 77.5)
+	game_state.set("catnip", 78)
 	var saved_player_level := int(game_state.get("player_level"))
 	var saved_training_levels := (game_state.get("training_levels") as Dictionary).duplicate(true)
 	if not bool(game_state.call("save_persistent_state")):
 		_fail("persistent shelter save could not be written")
 	game_state.set("scrap", 1)
-	game_state.set("catnip", 0.0)
+	game_state.set("catnip", 0)
 	game_state.set("player_level", 1)
 	game_state.set("training_levels", {})
 	if not bool(game_state.call("load_persistent_state")):
 		_fail("persistent shelter save could not be loaded")
-	if int(game_state.get("scrap")) != 123456 or not is_equal_approx(float(game_state.get("catnip")), 77.5):
+	if int(game_state.get("scrap")) != 123456 or int(game_state.get("catnip")) != 78:
 		_fail("persistent shelter save did not restore resource values")
 	if int(game_state.get("player_level")) != saved_player_level or game_state.get("training_levels") != saved_training_levels:
 		_fail("persistent progression save did not restore player and training levels")

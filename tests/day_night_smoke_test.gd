@@ -206,7 +206,12 @@ func _run() -> void:
 	assert(main_scene.get("mobile_flashlight_button") is Button)
 	assert(main_scene.get("mobile_map_button") is Button)
 	var tactical_map := main_scene.get("tactical_map") as Control
-	assert(tactical_map.find_child("MapCloseButton", true, false) is Button)
+	var map_close_button := tactical_map.find_child("MapCloseButton", true, false) as Button
+	assert(map_close_button is Button)
+	assert(tactical_map.is_connected(
+		"open_state_changed",
+		Callable(main_scene, "_on_tactical_map_open_state_changed")
+	))
 	main_scene.call("_on_mobile_map_pressed")
 	assert(bool(tactical_map.call("is_open")))
 	var mobile_map_button := main_scene.get("mobile_map_button") as Button
@@ -217,6 +222,10 @@ func _run() -> void:
 	map_close_touch.position = mobile_map_button.get_global_rect().get_center()
 	map_close_touch.pressed = true
 	assert(main_scene.call("_handle_mobile_action_touch", map_close_touch))
+	assert(not bool(tactical_map.call("is_open")))
+	main_scene.call("_on_mobile_map_pressed")
+	assert(bool(tactical_map.call("is_open")))
+	map_close_button.pressed.emit()
 	assert(not bool(tactical_map.call("is_open")))
 	var fire_button := main_scene.get("fire_button") as Button
 	var dash_button := main_scene.get("dash_button") as Button

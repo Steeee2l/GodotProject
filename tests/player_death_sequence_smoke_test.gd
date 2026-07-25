@@ -20,6 +20,11 @@ func _run() -> void:
 	assert(label != null)
 	assert(label.text.contains("GAME OVER"))
 	assert(label.text.contains("처치한 적"))
+	var loss_label := main_scene.get("game_over_loss_label") as Label
+	assert(loss_label != null)
+	assert(loss_label.text.contains("분실한 장비 및 소모품"))
+	assert(loss_label.text.contains("AK-47"))
+	assert(loss_label.text.contains("탄약"))
 	var corpse := game_state.get("pending_corpse_recovery") as Dictionary
 	var corpse_loot := corpse.get("loot", {}) as Dictionary
 	assert(int((corpse_loot.get("weapon_inventory", {}) as Dictionary).get("ak47", 0)) == 1)

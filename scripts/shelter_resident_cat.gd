@@ -22,7 +22,9 @@ const WANDER_MIN_WAIT := 1.0
 const WANDER_MAX_WAIT := 3.2
 const WANDER_RETARGET_TIME := 9.0
 const PRODUCTION_POP_INTERVAL := 1.0
-const PRODUCTION_POP_HEIGHT := 0.72
+const PRODUCTION_POP_HEIGHT := 1.18
+const PRODUCTION_POP_DURATION := 1.08
+const PRODUCTION_POP_FONT_SIZE := 46
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 
 var resident_id := ""
@@ -37,6 +39,7 @@ var work_indicator: Label3D
 var work_phase := 0.0
 var production_rate_per_second := 0.0
 var production_pop_timer := 0.0
+var production_pop_sequence := 0
 var roam_bounds := Rect2(Vector2(-12.0, -4.0), Vector2(24.0, 12.0))
 var wander_wait := 0.0
 var wander_retarget_time := 0.0
@@ -85,7 +88,7 @@ func _ready() -> void:
 	work_indicator = Label3D.new()
 	work_indicator.name = "WorkIndicator"
 	work_indicator.text = ""
-	work_indicator.position = Vector3(0, 1.72, 0)
+	work_indicator.position = Vector3(0, 1.54, 0)
 	work_indicator.font = FONT
 	work_indicator.font_size = 20
 	work_indicator.modulate = Color("#e6c978")
@@ -189,41 +192,72 @@ func _spawn_production_pop() -> void:
 	var label := Label3D.new()
 	label.name = "ProductionGain"
 	label.text = "+%s %s" % [
-		_format_production_rate(production_rate_per_second),
+		_format_catnip_rate(production_rate_per_second)
+		if is_catnip
+		else _format_production_rate(production_rate_per_second),
 		"캣닢" if is_catnip else "고철",
 	]
-	label.position = Vector3(0.0, 1.92, 0.0)
+	var side_direction := -1.0 if posmod(production_pop_sequence, 2) == 0 else 1.0
+	production_pop_sequence += 1
+	label.position = Vector3(side_direction * 0.06, 1.82, 0.0)
 	label.font = FONT
-	label.font_size = 25
-	label.pixel_size = 0.0044
-	label.modulate = color
+	label.font_size = PRODUCTION_POP_FONT_SIZE
+	label.pixel_size = 0.0052
+	label.modulate = Color(color.r, color.g, color.b, 0.0)
 	label.outline_modulate = Color(0.015, 0.02, 0.016, 0.98)
-	label.outline_size = 8
+	label.outline_size = 13
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
 	label.render_priority = 127
-	label.scale = Vector3.ONE * 0.78
+	label.scale = Vector3.ONE * 0.38
+	label.set_meta("production_kind", assignment_kind)
+	label.set_meta("production_rate", production_rate_per_second)
+	label.set_meta("rise_height", PRODUCTION_POP_HEIGHT)
 	add_child(label)
-	var tween := label.create_tween().set_parallel(true)
-	tween.tween_property(
+
+	var movement_tween := label.create_tween().set_parallel(true)
+	movement_tween.tween_property(
 		label,
 		"position:y",
 		label.position.y + PRODUCTION_POP_HEIGHT,
-		0.92
-	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(
+		PRODUCTION_POP_DURATION
+	).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+	movement_tween.tween_property(
+		label,
+		"position:x",
+		label.position.x + side_direction * 0.18,
+		PRODUCTION_POP_DURATION
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+	var scale_tween := label.create_tween()
+	scale_tween.tween_property(
 		label,
 		"scale",
-		Vector3.ONE * 1.06,
-		0.18
+		Vector3.ONE * 1.26,
+		0.16
 	).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tween.tween_property(
+	scale_tween.tween_property(
+		label,
+		"scale",
+		Vector3.ONE * 0.96,
+		0.17
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+	var visibility_tween := label.create_tween()
+	visibility_tween.tween_property(
+		label,
+		"modulate:a",
+		1.0,
+		0.1
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	visibility_tween.tween_interval(0.48)
+	visibility_tween.tween_property(
 		label,
 		"modulate:a",
 		0.0,
-		0.42
-	).set_delay(0.5).set_trans(Tween.TRANS_SINE)
-	tween.chain().tween_callback(label.queue_free)
+		0.5
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	visibility_tween.tween_callback(label.queue_free)
 
 
 func _format_production_rate(value: float) -> String:
@@ -232,6 +266,10 @@ func _format_production_rate(value: float) -> String:
 	if value >= 0.01:
 		return "%.2f" % value
 	return "%.4f" % value
+
+
+func _format_catnip_rate(value: float) -> String:
+	return str(maxi(0, roundi(value)))
 
 
 func _choose_wander_target() -> void:
@@ -258,7 +296,9 @@ func _update_work_indicator() -> void:
 			if production_rate_per_second > 0.0:
 				work_indicator.text = "%s +%s/s" % [
 					resource_name,
-					_format_production_rate(production_rate_per_second),
+					_format_catnip_rate(production_rate_per_second)
+					if assignment_kind == "catnip"
+					else _format_production_rate(production_rate_per_second),
 				]
 				work_indicator.modulate = (
 					Color("#aeea78") if assignment_kind == "catnip" else Color("#f1cf68")

@@ -18,6 +18,9 @@ func _run() -> void:
 	var field_interactions: Array[Node3D] = main_scene.get("field_interactions")
 	assert(player != null)
 	assert(not mission_sites.is_empty())
+	var initial_player_position := player.global_position
+	for mission_site in mission_sites:
+		assert(mission_site.global_position.distance_to(initial_player_position) >= 30.0)
 
 	var site := mission_sites[0]
 	site.set_meta("type", "defense")
@@ -37,11 +40,13 @@ func _run() -> void:
 	assert(str(main_scene.get("field_mission_phase")) == "preparing")
 	assert(is_equal_approx(float(main_scene.get("field_mission_prepare_timer")), 7.0))
 	assert(int(main_scene.get("field_mission_spawned_enemies")) == 0)
+	var objective_label := main_scene.get("objective_label") as Label
+	assert(objective_label.text.contains("실패 조건"))
+	assert(objective_label.text.contains("보상"))
 
 	main_scene.call("_update_field_missions", 2.0)
 	assert(str(main_scene.get("field_mission_phase")) == "preparing")
 	assert(int(main_scene.get("field_mission_spawned_enemies")) == 0)
-	var objective_label := main_scene.get("objective_label") as Label
 	assert(objective_label != null and objective_label.text.contains("시작까지"))
 
 	main_scene.call("_update_field_missions", 5.1)
