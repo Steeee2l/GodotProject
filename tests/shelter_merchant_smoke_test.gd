@@ -63,7 +63,7 @@ func _run() -> void:
 	assert(int(game_state.get("rescued_workers")) == residents_before + 1)
 	assert((shelter.get("shelter_residents") as Array).size() == residents_before + 1)
 
-	game_state.set("scrap", 500)
+	game_state.set("scrap", 1000)
 	var ammo_before := int(game_state.call("get_ammo_count", "762_fmj"))
 	shelter.call("_open_merchant_shop")
 	await get_tree().process_frame
@@ -85,7 +85,7 @@ func _run() -> void:
 	ammo_buy_button.pressed.emit()
 	await get_tree().process_frame
 	assert(int(game_state.call("get_ammo_count", "762_fmj")) == ammo_before + 30)
-	assert(int(game_state.get("scrap")) == 458)
+	assert(int(game_state.get("scrap")) == 350)
 
 	shelter.call("_set_merchant_shop_mode", "sell")
 	await get_tree().process_frame
@@ -100,7 +100,7 @@ func _run() -> void:
 	ammo_sell_button.pressed.emit()
 	await get_tree().process_frame
 	assert(int(game_state.call("get_ammo_count", "762_fmj")) == ammo_before)
-	assert(int(game_state.get("scrap")) == 458, "Merchant sales must never create shelter scrap.")
+	assert(int(game_state.get("scrap")) == 350, "Merchant sales must never create shelter scrap.")
 	assert(int(game_state.get("canned_food")) == canned_food_before + 2)
 
 	print("SHELTER_MERCHANT_OK waiting=true accepted=true idle_frames=4 trade=true")

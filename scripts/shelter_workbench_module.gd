@@ -15,63 +15,63 @@ const RECIPES := {
 			"id": "scope_lens",
 			"name": "스코프 렌즈",
 			"desc": "폐점포 스코프와 정밀 리시버 제작에 쓰는 투명 렌즈 부품.",
-			"cost": {"scrap": 45},
+			"cost": {"scrap": 900},
 			"result": {"component": "scope_lens", "amount": 1},
 		},
 		{
 			"id": "rubber_gasket",
 			"name": "고무 패킹",
 			"desc": "총구 양말, 임시 완충재, 방수 부품에 쓰는 탄성 고무.",
-			"cost": {"scrap": 35},
+			"cost": {"scrap": 700},
 			"result": {"component": "rubber_gasket", "amount": 1},
 		},
 		{
 			"id": "magazine_spring",
 			"name": "탄창 스프링",
 			"desc": "테이프 듀얼 탄창과 급탄 개선 부품에 쓰는 스프링.",
-			"cost": {"scrap": 40},
+			"cost": {"scrap": 800},
 			"result": {"component": "magazine_spring", "amount": 1},
 		},
 		{
 			"id": "scope_2x",
 			"name": "폐점포 2x 스코프",
 			"desc": "스코프 렌즈를 조립한 완성 조준경입니다.",
-			"cost": {"scrap": 35, "scope_lens": 1},
+			"cost": {"scrap": 1800, "scope_lens": 1},
 			"result": {"weapon_mod": "scope_2x", "amount": 1},
 		},
 		{
 			"id": "muffled_sock",
 			"name": "소리 방지용 양말",
 			"desc": "고무 패킹으로 고정한 임시 소음기입니다.",
-			"cost": {"scrap": 25, "rubber_gasket": 1},
+			"cost": {"scrap": 1500, "rubber_gasket": 1},
 			"result": {"weapon_mod": "muffled_sock", "amount": 1},
 		},
 		{
 			"id": "sponge_pad",
 			"name": "스펀지 턱받이",
 			"desc": "반동 회복을 돕는 완성 개머리판 패드입니다.",
-			"cost": {"scrap": 45, "rubber_gasket": 1},
+			"cost": {"scrap": 2400, "rubber_gasket": 1},
 			"result": {"weapon_mod": "sponge_pad", "amount": 1},
 		},
 		{
 			"id": "quick_mag",
 			"name": "테이프 듀얼 탄창",
 			"desc": "탄창 스프링을 사용한 빠른 교체용 탄창입니다.",
-			"cost": {"scrap": 55, "magazine_spring": 1},
+			"cost": {"scrap": 3200, "magazine_spring": 1},
 			"result": {"weapon_mod": "quick_mag", "amount": 1},
 		},
 		{
 			"id": "bell_bait",
 			"name": "딸랑이 방울",
 			"desc": "적의 주의를 유도하는 전술 보조공구입니다.",
-			"cost": {"scrap": 20, "magazine_spring": 1},
+			"cost": {"scrap": 1200, "magazine_spring": 1},
 			"result": {"weapon_mod": "bell_bait", "amount": 1},
 		},
 		{
 			"id": "ak_precision_receiver",
 			"name": "AK 정밀 단발 리시버",
 			"desc": "AK의 발사 특성을 바꾸는 특수 전술 모듈입니다.",
-			"cost": {"scrap": 160, "scope_lens": 2},
+			"cost": {"scrap": 25000, "scope_lens": 2},
 			"result": {"weapon_mod": "ak_precision_receiver", "amount": 1},
 			"required_workbench": 5,
 		},
@@ -81,21 +81,21 @@ const RECIPES := {
 			"id": "762_fmj_pack",
 			"name": "7.62mm 보통탄 x30",
 			"desc": "AK 계열 기본 탄약. 강하지만 총성이 커서 적을 끌어들입니다.",
-			"cost": {"scrap": 55, "magazine_spring": 1},
+			"cost": {"scrap": 500},
 			"result": {"ammo": "762_fmj", "amount": 30},
 		},
 		{
 			"id": "9mm_fmj_pack",
 			"name": "9mm 보통탄 x45",
 			"desc": "기관단총용 기본 탄약. 가볍고 수급이 안정적입니다.",
-			"cost": {"scrap": 45, "rubber_gasket": 1},
+			"cost": {"scrap": 350},
 			"result": {"ammo": "9mm_fmj", "amount": 45},
 		},
 		{
 			"id": "12g_buckshot_pack",
 			"name": "12게이지 벅샷 x12",
 			"desc": "근거리 저지력이 높은 산탄. 위기 탈출용으로 좋습니다.",
-			"cost": {"scrap": 75, "rubber_gasket": 1, "magazine_spring": 1},
+			"cost": {"scrap": 700},
 			"result": {"ammo": "12g_buckshot", "amount": 12},
 		},
 	],
@@ -104,7 +104,7 @@ const RECIPES := {
 			"id": "m1911",
 			"name": "M1911 솜방망이",
 			"desc": "초반 거지런과 최후의 보루용 권총.",
-			"cost": {"scrap": 160, "canned_food": 2, "rubber_gasket": 1},
+			"cost": {"scrap": 8000, "canned_food": 5, "rubber_gasket": 1},
 			"result": {"weapon": "m1911", "amount": 1},
 			"required_tier": 1,
 		},
@@ -112,7 +112,7 @@ const RECIPES := {
 			"id": "mp5",
 			"name": "MP5 하악이",
 			"desc": "기동전과 좀비 소탕에 강한 기관단총.",
-			"cost": {"scrap": 260, "canned_food": 3, "magazine_spring": 2, "rubber_gasket": 1},
+			"cost": {"scrap": 20000, "canned_food": 10, "magazine_spring": 2, "rubber_gasket": 1},
 			"result": {"weapon": "mp5", "amount": 1},
 			"required_tier": 1,
 		},
@@ -120,7 +120,7 @@ const RECIPES := {
 			"id": "ak47",
 			"name": "AK-47 캣라시니코프",
 			"desc": "강한 반동과 총성을 감수하고 화력을 얻는 소총.",
-			"cost": {"scrap": 620, "canned_food": 6, "scope_lens": 1, "magazine_spring": 2},
+			"cost": {"scrap": 55000, "canned_food": 18, "scope_lens": 1, "magazine_spring": 2},
 			"result": {"weapon": "ak47", "amount": 1},
 			"required_tier": 2,
 		},
@@ -128,7 +128,7 @@ const RECIPES := {
 			"id": "double_barrel",
 			"name": "더블배럴 참치 헌터",
 			"desc": "장전 중 무방비가 되지만 초근접 저지력이 강한 산탄총.",
-			"cost": {"scrap": 940, "canned_food": 9, "rubber_gasket": 3, "magazine_spring": 2},
+			"cost": {"scrap": 45000, "canned_food": 15, "rubber_gasket": 3, "magazine_spring": 2},
 			"result": {"weapon": "double_barrel", "amount": 1},
 			"required_tier": 3,
 		},
@@ -138,7 +138,7 @@ const RECIPES := {
 			"id": "repair_kit",
 			"name": "임시 총기 수리",
 			"desc": "장착 총기의 내구도를 즉시 조금 회복합니다.",
-			"cost": {"scrap": 60, "rubber_gasket": 1},
+			"cost": {"scrap": 1500, "rubber_gasket": 1},
 			"result": {"repair": 18.0},
 		},
 		{
@@ -195,6 +195,10 @@ const CATEGORY_ICONS := {
 
 @export var interaction_radius := 2.9
 
+const WALL_ALIGNED_TEXTURE := preload(
+	"res://assets/interiors/modules/shelter_workbench_wall_aligned_v4.png"
+)
+
 @onready var sprite: Sprite3D = $WorkbenchSprite
 
 var has_focus := false
@@ -210,6 +214,9 @@ func _ready() -> void:
 	add_to_group("shelter_module")
 	add_to_group("shelter_workbench")
 	set_meta("module_kind", "workbench")
+	sprite.texture = WALL_ALIGNED_TEXTURE
+	sprite.position = Vector3(0.0, 1.84, 0.02)
+	sprite.pixel_size = 0.00435
 
 
 func get_interaction_prompt() -> String:
@@ -254,42 +261,45 @@ func _rebuild_ui() -> void:
 	var dim := ColorRect.new()
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	dim.color = Color(0.006, 0.008, 0.011, 0.68)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	ui_layer.add_child(dim)
 
-	var root := PanelContainer.new()
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var viewport_size := get_viewport().get_visible_rect().size
-	var outer_margin := 10.0 if viewport_size.y < 640.0 else 28.0
-	root.offset_left = outer_margin
-	root.offset_top = outer_margin
-	root.offset_right = -outer_margin
-	root.offset_bottom = -outer_margin
+	var compact := viewport_size.x < 900.0 or viewport_size.y < 650.0
+	var stacked := viewport_size.x < 760.0
+	var panel_width := minf(1240.0, maxf(300.0, viewport_size.x - (20.0 if compact else 40.0)))
+	var panel_height := minf(780.0, maxf(360.0, viewport_size.y - (16.0 if compact else 40.0)))
+	var root := PanelContainer.new()
+	root.name = "WorkbenchPanel"
+	root.anchor_left = 0.5
+	root.anchor_top = 0.5
+	root.anchor_right = 0.5
+	root.anchor_bottom = 0.5
+	root.offset_left = -panel_width * 0.5
+	root.offset_top = -panel_height * 0.5
+	root.offset_right = panel_width * 0.5
+	root.offset_bottom = panel_height * 0.5
 	root.add_theme_stylebox_override("panel", _panel_style(Color(0.018, 0.023, 0.027, 0.95), Color("#8ac2a7"), 2, 10))
 	ui_layer.add_child(root)
 
-	var inner_margin := 12 if viewport_size.y < 640.0 else 22
+	var inner_margin := 12 if compact else 22
 	var margin := _margin(inner_margin, inner_margin, inner_margin, inner_margin)
 	root.add_child(margin)
-	var screen_scroll := ScrollContainer.new()
-	screen_scroll.name = "WorkbenchScreenScroll"
-	screen_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	screen_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	screen_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	screen_scroll.follow_focus = false
-	margin.add_child(screen_scroll)
 	var main := VBoxContainer.new()
-	main.custom_minimum_size.x = maxf(320.0, viewport_size.x - outer_margin * 2.0 - inner_margin * 2.0 - 12.0)
+	main.name = "WorkbenchContent"
 	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	main.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	main.add_theme_constant_override("separation", 10 if viewport_size.y < 640.0 else 16)
-	screen_scroll.add_child(main)
+	main.add_theme_constant_override("separation", 10 if compact else 14)
+	margin.add_child(main)
 
 	main.add_child(_build_header())
 	main.add_child(_build_tabs())
 
-	var body: BoxContainer = VBoxContainer.new() if viewport_size.x < 820.0 else HBoxContainer.new()
+	var body: BoxContainer = VBoxContainer.new() if stacked else HBoxContainer.new()
+	body.name = "WorkbenchBody"
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 18)
+	body.add_theme_constant_override("separation", 12 if compact else 16)
 	main.add_child(body)
 
 	body.add_child(_build_recipe_list())
@@ -300,12 +310,21 @@ func _rebuild_ui() -> void:
 
 func _build_header() -> Control:
 	var header := HBoxContainer.new()
+	header.name = "WorkbenchHeader"
 	header.add_theme_constant_override("separation", 12)
 	var title_box := VBoxContainer.new()
 	title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_box.clip_contents = true
 	header.add_child(title_box)
-	title_box.add_child(_label("제작 작업대  Lv.%d" % GameState.shelter_workbench_level, 30, Color("#f0e6c8")))
+	var title := _label("제작 작업대  Lv.%d" % GameState.shelter_workbench_level, 30, Color("#f0e6c8"))
+	title.name = "WorkbenchTitle"
+	title.autowrap_mode = TextServer.AUTOWRAP_OFF
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	title_box.add_child(title)
 	resource_label = _label(_resource_text(), 15, Color("#b7cfc3"))
+	resource_label.name = "WorkbenchResourceLabel"
+	resource_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	resource_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title_box.add_child(resource_label)
 
 	var close := _close_button()
@@ -326,10 +345,14 @@ func _build_tabs() -> Control:
 	tabs.add_theme_constant_override("v_separation", 8)
 	for category in ["parts", "ammo", "weapons", "supplies", "artisan", "enhance"]:
 		var tab := _button(str(CATEGORY_NAMES[category]), str(CATEGORY_ICONS[category]))
+		tab.name = "WorkbenchTab_%s" % category
 		tab.toggle_mode = true
 		tab.button_pressed = selected_category == category
 		tab.custom_minimum_size = Vector2(0, 40)
 		tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tab.autowrap_mode = TextServer.AUTOWRAP_OFF
+		tab.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		tab.clip_text = true
 		tab.pressed.connect(func() -> void:
 			selected_category = category
 			var recipes: Array = _recipes_for_category(selected_category)
@@ -343,17 +366,23 @@ func _build_tabs() -> Control:
 
 func _build_recipe_list() -> Control:
 	var panel := PanelContainer.new()
-	var viewport_width := get_viewport().get_visible_rect().size.x
-	panel.custom_minimum_size = Vector2(0 if viewport_width < 820.0 else (320 if viewport_width < 1040.0 else 380), 210 if viewport_width < 820.0 else 0)
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL if viewport_width < 820.0 else Control.SIZE_FILL
-	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel.name = "WorkbenchRecipePanel"
+	var viewport_size := get_viewport().get_visible_rect().size
+	var stacked := viewport_size.x < 760.0
+	panel.custom_minimum_size = Vector2(0.0 if stacked else 330.0, 170.0 if stacked else 0.0)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL if stacked else Control.SIZE_FILL
+	panel.size_flags_vertical = Control.SIZE_FILL if stacked else Control.SIZE_EXPAND_FILL
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.035, 0.043, 0.049, 0.86), Color("#456b61"), 1, 8))
 	var margin := _margin(12, 12, 12, 12)
 	panel.add_child(margin)
 	var scroll := ScrollContainer.new()
+	scroll.name = "WorkbenchRecipeScroll"
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	margin.add_child(scroll)
 	recipe_list = VBoxContainer.new()
+	recipe_list.name = "WorkbenchRecipeList"
 	recipe_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	recipe_list.add_theme_constant_override("separation", 8)
 	scroll.add_child(recipe_list)
@@ -362,16 +391,23 @@ func _build_recipe_list() -> Control:
 
 func _build_detail_panel() -> Control:
 	var panel := PanelContainer.new()
+	panel.name = "WorkbenchDetailPanel"
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.021, 0.027, 0.032, 0.88), Color("#55776d"), 1, 8))
 	var margin := _margin(22, 20, 22, 20)
 	panel.add_child(margin)
+	var scroll := ScrollContainer.new()
+	scroll.name = "WorkbenchDetailScroll"
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	margin.add_child(scroll)
 	detail_box = VBoxContainer.new()
+	detail_box.name = "WorkbenchDetailContent"
 	detail_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	detail_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	detail_box.add_theme_constant_override("separation", 14)
-	margin.add_child(detail_box)
+	scroll.add_child(detail_box)
 	return panel
 
 
@@ -387,6 +423,9 @@ func _refresh_recipe_list() -> void:
 		button.custom_minimum_size = Vector2(0, 72)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.autowrap_mode = TextServer.AUTOWRAP_OFF
+		button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		button.clip_text = true
 		button.toggle_mode = true
 		button.button_pressed = str(recipe["id"]) == selected_recipe_id
 		button.pressed.connect(func() -> void:
@@ -405,8 +444,14 @@ func _refresh_detail_panel() -> void:
 		return
 
 	var title := _label(str(recipe["name"]), 30, Color("#f0e6c8"))
+	title.name = "WorkbenchRecipeTitle"
+	title.autowrap_mode = TextServer.AUTOWRAP_OFF
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	detail_box.add_child(title)
-	detail_box.add_child(_label(str(recipe.get("desc", "")), 16, Color("#cdd8d0")))
+	var description := _label(str(recipe.get("desc", "")), 16, Color("#cdd8d0"))
+	description.name = "WorkbenchRecipeDescription"
+	description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	detail_box.add_child(description)
 
 	var icon_card := PanelContainer.new()
 	icon_card.custom_minimum_size = Vector2(170, 118)
@@ -444,17 +489,18 @@ func _refresh_detail_panel() -> void:
 	detail_box.add_child(result_label)
 
 	var craft := _button(_craft_action_text(recipe), _craft_action_icon(recipe))
-	craft.custom_minimum_size = Vector2(240, 48)
+	craft.name = "WorkbenchCraftButton"
+	craft.custom_minimum_size = Vector2(0, 48)
+	craft.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	craft.disabled = not _can_craft(recipe)
 	craft.pressed.connect(func() -> void:
 		_craft(recipe)
 	)
 	detail_box.add_child(craft)
 
-	var spacer := Control.new()
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	detail_box.add_child(spacer)
-	detail_box.add_child(_label("총기 부착물 장착은 이제 가방에서 총을 클릭해 진행합니다.", 15, Color("#88b9a5")))
+	var footer := _label("총기 부착물 장착은 가방에서 총을 선택해 진행합니다.", 15, Color("#88b9a5"))
+	footer.name = "WorkbenchFooter"
+	detail_box.add_child(footer)
 
 
 func _selected_recipe() -> Dictionary:
@@ -595,19 +641,22 @@ func _consume_resource(key: String, amount: int) -> void:
 
 
 func _resource_text() -> String:
-	return "고철 %d · 렌즈 %d · 고무 %d · 스프링 %d · 통조림 %d" % [
-		GameState.scrap,
+	return "고철 %s · 렌즈 %d · 고무 %d · 스프링 %d · 통조림 %s" % [
+		GameState.format_compact_number(GameState.scrap),
 		GameState.get_mod_component_count("scope_lens"),
 		GameState.get_mod_component_count("rubber_gasket"),
 		GameState.get_mod_component_count("magazine_spring"),
-		GameState.canned_food,
+		GameState.format_compact_number(GameState.canned_food),
 	]
 
 
 func _cost_short_text(recipe: Dictionary) -> String:
 	var parts: Array[String] = []
 	for key in _effective_cost(recipe).keys():
-		parts.append("%s %d" % [_resource_name(str(key)), int(_effective_cost(recipe)[key])])
+		parts.append("%s %s" % [
+			_resource_name(str(key)),
+			GameState.format_compact_number(int(_effective_cost(recipe)[key])),
+		])
 	return " / ".join(parts)
 
 
@@ -741,7 +790,10 @@ func _resource_row(key: String, owned: int, needed: int, color: Color) -> Contro
 	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	row.add_child(name_label)
-	var amount_label := _label("%d / %d" % [owned, needed], 17, color)
+	var amount_label := _label("%s / %s" % [
+		GameState.format_compact_number(owned),
+		GameState.format_compact_number(needed),
+	], 17, color)
 	amount_label.name = "ResourceAmount"
 	amount_label.custom_minimum_size = Vector2(112, 0)
 	amount_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT

@@ -2,12 +2,24 @@ class_name UiIconFactory
 extends RefCounted
 
 static var _cache: Dictionary = {}
+const GENERATED_CURRENCY_PATHS := {
+	"scrap": "res://assets/ui/currency/scrap.png",
+	"catnip": "res://assets/ui/currency/catnip.png",
+	"food": "res://assets/ui/currency/canned_food.png",
+	"churu": "res://assets/ui/currency/churu.png",
+}
 
 
 static func get_icon(icon_name: String, size := 64, color := Color("#d9e3dc")) -> Texture2D:
 	var key := "%s:%d:%s" % [icon_name, size, color.to_html()]
 	if _cache.has(key):
 		return _cache[key] as Texture2D
+	var generated_path := str(GENERATED_CURRENCY_PATHS.get(icon_name, ""))
+	if not generated_path.is_empty() and ResourceLoader.exists(generated_path):
+		var generated_texture := load(generated_path) as Texture2D
+		if generated_texture != null:
+			_cache[key] = generated_texture
+			return generated_texture
 	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
 	image.fill(Color.TRANSPARENT)
 	var scale := float(size) / 64.0

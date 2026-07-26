@@ -45,6 +45,10 @@ const COMPONENT_TEXTURES := {
 
 @export var interaction_radius := 3.8
 
+const WALL_ALIGNED_TEXTURE := preload(
+	"res://assets/interiors/modules/shelter_storage_wall_aligned_v4.png"
+)
+
 @onready var sprite: Sprite3D = $StorageSprite
 
 var ui_layer: CanvasLayer
@@ -56,6 +60,9 @@ func _ready() -> void:
 	add_to_group("shelter_module")
 	add_to_group("shelter_storage")
 	set_meta("module_kind", "storage")
+	sprite.texture = WALL_ALIGNED_TEXTURE
+	sprite.position = Vector3(0.0, 1.89, 0.02)
+	sprite.pixel_size = 0.0041
 
 
 func get_interaction_prompt() -> String:
@@ -134,19 +141,11 @@ func _open_ui() -> void:
 	margin.add_theme_constant_override("margin_bottom", inner_margin)
 	panel.add_child(margin)
 
-	var panel_scroll := ScrollContainer.new()
-	panel_scroll.name = "ShelterStorageScroll"
-	panel_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	panel_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	margin.add_child(panel_scroll)
-
 	content = VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.custom_minimum_size.x = maxf(320.0, panel.custom_minimum_size.x - inner_margin * 2.0 - 12.0)
 	content.add_theme_constant_override("separation", 12)
-	panel_scroll.add_child(content)
+	margin.add_child(content)
 	_rebuild_ui()
 
 
@@ -154,7 +153,7 @@ func _rebuild_ui() -> void:
 	if content == null:
 		return
 	for child in content.get_children():
-		child.queue_free()
+		child.free()
 
 	var viewport_size := get_viewport().get_visible_rect().size
 	var narrow := viewport_size.x < 1040.0
@@ -181,7 +180,7 @@ func _rebuild_ui() -> void:
 
 	var summary := GridContainer.new()
 	summary.name = "StorageSummary"
-	summary.columns = 2 if narrow else 4
+	summary.columns = 1 if viewport_size.x < 700.0 else 3
 	summary.add_theme_constant_override("h_separation", 8)
 	summary.add_theme_constant_override("v_separation", 8)
 	content.add_child(summary)
@@ -191,7 +190,6 @@ func _rebuild_ui() -> void:
 		"%d / %d" % [GameState.get_storage_used_slots(), GameState.get_storage_capacity()],
 		"loot"
 	))
-	summary.add_child(_summary_card("보관 규격", "%d행 × %d열" % [grid_size.y, grid_size.x], "all"))
 	summary.add_child(_upgrade_card())
 
 	var body: BoxContainer = VBoxContainer.new() if narrow else HBoxContainer.new()
@@ -384,9 +382,9 @@ func _upgrade_card() -> Control:
 	var button := Button.new()
 	button.name = "StorageUpgradeButton"
 	button.custom_minimum_size = Vector2(0, 58)
-	button.text = "Lv.%d 확장\n고철 %d%s" % [
+	button.text = "Lv.%d 확장\n고철 %s%s" % [
 		GameState.storage_level + 1,
-		scrap_cost,
+		GameState.format_compact_number(scrap_cost),
 		"  ·  츄르 %d" % churu_cost if churu_cost > 0 else "",
 	]
 	button.icon = UI_ICONS.get_icon("upgrade", 30, Color("#e0c16d"))
@@ -446,8 +444,9 @@ func _get_backpack_entries() -> Array[Dictionary]:
 	_append_dictionary_entries(entries, "mod", GameState.weapon_mod_inventory)
 	if GameState.medkits > 0:
 		entries.append({"type": "medkit", "id": "medkit", "count": GameState.medkits})
-	if GameState.canned_food > 0:
-		entries.append({"type": "food", "id": "canned_food", "count": GameState.canned_food})
+	var carried_food := GameState.get_backpack_storage_count("food", "canned_food")
+	if carried_food > 0:
+		entries.append({"type": "food", "id": "canned_food", "count": carried_food})
 	entries.sort_custom(func(a: Dictionary, b: Dictionary): return _item_name(str(a.get("id", ""))) < _item_name(str(b.get("id", ""))))
 	return entries
 
@@ -582,7 +581,8 @@ func _label(text: String, size: int, color: Color) -> Label:
 	label.add_theme_font_override("font", FONT)
 	label.add_theme_font_size_override("font_size", size)
 	label.add_theme_color_override("font_color", color)
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	return label
 
 

@@ -1,7 +1,7 @@
 [gd_scene load_steps=7 format=3 uid="uid://cmw084c46lret"]
 
 [ext_resource type="Script" uid="uid://4m73vb68ahso" path="res://scripts/shelter_storage_module.gd" id="1_script"]
-[ext_resource type="Texture2D" uid="uid://op16eufyysxj" path="res://assets/interiors/modules/shelter_storage_wall_v1.png" id="2_texture"]
+[ext_resource type="Texture2D" uid="uid://b51gso686s5p1" path="res://assets/interiors/modules/shelter_storage_wall_aligned_v4.png" id="2_mhgfs"]
 
 [sub_resource type="BoxShape3D" id="BoxShape_storage"]
 size = Vector3(5.45, 1.3, 1.75)
@@ -43,7 +43,7 @@ pixel_size = 0.0041
 billboard = 1
 no_depth_test = true
 render_priority = 22
-texture = ExtResource("2_texture")
+texture = ExtResource("2_mhgfs")
 
 [node name="GroundShadow" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.045, 0.79)

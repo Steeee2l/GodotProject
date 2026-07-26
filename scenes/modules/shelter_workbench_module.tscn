@@ -1,10 +1,10 @@
 [gd_scene load_steps=7 format=3 uid="uid://ba71fq0o4bon3"]
 
 [ext_resource type="Script" uid="uid://yeja3jlhrnfx" path="res://scripts/shelter_workbench_module.gd" id="1_script"]
-[ext_resource type="Texture2D" uid="uid://dd4vkciy3phjx" path="res://assets/interiors/modules/shelter_workbench_isometric_v6.png" id="2_texture"]
+[ext_resource type="Texture2D" uid="uid://c84ff5tst68t3" path="res://assets/interiors/modules/shelter_workbench_wall_aligned_v4.png" id="2_hyomg"]
 
 [sub_resource type="BoxShape3D" id="BoxShape_workbench"]
-size = Vector3(5.4, 1.25, 1.95)
+size = Vector3(5.4, 1.25, 1.45)
 
 [sub_resource type="Shader" id="Shader_shadow"]
 code = "shader_type spatial;
@@ -25,7 +25,7 @@ shader = SubResource("Shader_shadow")
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_shadow"]
 material = SubResource("ShaderMaterial_shadow")
-size = Vector2(6.15, 1.85)
+size = Vector2(5.8, 1.35)
 
 [node name="ShelterWorkbenchModule" type="Node3D"]
 script = ExtResource("1_script")
@@ -43,7 +43,7 @@ pixel_size = 0.0042
 billboard = 1
 no_depth_test = true
 render_priority = 22
-texture = ExtResource("2_texture")
+texture = ExtResource("2_hyomg")
 
 [node name="GroundShadow" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.045, 0.88)

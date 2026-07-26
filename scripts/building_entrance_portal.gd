@@ -1,6 +1,6 @@
 extends Area3D
 
-const BUILDING_SCENE_PATH := "res://scenes/building_interior.tscn"
+const BUILDING_SCENE := preload("res://scenes/building_interior.tscn")
 
 @export var building_id := "office_tower"
 @export var seed_offset := 0
@@ -10,6 +10,7 @@ const BUILDING_SCENE_PATH := "res://scenes/building_interior.tscn"
 var nearby_player: Node3D
 var portal_marker: MeshInstance3D
 var prompt: Label3D
+var transition_pending := false
 @onready var BuildingRunState: Node = get_node("/root/BuildingRunState")
 @onready var GameState: Node = get_node("/root/GameState")
 
@@ -19,7 +20,7 @@ func _ready() -> void:
 	add_to_group("field_interaction")
 	set_meta("interaction_type", "building_portal")
 	set_meta("display_name", "빌딩 진입")
-	set_meta("hold_duration", 0.25)
+	set_meta("hold_duration", 0.8)
 	set_meta("interaction_distance", 3.2)
 	collision_layer = 0
 	collision_mask = 1
@@ -61,7 +62,7 @@ func _build_visual_marker() -> void:
 	add_child(portal_marker)
 	prompt = Label3D.new()
 	prompt.name = "EntrancePrompt"
-	prompt.text = "E  빌딩 진입"
+	prompt.text = "F  빌딩 진입"
 	prompt.position = Vector3(0, 1.5, 0)
 	prompt.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	prompt.font_size = 42
@@ -72,17 +73,15 @@ func _build_visual_marker() -> void:
 	add_child(prompt)
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if nearby_player == null or not (event is InputEventKey):
+func enter_building(_player_body: Node3D) -> void:
+	if transition_pending:
 		return
-	var key_event := event as InputEventKey
-	if not key_event.pressed or key_event.echo or key_event.keycode != KEY_E:
-		return
-	enter_building(nearby_player)
-	get_viewport().set_input_as_handled()
-
-
-func enter_building(player_body: Node3D) -> void:
+	transition_pending = true
+	set_meta("completed", true)
+	monitoring = false
+	set_process(false)
+	if prompt != null:
+		prompt.visible = false
 	var current := get_tree().current_scene
 	if current != null and current.has_method("_save_run_state"):
 		current.call("_save_run_state")
@@ -95,7 +94,7 @@ func enter_building(player_body: Node3D) -> void:
 		return_point,
 		floor_count
 	)
-	get_tree().change_scene_to_file(BUILDING_SCENE_PATH)
+	get_tree().call_deferred("change_scene_to_packed", BUILDING_SCENE)
 
 
 func _on_body_entered(body: Node3D) -> void:

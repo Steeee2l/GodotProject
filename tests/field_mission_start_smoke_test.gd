@@ -41,8 +41,9 @@ func _run() -> void:
 	assert(is_equal_approx(float(main_scene.get("field_mission_prepare_timer")), 7.0))
 	assert(int(main_scene.get("field_mission_spawned_enemies")) == 0)
 	var objective_label := main_scene.get("objective_label") as Label
-	assert(objective_label.text.contains("실패 조건"))
-	assert(objective_label.text.contains("보상"))
+	assert(objective_label.text.count("\n") <= 3)
+	assert(not objective_label.text.contains("실패 조건"))
+	assert(not objective_label.text.contains("보상"))
 
 	main_scene.call("_update_field_missions", 2.0)
 	assert(str(main_scene.get("field_mission_phase")) == "preparing")

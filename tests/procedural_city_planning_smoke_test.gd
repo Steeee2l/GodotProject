@@ -51,6 +51,7 @@ func _run() -> void:
 	var map_script: Script = load("res://scripts/procedural_map.gd")
 	var building_catalog = load("res://scripts/building_catalog.gd")
 	var landmark_catalog = load("res://scripts/urban_landmark_catalog.gd")
+	var street_prop_catalog = load("res://scripts/street_prop_catalog.gd")
 	for landmark_id in ["playground"]:
 		var definition: Dictionary = landmark_catalog.get_definition(landmark_id)
 		_assert_isometric_footprint(definition)
@@ -64,6 +65,8 @@ func _run() -> void:
 		"seoul_market_row_8x4_v1",
 		"seoul_multifamily_villa_6x6_v1",
 		"gangnam_luxury_showroom_6x6_v1",
+		"seoul_laundromat_repair_8x4_v1",
+		"seoul_redbrick_corner_villa_6x6_v1",
 	]:
 		var definition: Dictionary = building_catalog.get_definition(building_id)
 		assert(building_catalog.is_valid_definition(definition))
@@ -72,7 +75,18 @@ func _run() -> void:
 	assert(building_catalog.get_definition("seoul_market_row_8x4_v1")["districts"].has("market_lane"))
 	assert(building_catalog.get_definition("seoul_multifamily_villa_6x6_v1")["districts"].has("multi_family"))
 	assert(building_catalog.get_definition("gangnam_luxury_showroom_6x6_v1")["districts"].has("luxury_core"))
+	assert(building_catalog.get_definition("seoul_laundromat_repair_8x4_v1")["districts"].has("street_mixed"))
+	assert(building_catalog.get_definition("seoul_redbrick_corner_villa_6x6_v1")["districts"].has("residential_buffer"))
+	for prop_id in street_prop_catalog.DEFINITIONS:
+		var prop_definition: Dictionary = street_prop_catalog.get_definition(prop_id)
+		var prop_collision_size: Vector3 = prop_definition["collision_size"]
+		var prop_corners: Array = prop_definition["footprint_corners_px"]
+		assert(ResourceLoader.exists(str(prop_definition["texture_path"])))
+		assert(prop_collision_size.x > 0.0)
+		assert(prop_collision_size.z > 0.0)
+		assert(prop_corners.size() == 4)
 	var generated_lowrise_ids := {}
+	var generated_prop_ids := {}
 	for seed in [1, 7, 42, 1337, 24681357]:
 		var city: Node3D = map_script.new()
 		city.set("map_seed", seed)
@@ -109,7 +123,7 @@ func _run() -> void:
 			assert(not (city.get("vertical_roads").has(cover_cell.x) and city.get("horizontal_roads").has(cover_cell.y)))
 			var cover_collision := cover.get_node("CoverCollision") as CollisionShape3D
 			var cover_shape := cover_collision.shape as BoxShape3D
-			assert(maxf(cover_shape.size.x, cover_shape.size.z) <= 4.3)
+			assert(maxf(cover_shape.size.x, cover_shape.size.z) <= 6.2)
 			assert(minf(cover_shape.size.x, cover_shape.size.z) <= 1.2)
 			var cover_type := str(cover.get_meta("cover_type"))
 			if cover_type.ends_with("axis_a"):
@@ -134,6 +148,21 @@ func _run() -> void:
 			var projectile_hit := city.get_world_3d().direct_space_state.intersect_ray(projectile_query)
 			assert(not projectile_hit.is_empty())
 			assert(projectile_hit.get("collider") == cover)
+		var street_props := get_nodes_in_group("street_prop_obstacle")
+		assert(street_props.size() >= 3)
+		for prop_node in street_props:
+			var prop := prop_node as StaticBody3D
+			assert(prop != null)
+			assert(prop.collision_layer == 1)
+			assert(prop.get_node_or_null("StreetPropSprite") is Sprite3D)
+			var prop_collision := prop.get_node("StreetPropCollision") as CollisionShape3D
+			var prop_shape := prop_collision.shape as BoxShape3D
+			assert(prop_shape != null)
+			assert(prop_shape.size == prop.get_meta("collision_world_size"))
+			var prop_debug := prop.get_node("StreetPropCollisionDebug") as MeshInstance3D
+			var prop_debug_plane := prop_debug.mesh as PlaneMesh
+			assert(prop_debug_plane.size == Vector2(prop_shape.size.x, prop_shape.size.z))
+			generated_prop_ids[str(prop.get_meta("prop_id"))] = true
 		var blocked_cover := road_covers[0] as Node3D
 		var physically_open: Vector3 = city.call(
 			"find_nearest_physically_open_position",
@@ -156,16 +185,16 @@ func _run() -> void:
 		var signature_roads: Dictionary = city.get("district_signature_road_cells")
 		var building_by_cell: Dictionary = city.get("building_type_by_cell")
 		var expected_anchor_buildings := {
-			"market_lane": "seoul_market_row_8x4_v1",
-			"multi_family": "seoul_multifamily_villa_6x6_v1",
-			"luxury_core": "gangnam_luxury_showroom_6x6_v1",
+			"market_lane": ["seoul_market_row_8x4_v1", "seoul_laundromat_repair_8x4_v1"],
+			"multi_family": ["seoul_multifamily_villa_6x6_v1", "seoul_redbrick_corner_villa_6x6_v1"],
+			"luxury_core": ["gangnam_luxury_showroom_6x6_v1"],
 		}
 		for district_name in expected_anchor_buildings:
 			assert(anchors.has(district_name))
 			assert(signature_roads.has(district_name))
 			var anchor_cell: Vector2i = anchors[district_name]
 			assert(str(zones[anchor_cell]) == district_name)
-			assert(str(building_by_cell[anchor_cell]) == str(expected_anchor_buildings[district_name]))
+			assert(expected_anchor_buildings[district_name].has(str(building_by_cell[anchor_cell])))
 			for other_name in expected_anchor_buildings:
 				if other_name == district_name:
 					continue
@@ -198,8 +227,17 @@ func _run() -> void:
 			assert(is_equal_approx(collision_box.size.x, footprint.x * 2.0))
 			assert(is_equal_approx(collision_box.size.z, footprint.y * 2.0))
 			var sprite := building.get_node_or_null("BuildingSprite") as Sprite3D
+			var source_size: Vector2i = definition.get(
+				"source_size",
+				Vector2i(sprite.texture.get_width(), sprite.texture.get_height())
+			)
+			var corner_scale := Vector2(
+				float(sprite.texture.get_width()) / float(source_size.x),
+				float(sprite.texture.get_height()) / float(source_size.y)
+			)
 			var corners: Array = definition["footprint_corners_px"]
-			assert(is_equal_approx(sprite.offset.x, sprite.texture.get_width() * 0.5 - (corners[3] as Vector2).x))
+			var bottom_corner: Vector2 = (corners[3] as Vector2) * corner_scale
+			assert(is_equal_approx(sprite.offset.x, sprite.texture.get_width() * 0.5 - bottom_corner.x))
 			var planning_cell: Vector2i = building.get_meta("planning_cell")
 			var cell_center: Vector3 = city.call("_cell_center", planning_cell)
 			var half_size := Vector2(collision_box.size.x, collision_box.size.z) * 0.5
@@ -248,6 +286,9 @@ func _run() -> void:
 	assert(generated_lowrise_ids.has("gangnam_lowrise_commercial_8x4_aligned"))
 	assert(generated_lowrise_ids.has("gangnam_lowrise_garage_8x4_aligned"))
 	assert(generated_lowrise_ids.has("seoul_market_row_8x4_v1"))
+	assert(generated_prop_ids.has("dumpster_cluster"))
+	assert(generated_prop_ids.has("vending_cluster"))
+	assert(generated_prop_ids.has("construction_cluster"))
 	assert(building_catalog.get_definition("gangnam_lowrise_commercial_8x4_aligned")["footprint_modules"] == Vector2i(4, 8))
 	print("CITY_PLANNING_OK seeds=5 parks=0 playgrounds=2 subways=2 apartments=0 districts=3 lowrise_types=%d" % generated_lowrise_ids.size())
 	quit(0)

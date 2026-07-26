@@ -11,6 +11,7 @@ const ISOMETRIC_VERTICAL_PROJECTION := 0.816496580927726
 const BUILDING_CATALOG := preload("res://scripts/building_catalog.gd")
 const LANDMARK_CATALOG := preload("res://scripts/urban_landmark_catalog.gd")
 const VEHICLE_CATALOG := preload("res://scripts/vehicle_catalog.gd")
+const STREET_PROP_CATALOG := preload("res://scripts/street_prop_catalog.gd")
 const BUILDING_ENTRANCE_SCENE := preload("res://scenes/modules/building_entrance_portal.tscn")
 const OPEN_SPACE_HIGH_RISE_BUFFER_CELLS := 2
 const OPEN_SPACE_MID_RISE_BUFFER_CELLS := 1
@@ -21,7 +22,7 @@ const FAR_DEPTH_OPEN_CELL := Vector2i(GRID_SIZE - 1, GRID_SIZE - 1)
 const ROAD_SETBACK_MODULES := 4
 const INTERIOR_SETBACK_MODULES := 1
 const ROAD_VEHICLE_CHANCE := 0.46
-const ROAD_COVER_OBSTACLE_CHANCE := 0.52
+const ROAD_COVER_OBSTACLE_CHANCE := 0.68
 const DISTRICT_RADIUS_CELLS := 2
 const DISTRICT_MIN_SEPARATION_CELLS := 6
 const ROAD_COVER_DEFINITIONS := {
@@ -579,13 +580,16 @@ func _build_road_cell(cell: Vector2i, center: Vector3, vertical: bool, horizonta
 		_add_lane_dash(center, true)
 	else:
 		_add_lane_dash(center, false)
+	var is_luxury_signature: bool = (
+		district_signature_road_cells.get("luxury_core", Vector2i(-1, -1)) == cell
+	)
 	if (
 		vertical != horizontal
 		and not _is_subway_vehicle_clearance_cell(cell)
 		and not _is_apartment_gate_clearance_cell(cell)
-		and not _is_road_cover_clearance_cell(cell, vertical)
+		and (is_luxury_signature or not _is_road_cover_clearance_cell(cell, vertical))
 	):
-		if district_signature_road_cells.get("luxury_core", Vector2i(-1, -1)) == cell:
+		if is_luxury_signature:
 			_spawn_road_cover_vehicle(center, vertical, "luxury_core", true)
 		elif rng.randf() < ROAD_VEHICLE_CHANCE:
 			_spawn_road_cover_vehicle(center, vertical, _road_district(cell))
@@ -668,7 +672,7 @@ func _build_zoned_lots() -> void:
 		_try_build_building(cell)
 	for cell in open_cells:
 		_build_open_lot(cell)
-	_build_market_district_props()
+	_build_district_props()
 
 
 func _build_apartment_complex() -> void:
@@ -754,18 +758,43 @@ func _build_waterfront_lot(cell: Vector2i) -> void:
 
 
 func _spawn_road_cover_vehicle(center: Vector3, vertical: bool, district: String = "", force_signature: bool = false) -> void:
-	var vehicle_roll := rng.randf()
-	var vehicle_type := "sedan"
-	if district == "luxury_core" and (force_signature or vehicle_roll < 0.76):
+	var vehicle_type := _choose_vehicle_type(district, true)
+	if district == "luxury_core" and force_signature:
 		vehicle_type = "luxury_sedan"
-	elif vehicle_roll > 0.9:
-		vehicle_type = "bus"
-	elif vehicle_roll > 0.66:
-		vehicle_type = "truck"
 	var lane_offset := (3.0 if rng.randf() < 0.5 else -3.0) * WORLD_SCALE
 	var travel_offset := rng.randf_range(-2.2, 2.2) * WORLD_SCALE
 	var position := center + (Vector3(lane_offset, 0.1, travel_offset) if vertical else Vector3(travel_offset, 0.1, lane_offset))
 	_spawn_vehicle("RoadCover_%d_%d" % [roundi(center.x), roundi(center.z)], vehicle_type, position, vertical)
+
+
+func _choose_vehicle_type(district: String, allow_large: bool) -> String:
+	var candidates: Array[String] = []
+	match district:
+		"luxury_core":
+			candidates = ["luxury_sedan", "luxury_sedan", "suv", "taxi", "sedan"]
+		"market_lane":
+			candidates = ["delivery_van", "delivery_van", "taxi", "sedan", "truck"]
+		"multi_family", "residential_buffer":
+			candidates = ["suv", "suv", "sedan", "taxi", "delivery_van"]
+		_:
+			candidates = ["sedan", "sedan", "suv", "taxi", "delivery_van"]
+	if allow_large:
+		var road_state_roll := rng.randf()
+		if road_state_roll < 0.08:
+			return "overturned_hatchback"
+		if road_state_roll < 0.24:
+			return "burned_sedan"
+		if rng.randf() < 0.14:
+			candidates.append("truck")
+		if rng.randf() < 0.055:
+			candidates.append("bus")
+	else:
+		var parked_state_roll := rng.randf()
+		if parked_state_roll < 0.16:
+			return "intact_hatchback"
+		if parked_state_roll < 0.23:
+			return "burned_sedan"
+	return candidates[rng.randi_range(0, candidates.size() - 1)]
 
 
 func _spawn_road_cover_obstacle(cell: Vector2i, center: Vector3, vertical: bool) -> void:
@@ -875,15 +904,158 @@ func _build_parking_lot(cell: Vector2i) -> void:
 	var vehicle_count := rng.randi_range(2, slots.size())
 	var zone := str(cell_zones.get(cell, "street_mixed"))
 	for slot_index in range(vehicle_count):
-		var vehicle_type := "truck" if rng.randf() < 0.16 else "sedan"
-		if zone == "luxury_core" and rng.randf() < 0.72:
-			vehicle_type = "luxury_sedan"
+		var vehicle_type := _choose_vehicle_type(zone, false)
 		_spawn_vehicle(
 			"Parked_%d_%d_%d" % [cell.x, cell.y, slot_index],
 			vehicle_type,
 			center + slots[slot_index],
 			true
 		)
+
+
+func _build_district_props() -> void:
+	_build_market_district_props()
+	var spawned_count := 0
+	var cells: Array = building_cells.keys()
+	cells.shuffle()
+	for cell_variant in cells:
+		if spawned_count >= 14:
+			break
+		var cell: Vector2i = cell_variant
+		if not _touches_road(cell):
+			continue
+		var zone := str(cell_zones.get(cell, "street_mixed"))
+		var is_anchor: bool = district_anchors.get(zone, Vector2i(-1, -1)) == cell
+		if not is_anchor and rng.randf() >= 0.14:
+			continue
+		var frontage := _get_road_frontage(cell)
+		if frontage.is_empty():
+			continue
+		var prop_id := _choose_street_prop(zone)
+		if prop_id.is_empty():
+			continue
+		var side := frontage[rng.randi_range(0, frontage.size() - 1)]
+		_spawn_street_prop(cell, side, prop_id, spawned_count)
+		spawned_count += 1
+
+
+func _choose_street_prop(district: String) -> String:
+	var candidates: Array[Dictionary] = []
+	var total_weight := 0.0
+	for prop_id_variant in STREET_PROP_CATALOG.DEFINITIONS:
+		var prop_id := str(prop_id_variant)
+		var definition: Dictionary = STREET_PROP_CATALOG.get_definition(prop_id)
+		var districts: Array = definition.get("districts", [])
+		if not districts.has(district):
+			continue
+		var weight := float(definition.get("weight", 1.0))
+		total_weight += weight
+		candidates.append({
+			"id": prop_id,
+			"weight": weight,
+		})
+	if candidates.is_empty():
+		return ""
+	var roll := rng.randf() * total_weight
+	for candidate in candidates:
+		roll -= float(candidate["weight"])
+		if roll <= 0.0:
+			return str(candidate["id"])
+	return str(candidates.back()["id"])
+
+
+func _spawn_street_prop(
+	cell: Vector2i,
+	frontage: String,
+	prop_id: String,
+	instance_index: int
+) -> void:
+	var definition: Dictionary = STREET_PROP_CATALOG.get_definition(prop_id)
+	if definition.is_empty():
+		return
+	var texture_path := str(definition.get("texture_path", ""))
+	if not ResourceLoader.exists(texture_path):
+		return
+	var texture := load(texture_path) as Texture2D
+	if texture == null:
+		return
+	var base_size: Vector3 = definition.get("collision_size", Vector3(2.4, 1.5, 1.0))
+	var along_z := frontage in ["west", "east"]
+	var collision_size := Vector3(base_size.z, base_size.y, base_size.x) if along_z else base_size
+	var edge_depth := collision_size.x if along_z else collision_size.z
+	var inward_offset := CELL_SIZE * 0.5 - edge_depth * 0.5 - 0.25
+	var parallel_offset := rng.randf_range(3.0, 3.8) * (-1.0 if rng.randf() < 0.5 else 1.0)
+	var offset := Vector3.ZERO
+	match frontage:
+		"west":
+			offset = Vector3(-inward_offset, 0.08, parallel_offset)
+		"east":
+			offset = Vector3(inward_offset, 0.08, parallel_offset)
+		"north":
+			offset = Vector3(parallel_offset, 0.08, -inward_offset)
+		"south":
+			offset = Vector3(parallel_offset, 0.08, inward_offset)
+		_:
+			return
+
+	var body := StaticBody3D.new()
+	body.name = "StreetProp_%s_%d_%d_%d" % [prop_id, cell.x, cell.y, instance_index]
+	body.position = _cell_center(cell) + offset
+	body.collision_layer = 1
+	body.add_to_group("district_prop")
+	body.add_to_group("street_prop_obstacle")
+	body.add_to_group("cover_obstacle")
+	body.set_meta("prop_id", prop_id)
+	body.set_meta("planning_cell", cell)
+	body.set_meta("zoning_district", str(cell_zones.get(cell, "street_mixed")))
+	body.set_meta("collision_world_size", collision_size)
+	add_child(body)
+
+	var sprite := Sprite3D.new()
+	sprite.name = "StreetPropSprite"
+	sprite.texture = texture
+	var corners: Array[Vector2] = _texture_space_footprint_corners(definition, texture)
+	var left_corner := corners[0] as Vector2
+	var right_corner := corners[2] as Vector2
+	var bottom_corner := corners[3] as Vector2
+	var base_pixel_width := maxf(1.0, absf(right_corner.x - left_corner.x))
+	var projected_width := (base_size.x + base_size.z) / sqrt(2.0)
+	sprite.pixel_size = projected_width / base_pixel_width
+	var horizontal_offset := texture.get_width() * 0.5 - bottom_corner.x
+	var flip_prop := not along_z
+	sprite.offset.x = -horizontal_offset if flip_prop else horizontal_offset
+	sprite.flip_h = flip_prop
+	sprite.position = Vector3(
+		collision_size.x * 0.5,
+		(bottom_corner.y - texture.get_height() * 0.5) * sprite.pixel_size / ISOMETRIC_VERTICAL_PROJECTION - body.position.y,
+		collision_size.z * 0.5
+	)
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.transparent = true
+	sprite.shaded = false
+	sprite.no_depth_test = true
+	sprite.render_priority = 4
+	body.add_child(sprite)
+
+	var collision := CollisionShape3D.new()
+	collision.name = "StreetPropCollision"
+	var shape := BoxShape3D.new()
+	shape.size = collision_size
+	collision.position.y = collision_size.y * 0.5 - body.position.y
+	collision.shape = shape
+	body.add_child(collision)
+
+	var debug_mesh := MeshInstance3D.new()
+	debug_mesh.name = "StreetPropCollisionDebug"
+	debug_mesh.position = Vector3(0.0, 0.035 - body.position.y, 0.0)
+	var footprint_mesh := PlaneMesh.new()
+	footprint_mesh.size = Vector2(collision_size.x, collision_size.z)
+	footprint_mesh.material = vehicle_collision_material
+	debug_mesh.mesh = footprint_mesh
+	debug_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	debug_mesh.set_meta("prop_id", prop_id)
+	debug_mesh.set_meta("footprint_world_size", Vector2(collision_size.x, collision_size.z))
+	body.add_child(debug_mesh)
 
 
 func _build_market_district_props() -> void:
@@ -1080,7 +1252,7 @@ func _spawn_landmark_at(center: Vector3, landmark_id: String, instance_suffix: S
 	var sprite := Sprite3D.new()
 	sprite.name = "LandmarkSprite"
 	sprite.texture = texture
-	var corners: Array = definition["footprint_corners_px"]
+	var corners: Array[Vector2] = _texture_space_footprint_corners(definition, texture)
 	var base_pixel_width := absf((corners[2] as Vector2).x - (corners[0] as Vector2).x)
 	var projected_width := (footprint_world.x + footprint_world.y) / sqrt(2.0)
 	sprite.pixel_size = projected_width / base_pixel_width
@@ -1137,7 +1309,7 @@ func _spawn_building(building_id: String, definition: Dictionary, module_origin:
 	var sprite := Sprite3D.new()
 	sprite.name = "BuildingSprite"
 	sprite.texture = texture
-	var corners: Array = definition["footprint_corners_px"]
+	var corners: Array[Vector2] = _texture_space_footprint_corners(definition, texture)
 	var base_pixel_width := absf((corners[2] as Vector2).x - (corners[0] as Vector2).x)
 	var projected_width := (footprint_world.x + footprint_world.y) / sqrt(2.0)
 	sprite.pixel_size = projected_width / base_pixel_width
@@ -1226,6 +1398,28 @@ func _get_road_frontage(cell: Vector2i) -> PackedStringArray:
 	return frontage
 
 
+func _texture_space_footprint_corners(
+	definition: Dictionary,
+	texture: Texture2D
+) -> Array[Vector2]:
+	var result: Array[Vector2] = []
+	var raw_corners: Array = definition.get("footprint_corners_px", [])
+	var source_size: Vector2i = definition.get(
+		"source_size",
+		Vector2i(texture.get_width(), texture.get_height())
+	)
+	var coordinate_scale := Vector2.ONE
+	if source_size.x > 0 and source_size.y > 0:
+		coordinate_scale = Vector2(
+			float(texture.get_width()) / float(source_size.x),
+			float(texture.get_height()) / float(source_size.y)
+		)
+	for corner_variant in raw_corners:
+		var corner: Vector2 = corner_variant
+		result.append(corner * coordinate_scale)
+	return result
+
+
 func _spawn_vehicle(node_name: String, vehicle_type: String, position: Vector3, along_z: bool = false) -> void:
 	var definition := VEHICLE_CATALOG.get_definition(vehicle_type)
 	if definition.is_empty():
@@ -1241,13 +1435,14 @@ func _spawn_vehicle(node_name: String, vehicle_type: String, position: Vector3, 
 	body.collision_layer = 1
 	body.add_to_group("vehicle_obstacle")
 	body.set_meta("vehicle_type", vehicle_type)
+	body.set_meta("vehicle_state", str(definition.get("state", "wrecked")))
 	body.set_meta("vehicle_axis", "z" if along_z else "x")
 	body.set_meta("collision_world_size", collision_size)
 	add_child(body)
 	var sprite := Sprite3D.new()
 	sprite.name = "VehicleSprite"
 	sprite.texture = texture
-	var corners: Array = definition["footprint_corners_px"]
+	var corners: Array[Vector2] = _texture_space_footprint_corners(definition, texture)
 	var base_pixel_width := absf((corners[2] as Vector2).x - (corners[0] as Vector2).x)
 	var projected_width := (footprint.x + footprint.z) / sqrt(2.0)
 	sprite.pixel_size = projected_width / base_pixel_width

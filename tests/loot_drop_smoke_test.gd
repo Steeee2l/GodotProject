@@ -17,7 +17,7 @@ func _run() -> void:
 	assert(bool(main_scene.get("has_ak")))
 	assert(main_scene.get("ak_pickup") == null)
 	assert(bool(game_state.get("has_ak")))
-	assert((main_scene.get("ammo_pickups") as Array).size() == 22)
+	assert((main_scene.get("ammo_pickups") as Array).size() == 64)
 	var field_scrap_before := int(game_state.get("scrap"))
 
 	var player := main_scene.get("player") as Node3D

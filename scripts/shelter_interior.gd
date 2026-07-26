@@ -12,10 +12,12 @@ const STORAGE_MODULE_SCENE := preload("res://scenes/modules/shelter_storage_modu
 const TRAINING_MODULE_SCENE := preload("res://scenes/modules/shelter_training_module.tscn")
 const SHELTER_RESIDENT_SCRIPT := preload("res://scripts/shelter_resident_cat.gd")
 const SHELTER_MERCHANT_SCRIPT := preload("res://scripts/shelter_merchant.gd")
+const SHELTER_CONTRACT_TRAINER_SCRIPT := preload("res://scripts/shelter_contract_trainer.gd")
 const MERCHANT_TEXTURE := preload("res://assets/characters/merchant_cat/merchant_down_left_idle.png")
 const MOVE_SPEED := 4.6
 const CAT_ANIMATION_ROOT := "res://assets/characters/cat_8way"
 const CAT_ROLL_ANIMATION_ROOT := "res://assets/characters/cat_roll"
+const CAT_LOAF_ANIMATION_ROOT := "res://assets/characters/loaf"
 const ROLL_COOLDOWN_INDICATOR_SCRIPT := preload("res://scripts/roll_cooldown_indicator.gd")
 const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
@@ -44,6 +46,10 @@ const ROLL_STAMINA_RECOVERY_PER_SECOND := 30.0
 const ROLL_START_SPEED := 18.0
 const ROLL_END_SPEED := 4.2
 const ROLL_AFTERIMAGE_INTERVAL := 0.06
+const LOAF_HOLD_THRESHOLD := 0.26
+const LOAF_MOVE_MULTIPLIER := 1.0
+const LOAF_STAMINA_DRAIN_PER_SECOND := 7.5
+const LOAF_MIN_STAMINA := 1.0
 const ROOM_SIZE_BY_TIER := {
 	1: Vector2(48.0, 28.0),
 	2: Vector2(56.0, 32.0),
@@ -57,27 +63,22 @@ const PIPE_EXIT_LABEL := "파이프를 타고 도시로 올라가기"
 const MERCHANT_GOODS := [
 	{
 		"id": "762_fmj", "type": "ammo", "title": "7.62mm 보통탄 상자", "amount": 30,
-		"buy_price": 42, "sell_cans": 2, "icon": "res://assets/items/ammo_762.png",
+		"buy_price": 650, "sell_cans": 2, "icon": "res://assets/items/ammo_762.png",
 		"description": "AK 계열 총기에 사용하는 보통탄 30발입니다.",
 	},
 	{
-		"id": "canned_food", "type": "food", "title": "밀봉 통조림", "amount": 1,
-		"buy_price": 64, "sell_cans": 0, "icon": "",
-		"description": "주민 노동과 쉘터 시설 운영에 필요한 기본 재화입니다.",
-	},
-	{
 		"id": "scope_lens", "type": "component", "title": "스코프 렌즈", "amount": 1,
-		"buy_price": 90, "sell_cans": 5, "icon": "res://assets/items/mod_components/scope_lens.png",
+		"buy_price": 1200, "sell_cans": 5, "icon": "res://assets/items/mod_components/scope_lens.png",
 		"description": "조준경과 정밀 모듈 제작에 사용하는 온전한 렌즈입니다.",
 	},
 	{
 		"id": "rubber_gasket", "type": "component", "title": "고무 패킹", "amount": 1,
-		"buy_price": 58, "sell_cans": 3, "icon": "res://assets/items/mod_components/rubber_gasket.png",
+		"buy_price": 950, "sell_cans": 3, "icon": "res://assets/items/mod_components/rubber_gasket.png",
 		"description": "소음기와 반동 완충 부품 제작에 사용하는 패킹입니다.",
 	},
 	{
 		"id": "magazine_spring", "type": "component", "title": "탄창 스프링", "amount": 1,
-		"buy_price": 72, "sell_cans": 4, "icon": "res://assets/items/mod_components/magazine_spring.png",
+		"buy_price": 1050, "sell_cans": 4, "icon": "res://assets/items/mod_components/magazine_spring.png",
 		"description": "탄창과 전술 부품 제작에 사용하는 복원력 높은 스프링입니다.",
 	},
 ]
@@ -110,6 +111,10 @@ var roll_stamina := ROLL_STAMINA_MAX
 var roll_afterimage_timer := 0.0
 var roll_direction := Vector3.ZERO
 var roll_afterimages: Array[Sprite3D] = []
+var loafing := false
+var space_hold_active := false
+var space_hold_elapsed := 0.0
+var space_hold_consumed := false
 var roll_audio_player: AudioStreamPlayer3D
 var shelter_residents: Array[CharacterBody3D] = []
 var merchant: Node3D
@@ -123,6 +128,11 @@ var merchant_buy_tab: Button
 var merchant_sell_tab: Button
 var merchant_shop_mode := "buy"
 var merchant_ui_open := false
+var contract_agent: Node3D
+var contract_ui_layer: CanvasLayer
+var contract_ui_body: VBoxContainer
+var contract_ui_open := false
+var contract_report_message := ""
 var shelter_stats_refresh_time := 0.0
 var shelter_save_time := 0.0
 var raid_zone_ui_layer: CanvasLayer
@@ -173,6 +183,10 @@ func _training_position() -> Vector3:
 	return Vector3(5.2, 0.0, _north_module_z())
 
 
+func _contract_agent_position() -> Vector3:
+	return Vector3(7.6, 0.78, _north_module_z() + 3.15)
+
+
 func _pipe_position() -> Vector3:
 	return Vector3(_room_half_extents().x - 3.0, 0.0, _north_module_z() + 1.18)
 
@@ -206,6 +220,7 @@ func _ready() -> void:
 	_build_player()
 	roll_stamina = GameState.get_max_stamina()
 	_build_shelter_residents()
+	_setup_contract_agent()
 	_build_roll_audio()
 	_build_interface()
 	_setup_merchant_visit()
@@ -216,13 +231,27 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if not is_instance_valid(player):
 		return
-	if not roll_active:
+	_update_space_hold(delta)
+	if loafing:
+		roll_stamina = maxf(
+			0.0,
+			roll_stamina
+			- LOAF_STAMINA_DRAIN_PER_SECOND
+			* GameState.get_stamina_cost_multiplier()
+			* delta
+		)
+		if roll_stamina <= 0.0:
+			space_hold_active = false
+			space_hold_consumed = true
+			_set_loafing(false)
+			_show_status("스태미나가 부족합니다.")
+	elif not roll_active:
 		roll_stamina = minf(
 			GameState.get_max_stamina(),
 			roll_stamina + ROLL_STAMINA_RECOVERY_PER_SECOND * GameState.get_stamina_recovery_multiplier() * delta
 		)
 	if dash_button:
-		dash_button.disabled = roll_active or roll_stamina < ROLL_STAMINA_COST
+		dash_button.disabled = roll_active or loafing or roll_stamina < ROLL_STAMINA_COST
 	var input_vector := Vector2.ZERO
 	if not _ui_blocks_player():
 		input_vector = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
@@ -238,7 +267,12 @@ func _physics_process(delta: float) -> void:
 		_update_roll(delta)
 	elif world_direction.length_squared() > 0.01:
 		world_direction = world_direction.normalized()
-		player.velocity = world_direction * MOVE_SPEED * GameState.get_move_speed_multiplier()
+		player.velocity = (
+			world_direction
+			* MOVE_SPEED
+			* GameState.get_move_speed_multiplier()
+			* (LOAF_MOVE_MULTIPLIER if loafing else 1.0)
+		)
 		_update_facing(input_vector)
 		_set_motion_state("walk")
 	else:
@@ -543,6 +577,14 @@ func _add_debug_resident() -> bool:
 	return true
 
 
+func _setup_contract_agent() -> void:
+	if is_instance_valid(contract_agent):
+		return
+	contract_agent = SHELTER_CONTRACT_TRAINER_SCRIPT.new() as Node3D
+	contract_agent.position = _contract_agent_position()
+	add_child(contract_agent)
+
+
 func _setup_merchant_visit() -> void:
 	GameState.roll_merchant_visit()
 	match GameState.merchant_status:
@@ -706,6 +748,7 @@ func _update_camera(delta: float) -> void:
 func _ui_blocks_player() -> bool:
 	return (
 		merchant_ui_open
+		or contract_ui_open
 		or raid_zone_ui_open
 		or raid_loadout_ui_open
 		or not get_tree().get_nodes_in_group("shelter_modal_ui").is_empty()
@@ -887,6 +930,326 @@ func _build_merchant_arrival_notice(canvas: CanvasLayer) -> void:
 func _set_merchant_notice_visible(value: bool) -> void:
 	if is_instance_valid(merchant_notice_panel):
 		merchant_notice_panel.visible = value
+
+
+func _open_contract_ui() -> void:
+	if contract_ui_open:
+		return
+	contract_ui_open = true
+	touch_vector = Vector2.ZERO
+	roll_active = false
+	_set_motion_state("idle")
+	contract_ui_layer = CanvasLayer.new()
+	contract_ui_layer.name = "ContractAgentLayer"
+	contract_ui_layer.layer = 60
+	add_child(contract_ui_layer)
+
+	var root_control := Control.new()
+	root_control.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root_control.mouse_filter = Control.MOUSE_FILTER_STOP
+	contract_ui_layer.add_child(root_control)
+	var dim := ColorRect.new()
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.004, 0.007, 0.009, 0.82)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	root_control.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root_control.add_child(center)
+	var panel := PanelContainer.new()
+	panel.name = "ContractAgentPanel"
+	var viewport_size := get_viewport().get_visible_rect().size
+	panel.custom_minimum_size = Vector2(
+		clampf(viewport_size.x - 24.0, 320.0, 820.0),
+		clampf(viewport_size.y - 24.0, 430.0, 640.0)
+	)
+	panel.add_theme_stylebox_override(
+		"panel",
+		_rounded_panel_style(Color(0.018, 0.025, 0.023, 0.99), Color("#a98a4c"), 8)
+	)
+	center.add_child(panel)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 20)
+	margin.add_theme_constant_override("margin_top", 18)
+	margin.add_theme_constant_override("margin_right", 20)
+	margin.add_theme_constant_override("margin_bottom", 18)
+	panel.add_child(margin)
+	contract_ui_body = VBoxContainer.new()
+	contract_ui_body.name = "ContractContent"
+	contract_ui_body.add_theme_constant_override("separation", 12)
+	margin.add_child(contract_ui_body)
+	_refresh_contract_ui()
+
+
+func _refresh_contract_ui() -> void:
+	if not is_instance_valid(contract_ui_body):
+		return
+	for child in contract_ui_body.get_children():
+		contract_ui_body.remove_child(child)
+		child.queue_free()
+	var state := GameState.get_contract_state()
+	var definition := state.get("definition", {}) as Dictionary
+	var status := str(state.get("status", "available"))
+	var completed_count := int(state.get("completed_count", 0))
+	var total_count := int(state.get("total_count", 0))
+
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 14)
+	contract_ui_body.add_child(header)
+	var portrait := TextureRect.new()
+	portrait.custom_minimum_size = Vector2(82, 82)
+	if is_instance_valid(contract_agent) and contract_agent.has_method("get_portrait_texture"):
+		portrait.texture = contract_agent.call("get_portrait_texture") as Texture2D
+	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(portrait)
+	var title_box := VBoxContainer.new()
+	title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	header.add_child(title_box)
+	var eyebrow := Label.new()
+	eyebrow.text = "훈련교관 철근  ·  현장 계약 담당"
+	eyebrow.add_theme_font_override("font", FONT)
+	eyebrow.add_theme_font_size_override("font_size", 14)
+	eyebrow.add_theme_color_override("font_color", Color("#9fb2a9"))
+	title_box.add_child(eyebrow)
+	var title := Label.new()
+	title.text = "철근의 현장 계약"
+	title.add_theme_font_override("font", FONT)
+	title.add_theme_font_size_override("font_size", 26)
+	title.add_theme_color_override("font_color", Color("#ead69c"))
+	title_box.add_child(title)
+	var chain_progress := Label.new()
+	chain_progress.text = "완료한 계약  %d / %d" % [completed_count, total_count]
+	chain_progress.add_theme_font_override("font", FONT)
+	chain_progress.add_theme_font_size_override("font_size", 13)
+	chain_progress.add_theme_color_override("font_color", Color("#b9c8c1"))
+	title_box.add_child(chain_progress)
+	var close := _shelter_close_button()
+	close.pressed.connect(_close_contract_ui)
+	header.add_child(close)
+
+	var separator := HSeparator.new()
+	contract_ui_body.add_child(separator)
+	var contract_card := PanelContainer.new()
+	contract_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	contract_card.add_theme_stylebox_override(
+		"panel",
+		_rounded_panel_style(Color(0.035, 0.043, 0.04, 0.96), Color("#60786c"), 7)
+	)
+	contract_ui_body.add_child(contract_card)
+	var contract_margin := MarginContainer.new()
+	contract_margin.add_theme_constant_override("margin_left", 18)
+	contract_margin.add_theme_constant_override("margin_top", 15)
+	contract_margin.add_theme_constant_override("margin_right", 18)
+	contract_margin.add_theme_constant_override("margin_bottom", 15)
+	contract_card.add_child(contract_margin)
+	var contract_box := VBoxContainer.new()
+	contract_box.add_theme_constant_override("separation", 10)
+	contract_margin.add_child(contract_box)
+
+	if status == "finished" or definition.is_empty():
+		var finished_title := Label.new()
+		finished_title.text = "모든 현장 계약 완료"
+		finished_title.add_theme_font_override("font", FONT)
+		finished_title.add_theme_font_size_override("font_size", 24)
+		finished_title.add_theme_color_override("font_color", Color("#82d5aa"))
+		contract_box.add_child(finished_title)
+		var finished_body := Label.new()
+		finished_body.text = "철근이 수집한 종로의 기록이 모두 해금되었습니다.\n새 계약이 추가될 때까지 도시 탐사와 쉘터 확장을 계속할 수 있습니다."
+		finished_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		finished_body.add_theme_font_override("font", FONT)
+		finished_body.add_theme_font_size_override("font_size", 16)
+		finished_body.add_theme_color_override("font_color", Color("#d1ddd6"))
+		contract_box.add_child(finished_body)
+	else:
+		var status_text := "수락 가능"
+		match status:
+			"active":
+				status_text = "현장 진행 중"
+			"complete":
+				status_text = "보고 대기"
+		var contract_heading := HBoxContainer.new()
+		contract_heading.add_theme_constant_override("separation", 10)
+		contract_box.add_child(contract_heading)
+		var contract_title := Label.new()
+		contract_title.text = str(definition.get("title", "현장 계약"))
+		contract_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		contract_title.add_theme_font_override("font", FONT)
+		contract_title.add_theme_font_size_override("font_size", 22)
+		contract_title.add_theme_color_override("font_color", Color("#f0d58d"))
+		contract_heading.add_child(contract_title)
+		var status_label_local := Label.new()
+		status_label_local.text = str(status_text)
+		status_label_local.add_theme_font_override("font", FONT)
+		status_label_local.add_theme_font_size_override("font_size", 14)
+		status_label_local.add_theme_color_override(
+			"font_color",
+			Color("#7de0a8") if status == "complete" else Color("#d5b96d")
+		)
+		contract_heading.add_child(status_label_local)
+		var brief := Label.new()
+		brief.text = str(definition.get("brief", "현장 목표를 수행하십시오."))
+		brief.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		brief.add_theme_font_override("font", FONT)
+		brief.add_theme_font_size_override("font_size", 16)
+		brief.add_theme_color_override("font_color", Color("#c8d5ce"))
+		contract_box.add_child(brief)
+		var progress := int(state.get("progress", 0))
+		var target := maxi(1, int(state.get("target", 1)))
+		var objective_line := Label.new()
+		objective_line.text = "%s    %d / %d" % [
+			str(definition.get("objective", "목표")),
+			progress,
+			target,
+		]
+		objective_line.add_theme_font_override("font", FONT)
+		objective_line.add_theme_font_size_override("font_size", 16)
+		objective_line.add_theme_color_override("font_color", Color("#e5e0ce"))
+		contract_box.add_child(objective_line)
+		var progress_bar := ProgressBar.new()
+		progress_bar.custom_minimum_size = Vector2(0, 18)
+		progress_bar.max_value = target
+		progress_bar.value = progress
+		progress_bar.show_percentage = false
+		progress_bar.add_theme_stylebox_override(
+			"background",
+			_rounded_panel_style(Color("#101816"), Color("#32463e"), 7)
+		)
+		progress_bar.add_theme_stylebox_override(
+			"fill",
+			_rounded_panel_style(
+				Color("#62bd8d") if status == "complete" else Color("#c49b4d"),
+				Color.TRANSPARENT,
+				7
+			)
+		)
+		contract_box.add_child(progress_bar)
+		var reward_title := Label.new()
+		reward_title.text = "보고 보상"
+		reward_title.add_theme_font_override("font", FONT)
+		reward_title.add_theme_font_size_override("font_size", 14)
+		reward_title.add_theme_color_override("font_color", Color("#8fa89c"))
+		contract_box.add_child(reward_title)
+		var rewards := HFlowContainer.new()
+		rewards.add_theme_constant_override("h_separation", 12)
+		rewards.add_theme_constant_override("v_separation", 6)
+		contract_box.add_child(rewards)
+		_add_contract_reward_chips(rewards, definition.get("reward", {}) as Dictionary)
+
+	var latest_lore := GameState.get_latest_contract_lore()
+	if not contract_report_message.is_empty() or not latest_lore.is_empty():
+		var lore_panel := PanelContainer.new()
+		lore_panel.add_theme_stylebox_override(
+			"panel",
+			_rounded_panel_style(Color(0.045, 0.04, 0.025, 0.92), Color("#8d7644"), 6)
+		)
+		contract_ui_body.add_child(lore_panel)
+		var lore_margin := MarginContainer.new()
+		for margin_name in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
+			lore_margin.add_theme_constant_override(margin_name, 12)
+		lore_panel.add_child(lore_margin)
+		var lore_label := Label.new()
+		lore_label.text = contract_report_message if not contract_report_message.is_empty() else latest_lore
+		lore_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lore_label.max_lines_visible = 4
+		lore_label.add_theme_font_override("font", FONT)
+		lore_label.add_theme_font_size_override("font_size", 14)
+		lore_label.add_theme_color_override("font_color", Color("#dccb9f"))
+		lore_margin.add_child(lore_label)
+
+	var actions := HBoxContainer.new()
+	actions.alignment = BoxContainer.ALIGNMENT_END
+	actions.add_theme_constant_override("separation", 10)
+	contract_ui_body.add_child(actions)
+	var close_text := _merchant_button("닫기", false, "close")
+	close_text.custom_minimum_size = Vector2(130, 44)
+	close_text.pressed.connect(_close_contract_ui)
+	actions.add_child(close_text)
+	var action := _merchant_button("", true, "collect")
+	action.custom_minimum_size = Vector2(250, 44)
+	match status:
+		"available":
+			action.text = "계약 수락"
+			action.pressed.connect(_accept_current_contract)
+		"active":
+			action.text = "필드에서 목표 진행 중"
+			action.disabled = true
+		"complete":
+			action.text = "완료 보고 · 보상 받기"
+			action.pressed.connect(_claim_current_contract)
+		_:
+			action.text = "모든 계약 완료"
+			action.disabled = true
+	actions.add_child(action)
+
+
+func _add_contract_reward_chips(container: HFlowContainer, reward: Dictionary) -> void:
+	var entries := [
+		["upgrade", "경험치 %d" % maxi(0, int(reward.get("xp", 0))), Color("#e4cc73")],
+		["food", "통조림 %d" % maxi(0, int(reward.get("canned_food", 0))), Color("#e5b55b")],
+		["ammo", "탄약 %d" % maxi(0, int(reward.get("ammo", 0))), Color("#d8c576")],
+		["medkit", "구급약 %d" % maxi(0, int(reward.get("medkits", 0))), Color("#d47f74")],
+		["churu", "츄르 %d" % maxi(0, int(reward.get("churu", 0))), Color("#d99b67")],
+	]
+	for entry in entries:
+		var text := str(entry[1])
+		if text.ends_with(" 0"):
+			continue
+		var color: Color = entry[2]
+		container.add_child(_currency_chip(str(entry[0]), text, color, 22, 120))
+
+
+func _accept_current_contract() -> void:
+	var result := GameState.accept_current_contract()
+	if not bool(result.get("ok", false)):
+		contract_report_message = "지금은 새 계약을 수락할 수 없습니다."
+	else:
+		var definition := result.get("definition", {}) as Dictionary
+		contract_report_message = "계약 수락 · %s\n필드에 진입하면 좌상단에 목표가 표시됩니다." % str(
+			definition.get("title", "현장 계약")
+		)
+		_show_status("철근에게서 현장 계약을 받았습니다.")
+	_refresh_contract_ui()
+
+
+func _claim_current_contract() -> void:
+	var result := GameState.claim_current_contract_reward()
+	if not bool(result.get("ok", false)):
+		contract_report_message = "아직 보고할 수 있는 완료 계약이 없습니다."
+	else:
+		contract_report_message = "보고 완료 · %s\n새 세계 기록 해금\n%s" % [
+			_format_contract_reward_text(result.get("reward", {}) as Dictionary),
+			str(result.get("lore", "")),
+		]
+		_show_status("계약 보상을 받고 새로운 세계 기록을 해금했습니다.")
+		_update_stats()
+	_refresh_contract_ui()
+
+
+func _format_contract_reward_text(reward: Dictionary) -> String:
+	var parts: Array[String] = []
+	for reward_data in [
+		["xp", "경험치"],
+		["canned_food", "통조림"],
+		["ammo", "탄약"],
+		["medkits", "구급약"],
+		["churu", "츄르"],
+	]:
+		var amount := maxi(0, int(reward.get(str(reward_data[0]), 0)))
+		if amount > 0:
+			parts.append("%s +%d" % [str(reward_data[1]), amount])
+	return " · ".join(parts)
+
+
+func _close_contract_ui() -> void:
+	contract_ui_open = false
+	contract_report_message = ""
+	if is_instance_valid(contract_ui_layer):
+		contract_ui_layer.queue_free()
+	contract_ui_layer = null
+	contract_ui_body = null
 
 
 func _open_merchant_arrival_dialog() -> void:
@@ -1120,8 +1483,8 @@ func _refresh_merchant_shop() -> void:
 	for child in merchant_shop_list.get_children():
 		merchant_shop_list.remove_child(child)
 		child.queue_free()
-	(merchant_shop_currency_labels.get("scrap") as Label).text = "고철  %d" % GameState.scrap
-	(merchant_shop_currency_labels.get("food") as Label).text = "통조림  %d" % GameState.canned_food
+	(merchant_shop_currency_labels.get("scrap") as Label).text = "고철  %s" % GameState.format_compact_number(GameState.scrap)
+	(merchant_shop_currency_labels.get("food") as Label).text = "통조림  %s" % GameState.format_compact_number(GameState.canned_food)
 	_update_merchant_tab_styles()
 	var visible_good_count := 0
 	for good_variant in MERCHANT_GOODS:
@@ -1514,7 +1877,7 @@ func _build_touch_stick(canvas: CanvasLayer) -> void:
 
 
 func _update_nearby_station() -> void:
-	if merchant_ui_open:
+	if merchant_ui_open or contract_ui_open:
 		interact_button.visible = false
 		prompt_label.visible = false
 		return
@@ -1533,6 +1896,16 @@ func _update_nearby_station() -> void:
 		if merchant_distance <= 2.15 and merchant_distance < nearest_distance:
 			nearest = "merchant_shop"
 			nearest_distance = merchant_distance
+	if is_instance_valid(contract_agent):
+		var contract_distance := player.global_position.distance_to(contract_agent.global_position)
+		var contract_radius := (
+			float(contract_agent.call("get_interaction_radius"))
+			if contract_agent.has_method("get_interaction_radius")
+			else 2.35
+		)
+		if contract_distance <= contract_radius and contract_distance < nearest_distance:
+			nearest = "contract_agent"
+			nearest_distance = contract_distance
 	var exit_distance := player_ground.distance_to(exit_station["position"])
 	if exit_distance <= float(exit_station["radius"]) and exit_distance < nearest_distance:
 		nearest = "pipe_exit"
@@ -1561,7 +1934,7 @@ func _update_nearby_station() -> void:
 	if current_station.is_empty():
 		prompt_label.text = ""
 	elif current_station == "module" and is_instance_valid(current_module):
-		prompt_label.text = "[E]  %s" % str(current_module.call("get_interaction_prompt"))
+		prompt_label.text = "[F]  %s" % str(current_module.call("get_interaction_prompt"))
 		interact_button.text = "사용"
 		var module_kind := str(current_module.get_meta("module_kind", ""))
 		var interaction_icon := "workbench"
@@ -1575,21 +1948,30 @@ func _update_nearby_station() -> void:
 			interaction_icon = "secure"
 		interact_button.icon = UI_ICONS.get_icon(interaction_icon, 32, Color("#dce8e1"))
 	elif current_station == "merchant_waiting":
-		prompt_label.text = "[E]  누군가와 대화"
+		prompt_label.text = "[F]  누군가와 대화"
 		interact_button.text = "대화"
 		interact_button.icon = UI_ICONS.get_icon("resident", 32, Color("#e4c874"))
 	elif current_station == "merchant_shop":
-		prompt_label.text = "[E]  행상인과 거래하기"
+		prompt_label.text = "[F]  행상인과 거래하기"
 		interact_button.text = "거래"
 		interact_button.icon = UI_ICONS.get_icon("backpack", 32, Color("#e4c874"))
+	elif current_station == "contract_agent":
+		var contract_prompt := (
+			str(contract_agent.call("get_interaction_prompt"))
+			if is_instance_valid(contract_agent) and contract_agent.has_method("get_interaction_prompt")
+			else "철근에게 현장 계약 확인"
+		)
+		prompt_label.text = "[F]  %s" % contract_prompt
+		interact_button.text = "계약"
+		interact_button.icon = UI_ICONS.get_icon("collect", 32, Color("#e4c874"))
 	else:
-		prompt_label.text = "[E]  %s" % _pipe_exit_station()["label"]
+		prompt_label.text = "[F]  %s" % _pipe_exit_station()["label"]
 		interact_button.text = "탐색"
 		interact_button.icon = UI_ICONS.get_icon("upgrade", 32, Color("#dce8e1"))
 
 
 func _interact() -> void:
-	if merchant_ui_open:
+	if merchant_ui_open or contract_ui_open:
 		return
 	match current_station:
 		"module":
@@ -1601,6 +1983,8 @@ func _interact() -> void:
 			_open_merchant_arrival_dialog()
 		"merchant_shop":
 			_open_merchant_shop()
+		"contract_agent":
+			_open_contract_ui()
 	_update_stats()
 
 
@@ -1619,10 +2003,10 @@ func _update_stats() -> void:
 		GameState.get_catnip_worker_slots(),
 	]
 	if shelter_currency_labels.has("scrap"):
-		(shelter_currency_labels["scrap"] as Label).text = "고철  %d" % GameState.scrap
-		(shelter_currency_labels["catnip"] as Label).text = "캣닢  %d" % GameState.catnip
-		(shelter_currency_labels["food"] as Label).text = "통조림  %d" % GameState.canned_food
-		(shelter_currency_labels["churu"] as Label).text = "츄르  %d" % GameState.churu
+		(shelter_currency_labels["scrap"] as Label).text = "고철  %s" % GameState.format_compact_number(GameState.scrap)
+		(shelter_currency_labels["catnip"] as Label).text = "캣닢  %s" % GameState.format_compact_number(GameState.catnip)
+		(shelter_currency_labels["food"] as Label).text = "통조림  %s" % GameState.format_compact_number(GameState.canned_food)
+		(shelter_currency_labels["churu"] as Label).text = "츄르  %s" % GameState.format_compact_number(GameState.churu)
 	if shelter_upgrade_button:
 		var cost := GameState.get_shelter_upgrade_cost()
 		if cost.is_empty():
@@ -1631,7 +2015,11 @@ func _update_stats() -> void:
 		else:
 			var scrap_cost := int(cost.get("scrap", 0))
 			var churu_cost := int(cost.get("churu", 0))
-			shelter_upgrade_button.text = "Tier %d 확장  ·  고철 %d + 츄르 %d" % [GameState.shelter_tier + 1, scrap_cost, churu_cost]
+			shelter_upgrade_button.text = "Tier %d 확장  ·  고철 %s + 츄르 %s" % [
+				GameState.shelter_tier + 1,
+				GameState.format_compact_number(scrap_cost),
+				GameState.format_compact_number(churu_cost),
+			]
 			shelter_upgrade_button.disabled = GameState.scrap < scrap_cost or GameState.churu < churu_cost
 func _refresh_inventory_state() -> void:
 	if inventory_ui == null:
@@ -1729,7 +2117,10 @@ func _update_live_shelter_income(delta: float) -> void:
 		_update_stats()
 		_refresh_resident_production_feedback()
 	if gained > 0 and scrap_gain_label:
-		scrap_gain_label.text = "+%d 고철   %.2f/s" % [gained, GameState.get_scrap_per_second()]
+		scrap_gain_label.text = "+%s 고철   %s/s" % [
+			GameState.format_compact_number(gained),
+			GameState.format_compact_number(GameState.get_scrap_per_second()),
+		]
 		scrap_gain_label.modulate.a = 1.0
 
 
@@ -2025,7 +2416,11 @@ func _build_offline_status_text(progress: Dictionary) -> String:
 	var catnip_gain := int(progress.get("catnip", 0))
 	var repair_gain := float(progress.get("repair", 0.0))
 	if scrap_gain > 0 or catnip_gain > 0 or repair_gain > 0.01:
-		return "오프라인 정산 · 고철 +%d · 캣닢 +%d · 내구도 +%.1f%%" % [scrap_gain, catnip_gain, repair_gain]
+		return "오프라인 정산 · 고철 +%s · 캣닢 +%s · 내구도 +%.1f%%" % [
+			GameState.format_compact_number(scrap_gain),
+			GameState.format_compact_number(catnip_gain),
+			repair_gain,
+		]
 	return "쉘터에 복귀했습니다. 생산기에 주민을 배치할 수 있습니다."
 
 
@@ -2049,7 +2444,10 @@ func _play_directional_animation() -> void:
 	if survivor == null:
 		return
 	survivor.flip_h = false
-	survivor.play("%s_%s" % [motion_state, facing])
+	if loafing:
+		survivor.play("loaf_%s" % facing)
+	else:
+		survivor.play("%s_%s" % [motion_state, facing])
 
 
 func _create_cat_frames() -> SpriteFrames:
@@ -2086,12 +2484,35 @@ func _create_cat_frames() -> SpriteFrames:
 				push_error("Missing cat roll animation frame: %s" % roll_texture_path)
 				continue
 			frames.add_frame(roll_animation_name, roll_texture)
+		var loaf_animation_name := "loaf_%s" % direction_name
+		frames.add_animation(loaf_animation_name)
+		frames.set_animation_loop(loaf_animation_name, true)
+		frames.set_animation_speed(loaf_animation_name, 1.0)
+		var loaf_texture_path := "%s/%s.png" % [
+			CAT_LOAF_ANIMATION_ROOT,
+			direction_name,
+		]
+		var loaf_texture := load(loaf_texture_path) as Texture2D
+		if loaf_texture == null:
+			push_error("Missing cat loaf frame: %s" % loaf_texture_path)
+		else:
+			frames.add_frame(loaf_animation_name, loaf_texture)
 	return frames
 
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey and not event.echo:
+		var key_event := event as InputEventKey
+		var key := key_event.keycode if key_event.keycode != 0 else key_event.physical_keycode
+		if key == KEY_SPACE:
+			if key_event.pressed:
+				_begin_space_hold()
+			else:
+				_end_space_hold()
+			get_viewport().set_input_as_handled()
+			return
 	if inventory_ui != null and bool(inventory_ui.call("is_open")):
-		if event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_ESCAPE, KEY_I, KEY_B]:
+		if event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_ESCAPE, KEY_E, KEY_I, KEY_B]:
 			inventory_ui.call("toggle")
 		return
 	if raid_loadout_ui_open:
@@ -2106,15 +2527,17 @@ func _input(event: InputEvent) -> void:
 		if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
 			_close_merchant_ui()
 		return
+	if contract_ui_open:
+		if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+			_close_contract_ui()
+		return
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_I or event.keycode == KEY_B:
+		if event.keycode in [KEY_E, KEY_I, KEY_B]:
 			inventory_ui.call("toggle")
-		elif event.keycode == KEY_E:
+		elif event.keycode == KEY_F:
 			_interact()
 		elif event.keycode == KEY_3:
 			_add_debug_resident()
-		elif event.keycode == KEY_SPACE:
-			_try_start_roll()
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed and _is_inventory_button_at(touch.position):
@@ -2223,7 +2646,7 @@ func _play_roll_sound() -> void:
 
 
 func _try_start_roll() -> void:
-	if roll_active or roll_stamina < ROLL_STAMINA_COST or not is_instance_valid(player):
+	if roll_active or loafing or roll_stamina < ROLL_STAMINA_COST or not is_instance_valid(player):
 		return
 	var roll_input := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	if Input.is_key_pressed(KEY_A): roll_input.x -= 1.0
@@ -2245,6 +2668,51 @@ func _try_start_roll() -> void:
 	_set_motion_state("roll")
 	_play_roll_sound()
 	_spawn_roll_afterimage()
+
+
+func _begin_space_hold() -> void:
+	if space_hold_active or roll_active or _ui_blocks_player() or not is_instance_valid(player):
+		return
+	space_hold_active = true
+	space_hold_elapsed = 0.0
+	space_hold_consumed = false
+
+
+func _update_space_hold(delta: float) -> void:
+	if not space_hold_active or space_hold_consumed or roll_active:
+		return
+	space_hold_elapsed += delta
+	if space_hold_elapsed < LOAF_HOLD_THRESHOLD:
+		return
+	space_hold_consumed = true
+	if roll_stamina < LOAF_MIN_STAMINA:
+		_show_status("스태미나가 부족합니다.")
+		return
+	_set_loafing(true)
+
+
+func _end_space_hold() -> void:
+	if not space_hold_active:
+		if loafing:
+			_set_loafing(false)
+		return
+	var should_roll := not space_hold_consumed and space_hold_elapsed < LOAF_HOLD_THRESHOLD
+	space_hold_active = false
+	space_hold_elapsed = 0.0
+	if loafing:
+		_set_loafing(false)
+	if should_roll:
+		_try_start_roll()
+	space_hold_consumed = false
+
+
+func _set_loafing(enabled: bool) -> void:
+	if loafing == enabled:
+		return
+	loafing = enabled
+	_play_directional_animation()
+	if loafing:
+		_show_status("식빵 자세 · 은신 강화")
 
 
 func _update_roll(delta: float) -> void:

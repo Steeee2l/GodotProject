@@ -17,12 +17,13 @@ func _assert_vehicle(city: Node3D, vehicle_type: String, along_z: bool, index: i
 		along_z
 	)
 	var body := city.get_node(node_name) as StaticBody3D
+	var definition: Dictionary = VEHICLE_CATALOG.get_definition(vehicle_type)
 	assert(body != null)
 	assert(body.collision_layer == 1)
 	assert(str(body.get_meta("vehicle_type")) == vehicle_type)
+	assert(str(body.get_meta("vehicle_state")) == str(definition.get("state", "wrecked")))
 	assert(str(body.get_meta("vehicle_axis")) == ("z" if along_z else "x"))
 
-	var definition: Dictionary = VEHICLE_CATALOG.get_definition(vehicle_type)
 	var measured: Vector3 = definition["collision_size"]
 	var expected := Vector3(measured.z, measured.y, measured.x) if along_z else measured
 	var collision := body.get_node("VehicleCollision") as CollisionShape3D
@@ -33,7 +34,19 @@ func _assert_vehicle(city: Node3D, vehicle_type: String, along_z: bool, index: i
 
 	var sprite := body.get_node("VehicleSprite") as Sprite3D
 	assert(sprite.flip_h == not along_z)
-	var corners: Array = definition["footprint_corners_px"]
+	var source_size: Vector2i = definition.get(
+		"source_size",
+		Vector2i(sprite.texture.get_width(), sprite.texture.get_height())
+	)
+	var coordinate_scale := Vector2(
+		float(sprite.texture.get_width()) / float(source_size.x),
+		float(sprite.texture.get_height()) / float(source_size.y)
+	)
+	var raw_corners: Array = definition["footprint_corners_px"]
+	var corners: Array[Vector2] = []
+	for corner_variant in raw_corners:
+		var corner: Vector2 = corner_variant
+		corners.append(corner * coordinate_scale)
 	var projected_width := (measured.x + measured.z) / sqrt(2.0)
 	var base_pixel_width := absf((corners[2] as Vector2).x - (corners[0] as Vector2).x)
 	assert(is_equal_approx(sprite.pixel_size, projected_width / base_pixel_width))

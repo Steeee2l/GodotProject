@@ -5,11 +5,11 @@ const FLOOR_TEXTURE_PATH := "res://assets/interiors/shelter_floor_topdown_v3.png
 const WALL_TEXTURE_PATH := "res://assets/interiors/shelter_wall_panel_v3.png"
 const BED_TEXTURE_PATH := "res://assets/interiors/shelter_bed_module_v2.png"
 const PIPE_TEXTURE_PATH := "res://assets/interiors/shelter_escape_pipe_v1.png"
-const WORKBENCH_TEXTURE_PATH := "res://assets/interiors/modules/shelter_workbench_isometric_v6.png"
+const WORKBENCH_TEXTURE_PATH := "res://assets/interiors/modules/shelter_workbench_wall_aligned_v4.png"
 const SCRATCHER_BANK_TEXTURE_PATH := "res://assets/interiors/modules/scratcher_bank_isometric_v6.png"
 const CATNIP_SCRAPER_TEXTURE_PATH := "res://assets/interiors/modules/catnip_scraper_isometric_v5.png"
 const TRAINING_TEXTURE_PATH := "res://assets/interiors/modules/shelter_training_isometric_v6.png"
-const STORAGE_TEXTURE_PATH := "res://assets/interiors/modules/shelter_storage_wall_v1.png"
+const STORAGE_TEXTURE_PATH := "res://assets/interiors/modules/shelter_storage_wall_aligned_v4.png"
 
 
 func _initialize() -> void:
@@ -80,9 +80,9 @@ func _run() -> void:
 	var workbench_sprite := workbench.get_node("WorkbenchSprite") as Sprite3D
 	assert(workbench_sprite.texture.resource_path == WORKBENCH_TEXTURE_PATH)
 	assert(workbench_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
-	assert(is_equal_approx(workbench_sprite.position.y, 1.95))
+	assert(is_equal_approx(workbench_sprite.position.y, 1.84))
 	assert(is_equal_approx(workbench_sprite.position.z, 0.02))
-	assert(is_equal_approx(workbench_sprite.pixel_size, 0.0042))
+	assert(is_equal_approx(workbench_sprite.pixel_size, 0.00435))
 	assert(workbench_sprite.scale == Vector3.ONE)
 	assert(workbench_sprite.no_depth_test)
 	assert(workbench.get_node("GroundShadow") is MeshInstance3D)

@@ -1,7 +1,7 @@
 extends Area3D
 
-const SPEED := 30.0
-const MAX_LIFETIME := 1.6
+const SPEED := 46.0
+const MAX_LIFETIME := 1.15
 const PROJECTILE_COLLISION_RADIUS := 0.26
 const DEFAULT_TARGET_HIT_RADIUS := 0.62
 
@@ -16,17 +16,22 @@ var last_hit_damage_scale := 1.0
 var last_hit_grade := "normal"
 var lifetime := 0.0
 var penetrations_remaining := 0
+var effective_range := 18.0
+var maximum_range := 36.0
+var minimum_damage_multiplier := 0.35
+var spawn_position := Vector3.ZERO
 var processed_body_ids: Dictionary = {}
 var last_motion_origin := Vector3.INF
 
 
 func _ready() -> void:
 	collision_layer = 4 if not hostile else 8
-	collision_mask = 3 if not hostile else 17
+	collision_mask = 3
 	monitoring = true
 	body_entered.connect(_on_body_entered)
 	_build_neon_projectile()
 	last_motion_origin = global_position
+	spawn_position = global_position
 
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
@@ -99,7 +104,7 @@ func _build_neon_projectile() -> void:
 	var trail := GPUParticles3D.new()
 	trail.name = "NeonTrail"
 	trail.amount = 22
-	trail.lifetime = 0.22
+	trail.lifetime = 0.16
 	trail.randomness = 0.35
 	trail.local_coords = false
 	trail.visibility_aabb = AABB(Vector3(-4, -4, -4), Vector3(8, 8, 8))
@@ -194,12 +199,23 @@ func _apply_hit(body: Object, trajectory_origin: Vector3 = Vector3.INF) -> bool:
 	if body == null:
 		queue_free()
 		return false
+	if _shares_source_faction(body):
+		return true
 	var body_id := body.get_instance_id()
 	if processed_body_ids.has(body_id):
 		return true
 	var damaged := false
 	last_hit_damage_scale = _get_hit_damage_scale(body, trajectory_origin)
 	var adjusted_damage := maxi(1, roundi(float(damage) * last_hit_damage_scale))
+	var traveled_distance := spawn_position.distance_to(global_position)
+	var range_factor := 1.0
+	if traveled_distance > effective_range:
+		range_factor = lerpf(
+			1.0,
+			minimum_damage_multiplier,
+			clampf(inverse_lerp(effective_range, maximum_range, traveled_distance), 0.0, 1.0)
+		)
+	adjusted_damage = maxi(1, roundi(float(adjusted_damage) * range_factor))
 	last_hit_was_critical = not hostile and randf() < critical_chance
 	if body != null and not hostile and body.has_method("take_projectile_hit"):
 		body.call("take_projectile_hit", adjusted_damage, direction, last_hit_was_critical, critical_multiplier, last_hit_grade)
@@ -228,6 +244,18 @@ func _apply_hit(body: Object, trajectory_origin: Vector3 = Vector3.INF) -> bool:
 		return true
 	queue_free()
 	return false
+
+
+func _shares_source_faction(body: Object) -> bool:
+	if not is_instance_valid(source_body) or not source_body.has_method("get_faction_id"):
+		return false
+	var hit_actor := body
+	if not hit_actor.has_method("get_faction_id") and body is Node and (body as Node).get_parent() != null:
+		hit_actor = (body as Node).get_parent()
+	return (
+		hit_actor.has_method("get_faction_id")
+		and str(hit_actor.call("get_faction_id")) == str(source_body.call("get_faction_id"))
+	)
 
 
 func _spawn_impact_flash() -> void:

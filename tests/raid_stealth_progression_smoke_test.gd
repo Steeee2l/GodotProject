@@ -21,8 +21,7 @@ func _run() -> void:
 	assert(objective_panel.visible)
 	assert(objective_label.text.contains("기초 부품 확보"))
 	assert(objective_label.text.contains("지하철역 입구 조사"))
-	assert(objective_label.text.contains("목적"))
-	assert(objective_label.text.contains("보상"))
+	assert(objective_label.text.count("\n") <= 3)
 
 	var lore_clues: Array[Node3D] = main_scene.get("lore_clues")
 	assert(lore_clues.size() == 6)

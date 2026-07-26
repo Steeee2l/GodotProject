@@ -57,23 +57,22 @@ func _open_ui() -> void:
 	dim.color = Color(0.004, 0.006, 0.006, 0.84)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	modal.add_child(dim)
-	var safe_margin := MarginContainer.new()
-	safe_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var viewport_size := get_viewport().get_visible_rect().size
 	compact_layout = viewport_size.x < 1040.0 or viewport_size.y < 680.0
 	narrow_layout = viewport_size.x < 760.0
-	var outer_margin := 10 if viewport_size.y < 640.0 else 18
-	safe_margin.add_theme_constant_override("margin_left", outer_margin)
-	safe_margin.add_theme_constant_override("margin_top", outer_margin)
-	safe_margin.add_theme_constant_override("margin_right", outer_margin)
-	safe_margin.add_theme_constant_override("margin_bottom", outer_margin)
-	modal.add_child(safe_margin)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	modal.add_child(center)
 	var panel := PanelContainer.new()
 	panel.name = "TrainingPanel"
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel.custom_minimum_size = Vector2(
+		minf(1120.0, viewport_size.x - 32.0),
+		minf(780.0, viewport_size.y - 32.0)
+	)
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.015, 0.02, 0.019, 0.98), Color("#8fa164"), 8))
-	safe_margin.add_child(panel)
+	center.add_child(panel)
 	var margin := MarginContainer.new()
 	var inner_margin := 12 if compact_layout else 24
 	margin.add_theme_constant_override("margin_left", inner_margin)
@@ -99,7 +98,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _rebuild_ui() -> void:
 	for child in content.get_children():
-		child.queue_free()
+		child.free()
 	var header := VBoxContainer.new()
 	header.name = "TrainingHeader"
 	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -153,7 +152,7 @@ func _rebuild_ui() -> void:
 	header.add_child(subtitle)
 
 	var summary := GridContainer.new()
-	summary.columns = 1 if narrow_layout else (2 if compact_layout else 4)
+	summary.columns = 2 if narrow_layout or compact_layout else 4
 	summary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	summary.add_theme_constant_override("h_separation", 10)
 	summary.add_theme_constant_override("v_separation", 8)
@@ -165,7 +164,21 @@ func _rebuild_ui() -> void:
 
 	var divider := HSeparator.new()
 	content.add_child(divider)
-	content.add_child(_label("영구 강화 트리", 21, Color("#dce4dc")))
+	var section_row := HBoxContainer.new()
+	section_row.add_theme_constant_override("separation", 8)
+	content.add_child(section_row)
+	var section_title := _label("영구 강화", 19 if compact_layout else 21, Color("#dce4dc"))
+	section_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	section_row.add_child(section_title)
+	var section_hint := _label("카드를 눌러 즉시 훈련", 12, Color("#82958c"))
+	section_hint.name = "TrainingSectionHint"
+	section_hint.custom_minimum_size = Vector2(150, 0)
+	section_hint.size_flags_horizontal = Control.SIZE_SHRINK_END
+	section_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	section_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	section_hint.autowrap_mode = TextServer.AUTOWRAP_OFF
+	section_hint.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	section_row.add_child(section_hint)
 	var scroll := ScrollContainer.new()
 	scroll.name = "TrainingTreeScroll"
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -174,26 +187,24 @@ func _rebuild_ui() -> void:
 	scroll.follow_focus = false
 	content.add_child(scroll)
 	var tree := GridContainer.new()
-	tree.columns = 1 if narrow_layout else (2 if compact_layout else 3)
+	tree.name = "TrainingTreeGrid"
+	tree.columns = 1 if narrow_layout else 2
 	tree.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tree.add_theme_constant_override("h_separation", 16)
-	tree.add_theme_constant_override("v_separation", 14)
+	tree.add_theme_constant_override("h_separation", 12)
+	tree.add_theme_constant_override("v_separation", 10)
 	scroll.add_child(tree)
 	_add_training_card(tree, "vitality")
-	_add_connector(tree, "중량 훈련 2단계 필요")
 	_add_training_card(tree, "recovery")
 	_add_training_card(tree, "endurance")
-	_add_connector(tree, "유산소 훈련 2단계 필요")
 	_add_training_card(tree, "agility")
-	_add_spacer(tree)
-	_add_connector(tree, "회복 루틴·풋워크 2단계")
 	_add_training_card(tree, "fieldcraft")
-	status_label = _label("강화 노드를 선택하면 비용과 선행 조건을 확인할 수 있습니다.", 15, Color("#9db0a6"))
+	status_label = _label("통조림은 가방과 창고 보관분을 합산해 사용합니다.", 13, Color("#9db0a6"))
 	content.add_child(status_label)
 
 
 func _add_summary_chip(parent: Container, icon_name: String, title: String, value: String, color: Color) -> void:
 	var chip := PanelContainer.new()
+	chip.custom_minimum_size = Vector2(0, 68 if compact_layout else 76)
 	chip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	chip.add_theme_stylebox_override("panel", _panel_style(Color("#101716"), Color(0.43, 0.52, 0.48, 0.45), 6))
 	parent.add_child(chip)
@@ -220,46 +231,138 @@ func _add_training_card(parent: GridContainer, node_id: String) -> void:
 	var cost := GameState.get_training_cost(node_id)
 	var requirements_met := GameState.get_training_requirements_met(node_id)
 	var card := Button.new()
-	card.custom_minimum_size = Vector2(0 if narrow_layout or compact_layout else 250, 118 if compact_layout else 126)
+	card.name = "TrainingCard_%s" % node_id
+	card.custom_minimum_size = Vector2(0, 118 if compact_layout else 132)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.text = "%s   %d/%d\n%s\n%s" % [
-		str(definition.get("title", node_id)),
-		rank,
-		max_rank,
-		str(definition.get("description", "")),
-		"최대 단계" if rank >= max_rank else ("선행 강화 필요" if not requirements_met else "통조림 %d · 강화" % cost),
-	]
-	card.icon = UI_ICONS.get_icon(str(definition.get("icon", "fitness")), 54, Color("#d9c874"))
-	card.expand_icon = false
-	card.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	card.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	card.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	card.clip_contents = true
+	card.text = ""
+	card.focus_mode = Control.FOCUS_NONE
 	card.add_theme_font_override("font", FONT)
-	card.add_theme_font_size_override("font_size", 16)
-	card.add_theme_color_override("font_color", Color("#e4ebe5"))
-	card.add_theme_color_override("font_disabled_color", Color(0.66, 0.7, 0.68, 0.55))
 	card.add_theme_stylebox_override("normal", _panel_style(Color("#101514"), Color("#596760"), 7))
 	card.add_theme_stylebox_override("hover", _panel_style(Color("#1b231d"), Color("#d6c36f"), 7))
 	card.add_theme_stylebox_override("pressed", _panel_style(Color("#292a1c"), Color("#f0d77d"), 7))
+	card.add_theme_stylebox_override("disabled", _panel_style(Color("#0b0f0e"), Color("#343d39"), 7))
 	card.disabled = rank >= max_rank or not requirements_met
 	card.pressed.connect(_upgrade_training.bind(node_id))
 	parent.add_child(card)
 
+	var card_body := HBoxContainer.new()
+	card_body.name = "CardBody"
+	card_body.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	card_body.offset_left = 14
+	card_body.offset_top = 12
+	card_body.offset_right = -14
+	card_body.offset_bottom = -12
+	card_body.add_theme_constant_override("separation", 14)
+	card.add_child(card_body)
 
-func _add_connector(parent: GridContainer, text: String) -> void:
-	var connector := VBoxContainer.new()
-	connector.alignment = BoxContainer.ALIGNMENT_CENTER
-	connector.add_child(_label("↓" if narrow_layout else "→", 28, Color("#7c8c84")))
-	var note := _label(text, 12, Color("#84968d"))
-	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	connector.add_child(note)
-	parent.add_child(connector)
+	var icon_panel := PanelContainer.new()
+	icon_panel.custom_minimum_size = Vector2(64, 64)
+	icon_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	icon_panel.add_theme_stylebox_override(
+		"panel",
+		_panel_style(Color("#161d1a"), Color(0.62, 0.55, 0.29, 0.62), 6)
+	)
+	card_body.add_child(icon_panel)
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(48, 48)
+	icon.texture = UI_ICONS.get_icon(
+		str(definition.get("icon", "fitness")),
+		58,
+		Color("#d9c874") if requirements_met else Color("#69746f")
+	)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon_panel.add_child(icon)
+
+	var details := VBoxContainer.new()
+	details.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	details.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	details.add_theme_constant_override("separation", 4)
+	card_body.add_child(details)
+
+	var title_row := HBoxContainer.new()
+	title_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_row.add_theme_constant_override("separation", 8)
+	details.add_child(title_row)
+	var title := _label(
+		str(definition.get("title", node_id)),
+		16 if compact_layout else 18,
+		Color("#e5eadf") if requirements_met else Color("#7f8b85")
+	)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.autowrap_mode = TextServer.AUTOWRAP_OFF
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	title_row.add_child(title)
+	var rank_label := _label(
+		"%d / %d" % [rank, max_rank],
+		13 if compact_layout else 14,
+		Color("#d8c674") if rank < max_rank else Color("#78b791")
+	)
+	rank_label.name = "Rank"
+	rank_label.custom_minimum_size = Vector2(52, 0)
+	rank_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	rank_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	title_row.add_child(rank_label)
+
+	var description := _label(
+		str(definition.get("description", "")),
+		12 if compact_layout else 13,
+		Color("#9eaaa4") if requirements_met else Color("#65706b")
+	)
+	description.name = "TrainingCardDescription_%s" % node_id
+	description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	details.add_child(description)
+
+	var action_row := HBoxContainer.new()
+	action_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	action_row.add_theme_constant_override("separation", 6)
+	details.add_child(action_row)
+	var action_icon := TextureRect.new()
+	action_icon.custom_minimum_size = Vector2(20, 20)
+	action_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	action_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	action_row.add_child(action_icon)
+	var action_label := _label("", 12 if compact_layout else 13, Color("#efbd66"))
+	action_label.name = "Action"
+	action_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	action_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	action_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	action_row.add_child(action_label)
+	if rank >= max_rank:
+		action_icon.texture = UI_ICONS.get_icon("upgrade", 24, Color("#78b791"))
+		action_label.text = "최대 강화 완료"
+		action_label.add_theme_color_override("font_color", Color("#78b791"))
+	elif not requirements_met:
+		action_icon.texture = UI_ICONS.get_icon("alert", 24, Color("#7f8b85"))
+		action_label.text = "선행 필요 · %s" % _training_requirement_text(definition)
+		action_label.add_theme_color_override("font_color", Color("#7f8b85"))
+	else:
+		action_icon.texture = UI_ICONS.get_icon("food", 24, Color("#efbd66"))
+		action_label.text = "통조림 %d로 강화" % cost
+	_set_mouse_passthrough(card_body)
 
 
-func _add_spacer(parent: GridContainer) -> void:
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(80, 40)
-	parent.add_child(spacer)
+func _training_requirement_text(definition: Dictionary) -> String:
+	var requirements := definition.get("requires", {}) as Dictionary
+	var labels: Array[String] = []
+	for required_id in requirements.keys():
+		var required_definition := GameState.get_training_definition(str(required_id))
+		labels.append(
+			"%s %d단계" % [
+				str(required_definition.get("title", required_id)),
+				int(requirements[required_id]),
+			]
+		)
+	return " · ".join(labels) if not labels.is_empty() else "기초 훈련"
+
+
+func _set_mouse_passthrough(control: Control) -> void:
+	control.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for child in control.get_children():
+		if child is Control:
+			_set_mouse_passthrough(child as Control)
 
 
 func _upgrade_training(node_id: String) -> void:

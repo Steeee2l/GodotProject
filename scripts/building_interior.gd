@@ -191,18 +191,18 @@ func _input(event: InputEvent) -> void:
 			event is InputEventKey
 			and event.pressed
 			and not event.echo
-			and event.keycode in [KEY_ESCAPE, KEY_I, KEY_B]
+			and event.keycode in [KEY_ESCAPE, KEY_E, KEY_I, KEY_B]
 		):
 			inventory_ui.call("toggle")
 		return
 	if event is InputEventKey and not event.echo:
-		if event.keycode == KEY_E and event.pressed:
+		if event.keycode == KEY_F and event.pressed:
 			_interact()
 		elif event.keycode == KEY_SPACE and event.pressed:
 			_try_start_roll()
 		elif event.keycode == KEY_R and event.pressed:
 			_start_reload()
-		elif (event.keycode == KEY_I or event.keycode == KEY_B) and event.pressed and inventory_ui != null:
+		elif event.keycode in [KEY_E, KEY_I, KEY_B] and event.pressed and inventory_ui != null:
 			inventory_ui.call("toggle")
 		elif event.keycode == KEY_ESCAPE and event.pressed and BuildingRunState.current_floor == 1:
 			_show_status("1층 출구에서 나갈 수 있습니다.")
@@ -515,7 +515,7 @@ func _build_interface() -> void:
 	ammo_label.modulate = Color("#d6d2bd")
 	box.add_child(ammo_label)
 	var help := Label.new()
-	help.text = "WASD 이동 · SPACE 대시 · 좌클릭 근접 · 우클릭 조준+좌클릭 사격 · R 재장전 · E 상호작용"
+	help.text = "WASD 이동 · SPACE 대시 · 좌클릭 근접 · 우클릭 조준+좌클릭 사격 · R 재장전 · F 상호작용"
 	help.add_theme_font_override("font", FONT)
 	help.add_theme_font_size_override("font_size", 13)
 	help.modulate = Color("#aeb7b3")
@@ -1146,7 +1146,7 @@ func _update_nearby_interactable() -> void:
 			nearest = node
 			nearest_distance = distance
 	current_interactable = nearest
-	prompt_label.text = "" if nearest == null else "[E]  %s" % str(nearest.call("get_interaction_prompt"))
+	prompt_label.text = "" if nearest == null else "[F]  %s" % str(nearest.call("get_interaction_prompt"))
 
 
 func _interact() -> void:

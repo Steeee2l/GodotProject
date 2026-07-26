@@ -128,8 +128,8 @@ func _rebuild_ui() -> void:
 	content.add_child(summary)
 	summary.add_child(_summary_card("시설", "Lv.%d · Tier %d" % [GameState.catnip_scraper_level, GameState.shelter_tier], compact))
 	summary.add_child(_summary_card("배치", "%d / %d명" % [GameState.get_active_catnip_workers(), GameState.get_catnip_worker_slots()], compact))
-	summary.add_child(_summary_card("초당 생산", "캣닢 %d" % roundi(GameState.get_catnip_per_second()), compact))
-	summary.add_child(_summary_card("보유 자원", "캣닢 %d" % GameState.catnip, compact))
+	summary.add_child(_summary_card("초당 생산", "캣닢 %s" % GameState.format_compact_number(GameState.get_catnip_per_second()), compact))
+	summary.add_child(_summary_card("보유 자원", "캣닢 %s" % GameState.format_compact_number(GameState.catnip), compact))
 
 	var body: BoxContainer = VBoxContainer.new() if narrow else HBoxContainer.new()
 	body.name = "CatnipScraperBody"
@@ -192,7 +192,10 @@ func _rebuild_ui() -> void:
 	var upgrade := _button(
 		"최고 레벨"
 		if upgrade_cost == 0
-		else "Lv.%d 업그레이드  고철 %d" % [GameState.catnip_scraper_level + 1, upgrade_cost],
+		else "Lv.%d 업그레이드  고철 %s" % [
+			GameState.catnip_scraper_level + 1,
+			GameState.format_compact_number(upgrade_cost),
+		],
 		"upgrade"
 	)
 	upgrade.custom_minimum_size = Vector2(0, 38)

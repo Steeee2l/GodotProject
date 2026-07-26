@@ -66,10 +66,40 @@ func _run() -> void:
 	var training := module_root.get_node("SurvivalTrainingFacility") as Node
 	training.call("interact")
 	await process_frame
+	await process_frame
 	var training_layer := root.find_child("TrainingFacilityUILayer", true, false) as CanvasLayer
 	var training_close := training_layer.find_child("CloseButton", true, false) as Button
 	if training_close == null or not training_close.text.is_empty() or training_close.custom_minimum_size.x > 44.0:
 		_fail("training facility close control is not a compact icon button")
+	var training_hint := training_layer.find_child("TrainingSectionHint", true, false) as Label
+	if (
+		training_hint == null
+		or training_hint.autowrap_mode != TextServer.AUTOWRAP_OFF
+		or training_hint.size.x < 145.0
+		or training_hint.size.y > 40.0
+	):
+		_fail("training section hint collapsed into a vertical text column")
+	var training_scroll := training_layer.find_child("TrainingTreeScroll", true, false) as ScrollContainer
+	var training_tree := training_layer.find_child("TrainingTreeGrid", true, false) as GridContainer
+	if training_scroll == null or training_scroll.size.y < 240.0:
+		_fail("training card viewport has insufficient height")
+	if training_tree == null or training_tree.get_child_count() != 5:
+		_fail("training tree must show all five upgrade cards")
+	for node_id in ["vitality", "recovery", "endurance", "agility", "fieldcraft"]:
+		var training_card := training_layer.find_child("TrainingCard_%s" % node_id, true, false) as Button
+		var training_description := training_layer.find_child(
+			"TrainingCardDescription_%s" % node_id,
+			true,
+			false
+		) as Label
+		if (
+			training_card == null
+			or training_card.size.x < 300.0
+			or training_card.size.y < 110.0
+			or training_description == null
+			or training_description.size.x < 180.0
+		):
+			_fail("training upgrade card layout collapsed for %s" % node_id)
 	training_layer.queue_free()
 	await process_frame
 	shelter.call("_open_raid_zone_select")

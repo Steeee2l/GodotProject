@@ -71,7 +71,6 @@ var weapon_preview: TextureRect
 var weapon_stats: Label
 var weapon_state_action_button: Button
 var mod_slot_grid: GridContainer
-var weight_label: Label
 var bag_slot_usage_label: Label
 var item_detail_icon: TextureRect
 var item_detail_title: Label
@@ -106,8 +105,6 @@ var bag_filter: String = "all"
 var feedback_tween: Tween
 var visible_bag_items := 0
 var responsive_compact := false
-const BAG_WEIGHT_LIMIT := 49.0
-const BAG_WEIGHT_WARNING := 44.0
 const BAG_SLOT_CAPACITY := 15
 const BAG_GRID_COLUMNS := 5
 
@@ -202,7 +199,7 @@ func _build_open_button() -> void:
 	open_button.icon = UI_ICONS.get_icon("backpack", 40, Color("#dce9e1"))
 	open_button.expand_icon = true
 	open_button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	open_button.tooltip_text = "가방 열기  [I / B]"
+	open_button.tooltip_text = "가방 열기  [E]"
 	open_button.focus_mode = Control.FOCUS_NONE
 	open_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	open_button.z_as_relative = false
@@ -312,6 +309,8 @@ func _build_inventory_panel() -> Control:
 	inventory_feedback.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	box.add_child(inventory_feedback)
 
+	box.add_child(_build_item_detail_panel())
+
 	bag_scroll = ScrollContainer.new()
 	bag_scroll.name = "BagScroll"
 	bag_scroll.custom_minimum_size = Vector2(0, 174)
@@ -335,16 +334,6 @@ func _build_inventory_panel() -> Control:
 	bag_empty_hint.visible = false
 	box.add_child(bag_empty_hint)
 
-	box.add_child(_build_item_detail_panel())
-
-	var weight_row := HBoxContainer.new()
-	weight_row.add_theme_constant_override("separation", 8)
-	box.add_child(weight_row)
-	weight_row.add_child(_label("예상 중량", 12, Color("#aebbb5")))
-	weight_label = _label("0 / 49kg", 12, Color("#b7ef72"))
-	weight_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	weight_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	weight_row.add_child(weight_label)
 	return panel
 
 
@@ -826,6 +815,9 @@ func _count_bag_items_for_filter(filter_id: String) -> int:
 			if int(game_state.get_equipment_count(str(equipment_id))) > 0:
 				count += 1
 	if _bag_filter_matches_item(filter_id, "mod"):
+		for component_id_variant in game_state.mod_component_inventory:
+			if int(game_state.get_mod_component_count(str(component_id_variant))) > 0:
+				count += 1
 		for mod_id_variant in MOD_COMPONENTS:
 			if int(game_state.get_weapon_mod_count(str(mod_id_variant))) > 0:
 				count += 1
@@ -931,6 +923,22 @@ func _refresh_contents() -> void:
 			"texture": _equipment_texture(equipment_id, 64),
 		})
 
+	var component_ids: Array = game_state.mod_component_inventory.keys()
+	component_ids.sort()
+	for component_id_variant in component_ids:
+		var component_id := str(component_id_variant)
+		var component_count := int(game_state.get_mod_component_count(component_id))
+		if component_count <= 0:
+			continue
+		_add_bag_item({
+			"id": component_id,
+			"type": "component",
+			"title": _component_name(component_id),
+			"description": _component_description(component_id),
+			"quantity": component_count,
+			"texture": component_textures.get(component_id) as Texture2D,
+		})
+
 	var mod_ids: Array = MOD_COMPONENTS.keys()
 	mod_ids.sort()
 	for mod_id_variant in mod_ids:
@@ -960,26 +968,6 @@ func _refresh_contents() -> void:
 			Color("#ff9595") if occupied_slots > BAG_SLOT_CAPACITY else Color("#b7c8c0")
 		)
 
-	var equipment_weight := 0.0
-	for equipment_id_variant in game_state.equipment_inventory:
-		var equipment_id := str(equipment_id_variant)
-		var definition: Dictionary = game_state.get_equipment_definition(equipment_id)
-		equipment_weight += float(definition.get("weight", 0.0)) * float(game_state.get_equipment_count(equipment_id))
-	for equipped_id in [
-		str(game_state.equipped_body_armor_id),
-		str(game_state.equipped_head_armor_id),
-		str(game_state.equipped_footwear_id),
-	]:
-		if not equipped_id.is_empty():
-			equipment_weight += float(game_state.get_equipment_definition(equipped_id).get("weight", 0.0))
-	var load := 6.3 + float(reserve_state) * 0.015 + float(canned_food_state) * 0.35 + float(stored_weapons_state) * 3.2 + equipment_weight
-	weight_label.text = "%.1f / 49kg" % load
-	var weight_color := Color("#b7ef72")
-	if load >= BAG_WEIGHT_LIMIT:
-		weight_color = Color("#ff9595")
-	elif load >= BAG_WEIGHT_WARNING:
-		weight_color = Color("#e7d57b")
-	weight_label.add_theme_color_override("font_color", weight_color)
 	if scrap_label:
 		scrap_label.text = "쉘터 고철 %d" % int(game_state.scrap if game_state else 0)
 	if weapon_detail_open and has_weapon_state:
@@ -1007,6 +995,7 @@ func _update_bag_empty_hint() -> void:
 
 func _show_weapon_detail() -> void:
 	if not has_weapon_state:
+		_select_empty_equipment_slot("주무기")
 		return
 	weapon_detail_open = true
 	selected_item = {
@@ -1034,6 +1023,12 @@ func _equipped_equipment_label(slot: String, fallback: String) -> String:
 func _select_equipped_equipment(slot: String) -> void:
 	var equipment_id := str(game_state.get_equipped_equipment(slot))
 	if equipment_id.is_empty():
+		var empty_slot_names := {
+			"body": "몸 방어구",
+			"head": "머리 방어구",
+			"feet": "신발",
+		}
+		_select_empty_equipment_slot(str(empty_slot_names.get(slot, "장비")))
 		return
 	var definition: Dictionary = game_state.get_equipment_definition(equipment_id)
 	selected_item = {
@@ -1046,6 +1041,20 @@ func _select_equipped_equipment(slot: String) -> void:
 		"texture": _equipment_texture(equipment_id, 64),
 	}
 	_refresh_item_detail()
+	_show_inventory_feedback("%s 선택" % str(selected_item.get("title", "장비")), Color("#d9c579"))
+
+
+func _select_empty_equipment_slot(slot_name: String) -> void:
+	selected_item = {
+		"id": "empty_%s" % slot_name,
+		"type": "empty_slot",
+		"title": slot_name,
+		"description": "현재 장착된 장비가 없습니다. 가방의 아이템을 선택해 장착할 수 있습니다.",
+		"quantity": 0,
+		"texture": UI_ICONS.get_icon(_equipment_icon_name(slot_name), 64, Color("#71877c")),
+	}
+	_refresh_item_detail()
+	_show_inventory_feedback("%s 슬롯은 비어 있습니다." % slot_name, Color("#9eb8ad"))
 
 
 func _hide_weapon_detail() -> void:
@@ -1094,6 +1103,8 @@ func _select_item(item: Dictionary) -> void:
 
 func _on_bag_item_pressed(item: Dictionary) -> void:
 	_select_item(item)
+	_update_bag_selection_visual(str(item.get("id", "")))
+	_show_inventory_feedback("%s 선택" % str(item.get("title", "아이템")), Color("#d9c579"))
 	if not weapon_detail_open or str(item.get("type", "")) != "mod":
 		return
 	var mod_id := str(item.get("id", ""))
@@ -1103,6 +1114,16 @@ func _on_bag_item_pressed(item: Dictionary) -> void:
 	var installed := _get_mod_in_slot(str(definition.get("slot", "")))
 	if installed != mod_id:
 		_install_mod(mod_id)
+
+
+func _update_bag_selection_visual(selected_id: String) -> void:
+	if bag_grid == null:
+		return
+	for child in bag_grid.get_children():
+		if child is Button and str(child.name).begins_with("BagItem_"):
+			(child as Button).set_pressed_no_signal(
+				str(child.name) == "BagItem_%s" % selected_id
+			)
 
 
 func _refresh_item_detail() -> void:
@@ -1163,6 +1184,9 @@ func _refresh_item_detail() -> void:
 			if not reason_text.is_empty() and item_detail_reason:
 				item_detail_reason.text = reason_text
 				item_detail_reason.visible = true
+	elif item_type == "component":
+		var item_id := str(selected_item.get("id", ""))
+		item_detail_description.text = "%s\n쉘터 작업대에서 완성 부착물 제작에 사용합니다." % _component_description(item_id)
 	elif item_type == "equipment":
 		var equipment_id := str(selected_item.get("id", ""))
 		var equipment_definition: Dictionary = game_state.get_equipment_definition(equipment_id)
@@ -1190,7 +1214,9 @@ func _on_selected_item_action() -> void:
 			weapon_equipped.emit(item_id)
 			if game_state.equipped_weapon_id == item_id and bool(game_state.has_ak):
 				_show_inventory_feedback("%s 장착" % str(selected_item.get("title", item_id)), Color("#a3ff92"))
-				_show_weapon_detail()
+				selected_item = {}
+				weapon_detail_open = false
+				_refresh_contents()
 	elif item_type == "mod":
 		var definition := WEAPON_SYSTEM.get_mod(item_id)
 		var installed := _get_mod_in_slot(str(definition.get("slot", "")))
@@ -1224,7 +1250,6 @@ func _format_equipment_stats(definition: Dictionary) -> String:
 	var stamina_cost_percent := roundi((float(definition.get("stamina_cost_multiplier", 1.0)) - 1.0) * 100.0)
 	if stamina_cost_percent != 0:
 		stats.append("대시 스태미나 소모 %s%d%%" % ["+" if stamina_cost_percent > 0 else "", stamina_cost_percent])
-	stats.append("무게 %.1fkg" % float(definition.get("weight", 0.0)))
 	return "  ·  ".join(stats)
 
 
@@ -1454,6 +1479,12 @@ func _bag_item_button(item: Dictionary) -> Button:
 	var button := _tile_button("", has_quantity)
 	button.disabled = not has_quantity
 	button.name = "BagItem_%s" % str(item.get("id", "item"))
+	button.toggle_mode = true
+	button.button_pressed = (
+		not selected_item.is_empty()
+		and str(selected_item.get("id", "")) == item_id
+		and str(selected_item.get("type", "")) == item_type
+	)
 	button.custom_minimum_size = Vector2(82, 74)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.tooltip_text = "%s  x%d" % [str(item.get("title", "")), quantity]
@@ -1501,6 +1532,8 @@ func _tile_button(text: String, active: bool) -> Button:
 	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	button.focus_mode = Control.FOCUS_NONE
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	button.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
 	_apply_button_font(button, 11)
 	button.add_theme_stylebox_override("normal", _panel_style(Color(0.052, 0.061, 0.069, 0.82), Color(0.72, 0.8, 0.77, 0.48 if active else 0.2), 7))
 	button.add_theme_stylebox_override("hover", _panel_style(Color(0.085, 0.1, 0.105, 0.96), Color("#d9c579"), 7, 2))
@@ -1557,6 +1590,9 @@ func _item_texture(item: Dictionary) -> Texture2D:
 		"weapon": return UI_ICONS.get_icon("weapon", 64, Color("#c6d2cc"))
 		"equipment":
 			return _equipment_texture(str(item.get("id", "")), 64)
+		"component":
+			var component_texture := component_textures.get(str(item.get("id", ""))) as Texture2D
+			return component_texture if component_texture != null else UI_ICONS.get_icon("parts", 64, Color("#8fd3c4"))
 		"mod": return UI_ICONS.get_icon("mod", 64, Color("#8fd3c4"))
 	return UI_ICONS.get_icon("all", 64, Color("#8fa49a"))
 
@@ -1657,6 +1693,28 @@ func _mod_name(mod_id: String) -> String:
 		"ak_precision_receiver":
 			return "AK 정밀 수신부"
 	return mod_id
+
+
+func _component_name(component_id: String) -> String:
+	match component_id:
+		"rubber_gasket":
+			return "소음기용 고무 패킹"
+		"scope_lens":
+			return "스코프 렌즈"
+		"magazine_spring":
+			return "탄창 스프링"
+	return component_id.replace("_", " ").capitalize()
+
+
+func _component_description(component_id: String) -> String:
+	match component_id:
+		"rubber_gasket":
+			return "소음기와 완충 개머리판 제작에 쓰는 탄성 부품입니다."
+		"scope_lens":
+			return "배율 조준경과 정밀 모듈 제작에 쓰는 광학 부품입니다."
+		"magazine_spring":
+			return "고속 탄창과 전술 부품 제작에 쓰는 기계 부품입니다."
+	return "총기 부착물 제작에 쓰는 핵심 부품입니다."
 
 
 func _mod_description(mod_id: String) -> String:

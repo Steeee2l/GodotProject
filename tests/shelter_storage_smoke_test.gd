@@ -46,6 +46,29 @@ func _run() -> void:
 	if int(game_state.call("get_ammo_count", "762_fmj")) != ammo_before:
 		_fail("withdraw did not restore ammo to backpack")
 
+	game_state.set("canned_food", 9)
+	var food_result := game_state.call("deposit_storage_item", "food", "canned_food", 5) as Dictionary
+	if not bool(food_result.get("ok", false)):
+		_fail("canned food could not be deposited")
+	if int(game_state.get("canned_food")) != 9:
+		_fail("stored canned food must remain part of the shelter currency total")
+	if int(game_state.call("get_backpack_storage_count", "food", "canned_food")) != 4:
+		_fail("storage allocation must be excluded from carried canned food")
+	if int(game_state.call("get_stored_storage_count", "food", "canned_food")) != 5:
+		_fail("stored canned food allocation is missing")
+	var food_slot := -1
+	for index in game_state.storage_inventory.size():
+		var entry := game_state.storage_inventory[index] as Dictionary
+		if str(entry.get("type", "")) == "food":
+			food_slot = index
+			break
+	if food_slot < 0:
+		_fail("stored canned food slot is missing")
+	if not bool((game_state.call("withdraw_storage_item", food_slot, 5) as Dictionary).get("ok", false)):
+		_fail("stored canned food could not be withdrawn")
+	if int(game_state.get("canned_food")) != 9:
+		_fail("withdrawing canned food must not duplicate the currency total")
+
 	game_state.set("scrap", 10_000)
 	game_state.set("churu", 10)
 	if not bool(game_state.call("try_upgrade_storage")):

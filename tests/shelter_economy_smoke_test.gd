@@ -173,8 +173,8 @@ func _run() -> void:
 	game_state.set("canned_food", 0)
 	var unfed_scrap_before := int(game_state.get("scrap"))
 	game_state.call("tick_shelter_live", 3600.0)
-	if int(game_state.get("scrap")) != unfed_scrap_before:
-		_fail("unfed shelter workers should pause production")
+	if int(game_state.get("scrap")) <= unfed_scrap_before:
+		_fail("assigned shelter workers must keep producing without canned food")
 	game_state.set("canned_food", 20)
 
 	var workbench := get_nodes_in_group("shelter_workbench")[0] as Node
@@ -184,6 +184,40 @@ func _run() -> void:
 	if workbench_layer == null:
 		_fail("workbench did not create an interaction layer")
 	_assert_compact_close_button(workbench_layer, "workbench")
+	var workbench_panel := workbench_layer.find_child("WorkbenchPanel", true, false) as PanelContainer
+	var workbench_body := workbench_layer.find_child("WorkbenchBody", true, false) as BoxContainer
+	var workbench_recipe_panel := workbench_layer.find_child("WorkbenchRecipePanel", true, false) as PanelContainer
+	var workbench_detail_scroll := workbench_layer.find_child("WorkbenchDetailScroll", true, false) as ScrollContainer
+	if (
+		workbench_panel == null
+		or workbench_body == null
+		or workbench_recipe_panel == null
+		or workbench_detail_scroll == null
+	):
+		_fail("workbench responsive panel structure is missing")
+	var workbench_viewport_size := workbench.get_viewport().get_visible_rect().size
+	if (
+		workbench_panel.size.x > workbench_viewport_size.x
+		or workbench_panel.size.y > workbench_viewport_size.y
+		or workbench_recipe_panel.size.x < 260.0
+	):
+		_fail("workbench panel exceeds or collapses inside the viewport")
+	workbench.set("selected_category", "ammo")
+	workbench.set("selected_recipe_id", "762_fmj_pack")
+	workbench.call("_rebuild_ui")
+	await process_frame
+	var ammo_title := workbench_layer.find_child("WorkbenchRecipeTitle", true, false) as Label
+	var ammo_tab := workbench_layer.find_child("WorkbenchTab_ammo", true, false) as Button
+	var ammo_detail_scroll := workbench_layer.find_child("WorkbenchDetailScroll", true, false) as ScrollContainer
+	if (
+		ammo_title == null
+		or ammo_title.autowrap_mode != TextServer.AUTOWRAP_OFF
+		or ammo_tab == null
+		or not ammo_tab.button_pressed
+		or ammo_detail_scroll == null
+		or ammo_detail_scroll.size.y < 120.0
+	):
+		_fail("ammo selection breaks the workbench detail layout")
 	if (
 		_find_button_with_text(workbench_layer, "시간제 수리") != null
 		or _find_button_with_text(workbench_layer, "업그레이드") != null
@@ -235,6 +269,9 @@ func _run() -> void:
 	var training_viewport_size := training_module.get_viewport().get_visible_rect().size
 	if training_panel.size.x > training_viewport_size.x or training_panel.size.y > training_viewport_size.y:
 		_fail("training facility panel exceeds the viewport")
+	var training_cards := training_panel.find_children("TrainingCard_*", "Button", true, false)
+	if training_cards.size() < 5:
+		_fail("training facility must expose all five permanent upgrade cards")
 	var training_layer := training_module.get("ui_layer") as CanvasLayer
 	if is_instance_valid(training_layer):
 		training_layer.queue_free()
@@ -326,7 +363,10 @@ func _run() -> void:
 	var upgraded := bool(game_state.call("try_upgrade_scratcher_bank"))
 	if not upgraded or int(game_state.get("scratcher_bank_level")) != before_level + 1:
 		_fail("scratcher bank upgrade failed")
-	game_state.set("scrap", 1000)
+	game_state.set(
+		"scrap",
+		int(game_state.CATNIP_SCRAPER_UPGRADE_COSTS.get(int(game_state.get("catnip_scraper_level")) + 1, 0))
+	)
 	var catnip_level_before := int(game_state.get("catnip_scraper_level"))
 	var catnip_rate_before := float(game_state.call("get_catnip_per_hour"))
 	if not bool(game_state.call("try_upgrade_catnip_scraper")):
@@ -336,11 +376,12 @@ func _run() -> void:
 	if float(game_state.call("get_catnip_per_hour")) <= catnip_rate_before:
 		_fail("catnip scraper upgrade did not improve production")
 
-	game_state.set("catnip", 25)
+	game_state.set("catnip", game_state.CATNIP_BOOST_COST)
 	if not bool(game_state.call("activate_catnip_boost")) or float(game_state.call("get_production_multiplier")) != 10.0:
 		_fail("catnip production boost failed")
-	game_state.set("scrap", 2000)
-	game_state.set("churu", 1)
+	var tier_cost := game_state.call("get_shelter_upgrade_cost") as Dictionary
+	game_state.set("scrap", int(tier_cost.get("scrap", 0)))
+	game_state.set("churu", int(tier_cost.get("churu", 0)))
 	if not bool(game_state.call("try_upgrade_shelter_tier")):
 		_fail("shelter tier upgrade failed")
 	if int(game_state.call("get_resident_capacity")) != 10 or int(game_state.call("get_scratcher_worker_slots")) != 6 or int(game_state.call("get_catnip_worker_slots")) != 2:

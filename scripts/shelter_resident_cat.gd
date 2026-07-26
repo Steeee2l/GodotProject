@@ -22,9 +22,9 @@ const WANDER_MIN_WAIT := 1.0
 const WANDER_MAX_WAIT := 3.2
 const WANDER_RETARGET_TIME := 9.0
 const PRODUCTION_POP_INTERVAL := 1.0
-const PRODUCTION_POP_HEIGHT := 1.18
-const PRODUCTION_POP_DURATION := 1.08
-const PRODUCTION_POP_FONT_SIZE := 46
+const PRODUCTION_POP_HEIGHT := 1.34
+const PRODUCTION_POP_DURATION := 1.12
+const PRODUCTION_POP_FONT_SIZE := 62
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 
 var resident_id := ""
@@ -90,7 +90,7 @@ func _ready() -> void:
 	work_indicator.text = ""
 	work_indicator.position = Vector3(0, 1.54, 0)
 	work_indicator.font = FONT
-	work_indicator.font_size = 20
+	work_indicator.font_size = 28
 	work_indicator.modulate = Color("#e6c978")
 	work_indicator.outline_size = 6
 	work_indicator.outline_modulate = Color(0.02, 0.025, 0.02, 0.96)
@@ -202,14 +202,14 @@ func _spawn_production_pop() -> void:
 	label.position = Vector3(side_direction * 0.06, 1.82, 0.0)
 	label.font = FONT
 	label.font_size = PRODUCTION_POP_FONT_SIZE
-	label.pixel_size = 0.0052
+	label.pixel_size = 0.0056
 	label.modulate = Color(color.r, color.g, color.b, 0.0)
 	label.outline_modulate = Color(0.015, 0.02, 0.016, 0.98)
 	label.outline_size = 13
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
 	label.render_priority = 127
-	label.scale = Vector3.ONE * 0.38
+	label.scale = Vector3.ONE * 0.72
 	label.set_meta("production_kind", assignment_kind)
 	label.set_meta("production_rate", production_rate_per_second)
 	label.set_meta("rise_height", PRODUCTION_POP_HEIGHT)
@@ -233,13 +233,13 @@ func _spawn_production_pop() -> void:
 	scale_tween.tween_property(
 		label,
 		"scale",
-		Vector3.ONE * 1.26,
+		Vector3.ONE * 1.42,
 		0.16
 	).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	scale_tween.tween_property(
 		label,
 		"scale",
-		Vector3.ONE * 0.96,
+		Vector3.ONE * 1.08,
 		0.17
 	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
@@ -261,15 +261,11 @@ func _spawn_production_pop() -> void:
 
 
 func _format_production_rate(value: float) -> String:
-	if value >= 10.0:
-		return "%.1f" % value
-	if value >= 0.01:
-		return "%.2f" % value
-	return "%.4f" % value
+	return GameState.format_compact_number(maxf(1.0, value))
 
 
 func _format_catnip_rate(value: float) -> String:
-	return str(maxi(0, roundi(value)))
+	return GameState.format_compact_number(maxf(1.0, value))
 
 
 func _choose_wander_target() -> void:

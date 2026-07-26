@@ -132,7 +132,7 @@ func _rebuild_ui() -> void:
 	content.add_child(summary)
 	summary.add_child(_summary_card("시설", "Lv.%d · Tier %d" % [GameState.scratcher_bank_level, GameState.shelter_tier], compact))
 	summary.add_child(_summary_card("배치", "%d / %d명" % [workers, slots], compact))
-	summary.add_child(_summary_card("시간당 생산", "고철 %.0f" % GameState.get_scrap_per_hour(), compact))
+	summary.add_child(_summary_card("시간당 생산", "고철 %s" % GameState.format_compact_number(GameState.get_scrap_per_hour()), compact))
 	summary.add_child(_summary_card("부스터", "x%.0f" % GameState.get_production_multiplier(), compact))
 
 	var body: BoxContainer = VBoxContainer.new() if narrow else HBoxContainer.new()
@@ -204,7 +204,15 @@ func _rebuild_ui() -> void:
 	boost.pressed.connect(_activate_boost)
 	actions.add_child(boost)
 	var upgrade_cost := int(GameState.SCRATCHER_UPGRADE_COSTS.get(GameState.scratcher_bank_level + 1, 0))
-	var upgrade := _button("최고 레벨" if upgrade_cost == 0 else "Lv.%d 업그레이드  고철 %d" % [GameState.scratcher_bank_level + 1, upgrade_cost], "upgrade")
+	var upgrade := _button(
+		"최고 레벨"
+		if upgrade_cost == 0
+		else "Lv.%d 업그레이드  고철 %s" % [
+			GameState.scratcher_bank_level + 1,
+			GameState.format_compact_number(upgrade_cost),
+		],
+		"upgrade"
+	)
 	upgrade.disabled = upgrade_cost == 0 or GameState.scrap < upgrade_cost
 	upgrade.custom_minimum_size = Vector2(0, 38)
 	upgrade.pressed.connect(_upgrade)
@@ -213,11 +221,11 @@ func _rebuild_ui() -> void:
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	actions.add_child(spacer)
 	actions.add_child(_label("보유 자원", 13, Color("#8fa096")))
-	actions.add_child(_label("고철 %d   캣닢 %d\n통조림 %d   츄르 %d" % [
-		GameState.scrap,
-		GameState.catnip,
-		GameState.canned_food,
-		GameState.churu,
+	actions.add_child(_label("고철 %s   캣닢 %s\n통조림 %s   츄르 %s" % [
+		GameState.format_compact_number(GameState.scrap),
+		GameState.format_compact_number(GameState.catnip),
+		GameState.format_compact_number(GameState.canned_food),
+		GameState.format_compact_number(GameState.churu),
 	], 15, Color("#d9dfd9")))
 
 

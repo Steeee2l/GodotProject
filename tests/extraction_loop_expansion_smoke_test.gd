@@ -28,16 +28,40 @@ func _run() -> void:
 	assert(not enemies.is_empty())
 	var enemy := enemies[0] as CharacterBody3D
 	var player := main_scene.get("player") as CharacterBody3D
-	enemy.global_position = player.global_position + Vector3(0.0, 0.0, 8.0)
+	enemy.global_position = player.global_position + Vector3(0.0, 0.0, 13.0)
 	var facing_player := player.global_position - enemy.global_position
 	facing_player.y = 0.0
+	enemy.set("target", player)
+	enemy.set("primary_player_target", player)
 	enemy.set("facing_world_direction", facing_player.normalized())
 	enemy.set("alerted", false)
 	enemy.set("detection_awareness", 0.0)
 	enemy.set("perception_state", "patrol")
+	enemy.set("patrol_pause", 100.0)
 	var vision_range := float(enemy.call("_get_vision_range"))
-	for step in 3:
-		enemy.call("_update_detection_awareness", 0.16, 8.0, true, vision_range)
+	assert(vision_range >= 14.0 and vision_range <= 16.0)
+	var combat_lock_range := float(enemy.call("_get_combat_lock_range"))
+	assert(combat_lock_range >= 14.0)
+	assert(float(enemy.call("_get_search_break_distance")) >= combat_lock_range + 9.9)
+	main_scene.process_mode = Node.PROCESS_MODE_INHERIT
+	enemy.call("_physics_process", 0.16)
+	assert(float(enemy.get("detection_awareness")) > 0.0)
+	assert(not bool(enemy.get("alerted")))
+	for step in 20:
+		enemy.call("_physics_process", 0.16)
+		if bool(enemy.get("alerted")):
+			break
+	assert(bool(enemy.get("alerted")))
+	main_scene.process_mode = Node.PROCESS_MODE_DISABLED
+	enemy.call("_clear_alert")
+	enemy.global_position = player.global_position + Vector3(0.0, 0.0, 10.0)
+	facing_player = player.global_position - enemy.global_position
+	facing_player.y = 0.0
+	enemy.set("facing_world_direction", facing_player.normalized())
+	enemy.set("detection_awareness", 0.0)
+	enemy.set("perception_state", "patrol")
+	for step in 5:
+		enemy.call("_update_detection_awareness", 0.16, 10.0, true, vision_range)
 	assert(str(enemy.get("perception_state")) == "suspicious")
 	assert(not bool(enemy.get("alerted")))
 	assert(float(enemy.get("detection_awareness")) < 1.0)
@@ -48,8 +72,8 @@ func _run() -> void:
 	assert(detection_indicator.visible)
 	var detected := bool(enemy.call(
 		"_update_detection_awareness",
-		2.0,
-		8.0,
+		3.0,
+		10.0,
 		true,
 		vision_range
 	))
@@ -57,51 +81,74 @@ func _run() -> void:
 	enemy.call("_become_alerted")
 	assert(str(enemy.get("perception_state")) == "combat")
 	assert(float(enemy.get("alert_marker_time")) > 0.0)
+	assert(float(enemy.get("combat_reaction_time")) > 0.0)
 	enemy.call("_update_detection_indicator")
 	assert(detection_indicator.visible)
-	enemy.set("last_known_position", enemy.global_position)
-	enemy.set("search_time_remaining", 2.0)
-	enemy.set("perception_state", "search")
+	enemy.set("perception_state", "combat")
+	enemy.set("alert_marker_time", 0.0)
+	enemy.set("has_current_line_of_sight", false)
+	enemy.set("lost_sight_time", 5.0)
+	enemy.call("_update_detection_indicator")
+	assert(not detection_indicator.visible)
+	enemy.global_position = (
+		player.global_position
+		+ Vector3(0.0, 0.0, float(enemy.call("_get_search_break_distance")) + 1.0)
+	)
+	enemy.set("last_known_position", player.global_position)
+	enemy.set("pursuit_time", 10.0)
+	enemy.set("combat_reaction_time", 0.0)
+	enemy.set("alert_marker_time", 0.0)
+	main_scene.process_mode = Node.PROCESS_MODE_INHERIT
+	enemy.call("_physics_process", 0.16)
+	main_scene.process_mode = Node.PROCESS_MODE_DISABLED
+	assert(str(enemy.get("perception_state")) == "search")
+	enemy.call("_update_detection_indicator")
+	assert(detection_indicator.visible)
+	assert(detection_indicator.texture == enemy.call("_get_lost_target_texture"))
 	enemy.call("_update_search_behavior", 0.1)
 	assert(str(enemy.get("perception_state")) == "search")
-	enemy.call("_clear_alert")
+	enemy.set("search_time_remaining", 0.05)
+	enemy.call("_update_search_behavior", 0.1)
 	assert(str(enemy.get("perception_state")) == "return")
-	enemy.global_position = player.global_position + Vector3(0.0, 0.0, 2.4)
+	assert(not bool(enemy.get("alerted")))
+	enemy.global_position = player.global_position + Vector3(0.0, 0.0, 1.8)
 	enemy.set("facing_world_direction", Vector3.BACK)
 	enemy.set("detection_awareness", 0.0)
 	enemy.set("perception_state", "patrol")
-	var instant_close_detection := bool(enemy.call(
+	var initial_close_detection := bool(enemy.call(
 		"_update_detection_awareness",
 		0.01,
-		2.4,
+		1.8,
 		true,
 		vision_range
 	))
-	assert(instant_close_detection)
+	assert(not initial_close_detection)
+	assert(float(enemy.get("detection_awareness")) > 0.0)
+	assert(float(enemy.get("detection_awareness")) < 1.0)
+	var completed_close_detection := bool(enemy.call(
+		"_update_detection_awareness",
+		0.8,
+		1.8,
+		true,
+		vision_range
+	))
+	assert(completed_close_detection)
 	assert(is_equal_approx(float(enemy.get("detection_awareness")), 1.0))
 	enemy.call("_clear_alert")
-	enemy.global_position = player.global_position + Vector3(0.0, 0.0, 4.0)
+	enemy.global_position = player.global_position + Vector3(0.0, 0.0, 5.0)
 	enemy.set("facing_world_direction", Vector3.BACK)
 	enemy.set("detection_awareness", 0.0)
 	enemy.set("perception_state", "patrol")
 	var proximity_detection := bool(enemy.call(
 		"_update_detection_awareness",
-		0.4,
-		4.0,
+		1.0,
+		5.0,
 		true,
 		vision_range
 	))
 	assert(not proximity_detection)
-	assert(float(enemy.get("detection_awareness")) > 0.0)
-	assert(str(enemy.get("perception_state")) == "suspicious")
-	proximity_detection = bool(enemy.call(
-		"_update_detection_awareness",
-		2.0,
-		4.0,
-		true,
-		vision_range
-	))
-	assert(proximity_detection)
+	assert(is_zero_approx(float(enemy.get("detection_awareness"))))
+	assert(str(enemy.get("perception_state")) == "patrol")
 	enemy.call("_clear_alert")
 	enemy.global_position = player.global_position + Vector3(0.0, 0.0, 1.0)
 	enemy.set("detection_awareness", 0.0)

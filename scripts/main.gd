@@ -16,6 +16,7 @@ const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const CAT_ANIMATION_ROOT := "res://assets/characters/cat_8way"
 const CAT_ROLL_ANIMATION_ROOT := "res://assets/characters/cat_roll"
 const CAT_MELEE_ANIMATION_ROOT := "res://assets/characters/cat_melee"
+const CAT_LOAF_ANIMATION_ROOT := "res://assets/characters/loaf"
 const COWERING_RESIDENT_TEXTURE_PATHS := {
 	"n": "res://assets/characters/cowering_resident/up_action-frame-0.png",
 	"ne": "res://assets/characters/cowering_resident/up_right_action-frame-0.png",
@@ -51,6 +52,11 @@ const ROLL_STAMINA_RECOVERY_PER_SECOND := 28.0
 const ROLL_START_SPEED := 36.0
 const ROLL_END_SPEED := 4.4
 const ROLL_AFTERIMAGE_INTERVAL := 0.055
+const LOAF_HOLD_THRESHOLD := 0.26
+const LOAF_MOVE_MULTIPLIER := 1.0
+const LOAF_STAMINA_DRAIN_PER_SECOND := 7.5
+const LOAF_MIN_STAMINA := 1.0
+const LOAF_VISIBILITY_MULTIPLIER := 0.48
 const WEAPON_FRAME_SIZE := Vector2(192, 192)
 const WEAPON_VISUAL_PIXEL_SIZE := 0.0018
 const WEAPON_FLOAT_DISTANCE := 0.72
@@ -65,6 +71,7 @@ const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const ROCKET_BOSS_SCRIPT := preload("res://scripts/rocket_boss.gd")
 const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
 const PERCEPTION_SYSTEM_SCRIPT := preload("res://scripts/perception_system.gd")
+const SCENT_TRAIL_MANAGER_SCRIPT := preload("res://scripts/scent_trail_manager.gd")
 const OVERLAY_DEPTH_SORT := preload("res://scripts/overlay_depth_sort.gd")
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
@@ -88,12 +95,15 @@ const MAP_CONTENT_SCALE := ProceduralCityMap.WORLD_SCALE
 const SECONDS_PER_GAME_HOUR := 36.0
 const NIGHT_START_HOUR := 19.0
 const DEEP_NIGHT_HOUR := 22.0
-const BASE_ENEMY_COUNT := 17
-const MAX_NIGHT_ENEMY_COUNT := 34
+const BASE_ENEMY_COUNT := 24
+const MAX_NIGHT_ENEMY_COUNT := 44
 const ENEMY_PAIR_SQUAD_CHANCE := 0.78
 const FIRST_STAGE_ZONE_ID := "jongno_outskirts"
 const FIRST_STAGE_SOLO_SQUAD_CHANCE := 0.62
-const BASE_FIELD_LOOT_COUNT := 22
+const BASE_FIELD_LOOT_COUNT := 64
+const SALVAGE_VEHICLE_POINT_COUNT := 10
+const SALVAGE_MISC_POINT_COUNT := 4
+const RESCUE_POINT_COUNT := 5
 const RAID_ENTRY_ENEMY_SAFE_RADIUS := 30.0
 const MELEE_ATTACK_COOLDOWN := 0.72
 const MELEE_ATTACK_RANGE := 2.2
@@ -417,6 +427,9 @@ var weapon_reloading := false
 var reload_timer := 0.0
 var laser_aim_held := false
 var loafing := false
+var space_hold_active := false
+var space_hold_elapsed := 0.0
+var space_hold_consumed := false
 var aim_direction_indicator: MeshInstance3D
 var laser_beam: MeshInstance3D
 var laser_beam_mesh: BoxMesh
@@ -429,6 +442,12 @@ var aim_canvas: CanvasLayer
 var damage_feedback_canvas: CanvasLayer
 var damage_vignette: ColorRect
 var damage_vignette_material: ShaderMaterial
+var damage_direction_indicator: Label
+var damage_direction_tween: Tween
+var camera_shake_time := 0.0
+var camera_shake_strength := 0.0
+var hit_stop_serial := 0
+var combat_hit_stop_cooldown := 0.0
 var player_world_health_bar: Control
 var player_world_health_fill: Panel
 var player_health_fill_style: StyleBoxFlat
@@ -486,8 +505,13 @@ var raid_start_snapshot := {}
 var corpse_recovery_point: Node3D
 var game_over_canvas: CanvasLayer
 var game_over_fade: ColorRect
+var game_over_panel: PanelContainer
 var game_over_label: Label
 var game_over_loss_label: Label
+var game_over_loss_grid: HFlowContainer
+var game_over_continue_label: Label
+var game_over_ready_to_continue := false
+var game_over_continue_started := false
 var raid_zone_data: Dictionary = {}
 var field_mission_sites: Array[Node3D] = []
 var active_field_mission: Node3D
@@ -525,6 +549,10 @@ var boss_alert_panel: PanelContainer
 var boss_alert_title: Label
 var boss_alert_subtitle: Label
 var boss_alert_tween: Tween
+var scent_system: Node3D
+var scent_focus_active := false
+var scent_awareness_tick := 0.0
+var faction_conflict_tick := 0.0
 
 
 func _ready() -> void:
@@ -597,6 +625,7 @@ func _ready() -> void:
 	_build_gunshot_audio()
 	_build_roll_audio()
 	_build_bgm_audio()
+	_install_scent_system()
 	_spawn_enemies()
 	_setup_building_overlays()
 	_build_day_night_tint()
@@ -662,24 +691,41 @@ func _physics_process(delta: float) -> void:
 	_update_day_night(delta)
 	_update_lightning(delta)
 	_update_enemy_pressure(delta)
+	_update_scent_system(delta)
+	_update_faction_conflicts(delta)
 	melee_attack_cooldown = maxf(0.0, melee_attack_cooldown - delta)
+	combat_hit_stop_cooldown = maxf(0.0, combat_hit_stop_cooldown - delta)
 	_update_melee_attack(delta)
 	aim_hold_time = maxf(0.0, aim_hold_time - delta)
 	player_hit_stun_time = maxf(0.0, player_hit_stun_time - delta)
-	if not roll_active:
+	_update_space_hold(delta)
+	if loafing:
+		roll_stamina = maxf(
+			0.0,
+			roll_stamina
+			- LOAF_STAMINA_DRAIN_PER_SECOND
+			* GameState.get_stamina_cost_multiplier()
+			* delta
+		)
+		if roll_stamina <= 0.0:
+			space_hold_active = false
+			space_hold_consumed = true
+			_set_loafing(false)
+			state_label.text = "스태미나 부족"
+	elif not roll_active:
 		roll_stamina = minf(
 			GameState.get_max_stamina(),
 			roll_stamina + ROLL_STAMINA_RECOVERY_PER_SECOND * GameState.get_stamina_recovery_multiplier() * delta
 		)
-	if (laser_aim_held or mouse_fire_held) and has_ak and _uses_mouse_aim():
+	if (laser_aim_held or mouse_fire_held) and _uses_mouse_aim():
 		_lock_aim_direction(_get_mouse_world_direction())
 	_update_scope_camera(delta)
 	if melee_button:
-		melee_button.disabled = melee_attack_cooldown > 0.0
+		melee_button.disabled = melee_attack_cooldown > 0.0 or loafing
 	if dash_button:
-		dash_button.disabled = roll_active or roll_stamina < _get_roll_stamina_cost()
+		dash_button.disabled = roll_active or loafing or roll_stamina < _get_roll_stamina_cost()
 	if mobile_reload_button:
-		mobile_reload_button.disabled = weapon_reloading or not has_ak or reserve_ammo <= 0
+		mobile_reload_button.disabled = weapon_reloading or loafing or not has_ak or reserve_ammo <= 0
 	_update_field_interactions(delta)
 	_update_extraction_discovery()
 	_update_combat_overlay_visibility()
@@ -702,7 +748,6 @@ func _physics_process(delta: float) -> void:
 	if player_hit_stun_time > 0.0:
 		input_vector = Vector2.ZERO
 	_update_fatigue(delta, input_vector.length_squared() > 0.01)
-	loafing = not DisplayServer.is_touchscreen_available() and Input.is_key_pressed(KEY_C)
 	_update_weapon_ballistics(delta, input_vector.length_squared() > 0.01)
 
 	var world_direction := Vector3(input_vector.x + input_vector.y, 0, -input_vector.x + input_vector.y)
@@ -714,16 +759,19 @@ func _physics_process(delta: float) -> void:
 		_update_mobile_aim_direction(world_direction)
 	var aim_is_locked := (
 		melee_attack_active
-		or (has_ak and (fire_button_held or mouse_fire_held or laser_aim_held))
+		or laser_aim_held
+		or (has_ak and (fire_button_held or mouse_fire_held))
 		or aim_hold_time > 0.0
 	)
 	if roll_active:
 		_update_roll(delta)
 	elif world_direction.length_squared() > 0.01:
 		world_direction = world_direction.normalized()
-		var movement_speed := MOVE_SPEED * GameState.get_move_speed_multiplier() * (0.38 if loafing else 1.0)
+		var movement_speed := MOVE_SPEED * GameState.get_move_speed_multiplier() * (LOAF_MOVE_MULTIPLIER if loafing else 1.0)
 		movement_speed *= _get_fatigue_speed_multiplier()
 		movement_speed *= _get_escort_speed_multiplier()
+		if scent_focus_active:
+			movement_speed *= 0.78
 		if weapon_reloading:
 			movement_speed *= 0.55
 		player.velocity = world_direction * movement_speed + recoil_velocity
@@ -753,6 +801,12 @@ func _physics_process(delta: float) -> void:
 	_update_camera_occluders(delta)
 	_update_player_combat_feedback(delta)
 	var camera_target := Vector3(player.position.x, 0, player.position.z) + scope_camera_offset
+	if camera_shake_time > 0.0:
+		camera_target += Vector3(
+			weapon_random.randf_range(-camera_shake_strength, camera_shake_strength),
+			0.0,
+			weapon_random.randf_range(-camera_shake_strength, camera_shake_strength)
+		)
 	camera_rig.position = camera_rig.position.lerp(camera_target, 1.0 - exp(-7.0 * delta))
 	_update_building_overlays()
 	_update_visibility_fog()
@@ -804,14 +858,17 @@ func _lock_aim_direction(world_direction: Vector3) -> void:
 
 
 func _get_perception_aim_direction() -> Vector3:
-	if ((has_ak and (fire_button_held or mouse_fire_held or laser_aim_held)) or aim_hold_time > 0.0) and locked_aim_direction.length_squared() > 0.01:
+	if (
+		(laser_aim_held or (has_ak and (fire_button_held or mouse_fire_held)) or aim_hold_time > 0.0)
+		and locked_aim_direction.length_squared() > 0.01
+	):
 		return locked_aim_direction
 	return _get_current_facing_world_direction()
 
 
 func _try_start_roll() -> void:
 	var stamina_cost := _get_roll_stamina_cost()
-	if roll_active or roll_stamina < stamina_cost or player_health <= 0:
+	if roll_active or loafing or melee_attack_active or roll_stamina < stamina_cost or player_health <= 0:
 		return
 	var roll_input := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	if Input.is_key_pressed(KEY_A): roll_input.x -= 1.0
@@ -840,6 +897,74 @@ func _try_start_roll() -> void:
 	state_label.text = "회피 구르기"
 	_play_roll_sound()
 	_spawn_roll_afterimage()
+
+
+func _begin_space_hold() -> void:
+	if (
+		space_hold_active
+		or roll_active
+		or melee_attack_active
+		or player_health <= 0
+		or _is_inventory_open()
+		or _is_tactical_map_open()
+		or _is_lore_open()
+		or extraction_transition_active
+	):
+		return
+	space_hold_active = true
+	space_hold_elapsed = 0.0
+	space_hold_consumed = false
+
+
+func _update_space_hold(delta: float) -> void:
+	if not space_hold_active or space_hold_consumed or roll_active:
+		return
+	space_hold_elapsed += delta
+	if space_hold_elapsed < LOAF_HOLD_THRESHOLD:
+		return
+	space_hold_consumed = true
+	if roll_stamina < LOAF_MIN_STAMINA:
+		state_label.text = "스태미나 부족"
+		return
+	_set_loafing(true)
+
+
+func _end_space_hold() -> void:
+	if not space_hold_active:
+		if loafing:
+			_set_loafing(false)
+		return
+	var should_roll := not space_hold_consumed and space_hold_elapsed < LOAF_HOLD_THRESHOLD
+	space_hold_active = false
+	space_hold_elapsed = 0.0
+	if loafing:
+		_set_loafing(false)
+	if should_roll:
+		_try_start_roll()
+	space_hold_consumed = false
+
+
+func _set_loafing(enabled: bool) -> void:
+	if loafing == enabled:
+		return
+	loafing = enabled
+	player.set_meta(
+		"stealth_visibility_multiplier",
+		LOAF_VISIBILITY_MULTIPLIER if loafing else 1.0
+	)
+	if loafing:
+		fire_button_held = false
+		mouse_fire_held = false
+		laser_aim_held = false
+		aim_hold_time = 0.0
+		weapon_reloading = false
+		if reload_reticle_indicator:
+			reload_reticle_indicator.visible = false
+		state_label.text = "식빵 자세"
+	else:
+		state_label.text = "경계 중"
+	_play_directional_animation()
+	_update_weapon_pose()
 
 
 func _get_roll_stamina_cost() -> float:
@@ -922,8 +1047,11 @@ func _set_motion_state(next_state: String) -> void:
 func _play_directional_animation() -> void:
 	# The cat owns all eight views; never mirror one direction into another.
 	survivor.flip_h = false
-	survivor.play("%s_%s" % [motion_state, facing])
-	if weapon_sprite and has_ak and not melee_attack_active:
+	if loafing:
+		survivor.play("loaf_%s" % facing)
+	else:
+		survivor.play("%s_%s" % [motion_state, facing])
+	if weapon_sprite and has_ak and not melee_attack_active and not loafing:
 		var weapon_state := "fire" if weapon_sprite.animation.begins_with("fire_") else "idle"
 		var previous_frame := weapon_sprite.frame
 		_play_weapon_directional_animation(weapon_state)
@@ -1001,6 +1129,19 @@ func _create_cat_frames() -> SpriteFrames:
 				push_error("Missing cat roll animation frame: %s" % roll_texture_path)
 				continue
 			frames.add_frame(roll_animation_name, roll_texture)
+		var loaf_animation_name := "loaf_%s" % direction_name
+		frames.add_animation(loaf_animation_name)
+		frames.set_animation_loop(loaf_animation_name, true)
+		frames.set_animation_speed(loaf_animation_name, 1.0)
+		var loaf_texture_path := "%s/%s.png" % [
+			CAT_LOAF_ANIMATION_ROOT,
+			direction_name,
+		]
+		var loaf_texture := load(loaf_texture_path) as Texture2D
+		if loaf_texture == null:
+			push_error("Missing cat loaf frame: %s" % loaf_texture_path)
+		else:
+			frames.add_frame(loaf_animation_name, loaf_texture)
 	return frames
 
 
@@ -1183,7 +1324,7 @@ func _hide_melee_fan() -> void:
 
 
 func _try_melee_attack() -> void:
-	if melee_attack_cooldown > 0.0 or melee_attack_active or roll_active or player_health <= 0:
+	if melee_attack_cooldown > 0.0 or melee_attack_active or roll_active or loafing or player_health <= 0:
 		return
 	melee_attack_cooldown = MELEE_ATTACK_COOLDOWN
 	_add_fatigue(FATIGUE_MELEE_GAIN)
@@ -1652,6 +1793,16 @@ void fragment() {
 	damage_vignette_material.set_shader_parameter("intensity", 0.0)
 	damage_vignette.material = damage_vignette_material
 	damage_feedback_canvas.add_child(damage_vignette)
+	damage_direction_indicator = Label.new()
+	damage_direction_indicator.name = "DamageDirectionIndicator"
+	damage_direction_indicator.text = "▲"
+	damage_direction_indicator.add_theme_font_size_override("font_size", 42)
+	damage_direction_indicator.add_theme_color_override("font_color", Color("#ff5a46"))
+	damage_direction_indicator.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	damage_direction_indicator.add_theme_constant_override("outline_size", 7)
+	damage_direction_indicator.modulate.a = 0.0
+	damage_direction_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	damage_feedback_canvas.add_child(damage_direction_indicator)
 
 	player_world_health_bar = Control.new()
 	player_world_health_bar.name = "PlayerWorldHealthBar"
@@ -1724,6 +1875,8 @@ func _update_player_combat_feedback(delta: float) -> void:
 			)
 
 	player_hit_flash_time = maxf(0.0, player_hit_flash_time - delta)
+	camera_shake_time = maxf(0.0, camera_shake_time - delta)
+	camera_shake_strength = move_toward(camera_shake_strength, 0.0, delta * 8.0)
 	var hit_strength := clampf(player_hit_flash_time / 0.32, 0.0, 1.0)
 	if damage_vignette_material:
 		damage_vignette_material.set_shader_parameter("intensity", hit_strength * hit_strength)
@@ -1745,6 +1898,7 @@ func _setup_game_over_feedback() -> void:
 	game_over_canvas = CanvasLayer.new()
 	game_over_canvas.name = "GameOverCanvas"
 	game_over_canvas.layer = 180
+	game_over_canvas.visible = false
 	add_child(game_over_canvas)
 	game_over_fade = ColorRect.new()
 	game_over_fade.name = "GameOverFade"
@@ -1752,13 +1906,32 @@ func _setup_game_over_feedback() -> void:
 	game_over_fade.color = Color(0, 0, 0, 0)
 	game_over_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	game_over_canvas.add_child(game_over_fade)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	game_over_canvas.add_child(center)
+	game_over_panel = PanelContainer.new()
+	game_over_panel.name = "GameOverPanel"
+	game_over_panel.custom_minimum_size = Vector2(720, 520)
+	game_over_panel.modulate.a = 0.0
+	game_over_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.015, 0.02, 0.022, 0.96)
+	panel_style.border_color = Color("#9d7b4d")
+	panel_style.set_border_width_all(2)
+	panel_style.set_corner_radius_all(6)
+	game_over_panel.add_theme_stylebox_override("panel", panel_style)
+	center.add_child(game_over_panel)
+	var margin := MarginContainer.new()
+	for side in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
+		margin.add_theme_constant_override(side, 28)
+	game_over_panel.add_child(margin)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	margin.add_child(box)
 	game_over_label = Label.new()
 	game_over_label.name = "GameOverLabel"
-	game_over_label.set_anchors_preset(Control.PRESET_CENTER)
-	game_over_label.offset_left = -320
-	game_over_label.offset_top = -130
-	game_over_label.offset_right = 320
-	game_over_label.offset_bottom = 130
+	game_over_label.custom_minimum_size.y = 210
 	game_over_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	game_over_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	game_over_label.add_theme_font_override("font", preload("res://assets/fonts/Pretendard-Regular.otf"))
@@ -1766,25 +1939,95 @@ func _setup_game_over_feedback() -> void:
 	game_over_label.add_theme_color_override("font_color", Color("#f1e6c8"))
 	game_over_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.95))
 	game_over_label.add_theme_constant_override("outline_size", 8)
-	game_over_label.modulate.a = 0.0
-	game_over_canvas.add_child(game_over_label)
+	box.add_child(game_over_label)
+	var loss_title := Label.new()
+	loss_title.text = "분실한 장비 및 소모품"
+	loss_title.add_theme_font_override("font", preload("res://assets/fonts/Pretendard-Regular.otf"))
+	loss_title.add_theme_font_size_override("font_size", 20)
+	loss_title.add_theme_color_override("font_color", Color("#e0b58b"))
+	box.add_child(loss_title)
+	var loss_scroll := ScrollContainer.new()
+	loss_scroll.custom_minimum_size.y = 112
+	loss_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(loss_scroll)
+	game_over_loss_grid = HFlowContainer.new()
+	game_over_loss_grid.name = "GameOverLossGrid"
+	game_over_loss_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	game_over_loss_grid.add_theme_constant_override("h_separation", 8)
+	game_over_loss_grid.add_theme_constant_override("v_separation", 8)
+	loss_scroll.add_child(game_over_loss_grid)
 	game_over_loss_label = Label.new()
 	game_over_loss_label.name = "GameOverLossLabel"
-	game_over_loss_label.set_anchors_preset(Control.PRESET_CENTER)
-	game_over_loss_label.offset_left = -410
-	game_over_loss_label.offset_top = 126
-	game_over_loss_label.offset_right = 410
-	game_over_loss_label.offset_bottom = 300
 	game_over_loss_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	game_over_loss_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	game_over_loss_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	game_over_loss_label.add_theme_font_override("font", preload("res://assets/fonts/Pretendard-Regular.otf"))
 	game_over_loss_label.add_theme_font_size_override("font_size", 19)
 	game_over_loss_label.add_theme_color_override("font_color", Color("#e0b58b"))
 	game_over_loss_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.95))
 	game_over_loss_label.add_theme_constant_override("outline_size", 5)
-	game_over_loss_label.modulate.a = 0.0
-	game_over_canvas.add_child(game_over_loss_label)
+	game_over_loss_label.text = "보안 슬롯 1칸은 보존됩니다. 나머지는 다음 탐사에서 사망 지점의 가방을 한 번 회수할 수 있습니다."
+	box.add_child(game_over_loss_label)
+	game_over_continue_label = Label.new()
+	game_over_continue_label.text = "스페이스 또는 화면을 터치해 계속"
+	game_over_continue_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	game_over_continue_label.add_theme_font_override("font", preload("res://assets/fonts/Pretendard-Regular.otf"))
+	game_over_continue_label.add_theme_font_size_override("font_size", 17)
+	game_over_continue_label.add_theme_color_override("font_color", Color("#a9bbb5"))
+	box.add_child(game_over_continue_label)
+
+
+func _populate_game_over_loss_icons(loot: Dictionary) -> void:
+	for child in game_over_loss_grid.get_children():
+		child.free()
+	var entries: Array[Dictionary] = []
+	for weapon_id in (loot.get("weapon_inventory", {}) as Dictionary):
+		var count := int((loot.get("weapon_inventory", {}) as Dictionary).get(weapon_id, 0))
+		if count > 0:
+			entries.append({"name": _get_loot_weapon_name(str(weapon_id)), "count": count, "texture": WEAPON_VISUAL_CATALOG.get_weapon_texture(str(weapon_id))})
+	for equipment_id in (loot.get("equipment_inventory", {}) as Dictionary):
+		var count := int((loot.get("equipment_inventory", {}) as Dictionary).get(equipment_id, 0))
+		if count > 0:
+			var definition := GameState.get_equipment_definition(str(equipment_id))
+			var texture := load(str(definition.get("texture_path", ""))) as Texture2D
+			entries.append({"name": str(definition.get("display_name", equipment_id)), "count": count, "texture": texture})
+	var simple := [
+		["ammo_inventory", "탄약", "ammo"],
+		["mod_component_inventory", "부품", "parts"],
+		["weapon_mod_inventory", "부착물", "mod"],
+	]
+	for spec in simple:
+		var count := 0
+		for amount in (loot.get(spec[0], {}) as Dictionary).values():
+			count += int(amount)
+		if count > 0:
+			entries.append({"name": spec[1], "count": count, "texture": UI_ICONS.get_icon(spec[2], 64)})
+	for spec in [["medkits", "구급약", "medkit"], ["canned_food", "통조림", "food"], ["churu", "츄르", "churu"]]:
+		var count := int(loot.get(spec[0], 0))
+		if count > 0:
+			entries.append({"name": spec[1], "count": count, "texture": UI_ICONS.get_icon(spec[2], 64)})
+	if entries.is_empty():
+		var empty := Label.new()
+		empty.text = "분실한 휴대품이 없습니다."
+		empty.add_theme_font_override("font", preload("res://assets/fonts/Pretendard-Regular.otf"))
+		game_over_loss_grid.add_child(empty)
+		return
+	for entry in entries:
+		var card := VBoxContainer.new()
+		card.custom_minimum_size = Vector2(82, 96)
+		var icon := TextureRect.new()
+		icon.custom_minimum_size = Vector2(64, 64)
+		icon.texture = entry.texture
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.tooltip_text = str(entry.name)
+		card.add_child(icon)
+		var count_label := Label.new()
+		count_label.text = "x%d" % int(entry.count)
+		count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		count_label.add_theme_font_override("font", preload("res://assets/fonts/Pretendard-Regular.otf"))
+		count_label.add_theme_font_size_override("font_size", 16)
+		card.add_child(count_label)
+		game_over_loss_grid.add_child(card)
 
 
 func _setup_lore_reader_ui() -> void:
@@ -1905,6 +2148,7 @@ func _show_lore_entry(point: Node3D) -> void:
 	if not bool(point.get_meta("read", false)):
 		point.set_meta("read", true)
 		lore_clues_discovered += 1
+		_advance_contract_progress("lore")
 		var marker_label := point.get_node_or_null("LoreMarkerLabel") as Label3D
 		if marker_label:
 			marker_label.text = "확인한 기록"
@@ -2037,7 +2281,7 @@ func _capture_raid_start_snapshot() -> void:
 		"reserve_ammo": GameState.reserve_ammo,
 		"ammo_inventory": GameState.ammo_inventory.duplicate(true),
 		"medkits": GameState.medkits,
-		"canned_food": GameState.canned_food,
+		"canned_food": GameState.get_backpack_storage_count("food", "canned_food"),
 		"churu": GameState.churu,
 		"mod_component_inventory": GameState.mod_component_inventory.duplicate(true),
 		"weapon_mod_inventory": GameState.weapon_mod_inventory.duplicate(true),
@@ -2076,7 +2320,7 @@ func _build_death_corpse_loot() -> Dictionary:
 	var loot := {
 		"ammo_inventory": GameState.ammo_inventory.duplicate(true),
 		"medkits": maxi(0, GameState.medkits),
-		"canned_food": maxi(0, GameState.canned_food),
+		"canned_food": GameState.get_backpack_storage_count("food", "canned_food"),
 		"churu": maxi(0, GameState.churu),
 		"mod_component_inventory": GameState.mod_component_inventory.duplicate(true),
 		"weapon_mod_inventory": GameState.weapon_mod_inventory.duplicate(true),
@@ -2086,7 +2330,52 @@ func _build_death_corpse_loot() -> Dictionary:
 		"equipped_weapon_mods": GameState.equipped_weapon_mods.duplicate(),
 		"weapon_mod_loadouts": GameState.weapon_mod_loadouts.duplicate(true),
 	}
+	_fill_secure_slots_from_loot(loot)
 	return loot
+
+
+func _fill_secure_slots_from_loot(loot: Dictionary) -> void:
+	GameState.secure_dog_items.clear()
+	var candidates := [
+		{"key": "churu", "type": "currency", "id": "churu"},
+		{"key": "weapon_mod_inventory", "type": "mod", "id": ""},
+		{"key": "mod_component_inventory", "type": "component", "id": ""},
+		{"key": "medkits", "type": "consumable", "id": "medkit"},
+	]
+	for candidate in candidates:
+		if GameState.secure_dog_items.size() >= GameState.secure_dog_slots:
+			break
+		var key := str(candidate.key)
+		if loot.get(key) is Dictionary:
+			var values := loot.get(key) as Dictionary
+			for item_id in values.keys():
+				if int(values[item_id]) <= 0:
+					continue
+				GameState.store_secure_item({"type": candidate.type, "id": str(item_id), "amount": 1})
+				values[item_id] = int(values[item_id]) - 1
+				break
+		elif int(loot.get(key, 0)) > 0:
+			GameState.store_secure_item({"type": candidate.type, "id": candidate.id, "amount": 1})
+			loot[key] = int(loot[key]) - 1
+
+
+func _restore_secure_items_after_death() -> void:
+	for item in GameState.secure_dog_items:
+		var item_type := str(item.get("type", ""))
+		var item_id := str(item.get("id", ""))
+		var amount := maxi(1, int(item.get("amount", 1)))
+		match item_type:
+			"currency":
+				if item_id == "churu":
+					GameState.churu += amount
+			"consumable":
+				if item_id == "medkit":
+					GameState.medkits += amount
+			"component":
+				GameState.add_mod_component(item_id, amount)
+			"mod":
+				GameState.add_weapon_mod(item_id, amount)
+	GameState.secure_dog_items.clear()
 
 
 func _corpse_loot_item_count(loot: Dictionary) -> int:
@@ -2185,7 +2474,7 @@ func _clear_carried_inventory_after_death() -> void:
 	GameState.weapon_inventory.clear()
 	GameState.weapon_mod_loadouts.clear()
 	GameState.medkits = 0
-	GameState.canned_food = 0
+	GameState.canned_food = GameState.get_stored_storage_count("food", "canned_food")
 	GameState.churu = 0
 	GameState.magazine_ammo = 0
 	GameState.reserve_ammo = 0
@@ -2197,6 +2486,7 @@ func _clear_carried_inventory_after_death() -> void:
 	GameState.equipped_body_armor_id = ""
 	GameState.equipped_head_armor_id = ""
 	GameState.equipped_footwear_id = ""
+	_restore_secure_items_after_death()
 	GameState.fatigue = minf(fatigue + 18.0, FATIGUE_MAX)
 	GameState.player_health = mini(82, GameState.get_max_health())
 	GameState.returning_from_shelter = false
@@ -2215,10 +2505,14 @@ func _begin_player_death_sequence() -> void:
 	if player_death_sequence_active:
 		return
 	player_death_sequence_active = true
+	game_over_canvas.visible = true
 	var corpse_loot := _store_death_corpse()
 	fire_button_held = false
 	mouse_fire_held = false
 	laser_aim_held = false
+	space_hold_active = false
+	space_hold_consumed = false
+	_set_loafing(false)
 	player.velocity = Vector3.ZERO
 	if reload_reticle_indicator:
 		reload_reticle_indicator.visible = false
@@ -2228,19 +2522,30 @@ func _begin_player_death_sequence() -> void:
 		run_kills,
 		run_damage_dealt,
 	]
-	game_over_loss_label.text = _format_death_loss_summary(corpse_loot)
+	game_over_loss_label.text = "보안 슬롯 1칸은 보존됩니다. 나머지는 다음 탐사에서 사망 지점의 가방을 한 번 회수할 수 있습니다."
+	_populate_game_over_loss_icons(corpse_loot)
+	game_over_ready_to_continue = false
+	game_over_continue_started = false
 	Engine.time_scale = 0.18
 	var tween := create_tween()
 	tween.set_ignore_time_scale(true)
 	tween.set_parallel(true)
 	tween.tween_property(camera, "size", maxf(8.5, camera.size * 0.46), 1.15).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tween.tween_property(survivor, "modulate", Color(1, 1, 1, 0), 1.25).set_delay(0.45)
-	tween.tween_property(game_over_label, "modulate:a", 1.0, 0.55).set_delay(0.65)
-	tween.tween_property(game_over_loss_label, "modulate:a", 1.0, 0.55).set_delay(0.78)
+	tween.tween_property(game_over_panel, "modulate:a", 1.0, 0.55).set_delay(0.65)
 	tween.tween_property(game_over_fade, "color:a", 0.62, 0.85).set_delay(1.15)
 	tween.set_parallel(false)
-	tween.tween_interval(2.0)
-	tween.tween_property(game_over_fade, "color:a", 1.0, 0.6)
+	tween.tween_interval(1.2)
+	tween.tween_callback(func() -> void: game_over_ready_to_continue = true)
+
+
+func _continue_after_death() -> void:
+	if game_over_continue_started or not game_over_ready_to_continue:
+		return
+	game_over_continue_started = true
+	var tween := create_tween()
+	tween.set_ignore_time_scale(true)
+	tween.tween_property(game_over_fade, "color:a", 1.0, 0.35)
 	tween.tween_callback(func() -> void:
 		Engine.time_scale = 1.0
 		_clear_carried_inventory_after_death()
@@ -2590,7 +2895,7 @@ func _update_ammo_pickups(delta: float) -> void:
 			and not is_instance_valid(nearby_field_interaction)
 		)
 	if ammo_pickup_button and is_instance_valid(nearby_ammo_pickup):
-		ammo_pickup_button.text = "%s  [E]" % str(nearby_ammo_pickup.get_meta("display_name", "Ammo"))
+		ammo_pickup_button.text = "%s  [F]" % str(nearby_ammo_pickup.get_meta("display_name", "Ammo"))
 
 
 func _collect_nearby_ammo() -> void:
@@ -2613,6 +2918,7 @@ func _collect_nearby_ammo() -> void:
 			var component_id := str(nearby_ammo_pickup.get_meta("component_id", "rubber_gasket"))
 			GameState.add_mod_component(component_id, amount)
 			_advance_basic_mission("parts", amount)
+			_advance_contract_progress("parts", amount)
 			ammo_notice.text = "%s +%d   보유 %d" % [
 				str(nearby_ammo_pickup.get_meta("display_name", "총기 부품")),
 				amount,
@@ -2753,9 +3059,9 @@ func _apply_hud_layout() -> void:
 	var status_height := clampf(88.0 * ui_scale, 80.0, 108.0)
 	var objective_line_count := objective_label.text.count("\n") + 1
 	var objective_height := clampf(
-		28.0 + float(objective_line_count) * 22.0 * ui_scale,
-		92.0,
-		220.0
+		24.0 + float(objective_line_count) * 21.0 * ui_scale,
+		72.0,
+		148.0
 	)
 	var hud_blocked := _is_inventory_open() or _is_tactical_map_open() or _is_lore_open()
 
@@ -2817,7 +3123,11 @@ func _apply_hud_layout() -> void:
 
 	objective_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	objective_panel.offset_left = side_margin
-	objective_panel.offset_top = top_left_status_panel.offset_bottom + 6.0
+	objective_panel.offset_top = (
+		top_left_status_panel.offset_bottom + 6.0
+		if top_left_status_panel.visible
+		else top_margin
+	)
 	objective_panel.offset_right = side_margin + safe_left_width
 	objective_panel.offset_bottom = objective_panel.offset_top + objective_height
 
@@ -3000,23 +3310,11 @@ func _apply_hud_layout() -> void:
 		ammo_notice.offset_bottom = -maxf(266.0, viewport_size.y - (viewport_size.y * 0.68))
 		ammo_notice.offset_top = ammo_notice.offset_bottom - notice_h
 
-	if game_over_label:
-		var over_w := minf(viewport_size.x * 0.8, 700.0)
-		var over_h := minf(viewport_size.y * 0.25, 220.0)
-		game_over_label.set_anchors_preset(Control.PRESET_CENTER)
-		game_over_label.offset_left = -over_w * 0.5
-		game_over_label.offset_right = over_w * 0.5
-		game_over_label.offset_top = -over_h * 0.5
-		game_over_label.offset_bottom = over_h * 0.5
-	if game_over_loss_label:
-		var loss_w := minf(viewport_size.x * 0.88, 840.0)
-		var loss_top := minf(viewport_size.y * 0.15, 130.0)
-		var loss_bottom := minf(viewport_size.y * 0.38, 310.0)
-		game_over_loss_label.set_anchors_preset(Control.PRESET_CENTER)
-		game_over_loss_label.offset_left = -loss_w * 0.5
-		game_over_loss_label.offset_right = loss_w * 0.5
-		game_over_loss_label.offset_top = loss_top
-		game_over_loss_label.offset_bottom = loss_bottom
+	if game_over_panel:
+		game_over_panel.custom_minimum_size = Vector2(
+			minf(viewport_size.x - 32.0, 760.0),
+			minf(viewport_size.y - 32.0, 540.0)
+		)
 
 	if extraction_result_panel:
 		var panel_w := clampf(minf(viewport_size.x * 0.94, 920.0), 520.0, 1000.0)
@@ -3047,7 +3345,7 @@ func _build_weapon_hud() -> void:
 	pickup_panel.add_child(pickup_box)
 	var pickup_button := Button.new()
 	pickup_button.custom_minimum_size = Vector2(330, 40)
-	pickup_button.text = "AK-47  길게 눌러 줍기  [E]"
+	pickup_button.text = "AK-47  길게 눌러 줍기  [F]"
 	pickup_button.icon = AK_DROP_TEXTURE
 	pickup_button.expand_icon = true
 	pickup_button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -3074,7 +3372,7 @@ func _build_weapon_hud() -> void:
 	$HUD.add_child(ammo_prompt_panel)
 	ammo_pickup_button = Button.new()
 	ammo_pickup_button.custom_minimum_size = Vector2(330, 48)
-	ammo_pickup_button.text = "7.62mm 탄약 획득  [E]"
+	ammo_pickup_button.text = "7.62mm 탄약 획득  [F]"
 	ammo_pickup_button.icon = AMMO_762_TEXTURE
 	ammo_pickup_button.expand_icon = true
 	ammo_pickup_button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -3102,7 +3400,7 @@ func _build_weapon_hud() -> void:
 	field_interaction_panel.add_child(field_box)
 	field_interaction_button = Button.new()
 	field_interaction_button.custom_minimum_size = Vector2(430, 48)
-	field_interaction_button.text = "E 홀드  상호작용"
+	field_interaction_button.text = "F 홀드  상호작용"
 	field_interaction_button.icon = UI_ICONS.get_icon("interact", 34, Color("#c7e2d4"))
 	field_interaction_button.expand_icon = true
 	field_interaction_button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -3676,7 +3974,7 @@ func _initialize_equipped_weapon() -> void:
 
 func _update_firing(delta: float) -> void:
 	fire_cooldown = maxf(0.0, fire_cooldown - delta)
-	if roll_active or melee_attack_active:
+	if roll_active or melee_attack_active or loafing:
 		return
 	var firing_held := fire_button_held or mouse_fire_held
 	if firing_held and has_ak and bool(weapon_stats.get("automatic", true)) and fire_cooldown <= 0.0:
@@ -3707,12 +4005,12 @@ func _on_dash_button_pressed() -> void:
 
 
 func _try_fire_ak47() -> void:
-	if has_ak and not roll_active and not melee_attack_active and not weapon_reloading and fire_cooldown <= 0.0:
+	if has_ak and not roll_active and not loafing and not melee_attack_active and not weapon_reloading and fire_cooldown <= 0.0:
 		_fire_ak47()
 
 
 func _fire_ak47() -> void:
-	if weapon_reloading or melee_attack_active:
+	if weapon_reloading or melee_attack_active or loafing:
 		return
 	if magazine_ammo <= 0:
 		if reserve_ammo > 0:
@@ -3771,8 +4069,21 @@ func _spawn_weapon_projectile(direction: Vector3, pellet_index: int) -> void:
 	projectile.set("critical_chance", _get_weapon_critical_chance())
 	projectile.set("critical_multiplier", 1.65)
 	projectile.set("penetrations_remaining", penetration)
+	var range_profile := _get_weapon_range_profile(equipped_weapon_id)
+	projectile.set("effective_range", range_profile.x)
+	projectile.set("maximum_range", range_profile.y)
+	projectile.set("minimum_damage_multiplier", range_profile.z)
 	projectile.position = _get_weapon_muzzle_position(direction)
 	add_child(projectile)
+
+
+func _get_weapon_range_profile(weapon_id: String) -> Vector3:
+	match weapon_id:
+		"double_barrel": return Vector3(6.5, 15.0, 0.16)
+		"mp5": return Vector3(13.0, 29.0, 0.32)
+		"m1911": return Vector3(17.0, 34.0, 0.42)
+		"ak47": return Vector3(25.0, 46.0, 0.58)
+	return Vector3(16.0, 34.0, 0.35)
 
 
 func _get_weapon_critical_chance() -> float:
@@ -3784,7 +4095,7 @@ func _get_weapon_critical_chance() -> float:
 
 
 func _apply_weapon_recoil(aim_direction: Vector3) -> void:
-	var recoil_kick := float(weapon_stats.get("recoil_kick", 0.7))
+	var recoil_kick := float(weapon_stats.get("recoil_kick", 0.7)) * GameState.get_recoil_control_multiplier()
 	if loafing:
 		recoil_kick *= float(weapon_stats.get("loaf_recoil_multiplier", 1.0))
 	var knockback := float(weapon_stats.get("player_knockback", 0.15)) * recoil_kick
@@ -3878,8 +4189,8 @@ func _update_mobile_aim_direction(movement_world_direction: Vector3) -> void:
 func _update_weapon_pose() -> void:
 	if weapon_sprite == null:
 		return
-	weapon_sprite.visible = has_ak and not melee_attack_active and building_canvas == null
-	if not has_ak or melee_attack_active:
+	weapon_sprite.visible = has_ak and not melee_attack_active and not loafing and building_canvas == null
+	if not has_ak or melee_attack_active or loafing:
 		return
 	if WEAPON_VISUAL_CATALOG.has_weapon_texture(equipped_weapon_id):
 		var screen_direction: Vector2 = DIRECTION_VECTORS[facing]
@@ -3952,7 +4263,7 @@ func _get_current_facing_world_direction() -> Vector3:
 
 func _reload_ak47() -> void:
 	var magazine_size := int(weapon_stats.get("magazine_size", 30))
-	if weapon_reloading:
+	if weapon_reloading or loafing:
 		return
 	if reserve_ammo <= 0 or magazine_ammo >= magazine_size:
 		fire_cooldown = 0.35
@@ -4421,6 +4732,10 @@ func _spawn_enemies() -> void:
 	var enemy_multiplier := float(raid_zone_data.get("enemy_multiplier", 1.0))
 	var total_enemies := maxi(BASE_ENEMY_COUNT, roundi(float(BASE_ENEMY_COUNT) * enemy_multiplier))
 	var zone_threat := float(raid_zone_data.get("threat", 0.0))
+	if GameState.corpse_recovery_attempt_active:
+		total_enemies += 2
+		zone_threat = minf(1.0, zone_threat + 0.14)
+		call_deferred("_show_field_notice", "회수 작전 · 같은 구역의 경계가 강화됐습니다.")
 	var squad_sizes := _build_enemy_squad_sizes(total_enemies)
 	var spawned_count := 0
 	for squad_index in squad_sizes.size():
@@ -4464,6 +4779,8 @@ func _spawn_rocket_boss_at(
 	boss.position = spawn_position
 	boss.call("configure_rocket_boss", player, clampf(boss_threat, 0.0, 1.0))
 	add_child(boss)
+	if is_instance_valid(scent_system):
+		scent_system.call("register_mover", boss, "enemy")
 	boss.died.connect(_on_enemy_died)
 	if boss.has_signal("damaged"):
 		boss.connect("damaged", _on_enemy_damaged)
@@ -4751,8 +5068,15 @@ func _spawn_enemy(
 ) -> CharacterBody3D:
 	var enemy_weapon_id := "baseball_bat"
 	if kind != "melee":
-		var ranged_loadout_cycle := ["mp5", "ak47", "mp5", "ak47", "m1911", "double_barrel"]
-		enemy_weapon_id = ranged_loadout_cycle[enemy_ranged_spawn_serial % ranged_loadout_cycle.size()]
+		var roll := spawn_random.randf()
+		if roll < lerpf(0.48, 0.22, threat):
+			enemy_weapon_id = "m1911"
+		elif roll < lerpf(0.82, 0.58, threat):
+			enemy_weapon_id = "mp5"
+		elif roll < lerpf(0.95, 0.88, threat):
+			enemy_weapon_id = "ak47"
+		else:
+			enemy_weapon_id = "double_barrel"
 		enemy_ranged_spawn_serial += 1
 	var enemy := CharacterBody3D.new()
 	enemy.name = "%s_%s_Enemy%d" % [kind.capitalize(), enemy_weapon_id, enemy_spawn_serial]
@@ -4760,13 +5084,16 @@ func _spawn_enemy(
 	enemy.set_script(ENEMY_SCRIPT)
 	enemy.position = spawn_position
 	enemy.call("configure", kind, player, {}, threat, enemy_weapon_id)
+	enemy.call("set_faction", "feral" if posmod(assigned_squad_id, 4) == 0 else "raider")
 	if enemy.has_method("set_detection_profile"):
 		if _is_first_stage_zone():
-			enemy.call("set_detection_profile", 0.88, 50.0, 1.12)
+			enemy.call("set_detection_profile", 1.0, 60.0, 0.9)
 		else:
 			enemy.call("set_detection_profile", 1.0, 58.0, 1.0)
 	enemy.call("set_environment_visibility", night_intensity)
 	add_child(enemy)
+	if is_instance_valid(scent_system):
+		scent_system.call("register_mover", enemy, "enemy")
 	enemy.died.connect(_on_enemy_died)
 	if enemy.has_signal("damaged"):
 		enemy.connect("damaged", _on_enemy_damaged)
@@ -4780,6 +5107,7 @@ func _spawn_enemy(
 
 func _on_enemy_died(enemy: CharacterBody3D) -> void:
 	run_kills += 1
+	_advance_contract_progress("kills")
 	if (
 		is_instance_valid(active_field_mission)
 		and int(enemy.get_meta("field_mission_id", -1))
@@ -4801,6 +5129,9 @@ func _on_enemy_died(enemy: CharacterBody3D) -> void:
 
 func _on_enemy_damaged(_enemy: CharacterBody3D, amount: int) -> void:
 	run_damage_dealt += maxi(0, amount)
+	if amount >= 20 and combat_hit_stop_cooldown <= 0.0:
+		combat_hit_stop_cooldown = 0.12
+		_trigger_hit_stop(0.028)
 
 
 func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
@@ -5352,9 +5683,70 @@ func _install_perception_system() -> void:
 	add_child(perception_system)
 
 
+func _install_scent_system() -> void:
+	scent_system = SCENT_TRAIL_MANAGER_SCRIPT.new() as Node3D
+	scent_system.name = "ScentTrailManager"
+	add_child(scent_system)
+	scent_system.call("setup", player)
+	scent_system.connect("focus_changed", func(active: bool) -> void:
+		scent_focus_active = active
+		if ammo_notice:
+			ammo_notice.text = "후각 집중 · 이동 속도 감소" if active else ""
+			ammo_notice.visible = active
+			ammo_notice_time = 0.35
+	)
+
+
+func _update_scent_system(delta: float) -> void:
+	if not is_instance_valid(scent_system):
+		return
+	scent_system.call("set_night_factor", night_intensity)
+	scent_awareness_tick += delta
+	if scent_awareness_tick < 0.3:
+		return
+	scent_awareness_tick = 0.0
+	for enemy in enemies:
+		if not is_instance_valid(enemy) or not enemy.has_method("add_scent_suspicion"):
+			continue
+		var strength: float = float(scent_system.call("get_strength_near", enemy.global_position, "player", 5.0))
+		if strength >= 60.0:
+			enemy.call("add_scent_suspicion", player.global_position, strength * 0.0018)
+
+
+func _update_faction_conflicts(delta: float) -> void:
+	faction_conflict_tick += delta
+	if faction_conflict_tick < 0.8:
+		return
+	faction_conflict_tick = 0.0
+	for enemy in enemies:
+		if not is_instance_valid(enemy) or not enemy.has_method("get_faction_id"):
+			continue
+		if enemy.has_method("is_targeting_player") and not bool(enemy.call("is_targeting_player")):
+			continue
+		if bool(enemy.get("alerted")):
+			continue
+		var nearest_hostile: CharacterBody3D
+		var nearest_distance := 14.0
+		for other in enemies:
+			if not is_instance_valid(other) or other == enemy or not other.has_method("get_faction_id"):
+				continue
+			if str(other.call("get_faction_id")) == str(enemy.call("get_faction_id")):
+				continue
+			var distance := enemy.global_position.distance_to(other.global_position)
+			if distance < nearest_distance:
+				nearest_distance = distance
+				nearest_hostile = other
+		if is_instance_valid(nearest_hostile) and enemy.has_method("set_combat_target"):
+			enemy.call("set_combat_target", nearest_hostile)
+
+
 func take_damage(amount: int) -> void:
 	if amount <= 0 or player_health <= 0:
 		return
+	if loafing:
+		space_hold_active = false
+		space_hold_consumed = true
+		_set_loafing(false)
 	var applied_damage := maxi(1, roundi(float(amount) * GameState.get_damage_taken_multiplier()))
 	_add_fatigue(minf(1.8, float(applied_damage) * FATIGUE_DAMAGE_PER_POINT))
 	player_health = maxi(0, player_health - applied_damage)
@@ -5382,6 +5774,42 @@ func take_hit(amount: int, hit_direction: Vector3) -> void:
 	if player_health > 0 and hit_direction.length_squared() > 0.01:
 		recoil_velocity += hit_direction.normalized() * 1.35
 		player_hit_stun_time = maxf(player_hit_stun_time, 0.24)
+		_show_damage_direction(hit_direction)
+		camera_shake_time = 0.22
+		camera_shake_strength = minf(0.38, 0.12 + float(amount) * 0.006)
+		_trigger_hit_stop(0.045)
+
+
+func _show_damage_direction(hit_direction: Vector3) -> void:
+	if damage_direction_indicator == null:
+		return
+	var source_world := -hit_direction.normalized()
+	var screen_direction := Vector2(
+		source_world.x - source_world.z,
+		source_world.x + source_world.z
+	).normalized()
+	var viewport_size := get_viewport().get_visible_rect().size
+	var radius := minf(viewport_size.x, viewport_size.y) * 0.31
+	damage_direction_indicator.position = viewport_size * 0.5 + screen_direction * radius - Vector2(20, 20)
+	damage_direction_indicator.rotation = screen_direction.angle() + PI * 0.5
+	if damage_direction_tween:
+		damage_direction_tween.kill()
+	damage_direction_indicator.modulate.a = 1.0
+	damage_direction_indicator.scale = Vector2.ONE * 1.28
+	damage_direction_tween = create_tween()
+	damage_direction_tween.set_parallel(true)
+	damage_direction_tween.tween_property(damage_direction_indicator, "modulate:a", 0.0, 0.7)
+	damage_direction_tween.tween_property(damage_direction_indicator, "scale", Vector2.ONE * 0.82, 0.7)
+
+
+func _trigger_hit_stop(duration: float) -> void:
+	hit_stop_serial += 1
+	var serial := hit_stop_serial
+	Engine.time_scale = 0.24
+	get_tree().create_timer(duration, true, false, true).timeout.connect(func() -> void:
+		if serial == hit_stop_serial and not player_death_sequence_active:
+			Engine.time_scale = 1.0
+	)
 
 
 func _setup_building_overlays() -> void:
@@ -6036,20 +6464,34 @@ func _find_stratified_map_position(
 	occupied_positions: Array[Vector3],
 	world_y: float
 ) -> Vector3:
-	var grid_side := maxi(1, ceili(sqrt(float(maxi(1, total_count)))))
-	var sector_x := index % grid_side
-	var sector_z := floori(float(index) / float(grid_side))
+	var item_count := maxi(1, total_count)
+	var grid_rows := maxi(1, roundi(sqrt(float(item_count))))
+	var base_columns := floori(float(item_count) / float(grid_rows))
+	var extra_columns := item_count % grid_rows
+	var row_index := 0
+	var row_start := 0
+	var columns_in_row := maxi(1, base_columns)
+	for candidate_row in grid_rows:
+		columns_in_row = base_columns + (1 if candidate_row < extra_columns else 0)
+		columns_in_row = maxi(1, columns_in_row)
+		if index < row_start + columns_in_row:
+			row_index = candidate_row
+			break
+		row_start += columns_in_row
+	var column_index := clampi(index - row_start, 0, columns_in_row - 1)
 	var map_limit := world.get_map_limit() - 8.0
-	var sector_size := map_limit * 2.0 / float(grid_side)
+	var sector_width := map_limit * 2.0 / float(columns_in_row)
+	var sector_height := map_limit * 2.0 / float(grid_rows)
+	var sector_span := minf(sector_width, sector_height)
 	var sector_center := Vector3(
-		-map_limit + (float(sector_x) + 0.5) * sector_size,
+		-map_limit + (float(column_index) + 0.5) * sector_width,
 		world_y,
-		-map_limit + (float(sector_z) + 0.5) * sector_size
+		-map_limit + (float(row_index) + 0.5) * sector_height
 	)
 	var distant_fallback := Vector3.INF
 	var distant_fallback_separation := -1.0
 	for attempt in 72:
-		var jitter_scale := sector_size * (0.12 + 0.015 * float(attempt % 8))
+		var jitter_scale := sector_span * (0.12 + 0.015 * float(attempt % 8))
 		var angle := spawn_random.randf_range(0.0, TAU)
 		var requested := sector_center + Vector3(cos(angle), 0.0, sin(angle)) * jitter_scale
 		requested.x = clampf(requested.x, -map_limit, map_limit)
@@ -6312,6 +6754,21 @@ func _build_world_lore_board(point: Node3D) -> void:
 	point.add_child(label)
 
 
+func _advance_contract_progress(metric: String, amount: int = 1) -> void:
+	var result := GameState.advance_contract(metric, amount)
+	if not bool(result.get("changed", false)):
+		return
+	var definition := result.get("definition", {}) as Dictionary
+	var title := str(definition.get("title", "현장 계약"))
+	var progress := int(result.get("progress", 0))
+	var target := maxi(1, int(result.get("target", 1)))
+	if bool(result.get("completed", false)):
+		_show_field_notice("계약 목표 달성 · %s · 쉘터의 철근에게 보고" % title)
+	else:
+		_show_field_notice("계약 진행 · %s  %d/%d" % [title, progress, target])
+	_refresh_objective_panel()
+
+
 func _advance_basic_mission(mission_id: String, amount: int = 1) -> void:
 	for mission in basic_raid_missions:
 		if str(mission.get("id", "")) != mission_id or bool(mission.get("completed", false)):
@@ -6365,14 +6822,11 @@ func _get_basic_mission_lines() -> Array[String]:
 		var completed := bool(mission.get("completed", false))
 		var progress := int(mission.get("progress", 0))
 		var target_count := maxi(1, int(mission.get("target", 1)))
-		lines.append("%s [주요] %s  %d/%d" % [
+		lines.append("%s %s  %d/%d · XP %d" % [
 			"✓" if completed else "□",
 			str(mission.get("title", "기본 목표")),
 			progress,
 			target_count,
-		])
-		lines.append("    목적 · %s  /  보상 · 경험치 %d" % [
-			str(mission.get("detail", "현장 목표 수행")),
 			maxi(0, int(mission.get("xp", 0))),
 		])
 	return lines
@@ -6382,15 +6836,24 @@ func _refresh_objective_panel() -> void:
 	if objective_panel == null or objective_label == null:
 		return
 	var lines: Array[String] = []
+	var contract_state := GameState.get_contract_state()
+	var contract_status := str(contract_state.get("status", "available"))
+	var contract_definition := contract_state.get("definition", {}) as Dictionary
+	if contract_status in ["active", "complete"] and not contract_definition.is_empty():
+		lines.append("철근의 계약 · %s" % str(contract_definition.get("title", "현장 계약")))
+		if contract_status == "complete":
+			lines.append("  목표 달성 · 쉘터에서 완료 보고")
+		else:
+			lines.append("  %s  %d/%d" % [
+				str(contract_definition.get("objective", "목표")),
+				int(contract_state.get("progress", 0)),
+				maxi(1, int(contract_state.get("target", 1))),
+			])
 	if not field_objective_title.is_empty():
 		lines.append(field_objective_title)
-		for detail_line in field_objective_detail.split("\n", false):
-			lines.append("  %s" % detail_line)
-	if not basic_raid_missions.is_empty():
-		if not lines.is_empty():
-			lines.append("")
-		lines.append("레이드 주요 목표")
-		lines.append_array(_get_basic_mission_lines())
+		var detail_lines := field_objective_detail.split("\n", false)
+		if not detail_lines.is_empty():
+			lines.append("  %s" % detail_lines[0])
 	objective_label.text = "\n".join(lines)
 	objective_label.add_theme_color_override(
 		"font_color",
@@ -6511,7 +6974,7 @@ func _format_field_mission_reward(reward: Dictionary) -> String:
 func _build_field_mission_marker(site: Node3D) -> void:
 	var mission_type := str(site.get_meta("type", "defense"))
 	var marker_color := Color("#5eb9ad")
-	var marker_text := "E · %s 작전" % _get_field_mission_category(mission_type)
+	var marker_text := "F · %s 작전" % _get_field_mission_category(mission_type)
 	match mission_type:
 		"stealth":
 			marker_color = Color("#6aa8b9")
@@ -7201,6 +7664,7 @@ func _complete_field_mission() -> void:
 		Color("#7de0a8")
 	)
 	_show_field_notice("임무 완료 · %s" % reward_text)
+	_advance_contract_progress("field_mission")
 	field_mission_result_timer = FIELD_MISSION_RESULT_DURATION
 	field_mission_phase = "idle"
 	field_mission_prepare_timer = 0.0
@@ -7290,17 +7754,22 @@ func _set_field_mission_objective(title: String, detail: String, color: Color) -
 		)
 		if not objective_title.begins_with("["):
 			objective_title = "[%s 작전] %s" % [category, objective_title]
-		objective_detail += "\n실패 조건 · %s" % _get_field_mission_rules(active_field_mission)
-		objective_detail += "\n보상 · %s" % _format_field_mission_reward(
-			active_field_mission.get_meta("reward", {}) as Dictionary
-		)
 		if (
 			str(active_field_mission.get_meta("status", "")) == "active"
 			and field_mission_phase == "active"
 		):
 			var wave_status := _get_field_mission_wave_status()
 			if not wave_status.is_empty():
-				objective_detail += "\n위협 · %s" % wave_status
+				var compact_detail_lines := objective_detail.split("\n", false)
+				var compact_detail := (
+					compact_detail_lines[0]
+					if not compact_detail_lines.is_empty()
+					else "현장 목표 수행 중"
+				)
+				objective_detail = "%s · %s" % [
+					compact_detail,
+					wave_status,
+				]
 	field_objective_title = objective_title
 	field_objective_detail = objective_detail
 	field_objective_color = color
@@ -7390,9 +7859,11 @@ func _build_corpse_recovery_prop(point: Node3D) -> void:
 func _setup_salvage_points(world: ProceduralCityMap) -> void:
 	var vehicles := get_tree().get_nodes_in_group("vehicle_obstacle")
 	vehicles.sort_custom(func(a: Node, b: Node) -> bool: return a.name.naturalnocasecmp_to(b.name) < 0)
-	var vehicle_count := mini(5, vehicles.size())
+	var occupied_positions: Array[Vector3] = []
+	var vehicle_count := mini(SALVAGE_VEHICLE_POINT_COUNT, vehicles.size())
 	for index in vehicle_count:
-		var vehicle := vehicles[(index * 2 + GameState.map_seed) % vehicles.size()] as Node3D
+		var sampled_index := floori(float(index) * float(vehicles.size()) / float(vehicle_count))
+		var vehicle := vehicles[posmod(sampled_index + GameState.map_seed, vehicles.size())] as Node3D
 		if not is_instance_valid(vehicle):
 			continue
 		var collision_size: Vector3 = vehicle.get_meta("collision_world_size", Vector3(3.0, 1.0, 1.8))
@@ -7409,10 +7880,20 @@ func _setup_salvage_points(world: ProceduralCityMap) -> void:
 		)
 		point.set_meta("source_kind", str(vehicle.get_meta("vehicle_type", "wrecked_vehicle")))
 		_add_interaction_marker(point, Color("#67b8bd"), 1.05, false)
+		occupied_positions.append(point.global_position)
 
-	for index in 2:
-		var position := _find_random_field_position(world, 22.0)
-		var is_sentry := index == 0
+	for index in SALVAGE_MISC_POINT_COUNT:
+		var position := _find_stratified_map_position(
+			world,
+			index,
+			SALVAGE_MISC_POINT_COUNT,
+			22.0,
+			28.0,
+			occupied_positions,
+			0.08
+		)
+		occupied_positions.append(position)
+		var is_sentry := index % 2 == 0
 		var point := _create_field_interaction(
 			"salvage",
 			position,
@@ -7429,8 +7910,13 @@ func _setup_salvage_points(world: ProceduralCityMap) -> void:
 
 func _setup_rescue_points(world: ProceduralCityMap) -> void:
 	var occupied_rescue_positions: Array[Vector3] = []
-	for index in 3:
-		var rescue_position := _find_rescue_position(world, occupied_rescue_positions)
+	for index in RESCUE_POINT_COUNT:
+		var rescue_position := _find_rescue_position(
+			world,
+			occupied_rescue_positions,
+			index,
+			RESCUE_POINT_COUNT
+		)
 		occupied_rescue_positions.append(rescue_position)
 		var point := _create_field_interaction(
 			"rescue",
@@ -7442,7 +7928,28 @@ func _setup_rescue_points(world: ProceduralCityMap) -> void:
 		_add_interaction_marker(point, Color("#74d39f"), 0.95, false)
 
 
-func _find_rescue_position(world: ProceduralCityMap, occupied_positions: Array[Vector3]) -> Vector3:
+func _find_rescue_position(
+	world: ProceduralCityMap,
+	occupied_positions: Array[Vector3],
+	index: int,
+	total_count: int
+) -> Vector3:
+	var distributed_candidate := _find_stratified_map_position(
+		world,
+		index,
+		total_count,
+		26.0,
+		28.0,
+		occupied_positions,
+		0.08
+	)
+	var distributed_clear := true
+	for site in extraction_sites:
+		if is_instance_valid(site) and distributed_candidate.distance_to(site.global_position) < 14.0:
+			distributed_clear = false
+			break
+	if distributed_clear:
+		return distributed_candidate
 	var fallback := _find_random_field_position(world, 26.0)
 	var safe_fallback := Vector3.INF
 	for attempt in 64:
@@ -7600,6 +8107,8 @@ func _build_rescue_locker(point: Node3D) -> void:
 	sign.outline_size = 6
 	sign.no_depth_test = true
 	point.add_child(sign)
+	if is_instance_valid(scent_system):
+		scent_system.call("add_trace", point.global_position, "rescue", 100.0)
 
 
 func _update_cowering_resident_facing(point: Node3D) -> void:
@@ -7729,9 +8238,9 @@ func _update_field_interactions(delta: float) -> void:
 	var hold_duration := float(nearby_field_interaction.get_meta("hold_duration", 1.0))
 	if field_interaction_button:
 		if interaction_type == "extraction":
-			field_interaction_button.text = "E  %s  ·  주민 %d명 후송" % [display_name, rescued_followers.size()]
+			field_interaction_button.text = "F  %s  ·  주민 %d명 후송" % [display_name, rescued_followers.size()]
 		else:
-			field_interaction_button.text = "E 홀드  %s" % display_name
+			field_interaction_button.text = "F 홀드  %s" % display_name
 	if field_interaction_progress:
 		field_interaction_progress.max_value = maxf(hold_duration, 1.0)
 		field_interaction_progress.value = field_interaction_hold_time
@@ -7798,6 +8307,7 @@ func _complete_field_interaction(point: Node3D) -> void:
 		"salvage":
 			_add_fatigue(FATIGUE_SALVAGE_GAIN)
 			_spawn_salvage_rewards(point.global_position)
+			_advance_contract_progress("salvage")
 			_show_field_notice("분해 완료 · 총기 개조 부품이 떨어졌습니다.")
 		"basic_mission_subway":
 			var subway_mission_id := str(point.get_meta("basic_mission_id", "subway"))
@@ -7905,6 +8415,8 @@ func _add_rescued_follower(world_position: Vector3) -> void:
 	follower.global_position = Vector3(world_position.x, 0.05, world_position.z)
 	follower.call("setup", player, rescued_followers.size())
 	rescued_followers.append(follower)
+	if is_instance_valid(scent_system):
+		scent_system.call("register_mover", follower, "rescue")
 
 
 func _show_field_notice(message: String) -> void:
@@ -7976,6 +8488,8 @@ func _commit_rescued_followers() -> int:
 		return 0
 	var accepted: int = GameState.try_add_rescued_workers(rescued_count)
 	rescued_followers.clear()
+	if accepted > 0:
+		_advance_contract_progress("rescue", accepted)
 	return accepted
 
 
@@ -8111,12 +8625,34 @@ func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
 
 func _input(event: InputEvent) -> void:
 	if player_death_sequence_active:
+		var continue_requested := (
+			event is InputEventScreenTouch
+			and (event as InputEventScreenTouch).pressed
+		) or (
+			event is InputEventMouseButton
+			and (event as InputEventMouseButton).pressed
+		) or (
+			event is InputEventKey
+			and (event as InputEventKey).pressed
+			and not (event as InputEventKey).echo
+			and ((event as InputEventKey).keycode == KEY_SPACE or (event as InputEventKey).physical_keycode == KEY_SPACE)
+		)
+		if continue_requested:
+			_continue_after_death()
+			get_viewport().set_input_as_handled()
 		return
 	if event is InputEventKey and not event.echo:
 		var key_event := event as InputEventKey
 		var key := key_event.keycode if key_event.keycode != 0 else key_event.physical_keycode
 		if key == KEY_ESCAPE and key_event.pressed and _is_lore_open():
 			_close_lore_reader()
+			get_viewport().set_input_as_handled()
+			return
+		if key == KEY_SPACE:
+			if key_event.pressed:
+				_begin_space_hold()
+			else:
+				_end_space_hold()
 			get_viewport().set_input_as_handled()
 			return
 		if _is_lore_open():
@@ -8128,7 +8664,7 @@ func _input(event: InputEvent) -> void:
 				tactical_map.call("toggle")
 			get_viewport().set_input_as_handled()
 			return
-		if key in [KEY_I, KEY_B] and key_event.pressed:
+		if key in [KEY_E, KEY_I, KEY_B] and key_event.pressed:
 			if _is_tactical_map_open():
 				tactical_map.call("close")
 			_toggle_inventory()
@@ -8153,7 +8689,12 @@ func _input(event: InputEvent) -> void:
 			_use_quick_medkit()
 			get_viewport().set_input_as_handled()
 			return
-		if key == KEY_E:
+		if key == KEY_Q:
+			if is_instance_valid(scent_system):
+				scent_system.call("set_focus_active", key_event.pressed)
+			get_viewport().set_input_as_handled()
+			return
+		if key == KEY_F:
 			if is_instance_valid(nearby_field_interaction):
 				var interaction_type := str(nearby_field_interaction.get_meta("interaction_type", ""))
 				if interaction_type == "extraction" and key_event.pressed:
@@ -8168,8 +8709,6 @@ func _input(event: InputEvent) -> void:
 			else:
 				field_interaction_keyboard_held = false
 				pickup_keyboard_held = key_event.pressed
-		elif key == KEY_SPACE and key_event.pressed:
-			_try_start_roll()
 		elif key == KEY_R and key_event.pressed and has_ak:
 			_reload_ak47()
 		elif key == KEY_N and key_event.pressed:
@@ -8196,15 +8735,15 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
-		if _handle_mobile_action_touch(touch):
-			get_viewport().set_input_as_handled()
-			return
 		if (
 			_is_inventory_open()
 			or _is_tactical_map_open()
 			or _is_lore_open()
 			or extraction_transition_active
 		):
+			return
+		if _handle_mobile_action_touch(touch):
+			get_viewport().set_input_as_handled()
 			return
 		if touch.pressed:
 			if touch_id == -1 and touch.position.x < get_viewport().get_visible_rect().size.x * 0.55:
@@ -8222,6 +8761,13 @@ func _input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 	elif event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
+		if (
+			_is_inventory_open()
+			or _is_tactical_map_open()
+			or _is_lore_open()
+			or extraction_transition_active
+		):
+			return
 		if drag.index == fire_touch_id:
 			var fire_release_rect := fire_button.get_global_rect().grow(28.0)
 			if not fire_release_rect.has_point(drag.position):
@@ -8260,7 +8806,7 @@ func _handle_combat_mouse_button(mouse_event: InputEventMouseButton) -> void:
 		laser_aim_held = mouse_event.pressed
 		if not mouse_event.pressed:
 			mouse_fire_held = false
-		if mouse_event.pressed and has_ak:
+		if mouse_event.pressed:
 			_lock_aim_direction(_get_mouse_world_direction())
 
 

@@ -110,12 +110,85 @@ var weapon_enhancement_levels: Dictionary = {"ak47": 0}
 var mod_enhancement_levels: Dictionary = {}
 var artisan_pity: int = 0
 var selected_raid_zone: String = "jongno_outskirts"
+var contract_chain_index: int = 0
+var contract_status: String = "available"
+var contract_progress: int = 0
+var completed_contract_ids: Array[String] = []
+var unlocked_contract_lore: Array[String] = []
 var persistence_enabled: bool = true
 var persistence_path: String = SAVE_PATH
 
 const SAVE_PATH := "user://shelter_progress_v2.json"
 const MAX_WEAPON_ENHANCEMENT := 99
 const ARTISAN_PITY_LIMIT := 10
+const MISSION_CONTRACTS := [
+	{
+		"id": "field_parts",
+		"title": "흩어진 개조 부품",
+		"brief": "도시에 흩어진 총기 개조 부품을 확보해 철근에게 보고하십시오.",
+		"objective": "총기 개조 부품 획득",
+		"metric": "parts",
+		"target": 3,
+		"reward": {"xp": 80, "canned_food": 4},
+		"lore_title": "철근의 기록 01 · 남겨진 공구",
+		"lore": "인간이 사라진 뒤 가장 먼저 창고를 장악한 것은 유리발톱 연맹이었다. 지금 쓰는 총기 개조법 대부분은 그들이 봉인한 인간 공구함에서 시작됐다.",
+	},
+	{
+		"id": "street_patrol",
+		"title": "순찰대의 빈틈",
+		"brief": "종로 외곽을 장악한 적대 순찰대를 쓰러뜨리고 이동로를 확보하십시오.",
+		"objective": "적대 세력 처치",
+		"metric": "kills",
+		"target": 4,
+		"reward": {"xp": 110, "ammo": 30},
+		"lore_title": "철근의 기록 02 · 유리발톱",
+		"lore": "유리발톱 연맹은 서울의 식량 창고와 지상 통로를 통제한다. 연맹 깃발 아래 들지 않은 고양이는 통조림 배급표조차 받을 수 없다.",
+	},
+	{
+		"id": "lost_notices",
+		"title": "벽보가 기억하는 밤",
+		"brief": "폐허 곳곳의 기록 단서를 조사해 인간들이 사라진 날의 흔적을 모으십시오.",
+		"objective": "세계 기록 조사",
+		"metric": "lore",
+		"target": 2,
+		"reward": {"xp": 120, "canned_food": 3, "medkits": 1},
+		"lore_title": "철근의 기록 03 · 붉은비 격리령",
+		"lore": "마지막 인간 방송은 붉은비가 내린 날 지하철을 봉쇄하라고 반복했다. 그러나 누군가는 봉쇄 직전 고양이 보호소의 문을 모두 열어 두었다.",
+	},
+	{
+		"id": "salvage_cipher",
+		"title": "고철 속 암호",
+		"brief": "망가진 차량과 군용 설비를 분해해 남아 있는 표식을 확인하십시오.",
+		"objective": "현장 설비 분해",
+		"metric": "salvage",
+		"target": 2,
+		"reward": {"xp": 130, "canned_food": 4, "ammo": 45},
+		"lore_title": "철근의 기록 04 · 네 개의 재화",
+		"lore": "고철은 힘, 통조림은 노동, 캣닢은 속도, 츄르는 권한이다. 지금 서울의 모든 거래는 이 네 가지를 누가 쥐고 있느냐로 결정된다.",
+	},
+	{
+		"id": "rescue_route",
+		"title": "돌아오지 못한 주민",
+		"brief": "도시에 고립된 주민을 찾아 쉘터 탈출로까지 안전하게 호송하십시오.",
+		"objective": "주민 구조",
+		"metric": "rescue",
+		"target": 1,
+		"reward": {"xp": 150, "canned_food": 5, "churu": 1},
+		"lore_title": "철근의 기록 05 · 캣닢 배급선",
+		"lore": "연맹은 캣닢 생산지를 보호한다는 명목으로 주민을 공장에 묶어 둔다. 구조된 주민이 쉘터의 생산기를 돌리는 일은 그 통제에서 벗어났다는 증거다.",
+	},
+	{
+		"id": "field_operation",
+		"title": "종로 현장 작전",
+		"brief": "도시에서 현장 작전 하나를 수락하고 끝까지 완수하십시오.",
+		"objective": "현장 작전 완료",
+		"metric": "field_mission",
+		"target": 1,
+		"reward": {"xp": 180, "ammo": 60, "medkits": 2},
+		"lore_title": "철근의 기록 06 · 지하의 목소리",
+		"lore": "종로 지하선에는 연맹의 배급망을 거부한 작은 쉘터들이 남아 있다. 서로 얼굴은 몰라도 같은 주파수로 다음 안전로를 알린다고 한다.",
+	},
+]
 const EQUIPMENT_DEFINITIONS := {
 	"scav_vest": {
 		"display_name": "누더기 방탄 조끼", "slot": "body", "damage_reduction": 0.12,
@@ -167,23 +240,23 @@ const PLAYER_LEVEL_REWARDS := {
 const TRAINING_NODE_DEFS := {
 	"vitality": {
 		"title": "중량 훈련", "description": "랭크마다 최대 체력 +10", "icon": "health",
-		"max_rank": 5, "base_cost": 2, "cost_step": 2, "requires": {},
+		"max_rank": 5, "base_cost": 8, "cost_step": 6, "requires": {},
 	},
 	"endurance": {
 		"title": "유산소 훈련", "description": "랭크마다 최대 스태미나 +12", "icon": "stamina",
-		"max_rank": 5, "base_cost": 2, "cost_step": 2, "requires": {},
+		"max_rank": 5, "base_cost": 8, "cost_step": 6, "requires": {},
 	},
 	"recovery": {
 		"title": "회복 루틴", "description": "랭크마다 스태미나 회복 +8%", "icon": "recovery",
-		"max_rank": 4, "base_cost": 4, "cost_step": 3, "requires": {"vitality": 2},
+		"max_rank": 4, "base_cost": 14, "cost_step": 10, "requires": {"vitality": 2},
 	},
 	"agility": {
 		"title": "풋워크", "description": "랭크마다 이동 속도 +2%", "icon": "speed",
-		"max_rank": 4, "base_cost": 4, "cost_step": 3, "requires": {"endurance": 2},
+		"max_rank": 4, "base_cost": 14, "cost_step": 10, "requires": {"endurance": 2},
 	},
 	"fieldcraft": {
 		"title": "현장 체력", "description": "랭크마다 피로 획득 -7%", "icon": "fitness",
-		"max_rank": 3, "base_cost": 8, "cost_step": 5, "requires": {"recovery": 2, "agility": 2},
+		"max_rank": 3, "base_cost": 28, "cost_step": 18, "requires": {"recovery": 2, "agility": 2},
 	},
 }
 const RAID_ZONES := {
@@ -234,9 +307,9 @@ const RAID_ZONES := {
 	},
 }
 
-const WORKBENCH_UPGRADE_COSTS := {2: 180, 3: 420, 4: 900, 5: 1800}
-const SCRATCHER_UPGRADE_COSTS := {2: 120, 3: 320, 4: 850, 5: 1600}
-const CATNIP_SCRAPER_UPGRADE_COSTS := {2: 160, 3: 420, 4: 1050, 5: 2200}
+const WORKBENCH_UPGRADE_COSTS := {2: 7500, 3: 55000, 4: 400000, 5: 3000000}
+const SCRATCHER_UPGRADE_COSTS := {2: 12000, 3: 150000, 4: 2000000, 5: 30000000}
+const CATNIP_SCRAPER_UPGRADE_COSTS := {2: 10000, 3: 120000, 4: 1500000, 5: 20000000}
 const STORAGE_GRID_BY_LEVEL := {
 	1: Vector2i(6, 5),
 	2: Vector2i(7, 6),
@@ -245,21 +318,21 @@ const STORAGE_GRID_BY_LEVEL := {
 	5: Vector2i(10, 9),
 }
 const STORAGE_UPGRADE_COSTS := {
-	2: {"scrap": 180, "churu": 0},
-	3: {"scrap": 480, "churu": 1},
-	4: {"scrap": 1200, "churu": 2},
-	5: {"scrap": 2800, "churu": 4},
+	2: {"scrap": 8000, "churu": 0},
+	3: {"scrap": 60000, "churu": 1},
+	4: {"scrap": 500000, "churu": 2},
+	5: {"scrap": 4000000, "churu": 4},
 }
 const SHELTER_CAPACITY_BY_TIER := {1: 5, 2: 10, 3: 20, 4: 35, 5: 50}
 const KNEADING_SLOTS_BY_TIER := {1: 3, 2: 6, 3: 10, 4: 15, 5: 20}
 const CATNIP_SLOTS_BY_TIER := {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
 const SHELTER_UPGRADE_COSTS := {
-	2: {"scrap": 1200, "churu": 1},
-	3: {"scrap": 6000, "churu": 2},
-	4: {"scrap": 30000, "churu": 4},
-	5: {"scrap": 160000, "churu": 8},
+	2: {"scrap": 30000, "churu": 1},
+	3: {"scrap": 400000, "churu": 3},
+	4: {"scrap": 5000000, "churu": 8},
+	5: {"scrap": 60000000, "churu": 20},
 }
-const CATNIP_BOOST_COST := 25
+const CATNIP_BOOST_COST := 900
 const CATNIP_BOOST_DURATION_SECONDS := 600
 const CATNIP_BOOST_MULTIPLIER := 10.0
 const BASE_SCRAP_PER_WORKER_HOUR := 72.0
@@ -293,6 +366,32 @@ func _ready() -> void:
 	if raid_serial == 0:
 		randomize_map()
 	process_shelter_progress()
+
+
+func format_compact_number(value: float) -> String:
+	var absolute_value := absf(value)
+	var divisor := 1.0
+	var suffix := ""
+	if absolute_value >= 1_000_000_000_000.0:
+		divisor = 1_000_000_000_000.0
+		suffix = "T"
+	elif absolute_value >= 1_000_000_000.0:
+		divisor = 1_000_000_000.0
+		suffix = "B"
+	elif absolute_value >= 1_000_000.0:
+		divisor = 1_000_000.0
+		suffix = "M"
+	elif absolute_value >= 1_000.0:
+		divisor = 1_000.0
+		suffix = "K"
+	else:
+		return str(roundi(value))
+
+	var scaled := value / divisor
+	var compact := "%.0f" % scaled if absf(scaled) >= 100.0 else "%.1f" % scaled
+	if compact.ends_with(".0"):
+		compact = compact.substr(0, compact.length() - 2)
+	return compact + suffix
 
 
 func randomize_map() -> void:
@@ -525,8 +624,19 @@ func get_backpack_storage_count(item_type: String, item_id: String) -> int:
 		"medkit":
 			return medkits
 		"food":
-			return canned_food
+			return maxi(0, canned_food - get_stored_storage_count("food", "canned_food"))
 	return 0
+
+
+func get_stored_storage_count(item_type: String, item_id: String) -> int:
+	var total := 0
+	for entry in storage_inventory:
+		if (
+			str(entry.get("type", "")) == item_type
+			and str(entry.get("id", "")) == item_id
+		):
+			total += maxi(0, int(entry.get("count", 0)))
+	return total
 
 
 func deposit_storage_item(item_type: String, item_id: String, amount: int = 1) -> Dictionary:
@@ -613,7 +723,9 @@ func _remove_backpack_storage_item(item_type: String, item_id: String, amount: i
 		"medkit":
 			medkits = maxi(0, medkits - amount)
 		"food":
-			canned_food = maxi(0, canned_food - amount)
+			# Food remains part of the shelter-wide currency total. Storage only
+			# records which units are reserved in the warehouse.
+			pass
 		_:
 			return false
 	return true
@@ -634,7 +746,7 @@ func _add_backpack_storage_item(item_type: String, item_id: String, amount: int)
 		"medkit":
 			medkits += amount
 		"food":
-			canned_food += amount
+			pass
 
 
 func _normalize_storage_inventory() -> void:
@@ -650,6 +762,23 @@ func _normalize_storage_inventory() -> void:
 			continue
 		normalized.append({"type": item_type, "id": item_id, "count": count})
 	storage_inventory = normalized
+
+
+func _trim_stored_canned_food_to_total() -> void:
+	var remaining := maxi(0, canned_food)
+	for index in range(storage_inventory.size() - 1, -1, -1):
+		var entry := storage_inventory[index]
+		if (
+			str(entry.get("type", "")) != "food"
+			or str(entry.get("id", "")) != "canned_food"
+		):
+			continue
+		var kept := mini(maxi(0, int(entry.get("count", 0))), remaining)
+		remaining -= kept
+		if kept <= 0:
+			storage_inventory.remove_at(index)
+		else:
+			entry["count"] = kept
 
 
 func get_ammo_count(ammo_id: String) -> int:
@@ -879,20 +1008,19 @@ func get_catnip_efficiency_total() -> float:
 
 
 func get_worker_production_per_second(worker_id: String, production_kind: String) -> float:
-	if canned_food <= 0:
-		return 0.0
 	var trait_data := get_resident_trait(worker_id)
 	match production_kind:
 		"scratcher", "kneading":
 			if not assigned_worker_ids.has(worker_id):
 				return 0.0
-			return (
-				float(trait_data.get("kneading", 1.0))
-				* BASE_SCRAP_PER_WORKER_HOUR
-				* scratcher_multiplier
-				* get_production_multiplier()
-				/ 3600.0
+			var base_rate := maxi(
+				1,
+				roundi(
+					float(trait_data.get("kneading", 1.0))
+					* scratcher_multiplier
+				)
 			)
+			return float(base_rate) * get_production_multiplier()
 		"catnip":
 			if not assigned_catnip_worker_ids.has(worker_id):
 				return 0.0
@@ -933,9 +1061,14 @@ func get_scrap_per_hour() -> float:
 
 
 func get_base_scrap_per_hour() -> float:
-	if get_active_scratcher_workers() > 0 and canned_food <= 0:
-		return 0.0
-	return get_kneading_efficiency_total() * BASE_SCRAP_PER_WORKER_HOUR * scratcher_multiplier
+	var total_per_second := 0.0
+	for worker_id in assigned_worker_ids:
+		var trait_data := get_resident_trait(worker_id)
+		total_per_second += float(maxi(
+			1,
+			roundi(float(trait_data.get("kneading", 1.0)) * scratcher_multiplier)
+		))
+	return total_per_second * 3600.0
 
 
 func get_scrap_per_second() -> float:
@@ -947,8 +1080,6 @@ func get_catnip_per_hour() -> float:
 
 
 func get_catnip_per_second() -> float:
-	if get_active_catnip_workers() > 0 and canned_food <= 0:
-		return 0.0
 	var total := 0.0
 	for worker_id in assigned_catnip_worker_ids:
 		total += get_worker_production_per_second(worker_id, "catnip")
@@ -1144,16 +1275,14 @@ func _consume_worker_food_for_duration(requested_seconds: float) -> float:
 	if worker_count <= 0 or requested_seconds <= 0.0:
 		return maxf(requested_seconds, 0.0)
 	if canned_food <= 0:
-		return 0.0
+		return requested_seconds
 	var food_per_second := float(worker_count) / (WORKER_HOURS_PER_CANNED_FOOD * 3600.0)
-	var available_food := float(canned_food) - shelter_food_fraction
-	var work_seconds := minf(requested_seconds, available_food / food_per_second)
-	shelter_food_fraction += work_seconds * food_per_second
+	shelter_food_fraction += requested_seconds * food_per_second
 	var consumed := mini(canned_food, int(floor(shelter_food_fraction)))
 	if consumed > 0:
 		canned_food -= consumed
 		shelter_food_fraction -= float(consumed)
-	return work_seconds
+	return requested_seconds
 
 
 func consume_offline_progress_notice() -> Dictionary:
@@ -1265,7 +1394,7 @@ func get_weapon_enhancement_cost(weapon_id: String) -> int:
 		"mp5": weapon_factor = 1.2
 		"ak47": weapon_factor = 1.55
 		"double_barrel": weapon_factor = 1.4
-	return maxi(25, roundi(55.0 * weapon_factor * pow(1.082, float(level))))
+	return maxi(900, roundi(900.0 * weapon_factor * pow(1.11, float(level))))
 
 
 func try_enhance_weapon(weapon_id: String) -> bool:
@@ -1293,7 +1422,7 @@ func get_mod_enhancement_cost(mod_id: String) -> int:
 	var level := get_mod_enhancement_level(mod_id)
 	if level >= MAX_WEAPON_ENHANCEMENT:
 		return 0
-	return maxi(20, roundi(38.0 * pow(1.078, float(level))))
+	return maxi(500, roundi(500.0 * pow(1.105, float(level))))
 
 
 func try_enhance_mod(mod_id: String) -> bool:
@@ -1312,9 +1441,10 @@ func try_enhance_mod(mod_id: String) -> bool:
 
 
 func get_artisan_roll_cost() -> Dictionary:
+	var tier_index := maxi(0, shelter_tier - 1)
 	return {
-		"scrap": 180 + maxi(0, shelter_tier - 1) * 85,
-		"canned_food": 2 + int(floor(float(shelter_tier - 1) / 2.0)),
+		"scrap": roundi(12000.0 * pow(3.2, float(tier_index))),
+		"canned_food": 8 + tier_index * 4,
 	}
 
 
@@ -1452,6 +1582,14 @@ func get_fatigue_gain_multiplier() -> float:
 	return maxf(0.45, 1.0 - reduction)
 
 
+func get_recoil_control_multiplier() -> float:
+	var control := (
+		float(training_levels.get("agility", 0)) * 0.035
+		+ float(training_levels.get("fieldcraft", 0)) * 0.055
+	)
+	return maxf(0.62, 1.0 - control)
+
+
 func get_training_definition(node_id: String) -> Dictionary:
 	return (TRAINING_NODE_DEFS.get(node_id, {}) as Dictionary).duplicate(true)
 
@@ -1499,12 +1637,145 @@ func try_upgrade_training(node_id: String) -> Dictionary:
 	return {"ok": true, "rank": rank + 1, "cost": cost}
 
 
+func get_current_contract_definition() -> Dictionary:
+	if contract_chain_index < 0 or contract_chain_index >= MISSION_CONTRACTS.size():
+		return {}
+	return (MISSION_CONTRACTS[contract_chain_index] as Dictionary).duplicate(true)
+
+
+func get_contract_state() -> Dictionary:
+	var definition := get_current_contract_definition()
+	if definition.is_empty():
+		return {
+			"status": "finished",
+			"progress": 0,
+			"target": 0,
+			"definition": {},
+			"completed_count": completed_contract_ids.size(),
+			"total_count": MISSION_CONTRACTS.size(),
+		}
+	return {
+		"status": contract_status,
+		"progress": clampi(contract_progress, 0, int(definition.get("target", 1))),
+		"target": maxi(1, int(definition.get("target", 1))),
+		"definition": definition,
+		"completed_count": completed_contract_ids.size(),
+		"total_count": MISSION_CONTRACTS.size(),
+	}
+
+
+func accept_current_contract() -> Dictionary:
+	var definition := get_current_contract_definition()
+	if definition.is_empty():
+		return {"ok": false, "reason": "finished"}
+	if contract_status != "available":
+		return {"ok": false, "reason": contract_status}
+	contract_status = "active"
+	contract_progress = 0
+	save_persistent_state()
+	return {
+		"ok": true,
+		"definition": definition,
+		"progress": contract_progress,
+		"target": int(definition.get("target", 1)),
+	}
+
+
+func advance_contract(metric: String, amount: int = 1) -> Dictionary:
+	var definition := get_current_contract_definition()
+	if (
+		definition.is_empty()
+		or contract_status != "active"
+		or str(definition.get("metric", "")) != metric
+		or amount <= 0
+	):
+		return {"changed": false}
+	var target := maxi(1, int(definition.get("target", 1)))
+	var previous := contract_progress
+	contract_progress = mini(target, contract_progress + amount)
+	if contract_progress >= target:
+		contract_status = "complete"
+	save_persistent_state()
+	return {
+		"changed": contract_progress != previous,
+		"completed": contract_status == "complete",
+		"progress": contract_progress,
+		"target": target,
+		"definition": definition,
+	}
+
+
+func claim_current_contract_reward() -> Dictionary:
+	var definition := get_current_contract_definition()
+	if definition.is_empty() or contract_status != "complete":
+		return {"ok": false, "reason": contract_status}
+	var reward := (definition.get("reward", {}) as Dictionary).duplicate(true)
+	var experience_result := add_raid_experience(maxi(0, int(reward.get("xp", 0))))
+	canned_food += maxi(0, int(reward.get("canned_food", 0)))
+	medkits += maxi(0, int(reward.get("medkits", 0)))
+	churu += maxi(0, int(reward.get("churu", 0)))
+	var ammo_reward := maxi(0, int(reward.get("ammo", 0)))
+	if ammo_reward > 0:
+		var ammo_id := equipped_ammo_id
+		set_ammo_count(ammo_id, get_ammo_count(ammo_id) + ammo_reward)
+		reserve_ammo = get_ammo_count(ammo_id)
+	var contract_id := str(definition.get("id", ""))
+	if not completed_contract_ids.has(contract_id):
+		completed_contract_ids.append(contract_id)
+	var lore_entry := "%s\n%s" % [
+		str(definition.get("lore_title", "철근의 기록")),
+		str(definition.get("lore", "")),
+	]
+	if not unlocked_contract_lore.has(lore_entry):
+		unlocked_contract_lore.append(lore_entry)
+	contract_chain_index += 1
+	contract_progress = 0
+	contract_status = "available" if contract_chain_index < MISSION_CONTRACTS.size() else "finished"
+	save_persistent_state()
+	return {
+		"ok": true,
+		"definition": definition,
+		"reward": reward,
+		"experience": experience_result,
+		"lore": lore_entry,
+		"next_definition": get_current_contract_definition(),
+		"finished": contract_status == "finished",
+	}
+
+
+func get_latest_contract_lore() -> String:
+	if unlocked_contract_lore.is_empty():
+		return ""
+	return unlocked_contract_lore.back()
+
+
+func _normalize_contract_state() -> void:
+	contract_chain_index = clampi(contract_chain_index, 0, MISSION_CONTRACTS.size())
+	if contract_chain_index >= MISSION_CONTRACTS.size():
+		contract_status = "finished"
+		contract_progress = 0
+		return
+	if contract_status not in ["available", "active", "complete"]:
+		contract_status = "available"
+	var definition := get_current_contract_definition()
+	contract_progress = clampi(
+		contract_progress,
+		0,
+		maxi(1, int(definition.get("target", 1)))
+	)
+	if contract_status == "complete":
+		contract_progress = maxi(1, int(definition.get("target", 1)))
+
+
 func save_persistent_state() -> bool:
 	if not persistence_enabled:
 		return false
+	_normalize_storage_inventory()
+	_trim_stored_canned_food_to_total()
+	_normalize_contract_state()
 	save_equipped_weapon_loadout()
 	var data := {
-		"version": 4,
+		"version": 6,
 		"map_seed": map_seed,
 		"raid_serial": raid_serial,
 		"player_health": player_health,
@@ -1553,6 +1824,7 @@ func save_persistent_state() -> bool:
 		"catnip_scraper_multiplier": catnip_scraper_multiplier,
 		"storage_level": storage_level,
 		"storage_inventory": storage_inventory,
+		"storage_food_in_total": true,
 		"catnip_boost_end_time": catnip_boost_end_time,
 		"shelter_last_progress_time": shelter_last_progress_time,
 		"workbench_repair_active": workbench_repair_active,
@@ -1567,6 +1839,11 @@ func save_persistent_state() -> bool:
 		"merchant_decline_count": merchant_decline_count,
 		"artisan_pity": artisan_pity,
 		"selected_raid_zone": selected_raid_zone,
+		"contract_chain_index": contract_chain_index,
+		"contract_status": contract_status,
+		"contract_progress": contract_progress,
+		"completed_contract_ids": completed_contract_ids,
+		"unlocked_contract_lore": unlocked_contract_lore,
 	}
 	var file := FileAccess.open(persistence_path, FileAccess.WRITE)
 	if file == null:
@@ -1654,6 +1931,9 @@ func load_persistent_state() -> bool:
 	storage_level = clampi(int(data.get("storage_level", storage_level)), 1, 5)
 	storage_inventory = _to_dictionary_array(data.get("storage_inventory", []))
 	_normalize_storage_inventory()
+	if not bool(data.get("storage_food_in_total", false)):
+		canned_food += get_stored_storage_count("food", "canned_food")
+	_trim_stored_canned_food_to_total()
 	catnip_boost_end_time = int(data.get("catnip_boost_end_time", catnip_boost_end_time))
 	shelter_last_progress_time = int(data.get("shelter_last_progress_time", shelter_last_progress_time))
 	workbench_repair_active = bool(data.get("workbench_repair_active", workbench_repair_active))
@@ -1668,6 +1948,12 @@ func load_persistent_state() -> bool:
 	merchant_decline_count = int(data.get("merchant_decline_count", merchant_decline_count))
 	artisan_pity = clampi(int(data.get("artisan_pity", artisan_pity)), 0, ARTISAN_PITY_LIMIT - 1)
 	selected_raid_zone = str(data.get("selected_raid_zone", selected_raid_zone))
+	contract_chain_index = int(data.get("contract_chain_index", contract_chain_index))
+	contract_status = str(data.get("contract_status", contract_status))
+	contract_progress = int(data.get("contract_progress", contract_progress))
+	completed_contract_ids = _to_string_array(data.get("completed_contract_ids", []))
+	unlocked_contract_lore = _to_string_array(data.get("unlocked_contract_lore", []))
+	_normalize_contract_state()
 	if not RAID_ZONES.has(selected_raid_zone) or not is_raid_zone_unlocked(selected_raid_zone):
 		selected_raid_zone = "jongno_outskirts"
 	_ensure_resident_records()
@@ -1807,3 +2093,8 @@ func reset_run() -> void:
 	mod_enhancement_levels.clear()
 	artisan_pity = 0
 	selected_raid_zone = "jongno_outskirts"
+	contract_chain_index = 0
+	contract_status = "available"
+	contract_progress = 0
+	completed_contract_ids.clear()
+	unlocked_contract_lore.clear()

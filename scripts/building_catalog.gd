@@ -204,6 +204,40 @@ const DEFINITIONS := {
 		"height_class": "high",
 		"density_weight": 4.4,
 		"districts": ["luxury_core"],
+	},
+	"seoul_laundromat_repair_8x4_v1": {
+		"node_name": "SeoulLaundromatRepair",
+		"texture_path": "res://assets/buildings/seoul_laundromat_repair_8x4_v1.png",
+		"source_size": Vector2i(1536, 1024),
+		"footprint_modules": Vector2i(8, 4),
+		"height_world": 7.2,
+		"footprint_corners_px": [
+			Vector2(165, 670),
+			Vector2(765, 370),
+			Vector2(1365, 670),
+			Vector2(765, 970),
+		],
+		"occlusion_depth": 8.1,
+		"height_class": "low",
+		"density_weight": 3.8,
+		"districts": ["street_mixed", "market_lane"],
+	},
+	"seoul_redbrick_corner_villa_6x6_v1": {
+		"node_name": "SeoulRedbrickCornerVilla",
+		"texture_path": "res://assets/buildings/seoul_redbrick_corner_villa_6x6_v1.png",
+		"source_size": Vector2i(1254, 1254),
+		"footprint_modules": Vector2i(6, 6),
+		"height_world": 11.8,
+		"footprint_corners_px": [
+			Vector2(142, 890),
+			Vector2(602, 660),
+			Vector2(1062, 890),
+			Vector2(602, 1120),
+		],
+		"occlusion_depth": 12.4,
+		"height_class": "mid",
+		"density_weight": 4.0,
+		"districts": ["multi_family", "residential_buffer"],
 	}
 }
 
