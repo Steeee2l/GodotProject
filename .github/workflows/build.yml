@@ -24,9 +24,6 @@ jobs:
           version: 4.5.1
           use-dotnet: false
           include-templates: true
-          # The cached 4.5.1 template bundle can predate the no-thread Web
-          # templates required by GitHub Pages.
-          cache: false
 
       - name: Validate project
         run: godot --headless --path . --editor --quit
