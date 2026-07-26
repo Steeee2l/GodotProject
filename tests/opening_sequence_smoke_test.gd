@@ -62,6 +62,35 @@ func _run() -> void:
 		_fail("tutorial extraction point was not created")
 	if str(opening.get("phase")) != "intro_walk":
 		_fail("opening must begin with the automatic bridge walk")
+	var opening_environment := opening.get_node_or_null("OpeningEnvironment") as WorldEnvironment
+	if opening_environment == null or opening_environment.environment == null:
+		_fail("opening night environment is missing")
+	if opening_environment.environment.fog_enabled:
+		_fail("opening atmospheric fog must remain disabled")
+	var bridge_deck := opening.get_node_or_null("BridgeDeck") as MeshInstance3D
+	if bridge_deck == null or not (bridge_deck.mesh is PlaneMesh):
+		_fail("opening bridge deck is missing")
+	if (bridge_deck.mesh as PlaneMesh).size.y < 100.0:
+		_fail("opening bridge was not extended")
+	var wrecks: Array[Node] = []
+	for wreck_node in get_nodes_in_group("opening_wreck"):
+		if wreck_node is Node and opening.is_ancestor_of(wreck_node):
+			wrecks.append(wreck_node)
+	if wrecks.size() < 4:
+		_fail("opening wreck set is incomplete")
+	for wreck in wrecks:
+		var wreck_sprite := (wreck as Node).find_child("*", true, false) as Sprite3D
+		if wreck_sprite == null or wreck_sprite.position.y < 0.85:
+			_fail("opening wreck sprite can clip into the bridge deck")
+	if opening.get("visibility_material") == null or opening.get("visibility_rect") == null:
+		_fail("opening gameplay visibility mask is missing")
+	if opening.get("mobile_controls_root") == null:
+		_fail("opening mobile controls were not built")
+	for mobile_button_name in ["mobile_dash_button", "mobile_aim_button", "mobile_fire_button", "mobile_interact_button"]:
+		if opening.get(mobile_button_name) == null:
+			_fail("opening mobile action is missing: %s" % mobile_button_name)
+	if opening.get("weapon_hud_panel") == null or opening.get("magazine_label") == null:
+		_fail("opening weapon HUD is incomplete")
 
 	opening.call("_start_tutorial_move")
 	await process_frame
@@ -70,6 +99,45 @@ func _run() -> void:
 	var objective_panel := opening.get("objective_panel") as Control
 	if objective_panel == null or not objective_panel.visible:
 		_fail("tutorial objective panel is missing")
+	var visibility_rect := opening.get("visibility_rect") as ColorRect
+	if visibility_rect == null or not visibility_rect.visible:
+		_fail("gameplay visibility did not activate with player control")
+	opening.set("touch_enabled", true)
+	opening.call("_update_hud")
+	var mobile_controls := opening.get("mobile_controls_root") as Control
+	if mobile_controls == null or not mobile_controls.visible:
+		_fail("mobile tutorial controls cannot be shown")
+	opening.call("_start_tutorial_dash")
+	opening.set("mobile_move_vector", Vector2.UP)
+	opening.call("_try_dash")
+	if not bool(opening.get("roll_active")):
+		_fail("mobile dash input did not start a roll")
+	opening.set("roll_active", false)
+	opening.call("_start_tutorial_combat")
+	if bool(opening.get("tutorial_enemies_activated")):
+		_fail("tutorial enemies activated before the player approached")
+	opening.set("aim_held", true)
+	opening.call("_try_fire")
+	if int(opening.get("magazine_ammo")) != 29:
+		_fail("mobile fire input did not consume a round")
+	var tutorial_enemies := opening.get("enemies") as Array
+	opening.set("player_health", 1)
+	opening.call("take_damage", 999)
+	if bool(opening.get("restarting")):
+		_fail("opening restarted before the final-kill race could resolve")
+	if not bool(opening.get("death_resolution_pending")):
+		_fail("tutorial death did not enter deferred race resolution")
+	opening.call("_on_tutorial_enemy_died", tutorial_enemies[0])
+	opening.call("_on_tutorial_enemy_died", tutorial_enemies[1])
+	await physics_frame
+	await process_frame
+	if bool(opening.get("restarting")):
+		_fail("same-frame final kill still restarted the opening")
+	if bool(opening.get("death_resolution_pending")):
+		_fail("final-kill race resolution did not finish")
+	if int(opening.get("player_health")) < 1:
+		_fail("same-frame final kill did not preserve the tutorial player")
+	opening.set("touch_enabled", false)
 
 	game_state.call("complete_opening_and_prepare_shelter")
 	if not bool(game_state.get("opening_completed")):
