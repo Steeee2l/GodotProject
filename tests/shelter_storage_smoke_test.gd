@@ -90,6 +90,20 @@ func _run() -> void:
 	var close := ui_layer.find_child("CloseButton", true, false) as Button
 	if close == null or not close.text.is_empty():
 		_fail("storage close control must be an icon-only button")
+	var occupied_slot: Button
+	for slot in storage_grid.get_children():
+		var slot_button := slot as Button
+		if slot_button != null and not slot_button.disabled:
+			occupied_slot = slot_button
+			break
+	if occupied_slot == null:
+		_fail("storage UI did not expose an occupied slot for withdrawal")
+	occupied_slot.pressed.emit()
+	await process_frame
+	await process_frame
+	var rebuilt_grid := ui_layer.find_child("StorageGrid", true, false) as GridContainer
+	if rebuilt_grid == null or rebuilt_grid.get_child_count() != 42:
+		_fail("storage UI did not rebuild safely after a slot signal")
 	ui_layer.queue_free()
 
 	var save_path := "res://.godot/shelter_storage_smoke.json"

@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://beqovcs4vhnr4"
 path.s3tc="res://.godot/imported/scratcher_bank_isometric_v6.png-d7e01f91fb9e7a74666a31408e5a217d.s3tc.ctex"
+path.etc2="res://.godot/imported/scratcher_bank_isometric_v6.png-d7e01f91fb9e7a74666a31408e5a217d.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/interiors/modules/scratcher_bank_isometric_v6.png"
-dest_files=["res://.godot/imported/scratcher_bank_isometric_v6.png-d7e01f91fb9e7a74666a31408e5a217d.s3tc.ctex"]
+dest_files=["res://.godot/imported/scratcher_bank_isometric_v6.png-d7e01f91fb9e7a74666a31408e5a217d.s3tc.ctex", "res://.godot/imported/scratcher_bank_isometric_v6.png-d7e01f91fb9e7a74666a31408e5a217d.etc2.ctex"]
 
 [params]
 

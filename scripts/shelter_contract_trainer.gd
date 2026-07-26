@@ -12,8 +12,8 @@ func _ready() -> void:
 	add_to_group("shelter_contract_agent")
 	trainer_sprite = AnimatedSprite3D.new()
 	trainer_sprite.name = "TrainerSprite"
-	trainer_sprite.position = Vector3(0.0, 0.32, 0.0)
-	trainer_sprite.pixel_size = 0.0096
+	trainer_sprite.position = Vector3(0.0, 0.46, 0.0)
+	trainer_sprite.pixel_size = 0.0144
 	trainer_sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	trainer_sprite.shaded = false
 	trainer_sprite.transparent = true
@@ -27,7 +27,7 @@ func _ready() -> void:
 	var nameplate := Label3D.new()
 	nameplate.name = "ContractAgentName"
 	nameplate.text = "훈련교관 철근\n현장 계약 담당"
-	nameplate.position = Vector3(0.0, 1.72, 0.0)
+	nameplate.position = Vector3(0.0, 2.18, 0.0)
 	nameplate.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	nameplate.no_depth_test = true
 	nameplate.render_priority = 127
@@ -47,8 +47,8 @@ func _ready() -> void:
 	add_child(body)
 	var collision := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
-	shape.radius = 0.4
-	shape.height = 1.35
+	shape.radius = 0.52
+	shape.height = 1.7
 	collision.shape = shape
 	body.add_child(collision)
 

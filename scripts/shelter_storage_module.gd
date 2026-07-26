@@ -46,8 +46,9 @@ const COMPONENT_TEXTURES := {
 @export var interaction_radius := 3.8
 
 const WALL_ALIGNED_TEXTURE := preload(
-	"res://assets/interiors/modules/shelter_storage_wall_aligned_v4.png"
+	"res://assets/interiors/modules/shelter_storage_wall_front_v5.png"
 )
+const WALL_TEXTURE_REGION := Rect2(49.0, 145.0, 1515.0, 650.0)
 
 @onready var sprite: Sprite3D = $StorageSprite
 
@@ -61,8 +62,11 @@ func _ready() -> void:
 	add_to_group("shelter_storage")
 	set_meta("module_kind", "storage")
 	sprite.texture = WALL_ALIGNED_TEXTURE
-	sprite.position = Vector3(0.0, 1.89, 0.02)
-	sprite.pixel_size = 0.0041
+	sprite.position = Vector3(0.0, 1.245, 0.055)
+	sprite.pixel_size = 0.00383
+	sprite.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	sprite.region_enabled = true
+	sprite.region_rect = WALL_TEXTURE_REGION
 
 
 func get_interaction_prompt() -> String:
@@ -153,7 +157,8 @@ func _rebuild_ui() -> void:
 	if content == null:
 		return
 	for child in content.get_children():
-		child.free()
+		content.remove_child(child)
+		child.queue_free()
 
 	var viewport_size := get_viewport().get_visible_rect().size
 	var narrow := viewport_size.x < 1040.0

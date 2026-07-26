@@ -98,7 +98,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _rebuild_ui() -> void:
 	for child in content.get_children():
-		child.free()
+		content.remove_child(child)
+		child.queue_free()
 	var header := VBoxContainer.new()
 	header.name = "TrainingHeader"
 	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL

@@ -115,6 +115,7 @@ var contract_status: String = "available"
 var contract_progress: int = 0
 var completed_contract_ids: Array[String] = []
 var unlocked_contract_lore: Array[String] = []
+var opening_completed: bool = false
 var persistence_enabled: bool = true
 var persistence_path: String = SAVE_PATH
 
@@ -1775,7 +1776,7 @@ func save_persistent_state() -> bool:
 	_normalize_contract_state()
 	save_equipped_weapon_loadout()
 	var data := {
-		"version": 6,
+		"version": 7,
 		"map_seed": map_seed,
 		"raid_serial": raid_serial,
 		"player_health": player_health,
@@ -1844,6 +1845,7 @@ func save_persistent_state() -> bool:
 		"contract_progress": contract_progress,
 		"completed_contract_ids": completed_contract_ids,
 		"unlocked_contract_lore": unlocked_contract_lore,
+		"opening_completed": opening_completed,
 	}
 	var file := FileAccess.open(persistence_path, FileAccess.WRITE)
 	if file == null:
@@ -1953,6 +1955,8 @@ func load_persistent_state() -> bool:
 	contract_progress = int(data.get("contract_progress", contract_progress))
 	completed_contract_ids = _to_string_array(data.get("completed_contract_ids", []))
 	unlocked_contract_lore = _to_string_array(data.get("unlocked_contract_lore", []))
+	# Saves made before the opening existed should continue from the shelter.
+	opening_completed = bool(data.get("opening_completed", true))
 	_normalize_contract_state()
 	if not RAID_ZONES.has(selected_raid_zone) or not is_raid_zone_unlocked(selected_raid_zone):
 		selected_raid_zone = "jongno_outskirts"
@@ -2098,3 +2102,38 @@ func reset_run() -> void:
 	contract_progress = 0
 	completed_contract_ids.clear()
 	unlocked_contract_lore.clear()
+
+
+func reset_all_progress_for_opening() -> bool:
+	reset_run()
+	opening_completed = false
+	map_seed = 47291
+	raid_serial = 0
+	randomize_map()
+	player_health = get_max_health()
+	magazine_ammo = 30
+	ammo_inventory["762_fmj"] = 300
+	reserve_ammo = 300
+	shelter_last_progress_time = int(Time.get_unix_time_from_system())
+	if persistence_enabled and FileAccess.file_exists(persistence_path):
+		var absolute_path := ProjectSettings.globalize_path(persistence_path)
+		var remove_result := DirAccess.remove_absolute(absolute_path)
+		if remove_result != OK:
+			push_warning("Could not remove previous save before reset: %s" % absolute_path)
+	return save_persistent_state() if persistence_enabled else true
+
+
+func complete_opening_and_prepare_shelter() -> void:
+	opening_completed = true
+	player_health = get_max_health()
+	fatigue = 0.0
+	has_ak = true
+	weapon_inventory["ak47"] = maxi(1, int(weapon_inventory.get("ak47", 0)))
+	equipped_weapon_id = "ak47"
+	equipped_magazine_id = "ak_30rnd"
+	equipped_ammo_id = "762_fmj"
+	magazine_ammo = 30
+	ammo_inventory["762_fmj"] = maxi(300, int(ammo_inventory.get("762_fmj", 0)))
+	reserve_ammo = int(ammo_inventory["762_fmj"])
+	returning_from_shelter = false
+	save_persistent_state()

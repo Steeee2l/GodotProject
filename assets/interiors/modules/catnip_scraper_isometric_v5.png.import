@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://b3ml2qtn406jo"
 path.s3tc="res://.godot/imported/catnip_scraper_isometric_v5.png-a1d2fda02928c73a1af3f86d5ec47910.s3tc.ctex"
+path.etc2="res://.godot/imported/catnip_scraper_isometric_v5.png-a1d2fda02928c73a1af3f86d5ec47910.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/interiors/modules/catnip_scraper_isometric_v5.png"
-dest_files=["res://.godot/imported/catnip_scraper_isometric_v5.png-a1d2fda02928c73a1af3f86d5ec47910.s3tc.ctex"]
+dest_files=["res://.godot/imported/catnip_scraper_isometric_v5.png-a1d2fda02928c73a1af3f86d5ec47910.s3tc.ctex", "res://.godot/imported/catnip_scraper_isometric_v5.png-a1d2fda02928c73a1af3f86d5ec47910.etc2.ctex"]
 
 [params]
 

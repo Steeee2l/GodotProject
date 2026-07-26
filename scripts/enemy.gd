@@ -11,8 +11,8 @@ const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
 const DAMAGE_FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const DAMAGE_NUMBER_SCRIPT := preload("res://scripts/damage_number.gd")
-const MELEE_SPEED := 4.15
-const PISTOL_SPEED := 2.5
+const MELEE_SPEED := 5.1
+const PISTOL_SPEED := 3.15
 const PATROL_SPEED := 1.35
 const PATROL_RADIUS := 6.5
 const SQUAD_PATROL_RADIUS := 4.2
@@ -60,7 +60,9 @@ const PROXIMITY_DETECTION_SECONDS_NEAR := 0.38
 const DETECTION_DECAY_PER_SECOND := 0.72
 const SUSPICION_THRESHOLD := 0.12
 const SUSPICION_HOLD_SECONDS := 2.8
-const ALERT_REACTION_SECONDS := 0.48
+const ALERT_REACTION_SECONDS := 0.12
+const OPENING_PRESSURE_SECONDS := 3.2
+const OPENING_PRESSURE_SPEED := 5.25
 const ACTIVE_PURSUIT_BASE := 4.5
 const ACTIVE_PURSUIT_THREAT_BONUS := 2.5
 const SEARCH_BREAK_DISTANCE_BONUS := 10.0
@@ -168,6 +170,8 @@ var steering_lock_until_msec := 0
 var pending_facing := ""
 var pending_facing_since_msec := 0
 var faction_id := "raider"
+var opening_shot_pending := false
+var opening_pressure_time := 0.0
 static var weapon_texture_cache: Dictionary = {}
 static var health_bar_texture_cache: Dictionary = {}
 static var reload_texture_cache: Dictionary = {}
@@ -395,6 +399,7 @@ func _physics_process(delta: float) -> void:
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
 	grenade_cooldown = maxf(0.0, grenade_cooldown - delta)
 	combat_reaction_time = maxf(0.0, combat_reaction_time - delta)
+	opening_pressure_time = maxf(0.0, opening_pressure_time - delta)
 	_update_alert_marker(delta)
 	_update_detection_indicator()
 	_update_enemy_health_bar(delta)
@@ -528,6 +533,17 @@ func _physics_process(delta: float) -> void:
 
 	var direction := offset.normalized() if distance > 0.01 else Vector3.ZERO
 	_set_facing_from_world_direction(direction)
+	if (
+		opening_shot_pending
+		and enemy_kind not in ["melee", "grenadier"]
+		and has_visual_contact
+		and distance <= _get_weapon_engagement_range()
+	):
+		opening_shot_pending = false
+		opening_pressure_time = OPENING_PRESSURE_SECONDS
+		_start_pistol_burst(direction)
+		move_and_slide()
+		return
 	if enemy_kind == "melee":
 		_update_melee(direction, distance)
 	elif enemy_kind == "grenadier":
@@ -1223,6 +1239,7 @@ func _become_alerted() -> void:
 	_update_vision_fan_visual()
 	if newly_alerted:
 		combat_reaction_time = ALERT_REACTION_SECONDS
+		opening_shot_pending = enemy_kind not in ["melee", "grenadier"]
 	alert_marker_time = maxf(alert_marker_time, combat_reaction_time + 0.22)
 	if newly_alerted and squad_id >= 0:
 		var shared_position := target.global_position if is_instance_valid(target) else global_position
@@ -1249,6 +1266,8 @@ func receive_squad_alert(world_position: Vector3) -> void:
 	perception_state = "combat"
 	search_time_remaining = 0.0
 	visual_contact_confirmed = true
+	opening_shot_pending = false
+	opening_pressure_time = 0.0
 	_update_vision_fan_visual()
 
 
@@ -1275,6 +1294,8 @@ func _clear_alert() -> void:
 	visual_contact_confirmed = false
 	has_current_line_of_sight = false
 	pursuit_time = 0.0
+	opening_shot_pending = false
+	opening_pressure_time = 0.0
 	lost_sight_time = 0.0
 	target_stationary_time = 0.0
 	tactical_waypoint = Vector3.INF
@@ -1736,28 +1757,41 @@ func _update_pistol(direction: Vector3, distance: float, delta: float) -> void:
 		"double_barrel":
 			preferred_min = 4.0
 			preferred_max = 9.0
-	if _update_stationary_target_flank(direction, distance):
+	if opening_pressure_time > 0.0 and distance > 3.0:
+		velocity = (
+			_steer_around_obstacles(direction)
+			* maxf(movement_speed, OPENING_PRESSURE_SPEED * lerpf(1.0, 1.12, threat_level))
+		)
+	elif _update_stationary_target_flank(direction, distance):
 		return
-	strafe_switch_time = maxf(0.0, strafe_switch_time - delta)
-	if distance > preferred_max:
-		velocity = _steer_around_obstacles(direction) * movement_speed
-	elif distance < preferred_min:
-		velocity = _steer_around_obstacles(-direction) * movement_speed
 	else:
-		if strafe_switch_time <= 0.0 or is_on_wall():
-			strafe_sign = -strafe_sign if strafe_switch_time > 0.0 else (1.0 if randf() >= 0.5 else -1.0)
-			strafe_switch_time = randf_range(0.85, 1.55)
-		var strafe_direction := Vector3(-direction.z, 0.0, direction.x) * strafe_sign
-		velocity = _steer_around_obstacles(strafe_direction) * movement_speed * 0.78
+		strafe_switch_time = maxf(0.0, strafe_switch_time - delta)
+		if distance > preferred_max:
+			velocity = _steer_around_obstacles(direction) * movement_speed
+		elif distance < preferred_min:
+			velocity = _steer_around_obstacles(-direction) * movement_speed
+		else:
+			if strafe_switch_time <= 0.0 or is_on_wall():
+				strafe_sign = -strafe_sign if strafe_switch_time > 0.0 else (1.0 if randf() >= 0.5 else -1.0)
+				strafe_switch_time = randf_range(0.85, 1.55)
+			var strafe_direction := Vector3(-direction.z, 0.0, direction.x) * strafe_sign
+			velocity = _steer_around_obstacles(strafe_direction) * movement_speed * 0.78
 	if distance <= attack_range and attack_cooldown <= 0.0:
-		burst_shots_remaining = mini(magazine_ammo - 1, maxi(0, _get_weapon_burst_size() - 1))
-		combat_state = "pistol_burst"
-		state_timer = _get_enemy_fire_interval()
-		pending_attack_direction = direction
-		velocity = Vector3.ZERO
-		_set_motion_state("attack")
-		_fire_weapon(direction)
-		_start_recoil_pose()
+		_start_pistol_burst(direction)
+
+
+func _start_pistol_burst(direction: Vector3) -> void:
+	if magazine_ammo <= 0:
+		_start_reload()
+		return
+	burst_shots_remaining = mini(magazine_ammo - 1, maxi(0, _get_weapon_burst_size() - 1))
+	combat_state = "pistol_burst"
+	state_timer = _get_enemy_fire_interval()
+	pending_attack_direction = direction
+	velocity = Vector3.ZERO
+	_set_motion_state("attack")
+	_fire_weapon(direction)
+	_start_recoil_pose()
 
 
 func _update_grenadier(direction: Vector3, distance: float, delta: float) -> void:

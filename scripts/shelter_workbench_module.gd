@@ -196,8 +196,9 @@ const CATEGORY_ICONS := {
 @export var interaction_radius := 2.9
 
 const WALL_ALIGNED_TEXTURE := preload(
-	"res://assets/interiors/modules/shelter_workbench_wall_aligned_v4.png"
+	"res://assets/interiors/modules/shelter_workbench_wall_front_v5.png"
 )
+const WALL_TEXTURE_REGION := Rect2(122.0, 155.0, 1359.0, 669.0)
 
 @onready var sprite: Sprite3D = $WorkbenchSprite
 
@@ -215,8 +216,11 @@ func _ready() -> void:
 	add_to_group("shelter_workbench")
 	set_meta("module_kind", "workbench")
 	sprite.texture = WALL_ALIGNED_TEXTURE
-	sprite.position = Vector3(0.0, 1.84, 0.02)
-	sprite.pixel_size = 0.00435
+	sprite.position = Vector3(0.0, 1.452, 0.055)
+	sprite.pixel_size = 0.00434
+	sprite.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	sprite.region_enabled = true
+	sprite.region_rect = WALL_TEXTURE_REGION
 
 
 func get_interaction_prompt() -> String:

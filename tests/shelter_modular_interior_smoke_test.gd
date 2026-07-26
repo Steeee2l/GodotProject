@@ -5,11 +5,11 @@ const FLOOR_TEXTURE_PATH := "res://assets/interiors/shelter_floor_topdown_v3.png
 const WALL_TEXTURE_PATH := "res://assets/interiors/shelter_wall_panel_v3.png"
 const BED_TEXTURE_PATH := "res://assets/interiors/shelter_bed_module_v2.png"
 const PIPE_TEXTURE_PATH := "res://assets/interiors/shelter_escape_pipe_v1.png"
-const WORKBENCH_TEXTURE_PATH := "res://assets/interiors/modules/shelter_workbench_wall_aligned_v4.png"
+const WORKBENCH_TEXTURE_PATH := "res://assets/interiors/modules/shelter_workbench_wall_front_v5.png"
 const SCRATCHER_BANK_TEXTURE_PATH := "res://assets/interiors/modules/scratcher_bank_isometric_v6.png"
 const CATNIP_SCRAPER_TEXTURE_PATH := "res://assets/interiors/modules/catnip_scraper_isometric_v5.png"
 const TRAINING_TEXTURE_PATH := "res://assets/interiors/modules/shelter_training_isometric_v6.png"
-const STORAGE_TEXTURE_PATH := "res://assets/interiors/modules/shelter_storage_wall_aligned_v4.png"
+const STORAGE_TEXTURE_PATH := "res://assets/interiors/modules/shelter_storage_wall_front_v5.png"
 
 
 func _initialize() -> void:
@@ -79,13 +79,15 @@ func _run() -> void:
 	var workbench := get_nodes_in_group("shelter_workbench")[0] as Node
 	var workbench_sprite := workbench.get_node("WorkbenchSprite") as Sprite3D
 	assert(workbench_sprite.texture.resource_path == WORKBENCH_TEXTURE_PATH)
-	assert(workbench_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
-	assert(is_equal_approx(workbench_sprite.position.y, 1.84))
-	assert(is_equal_approx(workbench_sprite.position.z, 0.02))
-	assert(is_equal_approx(workbench_sprite.pixel_size, 0.00435))
+	assert(workbench_sprite.billboard == BaseMaterial3D.BILLBOARD_DISABLED)
+	assert(workbench_sprite.region_enabled)
+	assert(workbench_sprite.region_rect == Rect2(122.0, 155.0, 1359.0, 669.0))
+	assert(is_equal_approx(workbench_sprite.position.y, 1.452))
+	assert(is_equal_approx(workbench_sprite.position.z, 0.055))
+	assert(is_equal_approx(workbench_sprite.pixel_size, 0.00434))
 	assert(workbench_sprite.scale == Vector3.ONE)
 	assert(workbench_sprite.no_depth_test)
-	assert(workbench.get_node("GroundShadow") is MeshInstance3D)
+	assert(not (workbench.get_node("GroundShadow") as MeshInstance3D).visible)
 	assert(workbench.has_method("interact"))
 	var bank := get_nodes_in_group("scratcher_bank")[0] as Node
 	var bank_sprite := bank.get_node("BankSprite") as Sprite3D
@@ -114,12 +116,15 @@ func _run() -> void:
 	var storage := get_nodes_in_group("shelter_storage")[0] as Node
 	var storage_sprite := storage.get_node("StorageSprite") as Sprite3D
 	assert(storage_sprite.texture.resource_path == STORAGE_TEXTURE_PATH)
-	assert(storage_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
-	assert(is_equal_approx(storage_sprite.position.y, 1.89))
-	assert(is_equal_approx(storage_sprite.pixel_size, 0.0041))
+	assert(storage_sprite.billboard == BaseMaterial3D.BILLBOARD_DISABLED)
+	assert(storage_sprite.region_enabled)
+	assert(storage_sprite.region_rect == Rect2(49.0, 145.0, 1515.0, 650.0))
+	assert(is_equal_approx(storage_sprite.position.y, 1.245))
+	assert(is_equal_approx(storage_sprite.position.z, 0.055))
+	assert(is_equal_approx(storage_sprite.pixel_size, 0.00383))
 	assert(storage_sprite.scale == Vector3.ONE)
 	assert(storage_sprite.no_depth_test)
-	assert(storage.get_node("GroundShadow") is MeshInstance3D)
+	assert(not (storage.get_node("GroundShadow") as MeshInstance3D).visible)
 	assert(storage.has_method("interact"))
 	assert(storage.position.z == catnip_scraper.position.z)
 	assert(workbench.position.z == catnip_scraper.position.z)

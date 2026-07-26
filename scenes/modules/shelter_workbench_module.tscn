@@ -1,10 +1,10 @@
 [gd_scene load_steps=7 format=3 uid="uid://ba71fq0o4bon3"]
 
 [ext_resource type="Script" uid="uid://yeja3jlhrnfx" path="res://scripts/shelter_workbench_module.gd" id="1_script"]
-[ext_resource type="Texture2D" uid="uid://c84ff5tst68t3" path="res://assets/interiors/modules/shelter_workbench_wall_aligned_v4.png" id="2_hyomg"]
+[ext_resource type="Texture2D" path="res://assets/interiors/modules/shelter_workbench_wall_front_v5.png" id="2_hyomg"]
 
 [sub_resource type="BoxShape3D" id="BoxShape_workbench"]
-size = Vector3(5.4, 1.25, 1.45)
+size = Vector3(5.9, 1.25, 0.82)
 
 [sub_resource type="Shader" id="Shader_shadow"]
 code = "shader_type spatial;
@@ -34,18 +34,22 @@ script = ExtResource("1_script")
 collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="WorkbenchBody"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0.82)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0.38)
 shape = SubResource("BoxShape_workbench")
 
 [node name="WorkbenchSprite" type="Sprite3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.95, 0.02)
-pixel_size = 0.0042
-billboard = 1
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.452, 0.055)
+pixel_size = 0.00434
+region_enabled = true
+region_rect = Rect2(122, 155, 1359, 669)
+shaded = false
+transparent = true
 no_depth_test = true
 render_priority = 22
 texture = ExtResource("2_hyomg")
 
 [node name="GroundShadow" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.045, 0.88)
+visible = false
 cast_shadow = 0
 mesh = SubResource("PlaneMesh_shadow")

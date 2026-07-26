@@ -12,6 +12,7 @@ build/
 dist/
 export/
 tmp/
+test-output/
 *.log
 
 # Editor and operating-system files
