@@ -44,6 +44,7 @@ const MELEE_WINDUP_TIME := 0.46
 const MELEE_STRIKE_TIME := 0.16
 const MELEE_RECOVERY_TIME := 0.34
 const HIT_STAGGER_TIME := 0.13
+const STEALTH_TAKEDOWN_MAX_RANGE := 1.7
 const MELEE_VISION_RANGE := 14.0
 const RANGED_VISION_RANGE := 14.0
 const GRENADIER_VISION_RANGE := 14.0
@@ -2214,6 +2215,34 @@ func is_backstab_from(attacker_position: Vector3) -> bool:
 	if direction_to_attacker.length_squared() <= 0.01:
 		return false
 	return facing_world_direction.dot(direction_to_attacker.normalized()) <= -0.42
+
+
+func can_receive_stealth_takedown(
+	attacker_position: Vector3,
+	max_distance: float
+) -> bool:
+	if dying or backstab_stunned or alerted or reinforcement_call_active:
+		return false
+	var offset := attacker_position - global_position
+	offset.y = 0.0
+	return (
+		offset.length_squared() <= max_distance * max_distance
+		and detection_awareness < 1.0
+		and perception_state != "combat"
+	)
+
+
+func receive_stealth_takedown(
+	attacker_position: Vector3,
+	hit_direction: Vector3
+) -> bool:
+	if not can_receive_stealth_takedown(
+		attacker_position,
+		STEALTH_TAKEDOWN_MAX_RANGE
+	):
+		return false
+	take_melee_hit(maxi(health, 1), hit_direction, true)
+	return true
 
 
 func take_melee_hit(amount: int, hit_direction: Vector3, backstab: bool) -> void:

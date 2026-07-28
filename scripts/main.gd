@@ -108,6 +108,8 @@ const RAID_ENTRY_ENEMY_SAFE_RADIUS := 30.0
 const MELEE_ATTACK_COOLDOWN := 0.72
 const MELEE_ATTACK_RANGE := 2.2
 const MELEE_ATTACK_DAMAGE := 38
+const STEALTH_TAKEDOWN_RANGE := 1.6
+const STEALTH_TAKEDOWN_PROMPT_SIZE := Vector2(196.0, 54.0)
 const MOBILE_AIM_ASSIST_MAX_DISTANCE := 34.0
 const MOBILE_AIM_ASSIST_HALF_ANGLE_DEG := 42.0
 const MOBILE_AIM_ASSIST_ANGLE_WEIGHT := 24.0
@@ -417,6 +419,10 @@ var melee_fan_indicator: MeshInstance3D
 var melee_fan_fill_material: StandardMaterial3D
 var melee_fan_rim_material: StandardMaterial3D
 var melee_fan_tween: Tween
+var stealth_takedown_prompt: PanelContainer
+var stealth_takedown_key_label: Label
+var stealth_takedown_action_label: Label
+var nearby_stealth_takedown_target: CharacterBody3D
 var equipped_weapon_id := "ak47"
 var equipped_weapon_mods: Array[String] = []
 var weapon_stats: Dictionary = {}
@@ -752,6 +758,7 @@ func _physics_process(delta: float) -> void:
 	_update_field_interactions(delta)
 	_update_extraction_discovery()
 	_update_combat_overlay_visibility()
+	_update_stealth_takedown_prompt()
 	if _is_inventory_open() or _is_tactical_map_open() or _is_lore_open() or extraction_transition_active:
 		player.velocity = Vector3.ZERO
 		player.move_and_slide()
@@ -834,6 +841,7 @@ func _physics_process(delta: float) -> void:
 	_update_building_overlays()
 	_update_visibility_fog()
 	_update_enemy_visibility(delta)
+	_update_stealth_takedown_prompt()
 	if perception_system:
 		perception_system.call("set_aim_direction", _get_perception_aim_direction())
 		if perception_system.has_method("set_aim_expanded"):
@@ -1363,6 +1371,122 @@ func _try_melee_attack() -> void:
 	_show_melee_fan(melee_attack_direction)
 	_play_bat_swing(attack_direction)
 	state_label.text = "근접 공격"
+
+
+func _try_stealth_takedown() -> bool:
+	if (
+		melee_attack_cooldown > 0.0
+		or melee_attack_active
+		or roll_active
+		or loafing
+		or player_health <= 0
+	):
+		return false
+	var takedown_target := _find_stealth_takedown_target()
+	if not is_instance_valid(takedown_target):
+		return false
+	var attack_direction := takedown_target.global_position - player.global_position
+	attack_direction.y = 0.0
+	if attack_direction.length_squared() <= 0.01:
+		return false
+	attack_direction = attack_direction.normalized()
+	if not bool(takedown_target.call(
+		"receive_stealth_takedown",
+		player.global_position,
+		attack_direction
+	)):
+		return false
+	melee_attack_cooldown = MELEE_ATTACK_COOLDOWN
+	_add_fatigue(FATIGUE_MELEE_GAIN * 0.65)
+	_lock_aim_direction(attack_direction)
+	_set_facing_from_world_direction(attack_direction)
+	melee_attack_active = true
+	melee_attack_elapsed = 0.0
+	melee_attack_direction = attack_direction
+	melee_hit_resolved = true
+	motion_state = "melee"
+	_play_directional_animation()
+	_play_bat_swing(attack_direction)
+	_spawn_player_melee_arc(attack_direction)
+	nearby_stealth_takedown_target = null
+	if stealth_takedown_prompt:
+		stealth_takedown_prompt.visible = false
+	state_label.text = "기습 암살"
+	return true
+
+
+func _find_stealth_takedown_target() -> CharacterBody3D:
+	var nearest: CharacterBody3D
+	var nearest_distance := STEALTH_TAKEDOWN_RANGE
+	for enemy in enemies:
+		if (
+			not is_instance_valid(enemy)
+			or not enemy.has_method("can_receive_stealth_takedown")
+			or not bool(enemy.call(
+				"can_receive_stealth_takedown",
+				player.global_position,
+				STEALTH_TAKEDOWN_RANGE
+			))
+		):
+			continue
+		var offset := enemy.global_position - player.global_position
+		offset.y = 0.0
+		var distance := offset.length()
+		if distance > nearest_distance:
+			continue
+		var query := PhysicsRayQueryParameters3D.create(
+			player.global_position + Vector3(0.0, 0.42, 0.0),
+			enemy.global_position + Vector3(0.0, 0.42, 0.0),
+			3
+		)
+		query.exclude = [player.get_rid()]
+		var hit := player.get_world_3d().direct_space_state.intersect_ray(query)
+		if hit.is_empty() or hit.get("collider") != enemy:
+			continue
+		nearest = enemy
+		nearest_distance = distance
+	return nearest
+
+
+func _update_stealth_takedown_prompt() -> void:
+	if stealth_takedown_prompt == null:
+		return
+	var blocked := (
+		player_death_sequence_active
+		or melee_attack_active
+		or roll_active
+		or loafing
+		or _is_inventory_open()
+		or _is_tactical_map_open()
+		or _is_lore_open()
+		or extraction_transition_active
+	)
+	nearby_stealth_takedown_target = null if blocked else _find_stealth_takedown_target()
+	stealth_takedown_prompt.visible = is_instance_valid(nearby_stealth_takedown_target)
+	if melee_button and DisplayServer.is_touchscreen_available():
+		melee_button.text = "암살" if stealth_takedown_prompt.visible else "근접"
+	if not stealth_takedown_prompt.visible:
+		return
+	var target_screen := camera.unproject_position(
+		nearby_stealth_takedown_target.global_position + Vector3(0.0, 2.15, 0.0)
+	)
+	var viewport_size := get_viewport().get_visible_rect().size
+	var prompt_position := target_screen + Vector2(
+		-STEALTH_TAKEDOWN_PROMPT_SIZE.x * 0.5,
+		-78.0
+	)
+	prompt_position.x = clampf(
+		prompt_position.x,
+		12.0,
+		maxf(12.0, viewport_size.x - STEALTH_TAKEDOWN_PROMPT_SIZE.x - 12.0)
+	)
+	prompt_position.y = clampf(
+		prompt_position.y,
+		12.0,
+		maxf(12.0, viewport_size.y - STEALTH_TAKEDOWN_PROMPT_SIZE.y - 12.0)
+	)
+	stealth_takedown_prompt.position = prompt_position
+	stealth_takedown_prompt.size = STEALTH_TAKEDOWN_PROMPT_SIZE
 
 
 func _update_melee_attack(delta: float) -> void:
@@ -3448,6 +3572,7 @@ func _build_weapon_hud() -> void:
 		_make_panel_style(Color("#83c9a5"), Color("#bce9cc"), 4)
 	)
 	field_box.add_child(field_interaction_progress)
+	_setup_stealth_takedown_prompt(font)
 
 	fatigue_panel = PanelContainer.new()
 	fatigue_panel.name = "FatiguePanel"
@@ -3679,6 +3804,60 @@ func _build_weapon_hud() -> void:
 	inventory_ui.connect("weapon_unequipped", _on_inventory_weapon_unequipped)
 	inventory_ui.connect("equipment_changed", _on_inventory_equipment_changed)
 	_update_equipment_ui()
+
+
+func _setup_stealth_takedown_prompt(font: Font) -> void:
+	stealth_takedown_prompt = PanelContainer.new()
+	stealth_takedown_prompt.name = "StealthTakedownPrompt"
+	stealth_takedown_prompt.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	stealth_takedown_prompt.custom_minimum_size = STEALTH_TAKEDOWN_PROMPT_SIZE
+	stealth_takedown_prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stealth_takedown_prompt.z_index = 220
+	stealth_takedown_prompt.add_theme_stylebox_override(
+		"panel",
+		_make_panel_style(Color(0.025, 0.032, 0.029, 0.96), Color("#e0ba66"), 6)
+	)
+	stealth_takedown_prompt.visible = false
+	$HUD.add_child(stealth_takedown_prompt)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_right", 12)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	stealth_takedown_prompt.add_child(margin)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	margin.add_child(row)
+
+	var key_chip := PanelContainer.new()
+	key_chip.custom_minimum_size = Vector2(58, 34)
+	key_chip.add_theme_stylebox_override(
+		"panel",
+		_make_panel_style(Color("#d5aa55"), Color("#ffe09a"), 5)
+	)
+	row.add_child(key_chip)
+	stealth_takedown_key_label = Label.new()
+	stealth_takedown_key_label.text = (
+		"탭"
+		if DisplayServer.is_touchscreen_available()
+		else "LMB"
+	)
+	stealth_takedown_key_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	stealth_takedown_key_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	stealth_takedown_key_label.add_theme_font_override("font", font)
+	stealth_takedown_key_label.add_theme_font_size_override("font_size", 14)
+	stealth_takedown_key_label.add_theme_color_override("font_color", Color("#191711"))
+	key_chip.add_child(stealth_takedown_key_label)
+
+	stealth_takedown_action_label = Label.new()
+	stealth_takedown_action_label.text = "암살"
+	stealth_takedown_action_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stealth_takedown_action_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	stealth_takedown_action_label.add_theme_font_override("font", font)
+	stealth_takedown_action_label.add_theme_font_size_override("font_size", 18)
+	stealth_takedown_action_label.add_theme_color_override("font_color", Color("#f5e6c7"))
+	row.add_child(stealth_takedown_action_label)
 
 
 func _build_mobile_utility_buttons(font: Font) -> void:
@@ -4019,7 +4198,8 @@ func _on_fire_button_up() -> void:
 
 
 func _on_melee_button_pressed() -> void:
-	_try_melee_attack()
+	if not _try_stealth_takedown():
+		_try_melee_attack()
 	if DisplayServer.is_touchscreen_available():
 		Input.vibrate_handheld(35)
 
@@ -8846,7 +9026,9 @@ func _input(event: InputEvent) -> void:
 func _handle_combat_mouse_button(mouse_event: InputEventMouseButton) -> void:
 	if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 		if mouse_event.pressed:
-			if laser_aim_held and has_ak and (magazine_ammo > 0 or reserve_ammo > 0):
+			if _try_stealth_takedown():
+				mouse_fire_held = false
+			elif laser_aim_held and has_ak and (magazine_ammo > 0 or reserve_ammo > 0):
 				mouse_fire_held = true
 				_try_fire_ak47()
 			else:
