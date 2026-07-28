@@ -34,6 +34,18 @@ func _run() -> void:
 	var second_signature := _layout_signature(second_city)
 	assert(first_signature != second_signature, "Different raid seeds must produce different city structures.")
 	assert(str(second_city.call("get_sector_label", Vector3.ZERO)).contains("-"))
+	var long_patrol_route := second_city.call(
+		"get_long_road_patrol_route",
+		second_city.call("get_shelter_exit_position"),
+		17,
+		[]
+	) as Array
+	assert(long_patrol_route.size() >= 5, "Road patrols need enough waypoints for a visible long route.")
+	var patrol_span := 0.0
+	for first_point in long_patrol_route:
+		for second_point in long_patrol_route:
+			patrol_span = maxf(patrol_span, (first_point as Vector3).distance_to(second_point as Vector3))
+	assert(patrol_span >= 100.0, "Road patrol routes must cover a substantial stretch of road.")
 
 	var tactical_map := load("res://scripts/tactical_map.gd").new() as Control
 	var map_player := Node3D.new()
@@ -53,7 +65,7 @@ func _run() -> void:
 	assert(screen_right.x > center.x and absf(screen_right.y - center.y) < 0.01)
 	assert(screen_down.y > center.y and absf(screen_down.x - center.x) < 0.01)
 
-	print("RAID_MAP_NAVIGATION_SMOKE: PASS seeds=%d/%d" % [first_seed, second_seed])
+	print("RAID_MAP_NAVIGATION_SMOKE: PASS seeds=%d/%d patrol_span=%.1f" % [first_seed, second_seed, patrol_span])
 	tactical_map.free()
 	map_player.queue_free()
 	second_city.queue_free()

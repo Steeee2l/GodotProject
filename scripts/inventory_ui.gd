@@ -939,6 +939,28 @@ func _refresh_contents() -> void:
 			"texture": component_textures.get(component_id) as Texture2D,
 		})
 
+	var progression_item_ids: Array = game_state.progression_item_inventory.keys()
+	progression_item_ids.sort()
+	for progression_item_id_value in progression_item_ids:
+		var progression_item_id := str(progression_item_id_value)
+		var progression_item_count: int = int(
+			game_state.get_progression_item_count(progression_item_id)
+		)
+		if progression_item_count <= 0:
+			continue
+		_add_bag_item({
+			"id": progression_item_id,
+			"type": "progression",
+			"title": _progression_item_name(progression_item_id),
+			"description": _progression_item_description(progression_item_id),
+			"quantity": progression_item_count,
+			"texture": UI_ICONS.get_icon(
+				"secure" if progression_item_id == "sealed_zone_keycard" else "craft",
+				64,
+				Color("#e7c96f")
+			),
+		})
+
 	var mod_ids: Array = MOD_COMPONENTS.keys()
 	mod_ids.sort()
 	for mod_id_variant in mod_ids:
@@ -1715,6 +1737,28 @@ func _component_description(component_id: String) -> String:
 		"magazine_spring":
 			return "고속 탄창과 전술 부품 제작에 쓰는 기계 부품입니다."
 	return "총기 부착물 제작에 쓰는 핵심 부품입니다."
+
+
+func _progression_item_name(item_id: String) -> String:
+	match item_id:
+		"rifle_blueprint":
+			return "소총 제작 청사진"
+		"shotgun_blueprint":
+			return "산탄총 제작 청사진"
+		"sealed_zone_keycard":
+			return "봉인구역 키카드"
+	return item_id
+
+
+func _progression_item_description(item_id: String) -> String:
+	match item_id:
+		"rifle_blueprint":
+			return "AK 계열 소총 제작법을 해금하는 희귀 청사진입니다."
+		"shotgun_blueprint":
+			return "고화력 산탄총 제작법을 해금하는 희귀 청사진입니다."
+		"sealed_zone_keycard":
+			return "Stage 4 봉인구역 진입에 필요한 보안 키카드입니다."
+	return "상위 스테이지 진행에 사용하는 희귀 물품입니다."
 
 
 func _mod_description(mod_id: String) -> String:

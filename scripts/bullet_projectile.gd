@@ -25,6 +25,7 @@ var last_motion_origin := Vector3.INF
 
 
 func _ready() -> void:
+	add_to_group("projectile")
 	collision_layer = 4 if not hostile else 8
 	collision_mask = 3
 	monitoring = true
@@ -218,7 +219,15 @@ func _apply_hit(body: Object, trajectory_origin: Vector3 = Vector3.INF) -> bool:
 	adjusted_damage = maxi(1, roundi(float(adjusted_damage) * range_factor))
 	last_hit_was_critical = not hostile and randf() < critical_chance
 	if body != null and not hostile and body.has_method("take_projectile_hit"):
-		body.call("take_projectile_hit", adjusted_damage, direction, last_hit_was_critical, critical_multiplier, last_hit_grade)
+		body.call(
+			"take_projectile_hit",
+			adjusted_damage,
+			direction,
+			last_hit_was_critical,
+			critical_multiplier,
+			last_hit_grade,
+			source_body
+		)
 		damaged = true
 	elif body != null and body.has_method("take_hit"):
 		body.call("take_hit", adjusted_damage, direction)
@@ -229,7 +238,15 @@ func _apply_hit(body: Object, trajectory_origin: Vector3 = Vector3.INF) -> bool:
 	elif body is Node and (body as Node).get_parent() != null:
 		var parent := (body as Node).get_parent()
 		if not hostile and parent.has_method("take_projectile_hit"):
-			parent.call("take_projectile_hit", adjusted_damage, direction, last_hit_was_critical, critical_multiplier, last_hit_grade)
+			parent.call(
+				"take_projectile_hit",
+				adjusted_damage,
+				direction,
+				last_hit_was_critical,
+				critical_multiplier,
+				last_hit_grade,
+				source_body
+			)
 			damaged = true
 		elif parent.has_method("take_hit"):
 			parent.call("take_hit", adjusted_damage, direction)

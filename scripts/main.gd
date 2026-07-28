@@ -72,6 +72,7 @@ const ROCKET_BOSS_SCRIPT := preload("res://scripts/rocket_boss.gd")
 const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
 const PERCEPTION_SYSTEM_SCRIPT := preload("res://scripts/perception_system.gd")
 const SCENT_TRAIL_MANAGER_SCRIPT := preload("res://scripts/scent_trail_manager.gd")
+const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
 const OVERLAY_DEPTH_SORT := preload("res://scripts/overlay_depth_sort.gd")
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
@@ -85,12 +86,12 @@ const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber
 const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
 const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/magazine_spring.png")
 const BROKEN_SENTRY_TEXTURE := preload("res://assets/props/broken_sentry_salvage.png")
+const FIELD_LOOT_CACHE_TEXTURE := preload("res://assets/interiors/office_dungeon/modules/office_salvage_loot_v1.png")
 const START_WITH_COMPANION := false
 const AK_PICKUP_POSITION := Vector3(1.15, 0.32, 0.7)
 const PICKUP_DISTANCE := 1.75
 const PICKUP_HOLD_DURATION := 0.9
 const AIM_HOLD_DURATION := 0.55
-const AMMO_PICKUP_AMOUNT := 30
 const MAP_CONTENT_SCALE := ProceduralCityMap.WORLD_SCALE
 const SECONDS_PER_GAME_HOUR := 36.0
 const NIGHT_START_HOUR := 19.0
@@ -100,7 +101,6 @@ const MAX_NIGHT_ENEMY_COUNT := 44
 const ENEMY_PAIR_SQUAD_CHANCE := 0.78
 const FIRST_STAGE_ZONE_ID := "jongno_outskirts"
 const FIRST_STAGE_SOLO_SQUAD_CHANCE := 0.62
-const BASE_FIELD_LOOT_COUNT := 64
 const SALVAGE_VEHICLE_POINT_COUNT := 10
 const SALVAGE_MISC_POINT_COUNT := 4
 const RESCUE_POINT_COUNT := 5
@@ -372,6 +372,7 @@ var weapon_overlay: Sprite2D
 var roll_afterimages: Array[Sprite2D] = []
 var unarmed_sprite_frames: SpriteFrames
 var ammo_pickups: Array[Node3D] = []
+var field_loot_containers: Array[Node3D] = []
 var ammo_notice: Label
 var ammo_notice_time := 0.0
 var ammo_pickup_chain_total := 0
@@ -588,7 +589,8 @@ func _ready() -> void:
 	camera.position = Vector3.ONE * CAMERA_DIAGONAL_OFFSET
 	camera.look_at(Vector3.ZERO)
 	var world := $World as ProceduralCityMap
-	if GameState.returning_from_shelter:
+	var launched_from_shelter := GameState.returning_from_shelter
+	if launched_from_shelter:
 		player.position = world.get_shelter_exit_position()
 		GameState.returning_from_shelter = false
 	else:
@@ -597,6 +599,7 @@ func _ready() -> void:
 			0.62,
 			[player.get_rid()]
 		)
+	_snap_camera_to_player()
 	$SmokeA.emitting = false
 	$SmokeB.emitting = false
 	survivor.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
@@ -635,6 +638,8 @@ func _ready() -> void:
 	_update_enemy_visibility()
 	_set_facing("s")
 	_setup_extraction_site(world)
+	if launched_from_shelter:
+		_play_raid_entry_fade()
 	_setup_field_objectives(world)
 	_setup_procedural_field_missions(world)
 	_setup_basic_raid_missions(world)
@@ -651,6 +656,24 @@ func _ready() -> void:
 	if not DisplayServer.is_touchscreen_available():
 		Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
 	_apply_hud_layout()
+
+
+func _snap_camera_to_player() -> void:
+	camera_rig.position = Vector3(player.position.x, 0.0, player.position.z) + scope_camera_offset
+
+
+func _play_raid_entry_fade() -> void:
+	if not is_instance_valid(extraction_fade):
+		return
+	extraction_fade.color = Color(0, 0, 0, 1)
+	extraction_fade.mouse_filter = Control.MOUSE_FILTER_STOP
+	var tween := create_tween()
+	tween.tween_interval(0.08)
+	tween.tween_property(extraction_fade, "color:a", 0.0, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_callback(func() -> void:
+		if is_instance_valid(extraction_fade):
+			extraction_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	)
 
 
 func activate_companion() -> void:
@@ -2284,6 +2307,7 @@ func _capture_raid_start_snapshot() -> void:
 		"canned_food": GameState.get_backpack_storage_count("food", "canned_food"),
 		"churu": GameState.churu,
 		"mod_component_inventory": GameState.mod_component_inventory.duplicate(true),
+		"progression_item_inventory": GameState.progression_item_inventory.duplicate(true),
 		"weapon_mod_inventory": GameState.weapon_mod_inventory.duplicate(true),
 		"weapon_inventory": GameState.weapon_inventory.duplicate(true),
 		"equipment_inventory": GameState.equipment_inventory.duplicate(true),
@@ -2323,6 +2347,7 @@ func _build_death_corpse_loot() -> Dictionary:
 		"canned_food": GameState.get_backpack_storage_count("food", "canned_food"),
 		"churu": maxi(0, GameState.churu),
 		"mod_component_inventory": GameState.mod_component_inventory.duplicate(true),
+		"progression_item_inventory": GameState.progression_item_inventory.duplicate(true),
 		"weapon_mod_inventory": GameState.weapon_mod_inventory.duplicate(true),
 		"weapon_inventory": GameState.weapon_inventory.duplicate(true),
 		"equipment_inventory": current_equipment_totals,
@@ -2330,7 +2355,9 @@ func _build_death_corpse_loot() -> Dictionary:
 		"equipped_weapon_mods": GameState.equipped_weapon_mods.duplicate(),
 		"weapon_mod_loadouts": GameState.weapon_mod_loadouts.duplicate(true),
 	}
-	_fill_secure_slots_from_loot(loot)
+	# Death recovery is the only safety net: carried items remain on the corpse
+	# instead of being silently restored to the shelter.
+	GameState.secure_dog_items.clear()
 	return loot
 
 
@@ -2385,6 +2412,7 @@ func _corpse_loot_item_count(loot: Dictionary) -> int:
 	for dictionary_key in [
 		"ammo_inventory",
 		"mod_component_inventory",
+		"progression_item_inventory",
 		"weapon_mod_inventory",
 		"weapon_inventory",
 		"equipment_inventory",
@@ -2438,6 +2466,9 @@ func _format_death_loss_summary(loot: Dictionary) -> String:
 	var mod_count := 0
 	for amount in (loot.get("weapon_mod_inventory", {}) as Dictionary).values():
 		mod_count += maxi(0, int(amount))
+	var progression_item_count := 0
+	for amount in (loot.get("progression_item_inventory", {}) as Dictionary).values():
+		progression_item_count += maxi(0, int(amount))
 
 	var lines: Array[String] = ["분실한 장비 및 소모품"]
 	if not gear_entries.is_empty():
@@ -2456,6 +2487,8 @@ func _format_death_loss_summary(loot: Dictionary) -> String:
 		supply_entries.append("츄르 %d개" % churu_count)
 	if component_count + mod_count > 0:
 		supply_entries.append("부품 %d개" % (component_count + mod_count))
+	if progression_item_count > 0:
+		supply_entries.append("청사진·키카드 %d개" % progression_item_count)
 	if not supply_entries.is_empty():
 		lines.append("휴대품 · %s" % "  /  ".join(supply_entries))
 	lines.append("다음 탐사에서 사망 지점의 가방을 한 번 회수할 수 있습니다.")
@@ -2467,6 +2500,10 @@ func _clear_carried_inventory_after_death() -> void:
 		GameState.ammo_inventory[key] = 0
 	for key in GameState.mod_component_inventory.keys():
 		GameState.mod_component_inventory[key] = 0
+	for key in GameState.progression_item_inventory.keys():
+		GameState.progression_item_inventory[key] = 0
+	if not GameState.is_raid_zone_unlocked(GameState.selected_raid_zone):
+		GameState.selected_raid_zone = FIRST_STAGE_ZONE_ID
 	for key in GameState.weapon_mod_inventory.keys():
 		GameState.weapon_mod_inventory[key] = 0
 	for key in GameState.equipment_inventory.keys():
@@ -2486,7 +2523,7 @@ func _clear_carried_inventory_after_death() -> void:
 	GameState.equipped_body_armor_id = ""
 	GameState.equipped_head_armor_id = ""
 	GameState.equipped_footwear_id = ""
-	_restore_secure_items_after_death()
+	GameState.secure_dog_items.clear()
 	GameState.fatigue = minf(fatigue + 18.0, FATIGUE_MAX)
 	GameState.player_health = mini(82, GameState.get_max_health())
 	GameState.returning_from_shelter = false
@@ -2522,7 +2559,7 @@ func _begin_player_death_sequence() -> void:
 		run_kills,
 		run_damage_dealt,
 	]
-	game_over_loss_label.text = "보안 슬롯 1칸은 보존됩니다. 나머지는 다음 탐사에서 사망 지점의 가방을 한 번 회수할 수 있습니다."
+	game_over_loss_label.text = "휴대품은 모두 사망 지점에 남습니다. 다음 탐사에서 가방을 한 번 회수할 수 있습니다."
 	_populate_game_over_loss_icons(corpse_loot)
 	game_over_ready_to_continue = false
 	game_over_continue_started = false
@@ -2592,139 +2629,114 @@ func _spawn_ak_pickup() -> void:
 
 func _spawn_ammo_pickups() -> void:
 	var world := $World as ProceduralCityMap
+	var stage_tier := LOOT_ECONOMY.get_stage_for_zone(raid_zone_data)
+	var container_plan: Array[String] = LOOT_ECONOMY.build_container_plan(
+		stage_tier,
+		spawn_random
+	)
 	var occupied_positions: Array[Vector3] = []
-	for index in BASE_FIELD_LOOT_COUNT:
+	for index in container_plan.size():
 		var position := _find_stratified_map_position(
 			world,
 			index,
-			BASE_FIELD_LOOT_COUNT,
+			container_plan.size(),
 			12.0,
 			9.0,
 			occupied_positions,
 			0.34
 		)
 		occupied_positions.append(position)
-		_spawn_district_loot(world, position, index)
+		_spawn_field_loot_container(
+			world,
+			position,
+			str(container_plan[index]),
+			stage_tier,
+			index
+		)
 
 
-func _spawn_district_loot(
+func _spawn_field_loot_container(
 	world: ProceduralCityMap,
 	position: Vector3,
+	container_type: String,
+	stage_tier: int,
 	index: int
 ) -> Node3D:
 	var district := world.get_district_id(position)
-	var definition := _roll_district_loot_definition(district, index)
-	var loot_type := str(definition.get("type", "ammo"))
-	var data := (definition.get("data", {}) as Dictionary).duplicate(true)
-	data["district_id"] = district
-	var pickup := _create_loot_pickup(loot_type, position, data)
-	pickup.set_meta("district_id", district)
-	return pickup
+	var point := _create_field_interaction(
+		"loot_container",
+		position,
+		LOOT_ECONOMY.get_container_display_name(container_type),
+		0.72
+	)
+	point.name = "LootContainer_%02d_%s" % [index, container_type]
+	point.set_meta("container_type", container_type)
+	point.set_meta("stage_tier", stage_tier)
+	point.set_meta("district_id", district)
+	point.set_meta("container_index", index)
+	_build_field_loot_container_visual(point, container_type)
+	field_loot_containers.append(point)
+	return point
+
+
+func _build_field_loot_container_visual(point: Node3D, container_type: String) -> void:
+	var tint_by_type := {
+		"street_cache": Color("#7e8d83"),
+		"ammo_case": Color("#c2a65a"),
+		"toolbox": Color("#9a6d51"),
+		"clothing_cache": Color("#82929b"),
+		"weapon_case": Color("#d19b4a"),
+		"secure_cache": Color("#76b7a5"),
+	}
+	var sprite := Sprite3D.new()
+	sprite.name = "ContainerSprite"
+	sprite.texture = FIELD_LOOT_CACHE_TEXTURE
+	sprite.pixel_size = 0.00105
+	sprite.position = Vector3(0.0, 0.55, 0.0)
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.shaded = false
+	sprite.transparent = true
+	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
+	sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	sprite.modulate = tint_by_type.get(container_type, Color.WHITE)
+	point.add_child(sprite)
+	var icon_name := "backpack"
+	match container_type:
+		"ammo_case":
+			icon_name = "ammo"
+		"toolbox":
+			icon_name = "parts"
+		"clothing_cache":
+			icon_name = "armor"
+		"weapon_case":
+			icon_name = "weapon"
+		"secure_cache":
+			icon_name = "secure"
+	var icon := Sprite3D.new()
+	icon.name = "ContainerTypeIcon"
+	icon.texture = UI_ICONS.get_icon(icon_name, 72, Color("#f2d889"))
+	icon.pixel_size = 0.0065
+	icon.position = Vector3(0.0, 1.32, 0.0)
+	icon.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	icon.shaded = false
+	icon.transparent = true
+	icon.no_depth_test = true
+	icon.render_priority = 38
+	point.add_child(icon)
 
 
 func _roll_district_loot_definition(district: String, index: int) -> Dictionary:
-	# Every sixth sector has a guaranteed weapon recovery point so a player who
-	# lost their raid kit can rebuild without having to win an unarmed fight.
-	if index % 6 == 4:
-		var recovery_weapons := ["m1911", "mp5", "double_barrel"]
-		var weapon_id: String = recovery_weapons[floori(float(index) / 6.0) % recovery_weapons.size()]
-		return {
-			"type": "weapon",
-			"data": {
-				"weapon_id": weapon_id,
-				"amount": 1,
-				"display_name": _get_loot_weapon_name(weapon_id),
-			},
-		}
-
-	var district_weights := {
-		"market_lane": [
-			["canned_food", 0.31], ["medkit", 0.16], ["mod_component", 0.19],
-			["ammo", 0.18], ["armor", 0.10], ["weapon", 0.06],
-		],
-		"luxury_core": [
-			["armor", 0.28], ["mod_component", 0.27], ["weapon", 0.15],
-			["medkit", 0.12], ["ammo", 0.12], ["canned_food", 0.06],
-		],
-		"multi_family": [
-			["canned_food", 0.27], ["ammo", 0.24], ["medkit", 0.17],
-			["armor", 0.14], ["mod_component", 0.12], ["weapon", 0.06],
-		],
-		"business_corner": [
-			["ammo", 0.27], ["weapon", 0.18], ["mod_component", 0.23],
-			["armor", 0.14], ["medkit", 0.10], ["canned_food", 0.08],
-		],
-		"residential_buffer": [
-			["canned_food", 0.28], ["ammo", 0.25], ["medkit", 0.16],
-			["armor", 0.13], ["mod_component", 0.12], ["weapon", 0.06],
-		],
-		"open_space_edge": [
-			["mod_component", 0.29], ["ammo", 0.25], ["armor", 0.16],
-			["canned_food", 0.12], ["medkit", 0.10], ["weapon", 0.08],
-		],
-		"street_mixed": [
-			["ammo", 0.25], ["mod_component", 0.21], ["canned_food", 0.19],
-			["weapon", 0.14], ["armor", 0.12], ["medkit", 0.09],
-		],
-	}
-	var weights: Array = district_weights.get(district, district_weights["street_mixed"])
-	var roll := spawn_random.randf()
-	var cumulative := 0.0
-	var selected_type := "ammo"
-	for entry in weights:
-		cumulative += float(entry[1])
-		if roll <= cumulative:
-			selected_type = str(entry[0])
-			break
-	return _build_district_loot_data(selected_type, district, index)
-
-
-func _build_district_loot_data(loot_type: String, district: String, index: int) -> Dictionary:
-	match loot_type:
-		"canned_food":
-			return {"type": loot_type, "data": {"amount": 1, "display_name": "통조림"}}
-		"medkit":
-			return {"type": loot_type, "data": {"amount": 1, "display_name": "구급약"}}
-		"mod_component":
-			var component_ids := ["rubber_gasket", "scope_lens", "magazine_spring"]
-			var component_names := {
-				"rubber_gasket": "소음기용 고무 패킹",
-				"scope_lens": "스코프 렌즈",
-				"magazine_spring": "탄창 스프링",
-			}
-			var component_index := posmod(index + district.hash(), component_ids.size())
-			var component_id: String = component_ids[component_index]
-			return {
-				"type": loot_type,
-				"data": {
-					"component_id": component_id,
-					"amount": 1,
-					"display_name": component_names[component_id],
-				},
-			}
-		"weapon":
-			var weapon_ids := ["m1911", "mp5", "double_barrel"]
-			var weapon_id: String = weapon_ids[posmod(index + district.hash(), weapon_ids.size())]
-			return {
-				"type": loot_type,
-				"data": {
-					"weapon_id": weapon_id,
-					"amount": 1,
-					"display_name": _get_loot_weapon_name(weapon_id),
-				},
-			}
-		"armor":
-			return {"type": loot_type, "data": _get_random_armor_drop(index)}
-		_:
-			var ammo_id := "9mm_fmj" if district in ["market_lane", "multi_family", "residential_buffer"] else "762_fmj"
-			return {
-				"type": "ammo",
-				"data": {
-					"ammo_id": ammo_id,
-					"amount": AMMO_PICKUP_AMOUNT,
-					"display_name": "9mm 탄약" if ammo_id == "9mm_fmj" else "7.62mm 탄약",
-				},
-			}
+	var deterministic_random := RandomNumberGenerator.new()
+	deterministic_random.seed = (
+		GameState.map_seed
+		+ index * 104729
+		+ district.hash()
+	)
+	return LOOT_ECONOMY.roll_loose_loot(
+		LOOT_ECONOMY.get_stage_for_zone(raid_zone_data),
+		district,
+		deterministic_random
+	)
 
 
 func _create_loot_pickup(loot_type: String, world_position: Vector3, data: Dictionary = {}) -> Node3D:
@@ -2763,6 +2775,12 @@ func _create_loot_pickup(loot_type: String, world_position: Vector3, data: Dicti
 			sprite.texture = _get_mod_component_texture(component_id)
 			sprite.pixel_size = 0.00105
 			highlight_color = _get_mod_component_color(component_id)
+		"progression_item":
+			var progression_item_id := str(data.get("progression_item_id", "rifle_blueprint"))
+			var icon_name := "secure" if progression_item_id == "sealed_zone_keycard" else "craft"
+			sprite.texture = UI_ICONS.get_icon(icon_name, 96, Color("#e7c96f"))
+			sprite.pixel_size = 0.0062
+			highlight_color = Color("#e7c96f")
 		"weapon":
 			var weapon_id := str(data.get("weapon_id", "ak47"))
 			sprite.texture = _get_loot_weapon_texture(weapon_id)
@@ -2924,6 +2942,14 @@ func _collect_nearby_ammo() -> void:
 				amount,
 				GameState.get_mod_component_count(component_id),
 			]
+		"progression_item":
+			var progression_item_id := str(
+				nearby_ammo_pickup.get_meta("progression_item_id", "rifle_blueprint")
+			)
+			GameState.add_progression_item(progression_item_id, amount)
+			ammo_notice.text = "%s 획득" % str(
+				nearby_ammo_pickup.get_meta("display_name", "진행도 아이템")
+			)
 		"weapon":
 			var weapon_id := str(nearby_ammo_pickup.get_meta("weapon_id", "ak47"))
 			GameState.add_weapon(weapon_id, amount)
@@ -4974,10 +5000,11 @@ func _spawn_enemy_squad(
 		if order_position != Vector3.INF and enemy.has_method("receive_reinforcement_order"):
 			enemy.call("receive_reinforcement_order", order_position)
 		elif enemy.has_method("configure_patrol"):
+			var patrol_selector := posmod(assigned_squad_id, 4)
 			var patrol_mode := (
 				"sentry"
-				if posmod(assigned_squad_id + member_index, 3) == 0
-				else "route"
+				if patrol_selector == 0
+				else ("route" if patrol_selector == 1 else "road_route")
 			)
 			enemy.call(
 				"configure_patrol",
@@ -5000,6 +5027,8 @@ func _build_enemy_patrol_route(
 	patrol_mode: String
 ) -> Array[Vector3]:
 	var points: Array[Vector3] = [origin]
+	if patrol_mode == "road_route":
+		return world.get_long_road_patrol_route(origin, route_seed, [player.get_rid()])
 	var point_count := 3 if patrol_mode == "sentry" else 5
 	var route_radius := 4.2 if patrol_mode == "sentry" else 8.5
 	var base_angle := deg_to_rad(float(posmod(route_seed * 67, 360)))
@@ -5107,6 +5136,7 @@ func _spawn_enemy(
 
 func _on_enemy_died(enemy: CharacterBody3D) -> void:
 	run_kills += 1
+	GameState.raid_kills += 1
 	_advance_contract_progress("kills")
 	if (
 		is_instance_valid(active_field_mission)
@@ -5137,6 +5167,7 @@ func _on_enemy_damaged(_enemy: CharacterBody3D, amount: int) -> void:
 func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 	var drop_position := enemy.global_position
 	var enemy_weapon_id := str(enemy.get("weapon_id"))
+	var stage_tier := LOOT_ECONOMY.get_stage_for_zone(raid_zone_data)
 	if bool(enemy.get_meta("raid_boss", false)):
 		var component_ids := ["rubber_gasket", "scope_lens", "magazine_spring"]
 		var component_names := {
@@ -5161,71 +5192,29 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 			}
 		)
 		return boss_drop
-	if (
+	var definition: Dictionary = LOOT_ECONOMY.roll_enemy_drop(
+		stage_tier,
+		str(enemy.get("enemy_kind")),
+		enemy_weapon_id,
+		spawn_random,
 		not has_ak
-		and enemy_weapon_id != "baseball_bat"
-		and spawn_random.randf() < 0.58
+	)
+	if definition.is_empty():
+		return null
+	if not LOOT_ECONOMY.try_register_loot(
+		GameState,
+		definition,
+		"enemy",
+		stage_tier
 	):
-		return _create_loot_pickup(
-			"weapon",
-			drop_position,
-			{
-				"weapon_id": enemy_weapon_id,
-				"amount": 1,
-				"display_name": _get_loot_weapon_name(enemy_weapon_id),
-			}
-		)
-	var roll := spawn_random.randf()
-	var churu_chance := 0.01 + night_intensity * 0.015 + float(raid_zone_data.get("threat", 0.0)) * 0.018
-	if roll < churu_chance:
-		return _create_loot_pickup(
-			"churu",
-			drop_position,
-			{"amount": 1, "display_name": "희귀 츄르"}
-		)
-	if roll < churu_chance + 0.05:
-		return _create_loot_pickup(
-			"medkit",
-			drop_position,
-			{"amount": 1, "display_name": "구급약"}
-		)
-	if roll < 0.34 + churu_chance:
-		return _create_loot_pickup(
-			"ammo",
-			drop_position,
-			_get_enemy_ammo_drop(enemy_weapon_id)
-		)
-	if roll < 0.52 + churu_chance:
-		return _create_loot_pickup(
-			"canned_food",
-			drop_position,
-			{"amount": 2 if spawn_random.randf() < 0.12 else 1, "display_name": "Canned Food"}
-		)
-	if roll < 0.68 + churu_chance:
-		var component_ids := ["rubber_gasket", "scope_lens", "magazine_spring"]
-		var component_names := ["소음기용 고무 패킹", "스코프 렌즈", "탄창 스프링"]
-		var component_index := spawn_random.randi_range(0, component_ids.size() - 1)
-		return _create_loot_pickup(
-			"mod_component",
-			drop_position,
-			{
-				"amount": 1,
-				"component_id": component_ids[component_index],
-				"display_name": component_names[component_index],
-			}
-		)
-	var weapon_drop_threshold := 0.94 if _is_first_stage_zone() else 0.88
-	if roll < weapon_drop_threshold + churu_chance:
-		return _create_loot_pickup(
-			"weapon",
-			drop_position,
-			{
-				"amount": 1,
-				"weapon_id": enemy_weapon_id,
-				"display_name": _get_loot_weapon_name(enemy_weapon_id),
-			}
-		)
-	return _create_loot_pickup("armor", drop_position, _get_random_armor_drop(enemy.get_instance_id()))
+		return null
+	var data := (definition.get("data", {}) as Dictionary).duplicate(true)
+	data["loot_source"] = "enemy"
+	return _create_loot_pickup(
+		str(definition.get("type", "canned_food")),
+		drop_position,
+		data
+	)
 
 
 func _get_random_armor_drop(seed_hint: int = 0) -> Dictionary:
@@ -5245,18 +5234,6 @@ func _get_random_armor_drop(seed_hint: int = 0) -> Dictionary:
 		"equipment_id": equipment_id,
 		"display_name": str(definition.get("display_name", "Armor")),
 	}
-
-
-func _get_enemy_ammo_drop(enemy_weapon_id: String) -> Dictionary:
-	match enemy_weapon_id:
-		"m1911":
-			return {"ammo_id": "45_fmj", "amount": spawn_random.randi_range(7, 14), "display_name": ".45 ACP 탄약"}
-		"mp5":
-			return {"ammo_id": "9mm_fmj", "amount": spawn_random.randi_range(15, 30), "display_name": "9mm 탄약"}
-		"double_barrel":
-			return {"ammo_id": "12g_buckshot", "amount": spawn_random.randi_range(4, 8), "display_name": "12게이지 탄약"}
-		_:
-			return {"ammo_id": "762_fmj", "amount": spawn_random.randi_range(12, 24), "display_name": "7.62mm 탄약"}
 
 
 func _get_loot_weapon_name(weapon_id: String) -> String:
@@ -5331,8 +5308,17 @@ func _on_enemy_reinforcement_called(caller: CharacterBody3D) -> void:
 
 
 func _spawn_called_reinforcements() -> void:
+	var stage_profile: Dictionary = LOOT_ECONOMY.get_stage_profile(
+		LOOT_ECONOMY.get_stage_for_zone(raid_zone_data)
+	)
+	var remaining_kills := int(stage_profile.get("raid_kill_cap", 40)) - GameState.raid_kills
+	if remaining_kills <= 0:
+		return
 	var effective_threat := clampf(maxf(0.58, night_intensity), 0.0, 1.0)
-	var reinforcement_count := 6 + roundi(night_intensity * 4.0)
+	var reinforcement_count := mini(
+		6 + roundi(night_intensity * 4.0),
+		remaining_kills
+	)
 	var world := $World as ProceduralCityMap
 	var squad_sizes := _build_enemy_squad_sizes(reinforcement_count)
 	var spawned_count := 0
@@ -5367,6 +5353,12 @@ func _update_enemy_pressure(delta: float) -> void:
 			continue
 		enemy.call("set_threat_level", effective_threat)
 		enemy.call("set_environment_visibility", night_intensity)
+	var stage_profile: Dictionary = LOOT_ECONOMY.get_stage_profile(
+		LOOT_ECONOMY.get_stage_for_zone(raid_zone_data)
+	)
+	if GameState.raid_kills >= int(stage_profile.get("raid_kill_cap", 40)):
+		reinforcement_timer = 6.0
+		return
 	_update_reinforcement_call(delta, effective_threat)
 	var target_count := (
 		BASE_ENEMY_COUNT
@@ -8304,6 +8296,8 @@ func _complete_field_interaction(point: Node3D) -> void:
 			return
 	point.set_meta("completed", true)
 	match interaction_type:
+		"loot_container":
+			_open_field_loot_container(point)
 		"salvage":
 			_add_fatigue(FATIGUE_SALVAGE_GAIN)
 			_spawn_salvage_rewards(point.global_position)
@@ -8323,6 +8317,7 @@ func _complete_field_interaction(point: Node3D) -> void:
 			_show_field_notice("피난민 구조 · 호송 중 이동 속도가 감소합니다.")
 		"corpse_recovery":
 			_recover_previous_corpse()
+	field_loot_containers.erase(point)
 	field_interactions.erase(point)
 	nearby_field_interaction = null
 	field_interaction_hold_time = 0.0
@@ -8332,6 +8327,59 @@ func _complete_field_interaction(point: Node3D) -> void:
 		field_interaction_panel.visible = false
 	point.queue_free()
 	_update_equipment_ui()
+
+
+func _open_field_loot_container(point: Node3D) -> void:
+	var container_type := str(point.get_meta("container_type", "street_cache"))
+	var stage_tier := int(point.get_meta(
+		"stage_tier",
+		LOOT_ECONOMY.get_stage_for_zone(raid_zone_data)
+	))
+	var district := str(point.get_meta("district_id", "street_mixed"))
+	var container_index := int(point.get_meta("container_index", 0))
+	var container_random := RandomNumberGenerator.new()
+	container_random.seed = (
+		GameState.map_seed
+		^ (container_index * 104729)
+		^ container_type.hash()
+		^ district.hash()
+	)
+	var definitions: Array[Dictionary] = LOOT_ECONOMY.roll_container(
+		container_type,
+		stage_tier,
+		district,
+		container_random
+	)
+	var spawned_count := 0
+	for definition in definitions:
+		if not LOOT_ECONOMY.try_register_loot(
+			GameState,
+			definition,
+			"field",
+			stage_tier
+		):
+			continue
+		var angle := TAU * float(spawned_count) / float(maxi(1, definitions.size()))
+		var offset := Vector3(cos(angle), 0.0, sin(angle)) * (0.55 + spawned_count * 0.12)
+		var data := (definition.get("data", {}) as Dictionary).duplicate(true)
+		data["loot_source"] = "container"
+		data["container_type"] = container_type
+		_create_loot_pickup(
+			str(definition.get("type", "canned_food")),
+			point.global_position + offset,
+			data
+		)
+		spawned_count += 1
+	_add_fatigue(FATIGUE_LOOT_GAIN)
+	if spawned_count == 0:
+		_show_field_notice("%s · 비어 있습니다." % LOOT_ECONOMY.get_container_display_name(container_type))
+	else:
+		_show_field_notice(
+			"%s 개방 · 전리품 %d개" % [
+				LOOT_ECONOMY.get_container_display_name(container_type),
+				spawned_count,
+			]
+		)
 
 
 func _add_dictionary_loot(target: Dictionary, recovered: Dictionary) -> void:
@@ -8358,6 +8406,10 @@ func _recover_previous_corpse() -> void:
 	_add_dictionary_loot(
 		GameState.mod_component_inventory,
 		loot.get("mod_component_inventory", {}) as Dictionary
+	)
+	_add_dictionary_loot(
+		GameState.progression_item_inventory,
+		loot.get("progression_item_inventory", {}) as Dictionary
 	)
 	_add_dictionary_loot(
 		GameState.weapon_mod_inventory,

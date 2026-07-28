@@ -46,6 +46,14 @@ const PLAYER_START_Z := 48.0
 const INTRO_TARGET_Z := 34.0
 const SEWER_EXIT_Z := -49.0
 const TUTORIAL_ENEMY_ACTIVATION_RANGE := 17.5
+const CAMERA_TARGET_HEIGHT := 0.78
+const INTRO_CAMERA_SIZE := 18.0
+const REVEAL_CAMERA_SIZE := 28.0
+const GAMEPLAY_CAMERA_SIZE := 23.5
+const AIM_CAMERA_SIZE := 28.0
+const AIM_VISIBILITY_INNER_FACTOR := 0.50
+const AIM_VISIBILITY_OUTER_FACTOR := 0.80
+const TUTORIAL_KILL_GRACE_MSEC := 900
 
 var phase := "intro_walk"
 var dialogue_index := 0
@@ -78,6 +86,7 @@ var enemies_remaining := 0
 var tutorial_transitioning := false
 var restarting := false
 var death_resolution_pending := false
+var tutorial_damage_grace_until_msec := 0
 var extraction_ready := false
 var tutorial_enemies_activated := false
 var enemy_watch_bucket := -1
@@ -491,13 +500,13 @@ func _build_camera() -> void:
 	camera = Camera3D.new()
 	camera.name = "OpeningCamera"
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.size = 18.0
+	camera.size = INTRO_CAMERA_SIZE
 	camera.near = 0.1
 	camera.far = 300.0
 	camera.position = Vector3(10.5, 12.5, 10.5)
 	camera.current = true
 	camera_rig.add_child(camera)
-	camera.look_at(Vector3.ZERO)
+	camera.look_at(camera_rig.global_position + Vector3(0, CAMERA_TARGET_HEIGHT, 0))
 
 
 func _build_player() -> void:
@@ -612,12 +621,12 @@ func _build_extraction() -> void:
 	sewer_exit.position = Vector3(0, 0.08, SEWER_EXIT_Z)
 	add_child(sewer_exit)
 	var sprite := Sprite3D.new()
-	sprite.texture = load("res://assets/opening/opening_sewer_exit_v1.png") as Texture2D
-	sprite.pixel_size = 0.0036
+	sprite.texture = load("res://assets/opening/opening_sewer_exit_v2.png") as Texture2D
+	sprite.pixel_size = 0.0038
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.shaded = false
 	sprite.transparent = true
-	sprite.position.y = 0.72
+	sprite.position.y = 0.38
 	sewer_exit.add_child(sprite)
 	var glow_material := StandardMaterial3D.new()
 	glow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -1043,8 +1052,14 @@ func _update_visibility_fog() -> void:
 	visibility_material.set_shader_parameter("facing_screen_direction", facing_direction)
 	visibility_material.set_shader_parameter("circle_radius", short_side * 0.16)
 	visibility_material.set_shader_parameter("near_radius", short_side * 0.085)
-	visibility_material.set_shader_parameter("inner_radius", short_side * 0.38)
-	visibility_material.set_shader_parameter("outer_radius", short_side * 0.56)
+	visibility_material.set_shader_parameter(
+		"inner_radius",
+		short_side * AIM_VISIBILITY_INNER_FACTOR
+	)
+	visibility_material.set_shader_parameter(
+		"outer_radius",
+		short_side * AIM_VISIBILITY_OUTER_FACTOR
+	)
 	visibility_material.set_shader_parameter("fan_cos", 0.18)
 	visibility_material.set_shader_parameter("darkness", 0.94)
 	visibility_material.set_shader_parameter("aim_expanded", 1.0 if aim_held else 0.0)
@@ -1077,8 +1092,8 @@ func _panel_style(color: Color, border: Color, width: int, radius: int) -> Style
 
 func _spawn_cinematic_enemies() -> void:
 	var setups := [
-		{"position": Vector3(-2.3, 0.78, 8.0), "weapon": "m1911", "facing": "e"},
-		{"position": Vector3(2.1, 0.78, 3.0), "weapon": "mp5", "facing": "w"},
+		{"position": Vector3(-2.3, 0.78, -3.0), "weapon": "m1911", "facing": "e"},
+		{"position": Vector3(2.1, 0.78, -11.0), "weapon": "mp5", "facing": "w"},
 	]
 	for setup in setups:
 		var enemy := CharacterBody3D.new()
@@ -1136,8 +1151,8 @@ func _start_camera_reveal() -> void:
 	camera_tracks_player = false
 	var camera_tween := create_tween()
 	camera_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
-	camera_tween.tween_property(camera_rig, "position", Vector3(0, 0, 6.0), 1.75)
-	camera_tween.parallel().tween_property(camera, "size", 24.0, 1.75)
+	camera_tween.tween_property(camera_rig, "position", Vector3(0, 0, -7.0), 1.75)
+	camera_tween.parallel().tween_property(camera, "size", REVEAL_CAMERA_SIZE, 1.75)
 	await camera_tween.finished
 	await get_tree().create_timer(0.45).timeout
 	phase = "reveal_dialogue"
@@ -1151,7 +1166,7 @@ func _start_tutorial_move() -> void:
 	camera_tracks_player = true
 	var camera_tween := create_tween()
 	camera_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	camera_tween.tween_property(camera, "size", 18.0, 0.6)
+	camera_tween.tween_property(camera, "size", GAMEPLAY_CAMERA_SIZE, 0.6)
 	_show_objective(
 		"첫걸음",
 		"왼쪽 조이스틱으로 이동해 보세요." if touch_enabled else "WASD로 이동해 보세요.",
@@ -1334,6 +1349,8 @@ func _try_activate_tutorial_enemies() -> void:
 func _on_tutorial_enemy_died(enemy: CharacterBody3D) -> void:
 	if enemies.has(enemy):
 		enemies_remaining = maxi(0, enemies_remaining - 1)
+	tutorial_damage_grace_until_msec = Time.get_ticks_msec() + TUTORIAL_KILL_GRACE_MSEC
+	_clear_projectiles_from_enemy(enemy)
 	if phase == "tutorial_combat":
 		objective_progress.text = "남은 적 %d" % enemies_remaining
 		if enemies_remaining <= 0:
@@ -1342,6 +1359,15 @@ func _on_tutorial_enemy_died(enemy: CharacterBody3D) -> void:
 				if is_instance_valid(remaining_enemy):
 					remaining_enemy.set_physics_process(false)
 			_complete_tutorial_step("교량 확보", Callable(self, "_start_tutorial_extract"), 0.9)
+
+
+func _clear_projectiles_from_enemy(enemy: CharacterBody3D) -> void:
+	for projectile in get_tree().get_nodes_in_group("projectile"):
+		if (
+			is_instance_valid(projectile)
+			and projectile.get("source_body") == enemy
+		):
+			projectile.queue_free()
 
 
 func _start_tutorial_extract() -> void:
@@ -1467,9 +1493,13 @@ func take_damage(amount: int) -> void:
 	if phase == "tutorial_combat" and tutorial_transitioning:
 		return
 	if phase == "tutorial_combat":
+		if Time.get_ticks_msec() < tutorial_damage_grace_until_msec:
+			return
+		if player_hit_lock > 0.0:
+			return
 		amount = maxi(1, roundi(float(amount) * 0.62))
 	player_health = maxi(0, player_health - amount)
-	player_hit_lock = 0.18
+	player_hit_lock = 0.28
 	player_sprite.modulate = Color(1.55, 0.45, 0.35, 1.0)
 	var tween := create_tween()
 	tween.tween_property(player_sprite, "modulate", Color.WHITE, 0.16)
@@ -1630,7 +1660,10 @@ func _update_weapon_visual() -> void:
 func _update_camera(delta: float) -> void:
 	if camera_tracks_player and is_instance_valid(player):
 		var target := Vector3(player.position.x, 0, player.position.z)
-		camera_rig.position = camera_rig.position.lerp(target, 1.0 - exp(-6.5 * delta))
+		camera_rig.position = target
+	if GAMEPLAY_PHASES.has(phase) and is_instance_valid(camera):
+		var target_size := AIM_CAMERA_SIZE if aim_held else GAMEPLAY_CAMERA_SIZE
+		camera.size = lerpf(camera.size, target_size, 1.0 - exp(-6.5 * delta))
 
 
 func _update_hud() -> void:

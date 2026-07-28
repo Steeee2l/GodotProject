@@ -17,6 +17,10 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	var game_state := root.get_node("GameState")
+	game_state.set("persistence_enabled", false)
+	game_state.call("reset_run")
+	game_state.call("unlock_all_shelter_facilities")
 	assert(ResourceLoader.exists(FLOOR_TEXTURE_PATH))
 	assert(ResourceLoader.exists(WALL_TEXTURE_PATH))
 	assert(ResourceLoader.exists(BED_TEXTURE_PATH))

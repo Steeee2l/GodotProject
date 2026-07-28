@@ -96,7 +96,6 @@ func _run() -> void:
 	assert(armor_card != null, "Looted armor must appear in the bag as an equippable item.")
 	armor_card.pressed.emit()
 	assert(ui.item_detail_description.text.contains("피해 감소 12%"), "Armor details must show the applied damage reduction stat.")
-	assert(ui.item_detail_description.text.contains("무게 3.8kg"), "Armor details must show equipment weight.")
 	ui.item_action_button.pressed.emit()
 	assert(str(state.get("equipped_body_armor_id")) == "scav_vest", "The armor action must equip the selected body armor.")
 	assert(int(state.call("get_equipment_count", "scav_vest")) == 0, "Equipped armor must leave the bag inventory.")

@@ -4,6 +4,7 @@ const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const ROOM_MODULE_SCENE := preload("res://scenes/modules/building_room_module.tscn")
 const TRANSITION_MODULE_SCENE := preload("res://scenes/modules/building_transition_module.tscn")
 const LOOT_MODULE_SCENE := preload("res://scenes/modules/building_loot_module.tscn")
+const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const BULLET_SCRIPT := preload("res://scripts/bullet_projectile.gd")
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
@@ -1044,6 +1045,17 @@ func _add_transition(node_name: String, position: Vector3, rotation_y: float, ki
 
 func _spawn_floor_loot(random: RandomNumberGenerator) -> void:
 	var count: int = floor_cells.size() + int(BuildingRunState.current_floor)
+	var stage_tier := LOOT_ECONOMY.get_stage_for_zone(GameState.get_raid_zone())
+	var available_containers: Array[String] = [
+		"street_cache",
+		"ammo_case",
+		"toolbox",
+		"clothing_cache",
+	]
+	if stage_tier >= 2:
+		available_containers.append("weapon_case")
+	if stage_tier >= 3:
+		available_containers.append("secure_cache")
 	for index in count:
 		var key := "f%02d_loot_%02d" % [BuildingRunState.current_floor, index]
 		if BuildingRunState.is_loot_collected(BuildingRunState.current_floor, key):
@@ -1051,21 +1063,18 @@ func _spawn_floor_loot(random: RandomNumberGenerator) -> void:
 		var room_index := index % floor_cells.size()
 		var room_center := _cell_to_world(floor_cells[room_index])
 		var position := room_center + Vector3(random.randf_range(-6.8, 6.8), 0, random.randf_range(-4.7, 4.7))
-		var type_roll := random.randf()
-		var type_name := "ammo"
-		if type_roll < 0.28:
-			type_name = "ammo"
-		elif type_roll < 0.48:
-			type_name = "canned_food"
-		elif type_roll < 0.66:
-			type_name = "component"
-		elif type_roll < 0.84:
-			type_name = "weapon"
-		else:
-			type_name = "equipment"
-		var amount := random.randi_range(8, 22) if type_name == "ammo" else 1
+		var container_type := available_containers[
+			random.randi_range(0, available_containers.size() - 1)
+		]
 		var loot := LOOT_MODULE_SCENE.instantiate() as Node3D
-		loot.call("configure", key, type_name, amount, BuildingRunState.current_floor)
+		loot.call(
+			"configure_container",
+			key,
+			container_type,
+			stage_tier,
+			BuildingRunState.current_floor,
+			random.randi()
+		)
 		loot.name = "Loot_%s" % key
 		loot.position = position
 		loot.connect("collected", _on_loot_collected)
@@ -1102,10 +1111,37 @@ func _spawn_floor_enemies(random: RandomNumberGenerator) -> void:
 func _on_enemy_died(enemy: CharacterBody3D, enemy_key: String) -> void:
 	BuildingRunState.mark_enemy_defeated(BuildingRunState.current_floor, enemy_key)
 	enemies.erase(enemy)
+	GameState.raid_kills += 1
 	var reward_key := "%s_drop" % enemy_key
 	if not BuildingRunState.is_loot_collected(BuildingRunState.current_floor, reward_key):
+		var stage_tier := LOOT_ECONOMY.get_stage_for_zone(GameState.get_raid_zone())
+		var drop_random := RandomNumberGenerator.new()
+		drop_random.seed = BuildingRunState.get_floor_seed(BuildingRunState.current_floor) ^ enemy_key.hash()
+		var definition: Dictionary = LOOT_ECONOMY.roll_enemy_drop(
+			stage_tier,
+			str(enemy.get("enemy_kind")),
+			str(enemy.get("weapon_id")),
+			drop_random,
+			not GameState.has_ak
+		)
+		if (
+			definition.is_empty()
+			or not LOOT_ECONOMY.try_register_loot(
+				GameState,
+				definition,
+				"enemy",
+				stage_tier
+			)
+		):
+			BuildingRunState.mark_loot_collected(BuildingRunState.current_floor, reward_key)
+			return
 		var loot := LOOT_MODULE_SCENE.instantiate() as Node3D
-		loot.call("configure", reward_key, "ammo", 8, BuildingRunState.current_floor)
+		loot.call(
+			"configure_item",
+			reward_key,
+			definition,
+			BuildingRunState.current_floor
+		)
 		loot.name = "Loot_%s" % reward_key
 		loot.position = Vector3(enemy.position.x, 0, enemy.position.z)
 		loot.connect("collected", _on_loot_collected)

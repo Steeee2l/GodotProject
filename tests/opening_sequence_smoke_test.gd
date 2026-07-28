@@ -56,10 +56,44 @@ func _run() -> void:
 		_fail("opening player was not created")
 	if opening.get("camera") == null:
 		_fail("opening camera was not created")
-	if (opening.get("enemies") as Array).size() != 2:
+	var opening_player := opening.get("player") as CharacterBody3D
+	var opening_camera := opening.get("camera") as Camera3D
+	var player_screen_position := opening_camera.unproject_position(opening_player.global_position)
+	var viewport_center := opening.get_viewport().get_visible_rect().size * 0.5
+	if player_screen_position.distance_to(viewport_center) > 8.0:
+		_fail(
+			"opening camera does not frame the player at screen center: %s vs %s"
+			% [player_screen_position, viewport_center]
+		)
+	var original_player_position := opening_player.position
+	opening_player.position += Vector3(2.5, 0, -4.0)
+	opening.call("_update_camera", 1.0 / 60.0)
+	player_screen_position = opening_camera.unproject_position(opening_player.global_position)
+	if player_screen_position.distance_to(viewport_center) > 8.0:
+		_fail("opening camera loses screen center while the player moves")
+	opening_player.position = original_player_position
+	opening.call("_update_camera", 1.0 / 60.0)
+	var staged_enemies := opening.get("enemies") as Array
+	if staged_enemies.size() != 2:
 		_fail("opening reveal must stage two enemies")
-	if opening.get("sewer_exit") == null:
+	var nearest_staged_enemy := INF
+	for staged_enemy in staged_enemies:
+		nearest_staged_enemy = minf(
+			nearest_staged_enemy,
+			opening_player.global_position.distance_to((staged_enemy as Node3D).global_position)
+		)
+	if nearest_staged_enemy < 35.0:
+		_fail("opening enemies are staged too close to the player")
+	var sewer_exit := opening.get("sewer_exit") as Node3D
+	if sewer_exit == null:
 		_fail("tutorial extraction point was not created")
+	var sewer_sprite := sewer_exit.get_child(0) as Sprite3D
+	if (
+		sewer_sprite == null
+		or sewer_sprite.texture == null
+		or not sewer_sprite.texture.resource_path.ends_with("opening_sewer_exit_v2.png")
+	):
+		_fail("integrated asphalt sewer asset is not assigned")
 	if str(opening.get("phase")) != "intro_walk":
 		_fail("opening must begin with the automatic bridge walk")
 	var opening_environment := opening.get_node_or_null("OpeningEnvironment") as WorldEnvironment
@@ -117,17 +151,43 @@ func _run() -> void:
 	if bool(opening.get("tutorial_enemies_activated")):
 		_fail("tutorial enemies activated before the player approached")
 	opening.set("aim_held", true)
+	opening.call("_update_visibility_fog")
+	var visibility_material := opening.get("visibility_material") as ShaderMaterial
+	var short_side := minf(
+		opening.get_viewport().get_visible_rect().size.x,
+		opening.get_viewport().get_visible_rect().size.y
+	)
+	if float(visibility_material.get_shader_parameter("outer_radius")) < short_side * 0.78:
+		_fail("opening aim visibility does not reach far enough ahead")
+	opening.call("_update_camera", 1.0)
+	if opening_camera.size < 27.0:
+		_fail("opening camera does not pull back far enough while aiming")
 	opening.call("_try_fire")
 	if int(opening.get("magazine_ammo")) != 29:
 		_fail("mobile fire input did not consume a round")
 	var tutorial_enemies := opening.get("enemies") as Array
+	var stale_enemy_projectile := Area3D.new()
+	stale_enemy_projectile.set_script(preload("res://scripts/bullet_projectile.gd"))
+	stale_enemy_projectile.set("source_body", tutorial_enemies[0])
+	stale_enemy_projectile.set("hostile", true)
+	opening.add_child(stale_enemy_projectile)
+	stale_enemy_projectile.set_physics_process(false)
+	if not stale_enemy_projectile.is_in_group("projectile"):
+		_fail("tutorial projectile was not registered for cleanup")
+	opening.call("_on_tutorial_enemy_died", tutorial_enemies[0])
+	if not stale_enemy_projectile.is_queued_for_deletion():
+		_fail("defeated enemy left a hostile projectile active")
+	var health_before_kill_grace := int(opening.get("player_health"))
+	opening.call("take_damage", 999)
+	if int(opening.get("player_health")) != health_before_kill_grace:
+		_fail("delayed damage after a mobile tutorial kill was not ignored")
+	opening.set("tutorial_damage_grace_until_msec", 0)
 	opening.set("player_health", 1)
 	opening.call("take_damage", 999)
 	if bool(opening.get("restarting")):
 		_fail("opening restarted before the final-kill race could resolve")
 	if not bool(opening.get("death_resolution_pending")):
 		_fail("tutorial death did not enter deferred race resolution")
-	opening.call("_on_tutorial_enemy_died", tutorial_enemies[0])
 	opening.call("_on_tutorial_enemy_died", tutorial_enemies[1])
 	await physics_frame
 	await process_frame

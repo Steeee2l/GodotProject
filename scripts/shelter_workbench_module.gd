@@ -122,7 +122,8 @@ const RECIPES := {
 			"desc": "강한 반동과 총성을 감수하고 화력을 얻는 소총.",
 			"cost": {"scrap": 55000, "canned_food": 18, "scope_lens": 1, "magazine_spring": 2},
 			"result": {"weapon": "ak47", "amount": 1},
-			"required_tier": 2,
+			"required_tier": 3,
+			"required_blueprint": "rifle_blueprint",
 		},
 		{
 			"id": "double_barrel",
@@ -131,6 +132,7 @@ const RECIPES := {
 			"cost": {"scrap": 45000, "canned_food": 15, "rubber_gasket": 3, "magazine_spring": 2},
 			"result": {"weapon": "double_barrel", "amount": 1},
 			"required_tier": 3,
+			"required_blueprint": "shotgun_blueprint",
 		},
 	],
 	"supplies": [
@@ -538,6 +540,12 @@ func _can_craft(recipe: Dictionary) -> bool:
 		return false
 	if GameState.shelter_workbench_level < int(recipe.get("required_workbench", 1)):
 		return false
+	var required_blueprint := str(recipe.get("required_blueprint", ""))
+	if (
+		not required_blueprint.is_empty()
+		and GameState.get_progression_item_count(required_blueprint) <= 0
+	):
+		return false
 	for key in _effective_cost(recipe).keys():
 		if _owned_resource(str(key)) < int(_effective_cost(recipe)[key]):
 			return false
@@ -665,6 +673,12 @@ func _cost_short_text(recipe: Dictionary) -> String:
 
 
 func _recipe_list_subtitle(recipe: Dictionary) -> String:
+	var required_blueprint := str(recipe.get("required_blueprint", ""))
+	if (
+		not required_blueprint.is_empty()
+		and GameState.get_progression_item_count(required_blueprint) <= 0
+	):
+		return "청사진 필요 · %s" % _blueprint_name(required_blueprint)
 	var cost_text := _cost_short_text(recipe)
 	if not cost_text.is_empty():
 		return cost_text
@@ -674,6 +688,15 @@ func _recipe_list_subtitle(recipe: Dictionary) -> String:
 	if bool(result.get("workbench_upgrade", false)):
 		return "최고 레벨"
 	return _result_text(recipe)
+
+
+func _blueprint_name(item_id: String) -> String:
+	match item_id:
+		"rifle_blueprint":
+			return "소총 제작 청사진"
+		"shotgun_blueprint":
+			return "산탄총 제작 청사진"
+	return item_id
 
 
 func _result_text(recipe: Dictionary) -> String:

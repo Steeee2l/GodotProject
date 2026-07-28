@@ -1538,6 +1538,62 @@ func get_map_snapshot_data() -> Dictionary:
 	}
 
 
+func get_long_road_patrol_route(
+	origin: Vector3,
+	route_seed: int,
+	excluded_rids: Array = []
+) -> Array[Vector3]:
+	var origin_cell := _world_to_cell(origin)
+	origin_cell.x = clampi(origin_cell.x, 1, GRID_SIZE - 2)
+	origin_cell.y = clampi(origin_cell.y, 1, GRID_SIZE - 2)
+	var nearest_vertical := vertical_roads[0]
+	var nearest_horizontal := horizontal_roads[0]
+	for road_x in vertical_roads:
+		if absi(road_x - origin_cell.x) < absi(nearest_vertical - origin_cell.x):
+			nearest_vertical = road_x
+	for road_z in horizontal_roads:
+		if absi(road_z - origin_cell.y) < absi(nearest_horizontal - origin_cell.y):
+			nearest_horizontal = road_z
+
+	var use_vertical := absi(nearest_vertical - origin_cell.x) < absi(nearest_horizontal - origin_cell.y)
+	if absi(nearest_vertical - origin_cell.x) == absi(nearest_horizontal - origin_cell.y):
+		use_vertical = posmod(route_seed, 2) == 0
+	var center_axis := origin_cell.y if use_vertical else origin_cell.x
+	var route_span_cells := 8
+	var first_axis := clampi(
+		center_axis - route_span_cells / 2,
+		1,
+		GRID_SIZE - 2 - route_span_cells
+	)
+	var forward_points: Array[Vector3] = []
+	for point_index in 5:
+		var axis := first_axis + roundi(float(route_span_cells) * float(point_index) / 4.0)
+		var cell := (
+			Vector2i(nearest_vertical, axis)
+			if use_vertical
+			else Vector2i(axis, nearest_horizontal)
+		)
+		var requested := _cell_center(cell)
+		requested.y = origin.y
+		var candidate := find_nearest_physically_open_position(
+			requested,
+			0.58,
+			excluded_rids
+		)
+		candidate.y = origin.y
+		if forward_points.is_empty() or forward_points[-1].distance_to(candidate) >= 2.0:
+			forward_points.append(candidate)
+
+	if forward_points.size() < 3:
+		return [origin]
+	if posmod(route_seed, 2) != 0:
+		forward_points.reverse()
+	var route := forward_points.duplicate()
+	for reverse_index in range(forward_points.size() - 2, 0, -1):
+		route.append(forward_points[reverse_index])
+	return route
+
+
 func world_to_map_cell(world_position: Vector3) -> Vector2i:
 	return _world_to_cell(world_position)
 

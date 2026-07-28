@@ -17,7 +17,8 @@ func _run() -> void:
 	assert(bool(main_scene.get("has_ak")))
 	assert(main_scene.get("ak_pickup") == null)
 	assert(bool(game_state.get("has_ak")))
-	assert((main_scene.get("ammo_pickups") as Array).size() == 64)
+	assert((main_scene.get("ammo_pickups") as Array).is_empty())
+	assert((main_scene.get("field_loot_containers") as Array).size() == 29)
 	var field_scrap_before := int(game_state.get("scrap"))
 
 	var player := main_scene.get("player") as Node3D
@@ -72,7 +73,11 @@ func _run() -> void:
 
 	var enemies := main_scene.get("enemies") as Array
 	var pickup_count_before := (main_scene.get("ammo_pickups") as Array).size()
-	var random_drop: Node3D = main_scene.call("_spawn_enemy_loot", enemies[0])
+	var random_drop: Node3D = null
+	for _attempt in 40:
+		random_drop = main_scene.call("_spawn_enemy_loot", enemies[0])
+		if is_instance_valid(random_drop):
+			break
 	assert(is_instance_valid(random_drop))
 	assert((main_scene.get("ammo_pickups") as Array).size() == pickup_count_before + 1)
 	assert(["ammo", "canned_food", "churu", "medkit", "mod_component", "weapon", "armor"].has(str(random_drop.get_meta("loot_type"))))

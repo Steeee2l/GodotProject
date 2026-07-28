@@ -281,7 +281,11 @@ func assign_squad(assigned_squad_id: int, assigned_anchor: Vector3, formation_of
 
 
 func configure_patrol(mode: String, route_points: Array[Vector3]) -> void:
-	patrol_mode = "sentry" if mode == "sentry" else "route"
+	patrol_mode = (
+		"sentry"
+		if mode == "sentry"
+		else ("road_route" if mode == "road_route" else "route")
+	)
 	patrol_route.clear()
 	patrol_route.assign(route_points)
 	patrol_route_index = 0
@@ -1171,6 +1175,8 @@ func _update_patrol(delta: float) -> void:
 			if patrol_mode == "sentry":
 				patrol_pause = weapon_random.randf_range(2.4, 4.8)
 				patrol_look_timer = 0.08
+			elif patrol_mode == "road_route":
+				patrol_pause = weapon_random.randf_range(0.08, 0.24)
 			else:
 				patrol_pause = weapon_random.randf_range(0.2, 0.65)
 		else:
@@ -2246,11 +2252,31 @@ func take_projectile_hit(
 	hit_direction: Vector3,
 	is_critical: bool = false,
 	critical_multiplier: float = 1.65,
-	hit_zone: String = "body"
+	hit_zone: String = "body",
+	attacker: Node3D = null
 ) -> void:
+	_alert_to_projectile_attacker(attacker)
 	var critical := is_critical or hit_zone == "head"
 	var final_damage := roundi(float(amount) * critical_multiplier) if critical else amount
 	take_hit(final_damage, hit_direction, critical)
+
+
+func _alert_to_projectile_attacker(attacker: Node3D) -> void:
+	if dying or backstab_stunned:
+		return
+	var retaliation_target := attacker as CharacterBody3D
+	if not is_instance_valid(retaliation_target):
+		retaliation_target = primary_player_target
+	if not is_instance_valid(retaliation_target) or retaliation_target == self:
+		return
+	target = retaliation_target
+	last_known_position = retaliation_target.global_position
+	detection_awareness = 1.0
+	player_override_awareness = 0.0
+	_become_alerted()
+	combat_reaction_time = minf(combat_reaction_time, 0.08)
+	attack_cooldown = 0.0
+	alert_marker_time = maxf(alert_marker_time, 0.38)
 
 
 func take_hit(amount: int, hit_direction: Vector3, is_critical: bool = false) -> void:

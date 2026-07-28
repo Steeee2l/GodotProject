@@ -9,6 +9,7 @@ func _run() -> void:
 	var game_state := root.get_node("GameState")
 	game_state.set("persistence_enabled", false)
 	game_state.call("reset_run")
+	game_state.call("unlock_all_shelter_facilities")
 	game_state.set("scrap", 2_000_000)
 	game_state.set("canned_food", 200)
 	game_state.set("churu", 99)
@@ -49,8 +50,11 @@ func _run() -> void:
 	if bool(game_state.call("is_raid_zone_unlocked", "namsan_core")):
 		_fail("tier 5 zone should be locked at tier 1")
 	game_state.set("shelter_tier", 5)
+	if bool(game_state.call("is_raid_zone_unlocked", "namsan_core")):
+		_fail("sealed zone should remain locked without its keycard")
+	game_state.call("add_progression_item", "sealed_zone_keycard", 1)
 	if not bool(game_state.call("is_raid_zone_unlocked", "namsan_core")):
-		_fail("tier 5 zone did not unlock")
+		_fail("tier 5 zone did not unlock with its keycard")
 	if not bool(game_state.call("select_raid_zone", "namsan_core")):
 		_fail("unlocked raid zone could not be selected")
 

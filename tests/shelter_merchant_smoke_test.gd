@@ -12,6 +12,7 @@ func _run() -> void:
 	var game_state := tree_root.get_node("GameState")
 	game_state.set("persistence_enabled", false)
 	game_state.call("reset_run")
+	game_state.call("unlock_all_shelter_facilities")
 	game_state.call("register_shelter_return")
 	assert(bool(game_state.call("roll_merchant_visit", 1.0)), "A forced merchant visit must enter the waiting state.")
 	assert(str(game_state.get("merchant_status")) == "waiting")
@@ -58,7 +59,7 @@ func _run() -> void:
 	var sprite := merchant.get_node("MerchantSprite") as AnimatedSprite3D
 	assert(sprite.sprite_frames.get_frame_count("idle_down_left") == 4)
 	var residents_before := int(game_state.get("rescued_workers"))
-	assert(bool(shelter.call("_add_debug_resident")), "Debug key 3 must be able to add a resident while capacity remains.")
+	assert(bool(shelter.call("_add_debug_resident")), "Debug key 8 must be able to add a resident while capacity remains.")
 	await get_tree().process_frame
 	assert(int(game_state.get("rescued_workers")) == residents_before + 1)
 	assert((shelter.get("shelter_residents") as Array).size() == residents_before + 1)

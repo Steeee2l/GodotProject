@@ -43,6 +43,11 @@ var mod_component_inventory: Dictionary = {
 	"scope_lens": 0,
 	"magazine_spring": 0,
 }
+var progression_item_inventory: Dictionary = {
+	"rifle_blueprint": 0,
+	"shotgun_blueprint": 0,
+	"sealed_zone_keycard": 0,
+}
 var weapon_mod_inventory: Dictionary = {
 	"scope_2x": 0,
 	"muffled_sock": 0,
@@ -82,6 +87,12 @@ var secure_dog_items: Array[Dictionary] = []
 var pending_corpse_recovery: Dictionary = {}
 var corpse_recovery_attempt_active: bool = false
 var confirmed_raid_manifest: Dictionary = {}
+var raid_field_loot_value_generated: int = 0
+var raid_enemy_loot_value_generated: int = 0
+var raid_total_loot_value_generated: int = 0
+var raid_weapon_drops_generated: int = 0
+var raid_enemy_drops_generated: int = 0
+var raid_kills: int = 0
 var subway_story_stage: int = 0
 var shelter_workbench_level: int = 1
 var shelter_tier: int = 1
@@ -115,6 +126,15 @@ var contract_status: String = "available"
 var contract_progress: int = 0
 var completed_contract_ids: Array[String] = []
 var unlocked_contract_lore: Array[String] = []
+var shelter_facility_unlocks: Dictionary = {
+	"bed": true,
+	"storage": false,
+	"training": false,
+	"workbench": false,
+	"scratcher_bank": false,
+	"catnip_scraper": false,
+}
+var contract_agent_intro_seen: bool = false
 var opening_completed: bool = false
 var persistence_enabled: bool = true
 var persistence_path: String = SAVE_PATH
@@ -122,6 +142,15 @@ var persistence_path: String = SAVE_PATH
 const SAVE_PATH := "user://shelter_progress_v2.json"
 const MAX_WEAPON_ENHANCEMENT := 99
 const ARTISAN_PITY_LIMIT := 10
+const CONTRACT_AGENT_UNLOCK_RETURN := 3
+const SHELTER_FACILITY_NAMES := {
+	"bed": "개인 침대",
+	"storage": "쉘터 창고",
+	"training": "생존 체력 훈련장",
+	"workbench": "무기 작업대",
+	"scratcher_bank": "꾹꾹이 고철 생산기",
+	"catnip_scraper": "스크래핑 캣닢 생산기",
+}
 const MISSION_CONTRACTS := [
 	{
 		"id": "field_parts",
@@ -131,6 +160,7 @@ const MISSION_CONTRACTS := [
 		"metric": "parts",
 		"target": 3,
 		"reward": {"xp": 80, "canned_food": 4},
+		"facility_unlock": "scratcher_bank",
 		"lore_title": "철근의 기록 01 · 남겨진 공구",
 		"lore": "인간이 사라진 뒤 가장 먼저 창고를 장악한 것은 유리발톱 연맹이었다. 지금 쓰는 총기 개조법 대부분은 그들이 봉인한 인간 공구함에서 시작됐다.",
 	},
@@ -142,6 +172,7 @@ const MISSION_CONTRACTS := [
 		"metric": "kills",
 		"target": 4,
 		"reward": {"xp": 110, "ammo": 30},
+		"facility_unlock": "catnip_scraper",
 		"lore_title": "철근의 기록 02 · 유리발톱",
 		"lore": "유리발톱 연맹은 서울의 식량 창고와 지상 통로를 통제한다. 연맹 깃발 아래 들지 않은 고양이는 통조림 배급표조차 받을 수 없다.",
 	},
@@ -153,6 +184,7 @@ const MISSION_CONTRACTS := [
 		"metric": "lore",
 		"target": 2,
 		"reward": {"xp": 120, "canned_food": 3, "medkits": 1},
+		"facility_unlock": "workbench",
 		"lore_title": "철근의 기록 03 · 붉은비 격리령",
 		"lore": "마지막 인간 방송은 붉은비가 내린 날 지하철을 봉쇄하라고 반복했다. 그러나 누군가는 봉쇄 직전 고양이 보호소의 문을 모두 열어 두었다.",
 	},
@@ -265,6 +297,7 @@ const RAID_ZONES := {
 		"name": "종로 외곽",
 		"description": "낮은 위협도의 폐상가 지대. 통조림과 기초 부품을 확보하기 좋습니다.",
 		"required_tier": 1,
+		"stage_tier": 1,
 		"threat": 0.15,
 		"enemy_multiplier": 1.0,
 		"boss": false,
@@ -274,6 +307,7 @@ const RAID_ZONES := {
 		"name": "남대문 폐시장",
 		"description": "무장 약탈자가 상가 통로를 점거한 중위험 구역입니다.",
 		"required_tier": 2,
+		"stage_tier": 2,
 		"threat": 0.35,
 		"enemy_multiplier": 1.25,
 		"boss": true,
@@ -283,6 +317,7 @@ const RAID_ZONES := {
 		"name": "을지로 지하구역",
 		"description": "좁은 골목과 지하 통로가 이어지는 고위험 구역입니다.",
 		"required_tier": 3,
+		"stage_tier": 3,
 		"threat": 0.55,
 		"enemy_multiplier": 1.55,
 		"boss": true,
@@ -292,6 +327,7 @@ const RAID_ZONES := {
 		"name": "용산 봉쇄선",
 		"description": "군용 화기와 정예 병력이 남아 있는 봉쇄 구역입니다.",
 		"required_tier": 4,
+		"stage_tier": 4,
 		"threat": 0.78,
 		"enemy_multiplier": 1.9,
 		"boss": true,
@@ -301,6 +337,7 @@ const RAID_ZONES := {
 		"name": "남산 오염 핵심부",
 		"description": "서울에서 가장 위험한 심야 전투 구역입니다.",
 		"required_tier": 5,
+		"stage_tier": 4,
 		"threat": 1.0,
 		"enemy_multiplier": 2.3,
 		"boss": true,
@@ -423,7 +460,17 @@ func start_new_raid() -> void:
 		corpse_recovery_attempt_active = false
 	world_time_hours = 9.0
 	fatigue = 0.0
+	reset_raid_supply_counters()
 	save_persistent_state()
+
+
+func reset_raid_supply_counters() -> void:
+	raid_field_loot_value_generated = 0
+	raid_enemy_loot_value_generated = 0
+	raid_total_loot_value_generated = 0
+	raid_weapon_drops_generated = 0
+	raid_enemy_drops_generated = 0
+	raid_kills = 0
 
 
 func build_raid_loadout_manifest(zone_id: String = "") -> Dictionary:
@@ -504,7 +551,50 @@ func finish_corpse_recovery_attempt() -> void:
 func register_shelter_return() -> void:
 	shelter_return_serial += 1
 	clear_confirmed_raid_manifest()
+	sync_shelter_progression_milestones()
 	save_persistent_state()
+
+
+func is_contract_agent_available() -> bool:
+	return shelter_return_serial >= CONTRACT_AGENT_UNLOCK_RETURN
+
+
+func get_shelter_facility_name(facility_id: String) -> String:
+	return str(SHELTER_FACILITY_NAMES.get(facility_id, facility_id))
+
+
+func is_shelter_facility_unlocked(facility_id: String) -> bool:
+	return bool(shelter_facility_unlocks.get(facility_id, false))
+
+
+func unlock_shelter_facility(facility_id: String) -> bool:
+	if not SHELTER_FACILITY_NAMES.has(facility_id):
+		return false
+	var was_unlocked := is_shelter_facility_unlocked(facility_id)
+	shelter_facility_unlocks[facility_id] = true
+	return not was_unlocked
+
+
+func unlock_all_shelter_facilities() -> void:
+	for facility_id in SHELTER_FACILITY_NAMES.keys():
+		shelter_facility_unlocks[str(facility_id)] = true
+
+
+func sync_shelter_progression_milestones() -> Array[String]:
+	var newly_unlocked: Array[String] = []
+	shelter_facility_unlocks["bed"] = true
+	if is_contract_agent_available():
+		for facility_id in ["storage", "training"]:
+			if unlock_shelter_facility(facility_id):
+				newly_unlocked.append(facility_id)
+	for contract_value in MISSION_CONTRACTS:
+		var contract := contract_value as Dictionary
+		if not completed_contract_ids.has(str(contract.get("id", ""))):
+			continue
+		var facility_id := str(contract.get("facility_unlock", ""))
+		if not facility_id.is_empty() and unlock_shelter_facility(facility_id):
+			newly_unlocked.append(facility_id)
+	return newly_unlocked
 
 
 func get_raid_zone(zone_id: String = "") -> Dictionary:
@@ -525,7 +615,12 @@ func get_raid_zone_ids() -> Array[String]:
 func is_raid_zone_unlocked(zone_id: String) -> bool:
 	if not RAID_ZONES.has(zone_id):
 		return false
-	return shelter_tier >= int((RAID_ZONES[zone_id] as Dictionary).get("required_tier", 1))
+	var required_tier := int((RAID_ZONES[zone_id] as Dictionary).get("required_tier", 1))
+	if shelter_tier < required_tier:
+		return false
+	if required_tier >= 4 and get_progression_item_count("sealed_zone_keycard") <= 0:
+		return false
+	return true
 
 
 func select_raid_zone(zone_id: String) -> bool:
@@ -542,11 +637,17 @@ func roll_merchant_visit(chance: float = 0.38) -> bool:
 	if shelter_return_serial <= 0 or merchant_last_roll_serial == shelter_return_serial:
 		return false
 	merchant_last_roll_serial = shelter_return_serial
+	if shelter_return_serial == 1:
+		merchant_status = "waiting"
+		save_persistent_state()
+		return true
 	var random := RandomNumberGenerator.new()
 	random.seed = int(map_seed) ^ (shelter_return_serial * 982451653) ^ 0x4D455243
 	if random.randf() <= clampf(chance, 0.0, 1.0):
 		merchant_status = "waiting"
+		save_persistent_state()
 		return true
+	save_persistent_state()
 	return false
 
 
@@ -910,6 +1011,17 @@ func add_mod_component(component_id: String, amount: int = 1) -> void:
 	)
 
 
+func add_progression_item(item_id: String, amount: int = 1) -> void:
+	progression_item_inventory[item_id] = maxi(
+		0,
+		int(progression_item_inventory.get(item_id, 0)) + amount
+	)
+
+
+func get_progression_item_count(item_id: String) -> int:
+	return int(progression_item_inventory.get(item_id, 0))
+
+
 func claim_workbench_starter_parts() -> bool:
 	if workbench_starter_parts_claimed:
 		return false
@@ -969,12 +1081,16 @@ func get_catnip_worker_slots() -> int:
 
 
 func get_active_scratcher_workers() -> int:
+	if not is_shelter_facility_unlocked("scratcher_bank"):
+		return 0
 	_ensure_resident_records()
 	_sanitize_assigned_workers()
 	return mini(assigned_worker_ids.size(), get_scratcher_worker_slots())
 
 
 func get_active_catnip_workers() -> int:
+	if not is_shelter_facility_unlocked("catnip_scraper"):
+		return 0
 	_ensure_resident_records()
 	_sanitize_assigned_workers()
 	return mini(assigned_catnip_worker_ids.size(), get_catnip_worker_slots())
@@ -1012,6 +1128,8 @@ func get_worker_production_per_second(worker_id: String, production_kind: String
 	var trait_data := get_resident_trait(worker_id)
 	match production_kind:
 		"scratcher", "kneading":
+			if not is_shelter_facility_unlocked("scratcher_bank"):
+				return 0.0
 			if not assigned_worker_ids.has(worker_id):
 				return 0.0
 			var base_rate := maxi(
@@ -1023,6 +1141,8 @@ func get_worker_production_per_second(worker_id: String, production_kind: String
 			)
 			return float(base_rate) * get_production_multiplier()
 		"catnip":
+			if not is_shelter_facility_unlocked("catnip_scraper"):
+				return 0.0
 			if not assigned_catnip_worker_ids.has(worker_id):
 				return 0.0
 			return float(maxi(
@@ -1062,6 +1182,8 @@ func get_scrap_per_hour() -> float:
 
 
 func get_base_scrap_per_hour() -> float:
+	if not is_shelter_facility_unlocked("scratcher_bank"):
+		return 0.0
 	var total_per_second := 0.0
 	for worker_id in assigned_worker_ids:
 		var trait_data := get_resident_trait(worker_id)
@@ -1081,6 +1203,8 @@ func get_catnip_per_hour() -> float:
 
 
 func get_catnip_per_second() -> float:
+	if not is_shelter_facility_unlocked("catnip_scraper"):
+		return 0.0
 	var total := 0.0
 	for worker_id in assigned_catnip_worker_ids:
 		total += get_worker_production_per_second(worker_id, "catnip")
@@ -1177,6 +1301,8 @@ func _sanitize_assigned_workers() -> void:
 
 
 func assign_worker_to_scratcher(worker_id: String) -> bool:
+	if not is_shelter_facility_unlocked("scratcher_bank"):
+		return false
 	_ensure_resident_records()
 	if not resident_cat_ids.has(worker_id):
 		return false
@@ -1201,6 +1327,8 @@ func toggle_worker_assignment(worker_id: String) -> bool:
 
 
 func assign_worker_to_catnip(worker_id: String) -> bool:
+	if not is_shelter_facility_unlocked("catnip_scraper"):
+		return false
 	_ensure_resident_records()
 	if not resident_cat_ids.has(worker_id):
 		return false
@@ -1723,6 +1851,10 @@ func claim_current_contract_reward() -> Dictionary:
 	var contract_id := str(definition.get("id", ""))
 	if not completed_contract_ids.has(contract_id):
 		completed_contract_ids.append(contract_id)
+	var facility_id := str(definition.get("facility_unlock", ""))
+	var facility_unlocked := false
+	if not facility_id.is_empty():
+		facility_unlocked = unlock_shelter_facility(facility_id)
 	var lore_entry := "%s\n%s" % [
 		str(definition.get("lore_title", "철근의 기록")),
 		str(definition.get("lore", "")),
@@ -1739,6 +1871,9 @@ func claim_current_contract_reward() -> Dictionary:
 		"reward": reward,
 		"experience": experience_result,
 		"lore": lore_entry,
+		"facility_id": facility_id,
+		"facility_name": get_shelter_facility_name(facility_id) if not facility_id.is_empty() else "",
+		"facility_unlocked": facility_unlocked,
 		"next_definition": get_current_contract_definition(),
 		"finished": contract_status == "finished",
 	}
@@ -1776,7 +1911,7 @@ func save_persistent_state() -> bool:
 	_normalize_contract_state()
 	save_equipped_weapon_loadout()
 	var data := {
-		"version": 7,
+		"version": 8,
 		"map_seed": map_seed,
 		"raid_serial": raid_serial,
 		"player_health": player_health,
@@ -1798,6 +1933,7 @@ func save_persistent_state() -> bool:
 		"assigned_catnip_worker_ids": assigned_catnip_worker_ids,
 		"resident_traits": resident_traits,
 		"mod_component_inventory": mod_component_inventory,
+		"progression_item_inventory": progression_item_inventory,
 		"weapon_mod_inventory": weapon_mod_inventory,
 		"weapon_inventory": weapon_inventory,
 		"equipment_inventory": equipment_inventory,
@@ -1845,6 +1981,8 @@ func save_persistent_state() -> bool:
 		"contract_progress": contract_progress,
 		"completed_contract_ids": completed_contract_ids,
 		"unlocked_contract_lore": unlocked_contract_lore,
+		"shelter_facility_unlocks": shelter_facility_unlocks,
+		"contract_agent_intro_seen": contract_agent_intro_seen,
 		"opening_completed": opening_completed,
 	}
 	var file := FileAccess.open(persistence_path, FileAccess.WRITE)
@@ -1897,6 +2035,12 @@ func load_persistent_state() -> bool:
 	assigned_catnip_worker_ids = _to_string_array(data.get("assigned_catnip_worker_ids", []))
 	resident_traits = (data.get("resident_traits", {}) as Dictionary).duplicate(true)
 	mod_component_inventory = (data.get("mod_component_inventory", mod_component_inventory) as Dictionary).duplicate(true)
+	progression_item_inventory = (
+		data.get("progression_item_inventory", progression_item_inventory) as Dictionary
+	).duplicate(true)
+	for progression_item_id in ["rifle_blueprint", "shotgun_blueprint", "sealed_zone_keycard"]:
+		if not progression_item_inventory.has(progression_item_id):
+			progression_item_inventory[progression_item_id] = 0
 	weapon_mod_inventory = (data.get("weapon_mod_inventory", weapon_mod_inventory) as Dictionary).duplicate(true)
 	for mod_id in WEAPON_SYSTEM.MODS.keys():
 		if not weapon_mod_inventory.has(mod_id):
@@ -1955,9 +2099,21 @@ func load_persistent_state() -> bool:
 	contract_progress = int(data.get("contract_progress", contract_progress))
 	completed_contract_ids = _to_string_array(data.get("completed_contract_ids", []))
 	unlocked_contract_lore = _to_string_array(data.get("unlocked_contract_lore", []))
+	if data.has("shelter_facility_unlocks"):
+		shelter_facility_unlocks = (
+			data.get("shelter_facility_unlocks", shelter_facility_unlocks) as Dictionary
+		).duplicate(true)
+		for facility_id in SHELTER_FACILITY_NAMES.keys():
+			if not shelter_facility_unlocks.has(facility_id):
+				shelter_facility_unlocks[facility_id] = facility_id == "bed"
+	else:
+		# Preserve facilities in saves made before the staged shelter progression existed.
+		unlock_all_shelter_facilities()
+	contract_agent_intro_seen = bool(data.get("contract_agent_intro_seen", shelter_return_serial >= CONTRACT_AGENT_UNLOCK_RETURN))
 	# Saves made before the opening existed should continue from the shelter.
 	opening_completed = bool(data.get("opening_completed", true))
 	_normalize_contract_state()
+	sync_shelter_progression_milestones()
 	if not RAID_ZONES.has(selected_raid_zone) or not is_raid_zone_unlocked(selected_raid_zone):
 		selected_raid_zone = "jongno_outskirts"
 	_ensure_resident_records()
@@ -2009,6 +2165,7 @@ func reset_run() -> void:
 		"fieldcraft": 0,
 	}
 	raid_serial = 0
+	reset_raid_supply_counters()
 	magazine_ammo = 30
 	reserve_ammo = 90
 	has_ak = true
@@ -2028,6 +2185,11 @@ func reset_run() -> void:
 		"rubber_gasket": 0,
 		"scope_lens": 0,
 		"magazine_spring": 0,
+	}
+	progression_item_inventory = {
+		"rifle_blueprint": 0,
+		"shotgun_blueprint": 0,
+		"sealed_zone_keycard": 0,
 	}
 	weapon_mod_inventory = {
 		"scope_2x": 0,
@@ -2102,6 +2264,15 @@ func reset_run() -> void:
 	contract_progress = 0
 	completed_contract_ids.clear()
 	unlocked_contract_lore.clear()
+	shelter_facility_unlocks = {
+		"bed": true,
+		"storage": false,
+		"training": false,
+		"workbench": false,
+		"scratcher_bank": false,
+		"catnip_scraper": false,
+	}
+	contract_agent_intro_seen = false
 
 
 func reset_all_progress_for_opening() -> bool:

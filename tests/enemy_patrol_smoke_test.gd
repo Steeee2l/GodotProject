@@ -1,6 +1,7 @@
 extends SceneTree
 
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
+const BULLET_SCRIPT := preload("res://scripts/bullet_projectile.gd")
 
 
 func _initialize() -> void:
@@ -42,6 +43,36 @@ func _run() -> void:
 		push_error("ENEMY_PATROL: patrol enemy remained stationary")
 		quit(1)
 		return
+
+	var decoy := CharacterBody3D.new()
+	decoy.position = enemy.global_position + Vector3(4.0, 0.0, 0.0)
+	root.add_child(decoy)
+	enemy.set("target", decoy)
+	enemy.set("alerted", false)
+	enemy.set("detection_awareness", 0.0)
+	enemy.set("opening_shot_pending", false)
+	enemy.set("attack_cooldown", 1.0)
+	target.position = enemy.global_position + Vector3(8.0, 0.0, 0.0)
+	var player_bullet := Area3D.new()
+	player_bullet.set_script(BULLET_SCRIPT)
+	player_bullet.set("source_body", target)
+	player_bullet.set("direction", Vector3.RIGHT)
+	player_bullet.set("damage", 1)
+	root.add_child(player_bullet)
+	player_bullet.call("_apply_hit", enemy, player_bullet.global_position)
+	assert(enemy.get("target") == target, "A player bullet must immediately replace the current combat target.")
+	assert(bool(enemy.get("alerted")), "A hit enemy must immediately enter combat.")
+	assert(is_equal_approx(float(enemy.get("detection_awareness")), 1.0))
+	assert(bool(enemy.get("opening_shot_pending")), "A ranged enemy must prepare immediate return fire.")
+	assert(is_zero_approx(float(enemy.get("attack_cooldown"))))
+	var ammo_before_return_fire := int(enemy.get("magazine_ammo"))
+	for frame in 30:
+		await physics_frame
+	assert(
+		int(enemy.get("magazine_ammo")) < ammo_before_return_fire,
+		"A hit ranged enemy must actually fire back once its short hit reaction ends."
+	)
+	decoy.queue_free()
 
 	target.queue_free()
 	await process_frame

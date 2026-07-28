@@ -2,19 +2,25 @@ extends Node3D
 
 const SALVAGE_TEXTURE := preload("res://assets/interiors/office_dungeon/modules/office_salvage_loot_v1.png")
 const AMMO_TEXTURE := preload("res://assets/items/ammo_762.png")
-const COMPONENT_TEXTURES := [
-	preload("res://assets/items/mod_components/rubber_gasket.png"),
-	preload("res://assets/items/mod_components/scope_lens.png"),
-	preload("res://assets/items/mod_components/magazine_spring.png"),
-]
+const COMPONENT_TEXTURES := {
+	"rubber_gasket": preload("res://assets/items/mod_components/rubber_gasket.png"),
+	"scope_lens": preload("res://assets/items/mod_components/scope_lens.png"),
+	"magazine_spring": preload("res://assets/items/mod_components/magazine_spring.png"),
+}
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
 
 signal collected(loot_key: String, description: String)
 
 var loot_key := ""
-var loot_type := "canned_food"
+var loot_type := "container"
 var amount := 1
 var floor_number := 1
+var container_type := ""
+var stage_tier := 1
+var roll_seed := 1
+var fixed_definition: Dictionary = {}
+
 @onready var BuildingRunState: Node = get_node("/root/BuildingRunState")
 @onready var GameState: Node = get_node("/root/GameState")
 
@@ -22,10 +28,61 @@ var floor_number := 1
 func configure(key_value: String, type_value: String, amount_value: int, floor_value: int) -> void:
 	loot_key = key_value
 	loot_type = type_value
-	amount = amount_value
+	amount = maxi(1, amount_value)
 	floor_number = floor_value
+	var data := {
+		"amount": amount,
+		"display_name": _legacy_display_name(type_value),
+		"base_value": 0,
+		"slot_size": 1,
+		"total_value": 0,
+	}
+	match type_value:
+		"ammo":
+			data["ammo_id"] = "762_fmj"
+		"component":
+			loot_type = "mod_component"
+			data["component_id"] = _resolved_component_id()
+		"weapon":
+			data["weapon_id"] = _resolved_weapon_id()
+		"equipment":
+			loot_type = "armor"
+			data["equipment_id"] = _resolved_equipment_id()
+	fixed_definition = {"type": loot_type, "data": data}
+	_apply_metadata()
+
+
+func configure_item(key_value: String, definition: Dictionary, floor_value: int) -> void:
+	loot_key = key_value
+	floor_number = floor_value
+	fixed_definition = definition.duplicate(true)
+	loot_type = str(fixed_definition.get("type", "canned_food"))
+	amount = int((fixed_definition.get("data", {}) as Dictionary).get("amount", 1))
+	_apply_metadata()
+
+
+func configure_container(
+	key_value: String,
+	container_value: String,
+	stage_value: int,
+	floor_value: int,
+	seed_value: int
+) -> void:
+	loot_key = key_value
+	container_type = container_value
+	stage_tier = clampi(stage_value, 1, 4)
+	floor_number = floor_value
+	roll_seed = seed_value
+	loot_type = "container"
+	fixed_definition.clear()
+	_apply_metadata()
+
+
+func _apply_metadata() -> void:
 	set_meta("loot_key", loot_key)
 	set_meta("loot_type", loot_type)
+	set_meta("container_type", container_type)
+	set_meta("stage_tier", stage_tier)
 
 
 func _ready() -> void:
@@ -39,78 +96,142 @@ func get_interaction_radius() -> float:
 
 
 func get_interaction_prompt() -> String:
-	return "수색하기 · %s" % _display_name()
+	if not container_type.is_empty():
+		return "수색 · %s" % LOOT_ECONOMY.get_container_display_name(container_type)
+	return "획득 · %s" % _definition_display_name(fixed_definition)
 
 
 func interact() -> String:
 	if BuildingRunState.is_loot_collected(floor_number, loot_key):
 		return "이미 비어 있습니다."
-	var description := ""
-	match loot_type:
-		"ammo":
-			GameState.set_ammo_count(
-				GameState.equipped_ammo_id,
-				GameState.get_ammo_count(GameState.equipped_ammo_id) + amount
+	var definitions: Array[Dictionary] = []
+	if fixed_definition.is_empty():
+		var random := RandomNumberGenerator.new()
+		random.seed = roll_seed
+		definitions = LOOT_ECONOMY.roll_container(
+			container_type,
+			stage_tier,
+			"business_corner",
+			random
+		)
+	else:
+		definitions.append(fixed_definition)
+	var acquired_names: Array[String] = []
+	for definition in definitions:
+		if (
+			fixed_definition.is_empty()
+			and not LOOT_ECONOMY.try_register_loot(
+				GameState,
+				definition,
+				"field",
+				stage_tier
 			)
-			description = "탄약 %d발 획득" % amount
-		"canned_food":
-			GameState.canned_food += amount
-			description = "통조림 %d개 획득" % amount
-		"component":
-			var component_id := _resolved_component_id()
-			GameState.add_mod_component(component_id, amount)
-			description = "%s %d개 획득" % [_component_display_name(component_id), amount]
-		"weapon":
-			var weapon_id := _resolved_weapon_id()
-			GameState.add_weapon(weapon_id, amount)
-			description = "%s 획득 · 가방에서 장착" % _weapon_display_name(weapon_id)
-		"equipment":
-			var equipment_id := _resolved_equipment_id()
-			GameState.add_equipment(equipment_id, amount)
-			var definition: Dictionary = GameState.get_equipment_definition(equipment_id)
-			description = "%s 획득 · 가방에서 장착" % str(definition.get("display_name", "방어구"))
-		_:
-			# Legacy/unknown field loot is converted to food. Scrap is shelter-produced only.
-			GameState.canned_food += maxi(1, amount)
-			description = "통조림 %d개 획득" % maxi(1, amount)
+		):
+			continue
+		var granted := _grant_definition(definition)
+		if not granted.is_empty():
+			acquired_names.append(granted)
 	BuildingRunState.mark_loot_collected(floor_number, loot_key)
 	GameState.save_persistent_state()
+	var description := "비어 있습니다."
+	if not acquired_names.is_empty():
+		description = "획득 · %s" % " / ".join(acquired_names)
 	collected.emit(loot_key, description)
 	queue_free()
 	return description
 
 
-func _display_name() -> String:
-	match loot_type:
-		"ammo": return "탄약 상자"
-		"canned_food": return "비상 식량"
-		"component": return "부품 보관함"
-		"weapon": return "버려진 총기"
-		"equipment": return "방어 장비"
-	return "보급품"
+func _grant_definition(definition: Dictionary) -> String:
+	var type_name := str(definition.get("type", "canned_food"))
+	var data := definition.get("data", {}) as Dictionary
+	var item_amount := maxi(1, int(data.get("amount", 1)))
+	var display_name := str(data.get("display_name", "전리품"))
+	match type_name:
+		"ammo":
+			var ammo_id := str(data.get("ammo_id", "762_fmj"))
+			GameState.set_ammo_count(
+				ammo_id,
+				GameState.get_ammo_count(ammo_id) + item_amount
+			)
+		"canned_food":
+			GameState.canned_food += item_amount
+		"medkit":
+			GameState.medkits += item_amount
+		"churu":
+			GameState.churu += item_amount
+		"mod_component":
+			GameState.add_mod_component(
+				str(data.get("component_id", "rubber_gasket")),
+				item_amount
+			)
+		"progression_item":
+			GameState.add_progression_item(
+				str(data.get("progression_item_id", "rifle_blueprint")),
+				item_amount
+			)
+		"weapon":
+			GameState.add_weapon(str(data.get("weapon_id", "m1911")), item_amount)
+		"armor":
+			GameState.add_equipment(
+				str(data.get("equipment_id", "scav_vest")),
+				item_amount
+			)
+		_:
+			return ""
+	return "%s x%d" % [display_name, item_amount]
 
 
 func _build_visual() -> void:
 	var texture: Texture2D = SALVAGE_TEXTURE
-	var pixel_size := 0.00075
-	match loot_type:
-		"ammo":
-			texture = AMMO_TEXTURE
-			pixel_size = 0.0032
-		"canned_food":
-			texture = UI_ICONS.get_icon("food", 96, Color("#d9b85f"))
-			pixel_size = 0.007
-		"component":
-			texture = COMPONENT_TEXTURES[absi(loot_key.hash()) % COMPONENT_TEXTURES.size()]
-			pixel_size = 0.00075
-		"weapon":
-			texture = UI_ICONS.get_icon("weapon", 96, Color("#c4d0ca"))
-			pixel_size = 0.007
-		"equipment":
-			var equipment: Dictionary = GameState.get_equipment_definition(_resolved_equipment_id())
-			var icon_name := "helmet" if str(equipment.get("slot", "body")) == "head" else "armor"
-			texture = UI_ICONS.get_icon(icon_name, 96, Color("#a9c8b8"))
-			pixel_size = 0.007
+	var pixel_size := 0.00105
+	var icon_name := "backpack"
+	var tint := Color("#8ea097")
+	if not container_type.is_empty():
+		match container_type:
+			"ammo_case":
+				icon_name = "ammo"
+				tint = Color("#c8ab62")
+			"toolbox":
+				icon_name = "parts"
+				tint = Color("#a77a5c")
+			"clothing_cache":
+				icon_name = "armor"
+				tint = Color("#8d9ca4")
+			"weapon_case":
+				icon_name = "weapon"
+				tint = Color("#d3a252")
+			"secure_cache":
+				icon_name = "secure"
+				tint = Color("#76b7a5")
+	else:
+		var data := fixed_definition.get("data", {}) as Dictionary
+		match loot_type:
+			"ammo":
+				texture = AMMO_TEXTURE
+				pixel_size = 0.0032
+				icon_name = "ammo"
+			"canned_food":
+				texture = UI_ICONS.get_icon("food", 96, Color("#d9b85f"))
+				pixel_size = 0.007
+				icon_name = "food"
+			"mod_component":
+				var component_id := str(data.get("component_id", "rubber_gasket"))
+				texture = COMPONENT_TEXTURES.get(component_id, COMPONENT_TEXTURES["rubber_gasket"])
+				pixel_size = 0.00075
+				icon_name = "parts"
+			"progression_item":
+				var progression_item_id := str(data.get("progression_item_id", "rifle_blueprint"))
+				icon_name = "secure" if progression_item_id == "sealed_zone_keycard" else "craft"
+				texture = UI_ICONS.get_icon(icon_name, 96, Color("#e7c96f"))
+				pixel_size = 0.007
+			"weapon":
+				texture = UI_ICONS.get_icon("weapon", 96, Color("#c4d0ca"))
+				pixel_size = 0.007
+				icon_name = "weapon"
+			"armor":
+				texture = UI_ICONS.get_icon("armor", 96, Color("#a9c8b8"))
+				pixel_size = 0.007
+				icon_name = "armor"
 	var sprite := Sprite3D.new()
 	sprite.name = "GeneratedLootVisual"
 	sprite.texture = texture
@@ -119,17 +240,39 @@ func _build_visual() -> void:
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.shaded = false
 	sprite.transparent = true
-	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
+	sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	sprite.modulate = tint if not container_type.is_empty() else Color.WHITE
 	add_child(sprite)
-	var marker := Label3D.new()
+	var marker := Sprite3D.new()
 	marker.name = "LootMarker"
+	marker.texture = UI_ICONS.get_icon(icon_name, 64, Color("#e0ba55"))
+	marker.pixel_size = 0.006
 	marker.position = Vector3(0, 1.25, 0)
-	marker.text = "◆"
-	marker.font_size = 38
-	marker.modulate = Color("#e0ba55")
 	marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	marker.no_depth_test = true
+	marker.shaded = false
+	marker.transparent = true
 	add_child(marker)
+
+
+func _definition_display_name(definition: Dictionary) -> String:
+	return str((definition.get("data", {}) as Dictionary).get("display_name", "전리품"))
+
+
+func _legacy_display_name(type_name: String) -> String:
+	match type_name:
+		"ammo":
+			return "탄약"
+		"canned_food":
+			return "통조림"
+		"component":
+			return "총기 부품"
+		"weapon":
+			return "버려진 총기"
+		"equipment":
+			return "방어 장비"
+	return "보급품"
 
 
 func _resolved_component_id() -> String:
@@ -146,25 +289,6 @@ func _resolved_equipment_id() -> String:
 	var equipment_ids: Array[String] = [
 		"scav_vest",
 		"patched_helmet",
-		"riot_vest",
-		"tactical_helmet",
 		"patched_sneakers",
-		"tactical_boots",
 	]
 	return equipment_ids[absi(loot_key.hash()) % equipment_ids.size()]
-
-
-func _component_display_name(component_id: String) -> String:
-	match component_id:
-		"rubber_gasket": return "고무 패킹"
-		"scope_lens": return "스코프 렌즈"
-		"magazine_spring": return "탄창 스프링"
-	return "총기 부품"
-
-
-func _weapon_display_name(weapon_id: String) -> String:
-	match weapon_id:
-		"m1911": return "M1911"
-		"mp5": return "MP5"
-		"double_barrel": return "더블배럴 산탄총"
-	return "총기"
