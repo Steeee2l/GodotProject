@@ -13,6 +13,8 @@ const STAGE_PROFILES := {
 		"enemy_drop_cap": 18,
 		"raid_kill_cap": 40,
 		"weapon_case_chance": 0.16,
+		"guaranteed_canned_food_pickups": 20,
+		"canned_food_double_stack_chance": 0.22,
 		"container_counts": {
 			"street_cache": 14,
 			"ammo_case": 4,
@@ -32,6 +34,8 @@ const STAGE_PROFILES := {
 		"enemy_drop_cap": 22,
 		"raid_kill_cap": 55,
 		"weapon_case_chance": 0.24,
+		"guaranteed_canned_food_pickups": 22,
+		"canned_food_double_stack_chance": 0.24,
 		"container_counts": {
 			"street_cache": 15,
 			"ammo_case": 5,
@@ -52,6 +56,8 @@ const STAGE_PROFILES := {
 		"enemy_drop_cap": 28,
 		"raid_kill_cap": 70,
 		"weapon_case_chance": 0.34,
+		"guaranteed_canned_food_pickups": 24,
+		"canned_food_double_stack_chance": 0.26,
 		"container_counts": {
 			"street_cache": 14,
 			"ammo_case": 7,
@@ -72,6 +78,8 @@ const STAGE_PROFILES := {
 		"enemy_drop_cap": 34,
 		"raid_kill_cap": 85,
 		"weapon_case_chance": 0.42,
+		"guaranteed_canned_food_pickups": 26,
+		"canned_food_double_stack_chance": 0.28,
 		"container_counts": {
 			"street_cache": 14,
 			"ammo_case": 8,
@@ -451,6 +459,22 @@ static func get_stage_profile(stage_tier: int) -> Dictionary:
 	return (STAGE_PROFILES[clampi(stage_tier, 1, 4)] as Dictionary).duplicate(true)
 
 
+static func get_guaranteed_canned_food_pickup_count(stage_tier: int) -> int:
+	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 4)] as Dictionary
+	return maxi(0, int(profile.get("guaranteed_canned_food_pickups", 0)))
+
+
+static func roll_guaranteed_canned_food_amount(
+	stage_tier: int,
+	random: RandomNumberGenerator
+) -> int:
+	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 4)] as Dictionary
+	var double_stack_chance := float(
+		profile.get("canned_food_double_stack_chance", 0.0)
+	)
+	return 2 if random.randf() < double_stack_chance else 1
+
+
 static func get_container_display_name(container_type: String) -> String:
 	var definition := CONTAINER_DEFINITIONS.get(container_type, {}) as Dictionary
 	return str(definition.get("display_name", "보급품"))
@@ -676,8 +700,16 @@ static func simulate_stage_supply(stage_tier: int, run_count: int, seed_value: i
 	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 4)] as Dictionary
 	for _run_index in maxi(1, run_count):
 		var run_value := 0
+		var guaranteed_supply_value := 0
 		var run_weapon_count := 0
 		var run_common_supply := 0
+		for _pickup_index in get_guaranteed_canned_food_pickup_count(stage_tier):
+			var amount := roll_guaranteed_canned_food_amount(stage_tier, random)
+			total_canned_food += amount
+			run_common_supply += amount
+			guaranteed_supply_value += amount * int(
+				(ITEM_CATALOG["canned_food"] as Dictionary).get("base_value", 0)
+			)
 		for container_type in build_container_plan(stage_tier, random):
 			for definition in roll_container(container_type, stage_tier, "street_mixed", random):
 				var value := get_definition_value(definition)
@@ -708,7 +740,7 @@ static func simulate_stage_supply(stage_tier: int, run_count: int, seed_value: i
 						run_common_supply += amount
 		if run_common_supply >= 12:
 			runs_with_common_supply += 1
-		total_value += run_value
+		total_value += run_value + guaranteed_supply_value
 	var divisor := float(maxi(1, run_count))
 	return {
 		"average_weapons": float(total_weapons) / divisor,

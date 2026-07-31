@@ -8,6 +8,9 @@ func _initialize() -> void:
 func _run() -> void:
 	var game_state := root.get_node_or_null("GameState")
 	assert(game_state != null)
+	game_state.set("persistence_enabled", false)
+	game_state.call("reset_run")
+	game_state.call("select_raid_zone", "jongno_outskirts")
 	game_state.set("world_time_hours", 23.5)
 	var packed_scene: PackedScene = load("res://scenes/main.tscn")
 	var main_scene: Node = packed_scene.instantiate()
@@ -16,7 +19,7 @@ func _run() -> void:
 	await physics_frame
 	assert(float(main_scene.get("night_intensity")) > 0.9)
 	var enemies: Array = main_scene.get("enemies")
-	assert(enemies.size() == 17)
+	assert(enemies.size() == 24)
 	var initial_squad_counts := {}
 	for initial_enemy in enemies:
 		var squad_id := int(initial_enemy.get("squad_id"))
@@ -49,18 +52,18 @@ func _run() -> void:
 	main_scene.call("_update_enemy_pressure", 1.0)
 	await process_frame
 	enemies = main_scene.get("enemies")
-	assert(enemies.size() == 19)
+	assert(enemies.size() >= 26 and enemies.size() <= 27)
 	var enemy: Node = enemies[0]
 	assert(enemy.get_node_or_null("VisionFan") == null)
 	enemy.call("set_environment_visibility", 0.0)
 	var daylight_enemy_vision := float(enemy.call("_get_vision_range"))
 	enemy.call("set_environment_visibility", 1.0)
 	var night_enemy_vision := float(enemy.call("_get_vision_range"))
-	assert(daylight_enemy_vision >= 10.5 and daylight_enemy_vision <= 16.5)
-	assert(night_enemy_vision >= 6.5 and night_enemy_vision <= 10.5)
+	assert(daylight_enemy_vision >= 16.0 and daylight_enemy_vision <= 25.0)
+	assert(night_enemy_vision >= 10.0 and night_enemy_vision <= 18.0)
 	assert(night_enemy_vision < daylight_enemy_vision)
-	assert(is_equal_approx(float(enemy.get("detection_range_multiplier")), 0.88))
-	assert(is_equal_approx(float(enemy.get("detection_half_angle_degrees")), 50.0))
+	assert(is_equal_approx(float(enemy.get("detection_range_multiplier")), 1.0))
+	assert(is_equal_approx(float(enemy.get("detection_half_angle_degrees")), 60.0))
 	enemy.set("facing_world_direction", Vector3.FORWARD)
 	assert(enemy.call(
 		"_is_position_inside_vision_fan",

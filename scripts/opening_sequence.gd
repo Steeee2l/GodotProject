@@ -35,8 +35,8 @@ const DIALOGUE_LINES := [
 ]
 
 const PLAYER_SPEED := 5.2
-const ROLL_DURATION := 0.42
-const ROLL_START_SPEED := 19.0
+const ROLL_DURATION := 0.38
+const ROLL_START_SPEED := 22.0
 const ROLL_END_SPEED := 5.8
 const FIRE_INTERVAL := 0.105
 const PLAYER_MAX_HEALTH := 100

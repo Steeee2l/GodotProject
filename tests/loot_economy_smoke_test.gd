@@ -14,6 +14,8 @@ func _run() -> void:
 	assert(_container_count(stage_four_profile) == 47)
 	assert(int(stage_one_profile.get("weapon_rarity_cap", 0)) == 1)
 	assert(int(stage_four_profile.get("weapon_rarity_cap", 0)) == 4)
+	assert(LOOT_ECONOMY.get_guaranteed_canned_food_pickup_count(1) == 20)
+	assert(LOOT_ECONOMY.get_guaranteed_canned_food_pickup_count(4) == 26)
 
 	var stage_one_supply := LOOT_ECONOMY.simulate_stage_supply(1, 600, 1103)
 	var stage_four_supply := LOOT_ECONOMY.simulate_stage_supply(4, 600, 2207)
@@ -22,7 +24,7 @@ func _run() -> void:
 	assert(float(stage_one_supply.get("average_weapons", 99.0)) < 0.45)
 	assert(float(stage_one_supply.get("average_ammo", 0.0)) >= 40.0)
 	assert(float(stage_one_supply.get("average_ammo", 999.0)) <= 65.0)
-	assert(float(stage_one_supply.get("average_canned_food", 0.0)) >= 8.0)
+	assert(float(stage_one_supply.get("average_canned_food", 0.0)) >= 28.0)
 	assert(float(stage_one_supply.get("average_components", 0.0)) >= 10.0)
 	assert(float(stage_one_supply.get("average_common_supply", 0.0)) >= 20.0)
 	assert(float(stage_one_supply.get("common_supply_success_rate", 0.0)) >= 0.95)

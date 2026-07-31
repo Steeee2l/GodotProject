@@ -27,6 +27,14 @@ const AMMO_TEXTURE := preload("res://assets/items/ammo_762.png")
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
 const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
 const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/magazine_spring.png")
+const RAID_ZONE_MAP_TEXTURE := preload("res://assets/ui/raid_map/apocalypse_seoul_operations_map_v1.png")
+const RAID_ZONE_MAP_POSITIONS := {
+	"jongno_outskirts": Vector2(0.34, 0.23),
+	"namdaemun_market": Vector2(0.29, 0.53),
+	"euljiro_depths": Vector2(0.66, 0.43),
+	"yongsan_blockade": Vector2(0.40, 0.79),
+	"namsan_core": Vector2(0.49, 0.35),
+}
 const CAT_DIRECTION_STATES := {
 	"n": "up",
 	"ne": "up_right",
@@ -39,14 +47,14 @@ const CAT_DIRECTION_STATES := {
 }
 const CAT_FRAME_COUNT := 4
 const ROLL_FRAME_COUNT := 4
-const ROLL_DURATION := 0.46
+const ROLL_DURATION := 0.41
 const ROLL_STAMINA_MAX := 100.0
 const ROLL_STAMINA_COST := 35.0
 const ROLL_STAMINA_RECOVERY_PER_SECOND := 30.0
-const ROLL_START_SPEED := 18.0
+const ROLL_START_SPEED := 21.0
 const ROLL_END_SPEED := 4.2
 const ROLL_AFTERIMAGE_INTERVAL := 0.06
-const LOAF_HOLD_THRESHOLD := 0.26
+const LOAF_HOLD_THRESHOLD := 0.45
 const LOAF_MOVE_MULTIPLIER := 1.0
 const LOAF_STAMINA_DRAIN_PER_SECOND := 7.5
 const LOAF_MIN_STAMINA := 1.0
@@ -144,10 +152,28 @@ var contract_intro_body_label: Label
 var contract_intro_next_button: Button
 var contract_intro_index := 0
 var contract_intro_open := false
+var contract_story_layer: CanvasLayer
+var contract_story_title_label: Label
+var contract_story_body_label: Label
+var contract_story_progress_label: Label
+var contract_story_next_button: Button
+var contract_story_lines: Array[String] = []
+var contract_story_index := 0
+var contract_story_open := false
 var shelter_stats_refresh_time := 0.0
 var shelter_save_time := 0.0
 var raid_zone_ui_layer: CanvasLayer
 var raid_zone_ui_open := false
+var raid_zone_selected_id := ""
+var raid_zone_map_markers: Dictionary = {}
+var raid_zone_detail_state: Label
+var raid_zone_detail_title: Label
+var raid_zone_detail_description: Label
+var raid_zone_detail_threat: Label
+var raid_zone_detail_threat_bar: ProgressBar
+var raid_zone_detail_reward: Label
+var raid_zone_detail_requirement: Label
+var raid_zone_launch_button: Button
 var raid_loadout_ui_layer: CanvasLayer
 var raid_loadout_ui_open := false
 var inventory_ui: Control
@@ -265,7 +291,7 @@ func _physics_process(delta: float) -> void:
 			roll_stamina + ROLL_STAMINA_RECOVERY_PER_SECOND * GameState.get_stamina_recovery_multiplier() * delta
 		)
 	if dash_button:
-		dash_button.disabled = roll_active or loafing or roll_stamina < ROLL_STAMINA_COST
+		dash_button.disabled = roll_active or roll_stamina < ROLL_STAMINA_COST
 	var input_vector := Vector2.ZERO
 	if not _ui_blocks_player():
 		input_vector = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
@@ -729,6 +755,151 @@ func _refresh_contract_agent_intro() -> void:
 	)
 
 
+func _open_contract_story(title_text: String, lines: Array[String]) -> void:
+	if lines.is_empty() or contract_story_open:
+		return
+	contract_story_open = true
+	contract_story_lines.assign(lines)
+	contract_story_index = 0
+	touch_vector = Vector2.ZERO
+	roll_active = false
+	_set_motion_state("idle")
+	contract_story_layer = CanvasLayer.new()
+	contract_story_layer.name = "ContractNarrativeLayer"
+	contract_story_layer.layer = 78
+	contract_story_layer.add_to_group("shelter_modal_ui")
+	add_child(contract_story_layer)
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_STOP
+	contract_story_layer.add_child(root)
+	var dim := ColorRect.new()
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.003, 0.006, 0.006, 0.78)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.add_child(dim)
+	var accent := ColorRect.new()
+	accent.anchor_left = 0.0
+	accent.anchor_top = 0.0
+	accent.anchor_right = 1.0
+	accent.anchor_bottom = 0.012
+	accent.color = Color("#b89545")
+	accent.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(accent)
+	var panel := PanelContainer.new()
+	panel.name = "ContractNarrativePanel"
+	var viewport_size := get_viewport().get_visible_rect().size
+	var compact_layout := viewport_size.x < 760.0
+	panel.anchor_left = 0.035 if compact_layout else 0.08
+	panel.anchor_top = 0.34 if compact_layout else 0.59
+	panel.anchor_right = 0.965 if compact_layout else 0.92
+	panel.anchor_bottom = 0.97 if compact_layout else 0.94
+	panel.add_theme_stylebox_override(
+		"panel",
+		_rounded_panel_style(Color(0.012, 0.019, 0.018, 0.985), Color("#b89545"), 8)
+	)
+	root.add_child(panel)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 24)
+	margin.add_theme_constant_override("margin_top", 20)
+	margin.add_theme_constant_override("margin_right", 24)
+	margin.add_theme_constant_override("margin_bottom", 18)
+	panel.add_child(margin)
+	var row: BoxContainer = VBoxContainer.new() if compact_layout else HBoxContainer.new()
+	row.add_theme_constant_override("separation", 22)
+	margin.add_child(row)
+	var portrait_frame := PanelContainer.new()
+	var portrait_size := 88.0 if compact_layout else 136.0
+	portrait_frame.custom_minimum_size = Vector2(portrait_size, portrait_size)
+	portrait_frame.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	portrait_frame.add_theme_stylebox_override(
+		"panel",
+		_rounded_panel_style(Color("#101815"), Color("#6e856f"), 6)
+	)
+	row.add_child(portrait_frame)
+	var portrait := TextureRect.new()
+	if is_instance_valid(contract_agent) and contract_agent.has_method("get_portrait_texture"):
+		portrait.texture = contract_agent.call("get_portrait_texture") as Texture2D
+	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	portrait_frame.add_child(portrait)
+	var text_box := VBoxContainer.new()
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_box.add_theme_constant_override("separation", 7)
+	row.add_child(text_box)
+	var speaker_row := HBoxContainer.new()
+	text_box.add_child(speaker_row)
+	var speaker := Label.new()
+	speaker.text = "훈련교관 철근"
+	speaker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	speaker.add_theme_font_override("font", FONT)
+	speaker.add_theme_font_size_override("font_size", 18)
+	speaker.add_theme_color_override("font_color", Color("#f0ce70"))
+	speaker_row.add_child(speaker)
+	contract_story_progress_label = Label.new()
+	contract_story_progress_label.add_theme_font_override("font", FONT)
+	contract_story_progress_label.add_theme_font_size_override("font_size", 14)
+	contract_story_progress_label.add_theme_color_override("font_color", Color("#82998d"))
+	speaker_row.add_child(contract_story_progress_label)
+	contract_story_title_label = Label.new()
+	contract_story_title_label.text = title_text
+	contract_story_title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	contract_story_title_label.add_theme_font_override("font", FONT)
+	contract_story_title_label.add_theme_font_size_override("font_size", 20 if compact_layout else 24)
+	contract_story_title_label.add_theme_color_override("font_color", Color("#e7d49a"))
+	text_box.add_child(contract_story_title_label)
+	contract_story_body_label = Label.new()
+	contract_story_body_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	contract_story_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	contract_story_body_label.add_theme_font_override("font", FONT)
+	contract_story_body_label.add_theme_font_size_override("font_size", 17 if compact_layout else 20)
+	contract_story_body_label.add_theme_color_override("font_color", Color("#e5ece7"))
+	text_box.add_child(contract_story_body_label)
+	var actions := HBoxContainer.new()
+	actions.alignment = BoxContainer.ALIGNMENT_END
+	text_box.add_child(actions)
+	contract_story_next_button = _merchant_button("다음", true, "collect")
+	contract_story_next_button.custom_minimum_size = Vector2(132 if compact_layout else 170, 46)
+	contract_story_next_button.pressed.connect(_advance_contract_story)
+	actions.add_child(contract_story_next_button)
+	_refresh_contract_story()
+
+
+func _refresh_contract_story() -> void:
+	if not is_instance_valid(contract_story_body_label):
+		return
+	contract_story_body_label.text = contract_story_lines[contract_story_index]
+	contract_story_progress_label.text = "%d / %d" % [
+		contract_story_index + 1,
+		contract_story_lines.size(),
+	]
+	contract_story_next_button.text = (
+		"기록 보관"
+		if contract_story_index >= contract_story_lines.size() - 1
+		else "다음"
+	)
+
+
+func _advance_contract_story() -> void:
+	if not contract_story_open:
+		return
+	contract_story_index += 1
+	if contract_story_index < contract_story_lines.size():
+		_refresh_contract_story()
+		return
+	contract_story_open = false
+	if is_instance_valid(contract_story_layer):
+		contract_story_layer.queue_free()
+	contract_story_layer = null
+	contract_story_title_label = null
+	contract_story_body_label = null
+	contract_story_progress_label = null
+	contract_story_next_button = null
+	contract_story_lines.clear()
+	contract_story_index = 0
+
+
 func _advance_contract_agent_intro() -> void:
 	if not contract_intro_open:
 		return
@@ -912,6 +1083,7 @@ func _ui_blocks_player() -> bool:
 		merchant_ui_open
 		or contract_ui_open
 		or contract_intro_open
+		or contract_story_open
 		or raid_zone_ui_open
 		or raid_loadout_ui_open
 		or not get_tree().get_nodes_in_group("shelter_modal_ui").is_empty()
@@ -1172,13 +1344,13 @@ func _refresh_contract_ui() -> void:
 	title_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	header.add_child(title_box)
 	var eyebrow := Label.new()
-	eyebrow.text = "훈련교관 철근  ·  현장 계약 담당"
+	eyebrow.text = "훈련교관 철근  ·  살아 돌아온 녀석만 받는다"
 	eyebrow.add_theme_font_override("font", FONT)
 	eyebrow.add_theme_font_size_override("font_size", 14)
 	eyebrow.add_theme_color_override("font_color", Color("#9fb2a9"))
 	title_box.add_child(eyebrow)
 	var title := Label.new()
-	title.text = "철근의 현장 계약"
+	title.text = "철근의 계약판"
 	title.add_theme_font_override("font", FONT)
 	title.add_theme_font_size_override("font_size", 26)
 	title.add_theme_color_override("font_color", Color("#ead69c"))
@@ -1214,25 +1386,25 @@ func _refresh_contract_ui() -> void:
 
 	if status == "finished" or definition.is_empty():
 		var finished_title := Label.new()
-		finished_title.text = "모든 현장 계약 완료"
+		finished_title.text = "이제 네가 길을 고를 차례다"
 		finished_title.add_theme_font_override("font", FONT)
 		finished_title.add_theme_font_size_override("font_size", 24)
 		finished_title.add_theme_color_override("font_color", Color("#82d5aa"))
 		contract_box.add_child(finished_title)
 		var finished_body := Label.new()
-		finished_body.text = "철근이 수집한 종로의 기록이 모두 해금되었습니다.\n새 계약이 추가될 때까지 도시 탐사와 쉘터 확장을 계속할 수 있습니다."
+		finished_body.text = "내가 아는 건 전부 넘겼다. 이제 종로 어디를 파고들지는 네가 정해.\n살아서 돌아오기만 해. 다음 기록은 네가 쓰는 거다."
 		finished_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		finished_body.add_theme_font_override("font", FONT)
 		finished_body.add_theme_font_size_override("font_size", 16)
 		finished_body.add_theme_color_override("font_color", Color("#d1ddd6"))
 		contract_box.add_child(finished_body)
 	else:
-		var status_text := "수락 가능"
+		var status_text := "내가 맡길 일"
 		match status:
 			"active":
-				status_text = "현장 진행 중"
+				status_text = "도시에서 처리 중"
 			"complete":
-				status_text = "보고 대기"
+				status_text = "돌아왔으면 보고해"
 		var contract_heading := HBoxContainer.new()
 		contract_heading.add_theme_constant_override("separation", 10)
 		contract_box.add_child(contract_heading)
@@ -1290,7 +1462,7 @@ func _refresh_contract_ui() -> void:
 		)
 		contract_box.add_child(progress_bar)
 		var reward_title := Label.new()
-		reward_title.text = "보고 보상"
+		reward_title.text = "내가 챙겨 줄 몫"
 		reward_title.add_theme_font_override("font", FONT)
 		reward_title.add_theme_font_size_override("font_size", 14)
 		reward_title.add_theme_color_override("font_color", Color("#8fa89c"))
@@ -1338,13 +1510,13 @@ func _refresh_contract_ui() -> void:
 	action.custom_minimum_size = Vector2(250, 44)
 	match status:
 		"available":
-			action.text = "계약 수락"
+			action.text = "철근의 계약 받기"
 			action.pressed.connect(_accept_current_contract)
 		"active":
-			action.text = "필드에서 목표 진행 중"
+			action.text = "도시에서 끝내고 돌아와"
 			action.disabled = true
 		"complete":
-			action.text = "완료 보고 · 보상 받기"
+			action.text = "철근에게 결과 보고"
 			action.pressed.connect(_claim_current_contract)
 		_:
 			action.text = "모든 계약 완료"
@@ -1386,37 +1558,61 @@ func _add_contract_reward_chips(
 func _accept_current_contract() -> void:
 	var result := GameState.accept_current_contract()
 	if not bool(result.get("ok", false)):
-		contract_report_message = "지금은 새 계약을 수락할 수 없습니다."
+		contract_report_message = "철근: 지금 맡긴 일부터 끝내. 발만 바쁘다고 일이 되는 건 아니다."
 	else:
 		var definition := result.get("definition", {}) as Dictionary
-		contract_report_message = "계약 수락 · %s\n필드에 진입하면 좌상단에 목표가 표시됩니다." % str(
-			definition.get("title", "현장 계약")
-		)
+		var story_lines: Array[String] = []
+		for line in definition.get("accept_dialogue", []) as Array:
+			story_lines.append(str(line))
+		story_lines.append("목표는 %s. 살아서 돌아와 보고해." % str(
+			definition.get("objective", "현장 목표 완수")
+		))
 		_show_status("철근에게서 현장 계약을 받았습니다.")
+		_close_contract_ui()
+		_open_contract_story(
+			"계약 수락 · %s" % str(definition.get("title", "현장 계약")),
+			story_lines
+		)
+		return
 	_refresh_contract_ui()
 
 
 func _claim_current_contract() -> void:
 	var result := GameState.claim_current_contract_reward()
 	if not bool(result.get("ok", false)):
-		contract_report_message = "아직 보고할 수 있는 완료 계약이 없습니다."
+		contract_report_message = "철근: 빈손 보고는 받지 않는다. 목표부터 확인하고 와."
 	else:
+		var definition := result.get("definition", {}) as Dictionary
 		var construction_line := ""
 		var facility_id := str(result.get("facility_id", ""))
 		if not facility_id.is_empty():
 			_refresh_unlocked_facilities()
 			construction_line = "\n시설 완공 · %s" % str(result.get("facility_name", facility_id))
-		contract_report_message = "보고 완료 · %s%s\n새 세계 기록 해금\n%s" % [
-			_format_contract_reward_text(result.get("reward", {}) as Dictionary),
-			construction_line,
-			str(result.get("lore", "")),
-		]
+		var story_lines: Array[String] = []
+		for line in definition.get("complete_dialogue", []) as Array:
+			story_lines.append(str(line))
+		story_lines.append("기록 해독 · %s\n%s" % [
+			str(definition.get("lore_title", "철근의 기록")),
+			str(definition.get("lore", "")),
+		])
+		var reward_line := "보고 보상 · %s" % _format_contract_reward_text(
+			result.get("reward", {}) as Dictionary
+		)
+		if not construction_line.is_empty():
+			reward_line += construction_line
+		story_lines.append(reward_line)
 		_show_status(
 			"철근이 %s 공사를 완료했습니다." % str(result.get("facility_name", "새 시설"))
 			if not facility_id.is_empty()
 			else "계약 보상을 받고 새로운 세계 기록을 해금했습니다."
 		)
 		_update_stats()
+		_close_contract_ui()
+		_open_contract_story(
+			"현장 보고 · %s" % str(definition.get("title", "계약 완료")),
+			story_lines
+		)
+		return
 	_refresh_contract_ui()
 
 
@@ -2069,7 +2265,7 @@ func _build_touch_stick(canvas: CanvasLayer) -> void:
 
 
 func _update_nearby_station() -> void:
-	if merchant_ui_open or contract_ui_open or contract_intro_open:
+	if merchant_ui_open or contract_ui_open or contract_intro_open or contract_story_open:
 		interact_button.visible = false
 		prompt_label.visible = false
 		return
@@ -2163,7 +2359,7 @@ func _update_nearby_station() -> void:
 
 
 func _interact() -> void:
-	if merchant_ui_open or contract_ui_open or contract_intro_open:
+	if merchant_ui_open or contract_ui_open or contract_intro_open or contract_story_open:
 		return
 	match current_station:
 		"module":
@@ -2336,6 +2532,8 @@ func _open_raid_zone_select() -> void:
 	if raid_zone_ui_open:
 		return
 	raid_zone_ui_open = true
+	raid_zone_selected_id = ""
+	raid_zone_map_markers.clear()
 	touch_vector = Vector2.ZERO
 	player.velocity = Vector3.ZERO
 	_set_motion_state("idle")
@@ -2352,48 +2550,201 @@ func _open_raid_zone_select() -> void:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	raid_zone_ui_layer.add_child(center)
 	var panel := PanelContainer.new()
+	panel.name = "RaidZoneSelectPanel"
 	var viewport_size := get_viewport().get_visible_rect().size
-	var panel_width := minf(900.0, maxf(500.0, viewport_size.x - 28.0))
-	var panel_height := minf(650.0, maxf(380.0, viewport_size.y - 28.0))
+	var panel_width := minf(1120.0, maxf(0.0, viewport_size.x - 24.0))
+	var panel_height := minf(700.0, maxf(0.0, viewport_size.y - 24.0))
 	panel.custom_minimum_size = Vector2(panel_width, panel_height)
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.025, 0.033, 0.031, 0.99), Color("#8f7950")))
+	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.018, 0.024, 0.023, 0.99), Color("#8f7950")))
 	center.add_child(panel)
 	var margin := MarginContainer.new()
 	for margin_name in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
-		margin.add_theme_constant_override(margin_name, 22)
+		margin.add_theme_constant_override(margin_name, 18)
 	panel.add_child(margin)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 12)
+	box.add_theme_constant_override("separation", 10)
 	margin.add_child(box)
 	var header := HBoxContainer.new()
 	box.add_child(header)
+	var header_icon := TextureRect.new()
+	header_icon.custom_minimum_size = Vector2(42, 42)
+	header_icon.texture = UI_ICONS.get_icon("map", 42, Color("#d8bd72"))
+	header_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	header_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	header.add_child(header_icon)
 	var title := Label.new()
-	title.text = "도시 탐색 구역 선택"
+	title.text = "서울 작전 지도"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.add_theme_font_override("font", FONT)
-	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_font_size_override("font_size", 27)
 	title.add_theme_color_override("font_color", Color("#ead69c"))
 	header.add_child(title)
 	var close := _shelter_close_button()
 	close.pressed.connect(_close_raid_zone_select)
 	header.add_child(close)
 	var subtitle := Label.new()
-	subtitle.text = "쉘터 Tier가 오르면 더 위험한 서울 구역과 보스 보상이 해금됩니다."
+	subtitle.text = "폐허가 된 서울의 진입 지점을 선택하십시오. 높은 위험도일수록 희귀한 전리품을 확보할 수 있습니다."
 	subtitle.add_theme_font_override("font", FONT)
-	subtitle.add_theme_font_size_override("font_size", 15)
+	subtitle.add_theme_font_size_override("font_size", 14)
 	subtitle.add_theme_color_override("font_color", Color("#aebdb5"))
 	box.add_child(subtitle)
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	box.add_child(scroll)
-	var list := VBoxContainer.new()
-	list.custom_minimum_size.x = maxf(320.0, panel_width - 56.0)
-	list.add_theme_constant_override("separation", 9)
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(list)
-	for zone_id in GameState.get_raid_zone_ids():
-		list.add_child(_build_raid_zone_row(zone_id))
+	var body := HBoxContainer.new()
+	body.name = "RaidZoneMapBody"
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", 14)
+	box.add_child(body)
+
+	var map_frame := PanelContainer.new()
+	map_frame.name = "SeoulMapFrame"
+	map_frame.custom_minimum_size.x = maxf(310.0, panel_width - 390.0)
+	map_frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	map_frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	map_frame.clip_contents = true
+	map_frame.add_theme_stylebox_override(
+		"panel",
+		_rounded_panel_style(Color(0.012, 0.018, 0.018, 1.0), Color("#536b61"), 6)
+	)
+	body.add_child(map_frame)
+	var map_texture := TextureRect.new()
+	map_texture.name = "SeoulOperationsMap"
+	map_texture.texture = RAID_ZONE_MAP_TEXTURE
+	map_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	map_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	map_texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	map_frame.add_child(map_texture)
+	var map_tint := ColorRect.new()
+	map_tint.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	map_tint.color = Color(0.025, 0.045, 0.042, 0.13)
+	map_tint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	map_texture.add_child(map_tint)
+	var marker_layer := Control.new()
+	marker_layer.name = "RaidZoneMarkerLayer"
+	marker_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	marker_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	map_texture.add_child(marker_layer)
+	var zone_ids := GameState.get_raid_zone_ids()
+	for zone_index in zone_ids.size():
+		var zone_id := str(zone_ids[zone_index])
+		marker_layer.add_child(_build_raid_zone_map_marker(zone_id, zone_index))
+
+	var legend := PanelContainer.new()
+	legend.name = "RaidMapLegend"
+	legend.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	legend.position = Vector2(14, -48)
+	legend.custom_minimum_size = Vector2(270, 34)
+	legend.add_theme_stylebox_override(
+		"panel",
+		_rounded_panel_style(Color(0.01, 0.015, 0.014, 0.88), Color(0.33, 0.43, 0.39, 0.8), 4)
+	)
+	map_texture.add_child(legend)
+	var legend_label := Label.new()
+	legend_label.text = "● 진입 가능    ◇ 선택 구역    ■ 봉쇄 구역"
+	legend_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	legend_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	legend_label.add_theme_font_override("font", FONT)
+	legend_label.add_theme_font_size_override("font_size", 12)
+	legend_label.add_theme_color_override("font_color", Color("#c0cec6"))
+	legend.add_child(legend_label)
+
+	var detail_panel := PanelContainer.new()
+	detail_panel.name = "RaidZoneBriefingPanel"
+	detail_panel.custom_minimum_size.x = 300
+	detail_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	detail_panel.add_theme_stylebox_override(
+		"panel",
+		_rounded_panel_style(Color(0.025, 0.034, 0.032, 0.98), Color("#52695f"), 6)
+	)
+	body.add_child(detail_panel)
+	var detail_margin := MarginContainer.new()
+	for margin_name in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
+		detail_margin.add_theme_constant_override(margin_name, 16)
+	detail_panel.add_child(detail_margin)
+	var detail_box := VBoxContainer.new()
+	detail_box.add_theme_constant_override("separation", 10)
+	detail_margin.add_child(detail_box)
+	var briefing_header := HBoxContainer.new()
+	briefing_header.add_theme_constant_override("separation", 8)
+	detail_box.add_child(briefing_header)
+	var briefing_icon := TextureRect.new()
+	briefing_icon.custom_minimum_size = Vector2(30, 30)
+	briefing_icon.texture = UI_ICONS.get_icon("alert", 30, Color("#d8bd72"))
+	briefing_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	briefing_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	briefing_header.add_child(briefing_icon)
+	var briefing_label := Label.new()
+	briefing_label.text = "작전 브리핑"
+	briefing_label.add_theme_font_override("font", FONT)
+	briefing_label.add_theme_font_size_override("font_size", 14)
+	briefing_label.add_theme_color_override("font_color", Color("#9eb2a8"))
+	briefing_header.add_child(briefing_label)
+	raid_zone_detail_state = Label.new()
+	raid_zone_detail_state.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	raid_zone_detail_state.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	raid_zone_detail_state.add_theme_font_override("font", FONT)
+	raid_zone_detail_state.add_theme_font_size_override("font_size", 13)
+	briefing_header.add_child(raid_zone_detail_state)
+	raid_zone_detail_title = Label.new()
+	raid_zone_detail_title.add_theme_font_override("font", FONT)
+	raid_zone_detail_title.add_theme_font_size_override("font_size", 25)
+	raid_zone_detail_title.add_theme_color_override("font_color", Color("#f0e3bc"))
+	detail_box.add_child(raid_zone_detail_title)
+	raid_zone_detail_description = Label.new()
+	raid_zone_detail_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	raid_zone_detail_description.add_theme_font_override("font", FONT)
+	raid_zone_detail_description.add_theme_font_size_override("font_size", 14)
+	raid_zone_detail_description.add_theme_color_override("font_color", Color("#b7c7bf"))
+	detail_box.add_child(raid_zone_detail_description)
+	var separator := HSeparator.new()
+	separator.add_theme_constant_override("separation", 4)
+	detail_box.add_child(separator)
+	var threat_title := Label.new()
+	threat_title.text = "지역 위협도"
+	threat_title.add_theme_font_override("font", FONT)
+	threat_title.add_theme_font_size_override("font_size", 12)
+	threat_title.add_theme_color_override("font_color", Color("#879b91"))
+	detail_box.add_child(threat_title)
+	var threat_row := HBoxContainer.new()
+	threat_row.add_theme_constant_override("separation", 10)
+	detail_box.add_child(threat_row)
+	raid_zone_detail_threat_bar = ProgressBar.new()
+	raid_zone_detail_threat_bar.custom_minimum_size = Vector2(0, 18)
+	raid_zone_detail_threat_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	raid_zone_detail_threat_bar.max_value = 100
+	raid_zone_detail_threat_bar.show_percentage = false
+	raid_zone_detail_threat_bar.add_theme_stylebox_override(
+		"background",
+		_rounded_panel_style(Color("#111a18"), Color("#354941"), 7)
+	)
+	threat_row.add_child(raid_zone_detail_threat_bar)
+	raid_zone_detail_threat = Label.new()
+	raid_zone_detail_threat.custom_minimum_size.x = 48
+	raid_zone_detail_threat.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	raid_zone_detail_threat.add_theme_font_override("font", FONT)
+	raid_zone_detail_threat.add_theme_font_size_override("font_size", 14)
+	threat_row.add_child(raid_zone_detail_threat)
+	raid_zone_detail_reward = Label.new()
+	raid_zone_detail_reward.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	detail_box.add_child(_build_raid_zone_detail_entry("loot", "주요 전리품", raid_zone_detail_reward))
+	raid_zone_detail_requirement = Label.new()
+	raid_zone_detail_requirement.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	detail_box.add_child(_build_raid_zone_detail_entry("secure", "진입 조건", raid_zone_detail_requirement))
+	var detail_spacer := Control.new()
+	detail_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	detail_box.add_child(detail_spacer)
+	raid_zone_launch_button = _merchant_button("선택 구역으로 출정", true, "raid")
+	raid_zone_launch_button.name = "RaidZoneLaunchButton"
+	raid_zone_launch_button.custom_minimum_size.y = 58
+	raid_zone_launch_button.pressed.connect(_launch_selected_raid_zone)
+	detail_box.add_child(raid_zone_launch_button)
+
+	var initial_zone_id := ""
+	for zone_id in zone_ids:
+		if GameState.is_raid_zone_unlocked(str(zone_id)):
+			initial_zone_id = str(zone_id)
+			break
+	if initial_zone_id.is_empty() and not zone_ids.is_empty():
+		initial_zone_id = str(zone_ids[0])
+	_select_raid_zone_preview(initial_zone_id)
 
 
 func _build_raid_zone_row(zone_id: String) -> Control:
@@ -2463,8 +2814,174 @@ func _build_raid_zone_row(zone_id: String) -> Control:
 	return row
 
 
+func _build_raid_zone_map_marker(zone_id: String, zone_index: int) -> Control:
+	var zone := GameState.get_raid_zone(zone_id)
+	var map_position: Vector2 = RAID_ZONE_MAP_POSITIONS.get(zone_id, Vector2(0.5, 0.5))
+	var wrapper := Control.new()
+	wrapper.name = "RaidZoneNode_%s" % zone_id
+	wrapper.set_anchor(SIDE_LEFT, map_position.x)
+	wrapper.set_anchor(SIDE_RIGHT, map_position.x)
+	wrapper.set_anchor(SIDE_TOP, map_position.y)
+	wrapper.set_anchor(SIDE_BOTTOM, map_position.y)
+	wrapper.offset_left = -66
+	wrapper.offset_right = 66
+	wrapper.offset_top = -31
+	wrapper.offset_bottom = 52
+	wrapper.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var marker := Button.new()
+	marker.name = "RaidZoneMarker_%s" % zone_id
+	marker.position = Vector2(39, 0)
+	marker.size = Vector2(54, 54)
+	marker.text = "%02d" % (zone_index + 1)
+	marker.tooltip_text = str(zone.get("name", zone_id))
+	marker.focus_mode = Control.FOCUS_ALL
+	marker.add_theme_font_override("font", FONT)
+	marker.add_theme_font_size_override("font_size", 15)
+	marker.add_theme_color_override("font_color", Color("#f5e5b6"))
+	marker.add_theme_color_override("font_hover_color", Color.WHITE)
+	marker.pressed.connect(_select_raid_zone_preview.bind(zone_id))
+	wrapper.add_child(marker)
+	raid_zone_map_markers[zone_id] = marker
+	var zone_name := Label.new()
+	zone_name.name = "ZoneName"
+	zone_name.position = Vector2(0, 55)
+	zone_name.size = Vector2(132, 25)
+	zone_name.text = str(zone.get("name", zone_id))
+	zone_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	zone_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	zone_name.add_theme_font_override("font", FONT)
+	zone_name.add_theme_font_size_override("font_size", 13)
+	zone_name.add_theme_color_override(
+		"font_color",
+		Color("#d9e2dc") if GameState.is_raid_zone_unlocked(zone_id) else Color("#7b8580")
+	)
+	zone_name.add_theme_color_override("font_outline_color", Color(0.005, 0.008, 0.008, 1.0))
+	zone_name.add_theme_constant_override("outline_size", 5)
+	wrapper.add_child(zone_name)
+	return wrapper
+
+
+func _build_raid_zone_detail_entry(icon_name: String, title: String, value_label: Label) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(34, 34)
+	icon.texture = UI_ICONS.get_icon(icon_name, 34, Color("#d3b86b"))
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	row.add_child(icon)
+	var text_box := VBoxContainer.new()
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_box.add_theme_constant_override("separation", 1)
+	row.add_child(text_box)
+	var title_label := Label.new()
+	title_label.text = title
+	title_label.add_theme_font_override("font", FONT)
+	title_label.add_theme_font_size_override("font_size", 11)
+	title_label.add_theme_color_override("font_color", Color("#82958b"))
+	text_box.add_child(title_label)
+	value_label.add_theme_font_override("font", FONT)
+	value_label.add_theme_font_size_override("font_size", 14)
+	value_label.add_theme_color_override("font_color", Color("#e2d3a7"))
+	text_box.add_child(value_label)
+	return row
+
+
+func _select_raid_zone_preview(zone_id: String) -> void:
+	if zone_id.is_empty() or not GameState.get_raid_zone_ids().has(zone_id):
+		return
+	raid_zone_selected_id = zone_id
+	var zone := GameState.get_raid_zone(zone_id)
+	var unlocked := GameState.is_raid_zone_unlocked(zone_id)
+	var required_tier := int(zone.get("required_tier", 1))
+	var needs_keycard := (
+		required_tier >= 4
+		and GameState.shelter_tier >= required_tier
+		and GameState.get_progression_item_count("sealed_zone_keycard") <= 0
+	)
+	raid_zone_detail_title.text = str(zone.get("name", zone_id))
+	raid_zone_detail_description.text = str(zone.get("description", ""))
+	var threat_percent := roundi(float(zone.get("threat", 0.0)) * 100.0)
+	raid_zone_detail_threat.text = "%d%%" % threat_percent
+	raid_zone_detail_threat_bar.value = threat_percent
+	var threat_color := Color("#73c994").lerp(Color("#e36f55"), float(threat_percent) / 100.0)
+	raid_zone_detail_threat.add_theme_color_override("font_color", threat_color)
+	raid_zone_detail_threat_bar.add_theme_stylebox_override(
+		"fill",
+		_rounded_panel_style(threat_color, threat_color.lightened(0.12), 7)
+	)
+	raid_zone_detail_reward.text = str(zone.get("reward", "-"))
+	if unlocked:
+		raid_zone_detail_state.text = "● 진입 가능"
+		raid_zone_detail_state.add_theme_color_override("font_color", Color("#72d6a0"))
+		raid_zone_detail_requirement.text = "진입 조건 충족 · 장비 확인 후 출정 가능"
+	else:
+		raid_zone_detail_state.text = "■ 봉쇄 구역"
+		raid_zone_detail_state.add_theme_color_override("font_color", Color("#d78371"))
+		raid_zone_detail_requirement.text = (
+			"봉쇄 구역 키카드 필요" if needs_keycard else "쉘터 Tier %d 필요" % required_tier
+		)
+	raid_zone_launch_button.disabled = not unlocked
+	raid_zone_launch_button.text = (
+		"선택 구역으로 출정"
+		if unlocked
+		else ("키카드 필요" if needs_keycard else "Tier %d에서 해금" % required_tier)
+	)
+	raid_zone_launch_button.icon = UI_ICONS.get_icon(
+		"raid" if unlocked else "secure",
+		30,
+		Color("#f0dda7") if unlocked else Color("#7b837f")
+	)
+	_refresh_raid_zone_map_markers()
+
+
+func _refresh_raid_zone_map_markers() -> void:
+	for zone_id in raid_zone_map_markers:
+		var marker := raid_zone_map_markers[zone_id] as Button
+		if not is_instance_valid(marker):
+			continue
+		var unlocked := GameState.is_raid_zone_unlocked(str(zone_id))
+		var selected := str(zone_id) == raid_zone_selected_id
+		marker.add_theme_stylebox_override("normal", _raid_zone_marker_style(unlocked, selected, false))
+		marker.add_theme_stylebox_override("hover", _raid_zone_marker_style(unlocked, true, true))
+		marker.add_theme_stylebox_override("pressed", _raid_zone_marker_style(unlocked, true, true))
+		marker.add_theme_stylebox_override("focus", _raid_zone_marker_style(unlocked, true, false))
+
+
+func _raid_zone_marker_style(unlocked: bool, selected: bool, hovered: bool) -> StyleBoxFlat:
+	var background := Color(0.055, 0.075, 0.069, 0.96) if unlocked else Color(0.035, 0.04, 0.04, 0.94)
+	var border := Color("#6aa985") if unlocked else Color("#626a66")
+	if selected:
+		background = Color(0.18, 0.145, 0.065, 0.98)
+		border = Color("#efd274")
+	elif hovered:
+		background = background.lightened(0.08)
+	var style := _rounded_panel_style(background, border, 27)
+	style.border_width_left = 3 if selected else 2
+	style.border_width_top = 3 if selected else 2
+	style.border_width_right = 3 if selected else 2
+	style.border_width_bottom = 3 if selected else 2
+	style.shadow_color = Color(border.r, border.g, border.b, 0.36 if selected else 0.18)
+	style.shadow_size = 9 if selected else 4
+	return style
+
+
+func _launch_selected_raid_zone() -> void:
+	if raid_zone_selected_id.is_empty():
+		return
+	_launch_raid_zone(raid_zone_selected_id)
+
+
 func _launch_raid_zone(zone_id: String) -> void:
 	if not GameState.is_raid_zone_unlocked(zone_id):
+		return
+	var used_slots := int(GameState.get_raid_bag_used_slots())
+	var capacity := int(GameState.get_raid_bag_capacity())
+	if used_slots > capacity:
+		_show_status(
+			"출정 불가 · 가방이 %d/%d칸입니다. 창고에 휴대품을 보관한 뒤 다시 시도하세요."
+			% [used_slots, capacity]
+		)
 		return
 	if _raid_requires_unarmed_confirmation(zone_id):
 		_open_raid_loadout_confirmation(zone_id)
@@ -2599,6 +3116,16 @@ func _close_raid_zone_select() -> void:
 	if is_instance_valid(raid_zone_ui_layer):
 		raid_zone_ui_layer.queue_free()
 	raid_zone_ui_layer = null
+	raid_zone_selected_id = ""
+	raid_zone_map_markers.clear()
+	raid_zone_detail_state = null
+	raid_zone_detail_title = null
+	raid_zone_detail_description = null
+	raid_zone_detail_threat = null
+	raid_zone_detail_threat_bar = null
+	raid_zone_detail_reward = null
+	raid_zone_detail_requirement = null
+	raid_zone_launch_button = null
 
 
 func _build_module_plate(parent: Node3D, position: Vector3, slot_index: int, rotation_y := 0.0) -> void:
@@ -2719,6 +3246,19 @@ func _create_cat_frames() -> SpriteFrames:
 
 
 func _input(event: InputEvent) -> void:
+	if contract_story_open:
+		if (
+			event is InputEventKey
+			and event.pressed
+			and not event.echo
+			and event.keycode in [KEY_SPACE, KEY_ENTER, KEY_F, KEY_ESCAPE]
+		):
+			_advance_contract_story()
+			get_viewport().set_input_as_handled()
+		elif event is InputEventScreenTouch and event.pressed:
+			_advance_contract_story()
+			get_viewport().set_input_as_handled()
+		return
 	if contract_intro_open:
 		if (
 			event is InputEventKey
@@ -2879,7 +3419,10 @@ func _play_roll_sound() -> void:
 
 
 func _try_start_roll() -> void:
-	if roll_active or loafing or roll_stamina < ROLL_STAMINA_COST or not is_instance_valid(player):
+	if loafing:
+		_set_loafing(false)
+		return
+	if roll_active or roll_stamina < ROLL_STAMINA_COST or not is_instance_valid(player):
 		return
 	var roll_input := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	if Input.is_key_pressed(KEY_A): roll_input.x -= 1.0
@@ -2904,6 +3447,12 @@ func _try_start_roll() -> void:
 
 
 func _begin_space_hold() -> void:
+	if loafing:
+		space_hold_active = false
+		space_hold_elapsed = 0.0
+		space_hold_consumed = false
+		_set_loafing(false)
+		return
 	if space_hold_active or roll_active or _ui_blocks_player() or not is_instance_valid(player):
 		return
 	space_hold_active = true
@@ -2926,14 +3475,10 @@ func _update_space_hold(delta: float) -> void:
 
 func _end_space_hold() -> void:
 	if not space_hold_active:
-		if loafing:
-			_set_loafing(false)
 		return
 	var should_roll := not space_hold_consumed and space_hold_elapsed < LOAF_HOLD_THRESHOLD
 	space_hold_active = false
 	space_hold_elapsed = 0.0
-	if loafing:
-		_set_loafing(false)
 	if should_roll:
 		_try_start_roll()
 	space_hold_consumed = false

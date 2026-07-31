@@ -229,6 +229,9 @@ func _apply_hit(body: Object, trajectory_origin: Vector3 = Vector3.INF) -> bool:
 			source_body
 		)
 		damaged = true
+	elif body != null and hostile and body.has_method("take_hostile_hit"):
+		body.call("take_hostile_hit", adjusted_damage, direction, source_body)
+		damaged = true
 	elif body != null and body.has_method("take_hit"):
 		body.call("take_hit", adjusted_damage, direction)
 		damaged = true
@@ -247,6 +250,9 @@ func _apply_hit(body: Object, trajectory_origin: Vector3 = Vector3.INF) -> bool:
 				last_hit_grade,
 				source_body
 			)
+			damaged = true
+		elif hostile and parent.has_method("take_hostile_hit"):
+			parent.call("take_hostile_hit", adjusted_damage, direction, source_body)
 			damaged = true
 		elif parent.has_method("take_hit"):
 			parent.call("take_hit", adjusted_damage, direction)

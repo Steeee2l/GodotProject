@@ -154,10 +154,16 @@ func _explode() -> void:
 		if offset.length() <= blast_radius and _has_clear_blast_path(target_body):
 			var falloff := 1.0 - clampf(offset.length() / blast_radius, 0.0, 0.72)
 			var applied_damage := maxi(8, roundi(float(damage) * falloff))
-			if target_body.has_method("take_damage"):
+			if target_body.has_method("take_hostile_hit"):
+				target_body.call("take_hostile_hit", applied_damage, offset.normalized(), source_body)
+			elif target_body.has_method("take_damage"):
 				target_body.call("take_damage", applied_damage)
-			elif target_body.get_parent() != null and target_body.get_parent().has_method("take_damage"):
-				target_body.get_parent().call("take_damage", applied_damage)
+			elif target_body.get_parent() != null:
+				var parent := target_body.get_parent()
+				if parent.has_method("take_hostile_hit"):
+					parent.call("take_hostile_hit", applied_damage, offset.normalized(), source_body)
+				elif parent.has_method("take_damage"):
+					parent.call("take_damage", applied_damage)
 	_spawn_explosion_fx()
 	grenade_mesh.visible = false
 	warning_disc.visible = false

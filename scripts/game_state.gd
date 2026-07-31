@@ -1,6 +1,18 @@
 extends Node
 
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
+const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
+
+const RAID_BAG_CAPACITY := 15
+const RAID_STACK_LIMITS := {
+	"ammo": 60,
+	"food": 4,
+	"medkit": 2,
+	"churu": 2,
+	"component": 3,
+	"mod": 1,
+	"progression": 1,
+}
 
 var map_seed: int = 47291
 var raid_serial: int = 0
@@ -93,6 +105,8 @@ var raid_total_loot_value_generated: int = 0
 var raid_weapon_drops_generated: int = 0
 var raid_enemy_drops_generated: int = 0
 var raid_kills: int = 0
+var raid_special_cargo: Dictionary = {}
+var recovered_story_cargo_ids: Array[String] = []
 var subway_story_stage: int = 0
 var shelter_workbench_level: int = 1
 var shelter_tier: int = 1
@@ -155,7 +169,15 @@ const MISSION_CONTRACTS := [
 	{
 		"id": "field_parts",
 		"title": "흩어진 개조 부품",
-		"brief": "도시에 흩어진 총기 개조 부품을 확보해 철근에게 보고하십시오.",
+		"brief": "도시 바닥에 굴러다니는 개조 부품 세 개만 챙겨 와. 쓸 만한 건 내가 골라내지.",
+		"accept_dialogue": [
+			"첫 계약이다. 총부터 쏘려고 들지 말고, 살아서 돌아올 물건부터 눈에 익혀.",
+			"인간 공구에는 아직 쓸모가 남아 있다. 개조 부품 세 개, 부서뜨리지 말고 가져와.",
+		],
+		"complete_dialogue": [
+			"좋아. 녹만 슨 고물과 진짜 부품을 구분할 눈은 있군.",
+			"이 각인을 봐. 유리발톱 놈들이 인간 창고를 봉인할 때 쓰던 표식이다.",
+		],
 		"objective": "총기 개조 부품 획득",
 		"metric": "parts",
 		"target": 3,
@@ -167,7 +189,15 @@ const MISSION_CONTRACTS := [
 	{
 		"id": "street_patrol",
 		"title": "순찰대의 빈틈",
-		"brief": "종로 외곽을 장악한 적대 순찰대를 쓰러뜨리고 이동로를 확보하십시오.",
+		"brief": "외곽 순찰대 넷을 끊어 놔. 길을 열려면 먼저 놈들의 발을 묶어야 한다.",
+		"accept_dialogue": [
+			"이번엔 발톱을 쓸 차례다. 외곽 순찰대 넷, 한꺼번에 덤비지 말고 잘라 먹어.",
+			"놈들이 지키는 건 길이 아니라 배급표다. 그 종이 한 장 때문에 굶는 고양이가 수백이야.",
+		],
+		"complete_dialogue": [
+			"총성이 여기까지 들리더군. 그래도 네 발로 돌아왔으니 합격이다.",
+			"유리발톱은 통로와 식량을 함께 쥔다. 길 하나를 뚫는 게 주민 열을 먹이는 일이지.",
+		],
 		"objective": "적대 세력 처치",
 		"metric": "kills",
 		"target": 4,
@@ -179,7 +209,15 @@ const MISSION_CONTRACTS := [
 	{
 		"id": "lost_notices",
 		"title": "벽보가 기억하는 밤",
-		"brief": "폐허 곳곳의 기록 단서를 조사해 인간들이 사라진 날의 흔적을 모으십시오.",
+		"brief": "벽보와 방송 기록 두 개를 찾아. 인간이 사라진 밤은 총알보다 오래 남아 있다.",
+		"accept_dialogue": [
+			"싸우는 것만 배워서는 오래 못 산다. 벽에 붙은 종이도 지도를 읽듯 읽어.",
+			"붉은비가 내린 날의 기록 두 개를 찾아 와. 누가 문을 열었는지 알아야 한다.",
+		],
+		"complete_dialogue": [
+			"역시 같은 문구군. 지하철 봉쇄, 그리고 보호소 전면 개방.",
+			"누군가 인간의 마지막 명령을 어기고 우리를 풀어 줬다. 이름은 아직 지워져 있지만.",
+		],
 		"objective": "세계 기록 조사",
 		"metric": "lore",
 		"target": 2,
@@ -191,7 +229,15 @@ const MISSION_CONTRACTS := [
 	{
 		"id": "salvage_cipher",
 		"title": "고철 속 암호",
-		"brief": "망가진 차량과 군용 설비를 분해해 남아 있는 표식을 확인하십시오.",
+		"brief": "망가진 차량이나 군용 설비 둘을 뜯어. 고철 속 숫자는 거짓말을 안 한다.",
+		"accept_dialogue": [
+			"이번엔 힘보다 손끝이다. 차량이든 센트리든 두 개만 제대로 분해해.",
+			"부품 안쪽의 배급 각인을 찾아라. 지금 서울의 값어치가 어디서 시작됐는지 보일 거다.",
+		],
+		"complete_dialogue": [
+			"고철, 통조림, 캣닢, 츄르. 인간 돈은 죽었고 이 네 놈이 왕좌를 나눠 가졌지.",
+			"기억해 둬. 고철은 힘이고, 통조림은 노동이고, 캣닢은 속도, 츄르는 권한이다.",
+		],
 		"objective": "현장 설비 분해",
 		"metric": "salvage",
 		"target": 2,
@@ -202,7 +248,15 @@ const MISSION_CONTRACTS := [
 	{
 		"id": "rescue_route",
 		"title": "돌아오지 못한 주민",
-		"brief": "도시에 고립된 주민을 찾아 쉘터 탈출로까지 안전하게 호송하십시오.",
+		"brief": "고립된 주민 하나를 데리고 돌아와. 네 목숨만큼 그 녀석 목숨도 챙겨.",
+		"accept_dialogue": [
+			"이번 짐은 물건이 아니라 목숨이다. 발견하면 네 뒤에서 떨어지지 않게 해.",
+			"주민을 데리고 뛰면 느려진다. 총을 더 쏠지, 길을 돌아갈지 네가 판단해.",
+		],
+		"complete_dialogue": [
+			"잘했다. 혼자 돌아오는 건 생존이지만, 둘이 돌아오는 건 쉘터를 만드는 일이다.",
+			"유리발톱은 캣닢 공장을 보호한다며 주민을 묶어 둔다. 네가 데려온 한 명이 그 사슬의 균열이야.",
+		],
 		"objective": "주민 구조",
 		"metric": "rescue",
 		"target": 1,
@@ -213,7 +267,15 @@ const MISSION_CONTRACTS := [
 	{
 		"id": "field_operation",
 		"title": "종로 현장 작전",
-		"brief": "도시에서 현장 작전 하나를 수락하고 끝까지 완수하십시오.",
+		"brief": "도시의 현장 작전 하나를 골라 끝까지 버텨. 시작한 싸움은 네 발로 끝내는 거다.",
+		"accept_dialogue": [
+			"이제 내가 찍어 주는 표적 말고, 네가 현장에서 판단할 차례다.",
+			"작전 하나를 골라 완수하고 돌아와. 종로 지하의 다른 쉘터들이 네 신호를 듣게 해.",
+		],
+		"complete_dialogue": [
+			"신호가 잡혔다. 네 작전 결과를 지하선 너머에서도 확인했어.",
+			"우린 혼자가 아니다. 얼굴도 모르는 쉘터들이 같은 주파수로 다음 길을 열고 있다.",
+		],
 		"objective": "현장 작전 완료",
 		"metric": "field_mission",
 		"target": 1,
@@ -730,6 +792,252 @@ func get_backpack_storage_count(item_type: String, item_id: String) -> int:
 	return 0
 
 
+func get_raid_bag_capacity() -> int:
+	return RAID_BAG_CAPACITY
+
+
+func _get_raid_catalog_definition(item_type: String, item_id: String) -> Dictionary:
+	var catalog_id := item_id
+	if item_type == "ammo":
+		catalog_id = "ammo_%s" % item_id
+	elif item_type == "food":
+		catalog_id = "canned_food"
+	elif item_type == "medkit":
+		catalog_id = "medkit"
+	if LOOT_ECONOMY.ITEM_CATALOG.has(catalog_id):
+		return (LOOT_ECONOMY.ITEM_CATALOG[catalog_id] as Dictionary).duplicate(true)
+	return {}
+
+
+func get_raid_item_stack_limit(item_type: String) -> int:
+	return maxi(1, int(RAID_STACK_LIMITS.get(item_type, 1)))
+
+
+func get_raid_item_slot_cost(item_type: String, item_id: String, amount: int) -> int:
+	if amount <= 0:
+		return 0
+	if item_type == "special_cargo":
+		return maxi(1, int(raid_special_cargo.get("slot_size", 6)))
+	var definition := _get_raid_catalog_definition(item_type, item_id)
+	var unit_size := maxi(1, int(definition.get("slot_size", 1)))
+	if item_type in ["weapon", "equipment"]:
+		return unit_size * amount
+	return ceili(float(amount) / float(get_raid_item_stack_limit(item_type))) * unit_size
+
+
+func _get_raid_bag_count(item_type: String, item_id: String) -> int:
+	match item_type:
+		"weapon", "equipment", "ammo", "component", "mod", "medkit", "food":
+			return get_backpack_storage_count(item_type, item_id)
+		"progression":
+			return get_progression_item_count(item_id)
+		"churu":
+			return maxi(0, churu)
+		"special_cargo":
+			return 0 if raid_special_cargo.is_empty() else 1
+	return 0
+
+
+func get_raid_bag_used_slots() -> int:
+	var used := 0
+	for ammo_id in ammo_inventory.keys():
+		used += get_raid_item_slot_cost("ammo", str(ammo_id), get_ammo_count(str(ammo_id)))
+	used += get_raid_item_slot_cost("medkit", "medkit", medkits)
+	used += get_raid_item_slot_cost(
+		"food",
+		"canned_food",
+		get_backpack_storage_count("food", "canned_food")
+	)
+	used += get_raid_item_slot_cost("churu", "churu", churu)
+	for component_id in mod_component_inventory.keys():
+		used += get_raid_item_slot_cost(
+			"component",
+			str(component_id),
+			get_mod_component_count(str(component_id))
+		)
+	for progression_id in progression_item_inventory.keys():
+		used += get_raid_item_slot_cost(
+			"progression",
+			str(progression_id),
+			get_progression_item_count(str(progression_id))
+		)
+	for mod_id in weapon_mod_inventory.keys():
+		used += get_raid_item_slot_cost(
+			"mod",
+			str(mod_id),
+			get_weapon_mod_count(str(mod_id))
+		)
+	for weapon_id in weapon_inventory.keys():
+		used += get_raid_item_slot_cost(
+			"weapon",
+			str(weapon_id),
+			get_backpack_storage_count("weapon", str(weapon_id))
+		)
+	for equipment_id in equipment_inventory.keys():
+		used += get_raid_item_slot_cost(
+			"equipment",
+			str(equipment_id),
+			get_equipment_count(str(equipment_id))
+		)
+	if not raid_special_cargo.is_empty():
+		used += maxi(1, int(raid_special_cargo.get("slot_size", 6)))
+	return used
+
+
+func get_raid_item_added_slot_delta(
+	item_type: String,
+	item_id: String,
+	amount: int
+) -> int:
+	var current := _get_raid_bag_count(item_type, item_id)
+	if item_type == "special_cargo":
+		return 0 if current > 0 else maxi(1, int(raid_special_cargo.get("slot_size", 6)))
+	return (
+		get_raid_item_slot_cost(item_type, item_id, current + maxi(0, amount))
+		- get_raid_item_slot_cost(item_type, item_id, current)
+	)
+
+
+func can_add_raid_item(item_type: String, item_id: String, amount: int = 1) -> bool:
+	if amount <= 0:
+		return false
+	if item_type == "special_cargo" and not raid_special_cargo.is_empty():
+		return false
+	var delta := get_raid_item_added_slot_delta(item_type, item_id, amount)
+	return delta <= 0 or get_raid_bag_used_slots() + delta <= RAID_BAG_CAPACITY
+
+
+func try_add_raid_item(item_type: String, item_id: String, amount: int = 1) -> bool:
+	if not can_add_raid_item(item_type, item_id, amount):
+		return false
+	match item_type:
+		"weapon":
+			add_weapon(item_id, amount)
+		"equipment":
+			return add_equipment(item_id, amount)
+		"ammo":
+			set_ammo_count(item_id, get_ammo_count(item_id) + amount)
+		"component":
+			add_mod_component(item_id, amount)
+		"mod":
+			add_weapon_mod(item_id, amount)
+		"progression":
+			add_progression_item(item_id, amount)
+		"medkit":
+			medkits += amount
+		"food":
+			canned_food += amount
+		"churu":
+			churu += amount
+		_:
+			return false
+	return true
+
+
+func remove_raid_bag_item(item_type: String, item_id: String, amount: int) -> int:
+	var removable := mini(maxi(0, amount), _get_raid_bag_count(item_type, item_id))
+	if removable <= 0:
+		return 0
+	match item_type:
+		"weapon":
+			weapon_inventory[item_id] = maxi(0, int(weapon_inventory.get(item_id, 0)) - removable)
+		"equipment":
+			equipment_inventory[item_id] = maxi(0, get_equipment_count(item_id) - removable)
+		"ammo":
+			set_ammo_count(item_id, get_ammo_count(item_id) - removable)
+		"component":
+			mod_component_inventory[item_id] = maxi(0, get_mod_component_count(item_id) - removable)
+		"mod":
+			weapon_mod_inventory[item_id] = maxi(0, get_weapon_mod_count(item_id) - removable)
+		"progression":
+			progression_item_inventory[item_id] = maxi(0, get_progression_item_count(item_id) - removable)
+		"medkit":
+			medkits = maxi(0, medkits - removable)
+		"food":
+			canned_food = maxi(0, canned_food - removable)
+		"churu":
+			churu = maxi(0, churu - removable)
+		"special_cargo":
+			raid_special_cargo.clear()
+	return removable
+
+
+func get_raid_bag_entries() -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	var inventories := [
+		["ammo", ammo_inventory],
+		["component", mod_component_inventory],
+		["progression", progression_item_inventory],
+		["mod", weapon_mod_inventory],
+		["weapon", weapon_inventory],
+		["equipment", equipment_inventory],
+	]
+	for inventory_data in inventories:
+		var item_type := str(inventory_data[0])
+		var inventory := inventory_data[1] as Dictionary
+		for item_id_value in inventory.keys():
+			var item_id := str(item_id_value)
+			var count := _get_raid_bag_count(item_type, item_id)
+			if count <= 0:
+				continue
+			entries.append({
+				"type": item_type,
+				"id": item_id,
+				"count": count,
+				"slot_cost": get_raid_item_slot_cost(item_type, item_id, count),
+				"drop_amount": mini(count, get_raid_item_stack_limit(item_type)),
+			})
+	for scalar in [
+		["food", "canned_food", get_backpack_storage_count("food", "canned_food")],
+		["medkit", "medkit", medkits],
+		["churu", "churu", churu],
+	]:
+		var scalar_type := str(scalar[0])
+		var scalar_id := str(scalar[1])
+		var scalar_count := int(scalar[2])
+		if scalar_count <= 0:
+			continue
+		entries.append({
+			"type": scalar_type,
+			"id": scalar_id,
+			"count": scalar_count,
+			"slot_cost": get_raid_item_slot_cost(scalar_type, scalar_id, scalar_count),
+			"drop_amount": mini(scalar_count, get_raid_item_stack_limit(scalar_type)),
+		})
+	if not raid_special_cargo.is_empty():
+		entries.append({
+			"type": "special_cargo",
+			"id": str(raid_special_cargo.get("id", "sealed_subway_cargo")),
+			"count": 1,
+			"slot_cost": int(raid_special_cargo.get("slot_size", 6)),
+			"drop_amount": 1,
+		})
+	return entries
+
+
+func try_take_story_cargo(cargo: Dictionary) -> bool:
+	if not raid_special_cargo.is_empty():
+		return false
+	var next_cargo := cargo.duplicate(true)
+	next_cargo["slot_size"] = maxi(1, int(next_cargo.get("slot_size", 6)))
+	var required := int(next_cargo["slot_size"])
+	if get_raid_bag_used_slots() + required > RAID_BAG_CAPACITY:
+		return false
+	raid_special_cargo = next_cargo
+	return true
+
+
+func complete_story_cargo() -> Dictionary:
+	if raid_special_cargo.is_empty():
+		return {}
+	var completed := raid_special_cargo.duplicate(true)
+	var cargo_id := str(completed.get("id", "sealed_subway_cargo"))
+	if not recovered_story_cargo_ids.has(cargo_id):
+		recovered_story_cargo_ids.append(cargo_id)
+	raid_special_cargo.clear()
+	return completed
+
+
 func get_stored_storage_count(item_type: String, item_id: String) -> int:
 	var total := 0
 	for entry in storage_inventory:
@@ -785,6 +1093,14 @@ func withdraw_storage_item(slot_index: int, amount: int = 1) -> Dictionary:
 	var moved := mini(maxi(amount, 1), int(entry.get("count", 0)))
 	if moved <= 0:
 		return {"ok": false, "reason": "선택한 창고 슬롯이 비어 있습니다."}
+	if not can_add_raid_item(item_type, item_id, moved):
+		return {
+			"ok": false,
+			"reason": "가방 공간이 부족합니다. 현재 %d/%d칸을 사용 중입니다." % [
+				get_raid_bag_used_slots(),
+				get_raid_bag_capacity(),
+			],
+		}
 	_add_backpack_storage_item(item_type, item_id, moved)
 	entry["count"] = int(entry.get("count", 0)) - moved
 	if int(entry.get("count", 0)) <= 0:
@@ -885,6 +1201,17 @@ func _trim_stored_canned_food_to_total() -> void:
 
 func get_ammo_count(ammo_id: String) -> int:
 	return int(ammo_inventory.get(ammo_id, 0))
+
+
+func get_mission_reward_ammo_id() -> String:
+	if not equipped_ammo_id.is_empty() and not WEAPON_SYSTEM.get_ammo(equipped_ammo_id).is_empty():
+		return equipped_ammo_id
+	if not equipped_weapon_id.is_empty():
+		var weapon_definition := WEAPON_SYSTEM.get_weapon(equipped_weapon_id)
+		var default_ammo_id := str(weapon_definition.get("default_ammo_id", ""))
+		if not default_ammo_id.is_empty() and not WEAPON_SYSTEM.get_ammo(default_ammo_id).is_empty():
+			return default_ammo_id
+	return "9mm_fmj"
 
 
 func set_ammo_count(ammo_id: String, amount: int) -> void:
@@ -1845,9 +2172,10 @@ func claim_current_contract_reward() -> Dictionary:
 	churu += maxi(0, int(reward.get("churu", 0)))
 	var ammo_reward := maxi(0, int(reward.get("ammo", 0)))
 	if ammo_reward > 0:
-		var ammo_id := equipped_ammo_id
+		var ammo_id := get_mission_reward_ammo_id()
 		set_ammo_count(ammo_id, get_ammo_count(ammo_id) + ammo_reward)
-		reserve_ammo = get_ammo_count(ammo_id)
+		if ammo_id == equipped_ammo_id:
+			reserve_ammo = get_ammo_count(ammo_id)
 	var contract_id := str(definition.get("id", ""))
 	if not completed_contract_ids.has(contract_id):
 		completed_contract_ids.append(contract_id)
@@ -1911,7 +2239,7 @@ func save_persistent_state() -> bool:
 	_normalize_contract_state()
 	save_equipped_weapon_loadout()
 	var data := {
-		"version": 8,
+		"version": 9,
 		"map_seed": map_seed,
 		"raid_serial": raid_serial,
 		"player_health": player_health,
@@ -1952,6 +2280,8 @@ func save_persistent_state() -> bool:
 		"pending_corpse_recovery": pending_corpse_recovery,
 		"corpse_recovery_attempt_active": corpse_recovery_attempt_active,
 		"confirmed_raid_manifest": confirmed_raid_manifest,
+		"raid_special_cargo": raid_special_cargo,
+		"recovered_story_cargo_ids": recovered_story_cargo_ids,
 		"subway_story_stage": subway_story_stage,
 		"shelter_workbench_level": shelter_workbench_level,
 		"shelter_tier": shelter_tier,
@@ -2067,6 +2397,8 @@ func load_persistent_state() -> bool:
 	pending_corpse_recovery = (data.get("pending_corpse_recovery", {}) as Dictionary).duplicate(true)
 	corpse_recovery_attempt_active = bool(data.get("corpse_recovery_attempt_active", false))
 	confirmed_raid_manifest = (data.get("confirmed_raid_manifest", {}) as Dictionary).duplicate(true)
+	raid_special_cargo = (data.get("raid_special_cargo", {}) as Dictionary).duplicate(true)
+	recovered_story_cargo_ids = _to_string_array(data.get("recovered_story_cargo_ids", []))
 	subway_story_stage = clampi(int(data.get("subway_story_stage", 0)), 0, 3)
 	shelter_workbench_level = clampi(int(data.get("shelter_workbench_level", shelter_workbench_level)), 1, 5)
 	shelter_tier = clampi(int(data.get("shelter_tier", shelter_tier)), 1, 5)
@@ -2230,6 +2562,8 @@ func reset_run() -> void:
 	pending_corpse_recovery.clear()
 	corpse_recovery_attempt_active = false
 	confirmed_raid_manifest.clear()
+	raid_special_cargo.clear()
+	recovered_story_cargo_ids.clear()
 	subway_story_stage = 0
 	shelter_workbench_level = 1
 	shelter_tier = 1

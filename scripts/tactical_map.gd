@@ -11,6 +11,8 @@ var discovered_extraction_indices: Dictionary = {}
 var corpse_recovery_position := Vector3.INF
 var corpse_recovery_available := false
 var boss_targets: Array[Node3D] = []
+var extraction_profiles: Array[Dictionary] = []
+var raid_markers: Array[Dictionary] = []
 
 
 func setup(
@@ -23,6 +25,8 @@ func setup(
 	player = player_node
 	extraction_positions.assign(extraction_world_positions)
 	discovered_extraction_indices.clear()
+	extraction_profiles.clear()
+	raid_markers.clear()
 	set_corpse_recovery(recovery_position)
 
 
@@ -49,6 +53,54 @@ func discover_extraction(index: int) -> void:
 	if index < 0 or index >= extraction_positions.size():
 		return
 	discovered_extraction_indices[index] = true
+	queue_redraw()
+
+
+func set_extraction_profiles(profiles: Array[Dictionary]) -> void:
+	extraction_profiles.assign(profiles)
+	queue_redraw()
+
+
+func register_raid_marker(
+	marker_id: String,
+	world_position: Vector3,
+	marker_type: String,
+	label: String,
+	discovered: bool = false
+) -> void:
+	if marker_id.is_empty():
+		return
+	for marker in raid_markers:
+		if str(marker.get("id", "")) != marker_id:
+			continue
+		marker["position"] = world_position
+		marker["type"] = marker_type
+		marker["label"] = label
+		marker["discovered"] = discovered
+		queue_redraw()
+		return
+	raid_markers.append({
+		"id": marker_id,
+		"position": world_position,
+		"type": marker_type,
+		"label": label,
+		"discovered": discovered,
+	})
+	queue_redraw()
+
+
+func discover_raid_marker(marker_id: String) -> void:
+	for marker in raid_markers:
+		if str(marker.get("id", "")) == marker_id:
+			marker["discovered"] = true
+			queue_redraw()
+			return
+
+
+func remove_raid_marker(marker_id: String) -> void:
+	for marker in raid_markers.duplicate():
+		if str(marker.get("id", "")) == marker_id:
+			raid_markers.erase(marker)
 	queue_redraw()
 
 
@@ -121,7 +173,7 @@ func _draw() -> void:
 	var panel_rect := Rect2((viewport_size - panel_size) * 0.5, panel_size)
 	draw_style_box(_panel_style(), panel_rect)
 	draw_string(UI_FONT, panel_rect.position + Vector2(28, 40), "종로 생존구역 전술 지도", HORIZONTAL_ALIGNMENT_LEFT, -1, 25, Color("#e4e1d3"))
-	draw_string(UI_FONT, panel_rect.position + Vector2(28, 65), "청록: 현재 위치 · 노랑: 발견한 하수구 · 주황: 분실 장비 · 빨강: 보스", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#aebbb4"))
+	draw_string(UI_FONT, panel_rect.position + Vector2(28, 65), "청록 원: 현재 위치 · 색상 원: 탈출 보상 · 청록 마름모: 고가치 보급 · 주황 마름모: 돌발 사건", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#aebbb4"))
 
 	var data: Dictionary = world.call("get_map_snapshot_data")
 	var grid_size := int(data.get("grid_size", 22))
@@ -166,20 +218,90 @@ func _draw() -> void:
 			continue
 		var extraction_position := extraction_positions[extraction_index]
 		var extraction_center := _world_position_to_map_point(extraction_position, map_rect, map_size)
+		var profile := (
+			extraction_profiles[extraction_index]
+			if extraction_index < extraction_profiles.size()
+			else {}
+		) as Dictionary
+		var route_color: Color = profile.get("color", Color("#dcb64b"))
+		var route_multiplier := float(profile.get("multiplier", 1.0))
 		if is_instance_valid(player):
 			var distance := player.global_position.distance_to(extraction_position)
 			if distance < nearest_distance:
 				nearest_distance = distance
 				nearest_extraction = extraction_center
-		draw_circle(extraction_center, marker_size * 0.72, Color(0.95, 0.72, 0.18, 0.18))
-		draw_circle(extraction_center, marker_size * 0.48, Color("#dcb64b"), false, 3.0)
+		draw_circle(
+			extraction_center,
+			marker_size * 0.72,
+			Color(route_color.r, route_color.g, route_color.b, 0.18)
+		)
+		draw_circle(extraction_center, marker_size * 0.48, route_color, false, 3.0)
 		draw_line(
 			extraction_center + Vector2(0, -marker_size * 0.35),
 			extraction_center + Vector2(0, marker_size * 0.28),
-			Color("#f0d77d"),
+			route_color.lightened(0.24),
 			2.0
 		)
-		draw_circle(extraction_center, 2.5, Color("#fff0a8"))
+		draw_circle(extraction_center, 2.5, route_color.lightened(0.32))
+		draw_string(
+			UI_FONT,
+			extraction_center + Vector2(marker_size * 0.62, marker_size * 0.18),
+			"×%.2f" % route_multiplier,
+			HORIZONTAL_ALIGNMENT_LEFT,
+			74,
+			13,
+			route_color.lightened(0.18)
+		)
+
+	for marker in raid_markers:
+		if not bool(marker.get("discovered", false)):
+			continue
+		var marker_center := _world_position_to_map_point(
+			marker.get("position", Vector3.ZERO),
+			map_rect,
+			map_size
+		)
+		var marker_type := str(marker.get("type", "hotspot"))
+		var marker_color := Color("#65d5ca")
+		if marker_type == "incident":
+			marker_color = Color("#ef7252")
+		elif marker_type == "jackpot":
+			marker_color = Color("#f0ad4f")
+		var marker_pulse := 0.5 + 0.5 * sin(
+			Time.get_ticks_msec() * (0.011 if marker_type == "incident" else 0.006)
+		)
+		var marker_radius := marker_size * (0.42 + marker_pulse * 0.08)
+		draw_circle(
+			marker_center,
+			marker_radius * 1.55,
+			Color(marker_color.r, marker_color.g, marker_color.b, 0.14)
+		)
+		var diamond := PackedVector2Array([
+			marker_center + Vector2(0, -marker_radius),
+			marker_center + Vector2(marker_radius, 0),
+			marker_center + Vector2(0, marker_radius),
+			marker_center + Vector2(-marker_radius, 0),
+		])
+		draw_colored_polygon(
+			diamond,
+			Color(
+				marker_color.r,
+				marker_color.g,
+				marker_color.b,
+				0.78 if marker_type in ["incident", "jackpot"] else 0.42
+			)
+		)
+		draw_polyline(_closed_polygon(diamond), marker_color.lightened(0.18), 2.0)
+		draw_circle(marker_center, marker_radius * 0.22, Color("#f5f0d5"))
+		draw_string(
+			UI_FONT,
+			marker_center + Vector2(marker_radius + 6.0, -marker_radius * 0.3),
+			str(marker.get("label", "고가치 지점")),
+			HORIZONTAL_ALIGNMENT_LEFT,
+			150,
+			13,
+			marker_color.lightened(0.2)
+		)
 
 	if corpse_recovery_available:
 		var corpse_center := _world_position_to_map_point(

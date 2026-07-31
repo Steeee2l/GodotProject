@@ -171,6 +171,16 @@ static func get_icon(icon_name: String, size := 64, color := Color("#d9e3dc")) -
 		"melee":
 			_line(image, _v(14, 49, scale), _v(46, 17, scale), color, 8.0 * scale)
 			_rect(image, Rect2i(_p(9, 46, scale), _p(15, 8, scale)), color.darkened(0.24))
+		"mouse_left":
+			_capsule_outline(image, _v(32, 32, scale), 34.0 * scale, 52.0 * scale, color, 4.0 * scale)
+			_line(image, _v(32, 7, scale), _v(32, 31, scale), color, 3.0 * scale)
+			_line(image, _v(16, 31, scale), _v(48, 31, scale), color, 3.0 * scale)
+			_polygon_fill(image, [
+				_v(18, 16, scale),
+				_v(29, 10, scale),
+				_v(29, 28, scale),
+				_v(18, 28, scale),
+			], Color(color.r, color.g, color.b, 0.42))
 		"up":
 			_polygon_fill(image, [_v(32, 8, scale), _v(52, 34, scale), _v(40, 34, scale), _v(40, 56, scale), _v(24, 56, scale), _v(24, 34, scale), _v(12, 34, scale)], color)
 		"down":
@@ -223,6 +233,30 @@ static func _circle_outline(image: Image, center: Vector2, radius: float, color:
 		for x in range(min_x, max_x + 1):
 			if Vector2(x, y).distance_squared_to(center) <= inner_squared:
 				image.set_pixel(x, y, Color.TRANSPARENT)
+
+
+static func _capsule_outline(
+	image: Image,
+	center: Vector2,
+	width: float,
+	height: float,
+	color: Color,
+	thickness: float
+) -> void:
+	var radius := width * 0.5
+	var inner_radius := maxf(0.0, radius - thickness)
+	var segment_half := maxf(0.0, (height - width) * 0.5)
+	var min_x := maxi(0, floori(center.x - radius))
+	var max_x := mini(image.get_width() - 1, ceili(center.x + radius))
+	var min_y := maxi(0, floori(center.y - height * 0.5))
+	var max_y := mini(image.get_height() - 1, ceili(center.y + height * 0.5))
+	for y in range(min_y, max_y + 1):
+		for x in range(min_x, max_x + 1):
+			var point := Vector2(x, y)
+			var closest_y := clampf(point.y, center.y - segment_half, center.y + segment_half)
+			var distance := point.distance_to(Vector2(center.x, closest_y))
+			if distance <= radius and distance >= inner_radius:
+				image.set_pixel(x, y, color)
 
 
 static func _line(image: Image, from: Vector2, to: Vector2, color: Color, thickness: float) -> void:

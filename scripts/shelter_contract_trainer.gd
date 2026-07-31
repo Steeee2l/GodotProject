@@ -26,19 +26,35 @@ func _ready() -> void:
 
 	var nameplate := Label3D.new()
 	nameplate.name = "ContractAgentName"
-	nameplate.text = "훈련교관 철근\n현장 계약 담당"
-	nameplate.position = Vector3(0.0, 2.18, 0.0)
+	nameplate.text = "훈련교관 철근"
+	nameplate.position = Vector3(0.0, 2.50, 0.0)
 	nameplate.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	nameplate.no_depth_test = true
 	nameplate.render_priority = 127
 	nameplate.font = FONT
-	nameplate.font_size = 24
-	nameplate.pixel_size = 0.0043
-	nameplate.modulate = Color("#e8cf89")
+	nameplate.font_size = 44
+	nameplate.pixel_size = 0.0060
+	nameplate.modulate = Color("#f4d778")
 	nameplate.outline_modulate = Color(0.01, 0.016, 0.014, 0.96)
-	nameplate.outline_size = 9
+	nameplate.outline_size = 13
 	nameplate.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(nameplate)
+
+	var roleplate := Label3D.new()
+	roleplate.name = "ContractAgentRole"
+	roleplate.text = "현장 계약 담당"
+	roleplate.position = Vector3(0.0, 2.22, 0.0)
+	roleplate.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	roleplate.no_depth_test = true
+	roleplate.render_priority = 127
+	roleplate.font = FONT
+	roleplate.font_size = 28
+	roleplate.pixel_size = 0.0056
+	roleplate.modulate = Color("#b9d8ca")
+	roleplate.outline_modulate = Color(0.01, 0.016, 0.014, 0.96)
+	roleplate.outline_size = 11
+	roleplate.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_child(roleplate)
 
 	var body := StaticBody3D.new()
 	body.name = "TrainerBody"
@@ -57,13 +73,13 @@ func get_interaction_prompt() -> String:
 	var state := GameState.get_contract_state()
 	match str(state.get("status", "available")):
 		"active":
-			return "철근에게 계약 진행 상황 확인"
+			return "철근에게 중간 보고"
 		"complete":
-			return "철근에게 임무 완료 보고"
+			return "철근에게 결과 보고"
 		"finished":
-			return "철근의 세계 기록 확인"
+			return "철근과 해금된 기록 이야기"
 		_:
-			return "철근에게 현장 계약 받기"
+			return "철근의 다음 계약 듣기"
 
 
 func get_interaction_radius() -> float:

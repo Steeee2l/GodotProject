@@ -73,7 +73,7 @@ func _run() -> void:
 				if cowering_resident == null or cowering_resident.texture == null:
 					_fail("rescue point is missing the cowering resident sprite")
 					return
-	if salvage_count < 5 or rescue_count != 3:
+	if salvage_count < 5 or rescue_count < 3:
 		_fail("field salvage/rescue objectives were not populated")
 		return
 

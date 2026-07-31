@@ -27,7 +27,26 @@ func _run() -> void:
 	var enemies: Array = main_scene.get("enemies")
 	assert(not enemies.is_empty())
 	var enemy := enemies[0] as CharacterBody3D
+	for enemy_candidate in enemies:
+		if str((enemy_candidate as CharacterBody3D).get("enemy_kind")) != "melee":
+			enemy = enemy_candidate as CharacterBody3D
+			break
 	var player := main_scene.get("player") as CharacterBody3D
+	var extraction_sites: Array = main_scene.get("extraction_sites")
+	assert(extraction_sites.size() >= 3)
+	var entry_extraction := extraction_sites[0] as Node3D
+	var entry_distance := entry_extraction.global_position.distance_to(player.global_position)
+	assert(entry_distance >= 23.5)
+	assert(bool(entry_extraction.get_meta("map_discovered", false)))
+	assert(entry_extraction.get_node_or_null("SewerHatch") is Sprite3D)
+	assert(bool((main_scene.get("discovered_extraction_indices") as Dictionary).get(0, false)))
+	for index in extraction_sites.size():
+		for other_index in range(index + 1, extraction_sites.size()):
+			assert(
+				(extraction_sites[index] as Node3D).global_position.distance_to(
+					(extraction_sites[other_index] as Node3D).global_position
+				) >= 31.5
+			)
 	enemy.global_position = player.global_position + Vector3(0.0, 0.0, 13.0)
 	var facing_player := player.global_position - enemy.global_position
 	facing_player.y = 0.0
@@ -39,14 +58,55 @@ func _run() -> void:
 	enemy.set("perception_state", "patrol")
 	enemy.set("patrol_pause", 100.0)
 	var vision_range := float(enemy.call("_get_vision_range"))
-	assert(vision_range >= 14.0 and vision_range <= 16.0)
+	assert(vision_range >= 19.0 and vision_range <= 23.0)
 	var combat_lock_range := float(enemy.call("_get_combat_lock_range"))
-	assert(combat_lock_range >= 14.0)
+	assert(combat_lock_range >= 20.0)
+	assert(combat_lock_range >= float(enemy.call("_get_weapon_engagement_range")) * 0.9)
 	assert(float(enemy.call("_get_search_break_distance")) >= combat_lock_range + 9.9)
+	enemy.set("combat_state", "reloading")
+	enemy.set("reload_elapsed", 0.0)
+	enemy.set("reload_duration", 2.0)
+	enemy.call("_update_reload", 0.1)
+	var reload_chase_direction := player.global_position - enemy.global_position
+	reload_chase_direction.y = 0.0
+	assert((enemy.get("velocity") as Vector3).dot(reload_chase_direction.normalized()) > 0.0)
+	enemy.set("combat_state", "normal")
 	main_scene.process_mode = Node.PROCESS_MODE_INHERIT
 	enemy.call("_physics_process", 0.16)
 	assert(float(enemy.get("detection_awareness")) > 0.0)
 	assert(not bool(enemy.get("alerted")))
+	main_scene.call("_begin_space_hold")
+	main_scene.call("_update_space_hold", 0.46)
+	main_scene.call("_end_space_hold")
+	assert(bool(main_scene.get("loafing")))
+	assert(bool(player.get_meta("loafing_stealth", false)))
+	main_scene.call("_begin_space_hold")
+	assert(not bool(main_scene.get("loafing")))
+	main_scene.call("_end_space_hold")
+	main_scene.call("_set_loafing", true)
+	assert(bool(player.get_meta("loafing_stealth", false)))
+	enemy.set("detection_awareness", 0.65)
+	var loaf_detected := bool(enemy.call(
+		"_update_detection_awareness",
+		0.4,
+		13.0,
+		true,
+		vision_range
+	))
+	assert(not loaf_detected)
+	assert(float(enemy.get("detection_awareness")) < 0.05)
+	enemy.call("_become_alerted")
+	enemy.set("combat_reaction_time", 0.0)
+	enemy.set("lost_sight_time", 0.0)
+	enemy.set("pursuit_time", 10.0)
+	enemy.call("_physics_process", 0.4)
+	assert(str(enemy.get("perception_state")) == "combat")
+	enemy.call("_physics_process", 0.4)
+	assert(str(enemy.get("perception_state")) == "search")
+	assert(not bool(enemy.get("has_current_line_of_sight")))
+	main_scene.call("_set_loafing", false)
+	assert(not bool(player.get_meta("loafing_stealth", false)))
+	enemy.call("_clear_alert")
 	for step in 20:
 		enemy.call("_physics_process", 0.16)
 		if bool(enemy.get("alerted")):
@@ -60,7 +120,7 @@ func _run() -> void:
 	enemy.set("facing_world_direction", facing_player.normalized())
 	enemy.set("detection_awareness", 0.0)
 	enemy.set("perception_state", "patrol")
-	for step in 5:
+	for step in 2:
 		enemy.call("_update_detection_awareness", 0.16, 10.0, true, vision_range)
 	assert(str(enemy.get("perception_state")) == "suspicious")
 	assert(not bool(enemy.get("alerted")))
@@ -111,14 +171,14 @@ func _run() -> void:
 	enemy.call("_update_search_behavior", 0.1)
 	assert(str(enemy.get("perception_state")) == "return")
 	assert(not bool(enemy.get("alerted")))
-	enemy.global_position = player.global_position + Vector3(0.0, 0.0, 1.8)
+	enemy.global_position = player.global_position + Vector3(0.0, 0.0, 0.75)
 	enemy.set("facing_world_direction", Vector3.BACK)
 	enemy.set("detection_awareness", 0.0)
 	enemy.set("perception_state", "patrol")
 	var initial_close_detection := bool(enemy.call(
 		"_update_detection_awareness",
 		0.01,
-		1.8,
+		0.75,
 		true,
 		vision_range
 	))
@@ -128,7 +188,7 @@ func _run() -> void:
 	var completed_close_detection := bool(enemy.call(
 		"_update_detection_awareness",
 		0.8,
-		1.8,
+		0.75,
 		true,
 		vision_range
 	))
@@ -249,12 +309,29 @@ func _run() -> void:
 	root.add_child(shelter)
 	await process_frame
 	await physics_frame
+	shelter.process_mode = Node.PROCESS_MODE_DISABLED
+	shelter.call("_begin_space_hold")
+	shelter.call("_update_space_hold", 0.46)
+	shelter.call("_end_space_hold")
+	assert(bool(shelter.get("loafing")))
+	shelter.call("_begin_space_hold")
+	assert(not bool(shelter.get("loafing")))
+	shelter.call("_end_space_hold")
 	assert(not bool(shelter.call("_raid_requires_unarmed_confirmation", "jongno_outskirts")))
 	game_state.set("has_ak", false)
 	game_state.set("equipped_weapon_id", "")
 	assert(bool(shelter.call("_raid_requires_unarmed_confirmation", "jongno_outskirts")))
 	shelter.call("_open_raid_zone_select")
 	await process_frame
+	var operations_map := root.find_child("SeoulOperationsMap", true, false) as TextureRect
+	assert(is_instance_valid(operations_map))
+	assert(operations_map.texture != null)
+	assert(root.find_child("RaidZoneBriefingPanel", true, false) is PanelContainer)
+	assert(root.find_child("RaidZoneLaunchButton", true, false) is Button)
+	for zone_id in game_state.get_raid_zone_ids():
+		assert(root.find_child("RaidZoneMarker_%s" % zone_id, true, false) is Button)
+	shelter.call("_select_raid_zone_preview", "namdaemun_market")
+	assert(str(shelter.get("raid_zone_selected_id")) == "namdaemun_market")
 	shelter.call("_launch_raid_zone", "jongno_outskirts")
 	await process_frame
 	var loadout_layer := root.find_child("RaidLoadoutConfirmLayer", true, false) as CanvasLayer

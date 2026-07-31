@@ -23,6 +23,11 @@ func _run() -> void:
 		assert(mission_site.global_position.distance_to(initial_player_position) >= 30.0)
 
 	var site := mission_sites[0]
+	var play_area := site.get_node_or_null("MissionPlayArea") as MeshInstance3D
+	assert(is_instance_valid(play_area))
+	var play_area_mesh := play_area.mesh as TorusMesh
+	assert(is_instance_valid(play_area_mesh))
+	assert(play_area_mesh.outer_radius >= 21.9)
 	site.set_meta("type", "defense")
 	site.set_meta("title", "상호작용 임무 검사")
 	site.set_meta("description", "준비 후 외곽에서 적이 접근해야 합니다.")
@@ -38,7 +43,7 @@ func _run() -> void:
 	main_scene.call("_complete_field_interaction", site)
 	assert(main_scene.get("active_field_mission") == site)
 	assert(str(main_scene.get("field_mission_phase")) == "preparing")
-	assert(is_equal_approx(float(main_scene.get("field_mission_prepare_timer")), 7.0))
+	assert(is_equal_approx(float(main_scene.get("field_mission_prepare_timer")), 5.0))
 	assert(int(main_scene.get("field_mission_spawned_enemies")) == 0)
 	var objective_label := main_scene.get("objective_label") as Label
 	assert(objective_label.text.count("\n") <= 3)
@@ -50,16 +55,16 @@ func _run() -> void:
 	assert(int(main_scene.get("field_mission_spawned_enemies")) == 0)
 	assert(objective_label != null and objective_label.text.contains("시작까지"))
 
-	main_scene.call("_update_field_missions", 5.1)
+	main_scene.call("_update_field_missions", 3.1)
 	assert(str(main_scene.get("field_mission_phase")) == "active")
 	assert(int(main_scene.get("field_mission_spawned_enemies")) == 0)
 	assert(objective_label.text.contains("다음 접근"))
 
-	main_scene.call("_update_field_missions", 3.3)
+	main_scene.call("_update_field_missions", 1.3)
 	var spawned_count := int(main_scene.get("field_mission_spawned_enemies"))
 	assert(spawned_count >= 2 and spawned_count <= 3)
 	var first_wave_interval := float(main_scene.get("field_mission_wave_timer"))
-	assert(is_equal_approx(first_wave_interval, 6.0))
+	assert(is_equal_approx(first_wave_interval, 4.2))
 
 	main_scene.call("_update_field_missions", first_wave_interval + 0.1)
 	var escalated_count := int(main_scene.get("field_mission_spawned_enemies"))
@@ -75,7 +80,7 @@ func _run() -> void:
 			is_instance_valid(enemy)
 			and int(enemy.get_meta("field_mission_id", -1)) == mission_id
 		):
-			assert(enemy.global_position.distance_to(player.global_position) >= 18.0)
+			assert(enemy.global_position.distance_to(player.global_position) >= 14.5)
 			safe_spawn_count += 1
 	assert(safe_spawn_count == escalated_count)
 

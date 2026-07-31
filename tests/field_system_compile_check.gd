@@ -8,6 +8,7 @@ const SCRIPTS := [
 	"res://scripts/building_loot_module.gd",
 	"res://scripts/rocket_boss.gd",
 	"res://scripts/rocket_projectile.gd",
+	"res://scripts/boss_mine.gd",
 	"res://scripts/enemy_grenade.gd",
 	"res://scripts/enemy_alert_overlay.gd",
 	"res://scripts/game_state.gd",
@@ -76,10 +77,15 @@ func _initialize() -> void:
 		push_error("FIELD_SYSTEM_COMPILE: stealth missions must use real enemy detection state")
 		quit(1)
 		return
-	if not main_source.contains("var required_types: Array[String] = [\"stealth\", \"investigate\", \"stealth_reach\"]"):
-		push_error("FIELD_SYSTEM_COMPILE: each raid must guarantee survival-oriented missions")
+	if not main_source.contains("const FIELD_MISSION_REQUIRED_TYPES := ["):
+		push_error("FIELD_SYSTEM_COMPILE: each raid must define guaranteed mission coverage")
 		quit(1)
 		return
+	for mission_type in ["defense", "eliminate", "collect", "stealth", "investigate", "stealth_reach"]:
+		if not main_source.contains("\t\"%s\"," % mission_type):
+			push_error("FIELD_SYSTEM_COMPILE: mission coverage is missing %s" % mission_type)
+			quit(1)
+			return
 	if building_portal_source.contains("func _unhandled_input"):
 		push_error("FIELD_SYSTEM_COMPILE: building entry must not bypass the shared hold interaction")
 		quit(1)

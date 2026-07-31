@@ -797,9 +797,15 @@ func _count_bag_items_for_filter(filter_id: String) -> int:
 	if game_state == null:
 		return 0
 	var count := 0
-	if reserve_state > 0 and _bag_filter_matches_item(filter_id, "ammo"):
+	if _bag_filter_matches_item(filter_id, "ammo"):
+		for ammo_id in game_state.ammo_inventory:
+			if int(game_state.ammo_inventory.get(ammo_id, 0)) > 0:
+				count += 1
+	if game_state.get_backpack_storage_count("food", "canned_food") > 0 and _bag_filter_matches_item(filter_id, "resource"):
 		count += 1
-	if canned_food_state > 0 and _bag_filter_matches_item(filter_id, "resource"):
+	if int(game_state.medkits) > 0 and _bag_filter_matches_item(filter_id, "resource"):
+		count += 1
+	if int(game_state.churu) > 0 and _bag_filter_matches_item(filter_id, "resource"):
 		count += 1
 	var weapon_ids: Array = game_state.weapon_inventory.keys()
 	weapon_ids.sort()
@@ -811,8 +817,23 @@ func _count_bag_items_for_filter(filter_id: String) -> int:
 		if _bag_filter_matches_item(filter_id, "weapon"):
 			count += 1
 	if _bag_filter_matches_item(filter_id, "equipment"):
-		for equipment_id in game_state.equipment_inventory:
-			if int(game_state.get_equipment_count(str(equipment_id))) > 0:
+		var equipment_ids: Array = game_state.equipment_inventory.keys()
+		for equipped_id in [
+			game_state.equipped_body_armor_id,
+			game_state.equipped_head_armor_id,
+			game_state.equipped_footwear_id,
+		]:
+			if not str(equipped_id).is_empty() and not equipment_ids.has(equipped_id):
+				equipment_ids.append(equipped_id)
+		for equipment_id in equipment_ids:
+			var display_count := int(game_state.get_equipment_count(str(equipment_id)))
+			if str(equipment_id) in [
+				str(game_state.equipped_body_armor_id),
+				str(game_state.equipped_head_armor_id),
+				str(game_state.equipped_footwear_id),
+			]:
+				display_count += 1
+			if display_count > 0:
 				count += 1
 	if _bag_filter_matches_item(filter_id, "mod"):
 		for component_id_variant in game_state.mod_component_inventory:
@@ -870,21 +891,60 @@ func _refresh_contents() -> void:
 		func() -> void: _select_equipped_equipment("feet")
 	))
 
-	_add_bag_item({
-		"id": "762_fmj",
-		"type": "ammo",
-		"title": "7.62mm 탄환",
-		"description": "현재 장착 총기에 사용하는 예비 탄약입니다.",
-		"quantity": reserve_state,
-		"texture": ammo_texture,
-	})
+	var ammo_names := {
+		"9mm_fmj": "9mm FMJ 탄환",
+		"45_fmj": ".45 ACP FMJ 탄환",
+		"762_fmj": "7.62mm FMJ 탄환",
+		"12g_buckshot": "12게이지 벅샷",
+	}
+	var ammo_ids: Array = game_state.ammo_inventory.keys()
+	ammo_ids.sort()
+	for ammo_id_value in ammo_ids:
+		var ammo_id := str(ammo_id_value)
+		var ammo_count := int(game_state.ammo_inventory.get(ammo_id, 0))
+		_add_bag_item({
+			"id": ammo_id,
+			"type": "ammo",
+			"title": str(ammo_names.get(ammo_id, ammo_id)),
+			"description": "총기에 장전하는 소모 탄약입니다. 무기 구경과 맞아야 사용할 수 있습니다.",
+			"quantity": ammo_count,
+			"slot_cost": game_state.get_raid_item_slot_cost("ammo", ammo_id, ammo_count),
+			"texture": ammo_texture if ammo_id == "762_fmj" else UI_ICONS.get_icon(
+				"ammo",
+				64,
+				Color("#d9c16d")
+			),
+		})
 	_add_bag_item({
 		"id": "canned_food",
 		"type": "resource",
 		"title": "통조림",
 		"description": "레이드에서 확보하는 핵심 식량이자 쉘터 노동 자원입니다.",
-		"quantity": canned_food_state,
+		"quantity": game_state.get_backpack_storage_count("food", "canned_food"),
+		"slot_cost": game_state.get_raid_item_slot_cost(
+			"food",
+			"canned_food",
+			game_state.get_backpack_storage_count("food", "canned_food")
+		),
 		"texture": UI_ICONS.get_icon("food", 64, Color("#e6b65c")),
+	})
+	_add_bag_item({
+		"id": "medkit",
+		"type": "resource",
+		"title": "구급약",
+		"description": "전투 중 체력을 회복하는 응급 치료품입니다. SHIFT 또는 모바일 치료 버튼으로 사용합니다.",
+		"quantity": int(game_state.medkits),
+		"slot_cost": game_state.get_raid_item_slot_cost("medkit", "medkit", int(game_state.medkits)),
+		"texture": UI_ICONS.get_icon("medkit", 64, Color("#dce8df")),
+	})
+	_add_bag_item({
+		"id": "churu",
+		"type": "resource",
+		"title": "츄르",
+		"description": "희귀 구역과 보스에게서 확보하는 쉘터 확장 재화입니다.",
+		"quantity": int(game_state.churu),
+		"slot_cost": game_state.get_raid_item_slot_cost("churu", "churu", int(game_state.churu)),
+		"texture": UI_ICONS.get_icon("churu", 64, Color("#e7b561")),
 	})
 
 	var weapon_ids: Array = game_state.weapon_inventory.keys()
@@ -892,25 +952,42 @@ func _refresh_contents() -> void:
 	for weapon_id_variant in weapon_ids:
 		var weapon_id := str(weapon_id_variant)
 		var count: int = int(game_state.get_weapon_count(weapon_id))
-		if has_weapon_state and weapon_id == game_state.equipped_weapon_id:
-			count -= 1
 		if count <= 0:
 			continue
 		var definition := WEAPON_SYSTEM.get_weapon(weapon_id)
+		var weapon_equipped: bool = (
+			has_weapon_state and weapon_id == str(game_state.equipped_weapon_id)
+		)
 		_add_bag_item({
 			"id": weapon_id,
 			"type": "weapon",
 			"title": str(definition.get("display_name", weapon_id)),
-			"description": "가방에 보관 중인 무기입니다. 선택 후 장착하면 현재 주무기와 교체됩니다.",
+			"description": (
+				"현재 장착 중인 주무기입니다."
+				if weapon_equipped
+				else "가방에 보관 중인 무기입니다. 선택 후 장착하면 현재 주무기와 교체됩니다."
+			),
 			"quantity": count,
+			"equipped": weapon_equipped,
+			"slot_cost": game_state.get_raid_item_slot_cost(
+				"weapon",
+				weapon_id,
+				game_state.get_backpack_storage_count("weapon", weapon_id)
+			),
 			"texture": weapon_textures.get(weapon_id) as Texture2D,
 		})
 
 	var equipment_ids: Array = game_state.equipment_inventory.keys()
+	for equipped_id in [body_id, head_id, footwear_id]:
+		if not equipped_id.is_empty() and not equipment_ids.has(equipped_id):
+			equipment_ids.append(equipped_id)
 	equipment_ids.sort()
 	for equipment_id_variant in equipment_ids:
 		var equipment_id := str(equipment_id_variant)
 		var equipment_count := int(game_state.get_equipment_count(equipment_id))
+		var equipment_equipped: bool = equipment_id in [body_id, head_id, footwear_id]
+		if equipment_equipped:
+			equipment_count += 1
 		if equipment_count <= 0:
 			continue
 		var equipment_definition: Dictionary = game_state.get_equipment_definition(equipment_id)
@@ -920,6 +997,12 @@ func _refresh_contents() -> void:
 			"title": str(equipment_definition.get("display_name", equipment_id)),
 			"description": str(equipment_definition.get("description", "")),
 			"quantity": equipment_count,
+			"equipped": equipment_equipped,
+			"slot_cost": game_state.get_raid_item_slot_cost(
+				"equipment",
+				equipment_id,
+				game_state.get_equipment_count(equipment_id)
+			),
 			"texture": _equipment_texture(equipment_id, 64),
 		})
 
@@ -936,6 +1019,7 @@ func _refresh_contents() -> void:
 			"title": _component_name(component_id),
 			"description": _component_description(component_id),
 			"quantity": component_count,
+			"slot_cost": game_state.get_raid_item_slot_cost("component", component_id, component_count),
 			"texture": component_textures.get(component_id) as Texture2D,
 		})
 
@@ -954,6 +1038,11 @@ func _refresh_contents() -> void:
 			"title": _progression_item_name(progression_item_id),
 			"description": _progression_item_description(progression_item_id),
 			"quantity": progression_item_count,
+			"slot_cost": game_state.get_raid_item_slot_cost(
+				"progression",
+				progression_item_id,
+				progression_item_count
+			),
 			"texture": UI_ICONS.get_icon(
 				"secure" if progression_item_id == "sealed_zone_keycard" else "craft",
 				64,
@@ -976,15 +1065,31 @@ func _refresh_contents() -> void:
 			"title": _mod_name(mod_id),
 			"description": _mod_description(mod_id),
 			"quantity": available,
+			"slot_cost": game_state.get_raid_item_slot_cost("mod", mod_id, available),
 			"texture": component_textures.get(component_id) as Texture2D,
 		})
 
-	var occupied_slots := visible_bag_items
+	if not game_state.raid_special_cargo.is_empty():
+		var cargo := game_state.raid_special_cargo as Dictionary
+		_add_bag_item({
+			"id": str(cargo.get("id", "sealed_subway_cargo")),
+			"type": "special_cargo",
+			"title": str(cargo.get("title", "봉인된 지하철 화물")),
+			"description": str(cargo.get(
+				"description",
+				"인간 격리구역에서 회수한 대형 화물입니다. 탈출해야 내용물을 확인할 수 있습니다."
+			)),
+			"quantity": 1,
+			"slot_cost": int(cargo.get("slot_size", 6)),
+			"texture": UI_ICONS.get_icon("secure", 64, Color("#f0ad55")),
+		})
+
+	var occupied_slots := int(game_state.get_raid_bag_used_slots())
 	var empty_slots := maxi(0, BAG_SLOT_CAPACITY - occupied_slots)
 	for index in range(empty_slots):
 		bag_grid.add_child(_empty_slot())
 	if bag_slot_usage_label:
-		bag_slot_usage_label.text = "%d / %d칸" % [occupied_slots, BAG_SLOT_CAPACITY]
+		bag_slot_usage_label.text = "%d / %d칸" % [occupied_slots, int(game_state.get_raid_bag_capacity())]
 		bag_slot_usage_label.add_theme_color_override(
 			"font_color",
 			Color("#ff9595") if occupied_slots > BAG_SLOT_CAPACITY else Color("#b7c8c0")
@@ -1209,6 +1314,31 @@ func _refresh_item_detail() -> void:
 	elif item_type == "component":
 		var item_id := str(selected_item.get("id", ""))
 		item_detail_description.text = "%s\n쉘터 작업대에서 완성 부착물 제작에 사용합니다." % _component_description(item_id)
+	elif item_type == "ammo":
+		item_detail_description.text = "%s\n보유 수량 %d발" % [
+			str(selected_item.get("description", "총기용 탄약입니다.")),
+			int(selected_item.get("quantity", 0)),
+		]
+	elif item_type == "resource":
+		item_detail_description.text = "%s\n보유 수량 %d개" % [
+			str(selected_item.get("description", "레이드에서 사용하는 자원입니다.")),
+			int(selected_item.get("quantity", 0)),
+		]
+	elif item_type == "churu":
+		item_detail_description.text = "%s\n보유 수량 %d개" % [
+			str(selected_item.get("description", "희귀 재화입니다.")),
+			int(selected_item.get("quantity", 0)),
+		]
+	elif item_type == "special_cargo":
+		item_detail_description.text = "%s\n가방 %d칸 사용 · 탈출 시 정산" % [
+			str(selected_item.get("description", "봉인된 대형 화물입니다.")),
+			int(selected_item.get("slot_cost", 6)),
+		]
+	elif item_type == "progression":
+		item_detail_description.text = "%s\n보유 수량 %d개" % [
+			str(selected_item.get("description", "진행에 필요한 중요 아이템입니다.")),
+			int(selected_item.get("quantity", 0)),
+		]
 	elif item_type == "equipment":
 		var equipment_id := str(selected_item.get("id", ""))
 		var equipment_definition: Dictionary = game_state.get_equipment_definition(equipment_id)
@@ -1509,7 +1639,8 @@ func _bag_item_button(item: Dictionary) -> Button:
 	)
 	button.custom_minimum_size = Vector2(82, 74)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	button.tooltip_text = "%s  x%d" % [str(item.get("title", "")), quantity]
+	var slot_cost := maxi(0, int(item.get("slot_cost", 1)))
+	button.tooltip_text = "%s  x%d  ·  %d칸" % [str(item.get("title", "")), quantity, slot_cost]
 	if not has_quantity:
 		button.tooltip_text += " (보유하지 않음)"
 	elif item_type == "mod" and not _can_install_mod(item_id):
@@ -1536,6 +1667,41 @@ func _bag_item_button(item: Dictionary) -> Button:
 	badge.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	badge.add_theme_constant_override("outline_size", 4)
 	button.add_child(badge)
+	if slot_cost > 0:
+		var slot_badge := Label.new()
+		slot_badge.name = "SlotCostBadge"
+		slot_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot_badge.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		slot_badge.offset_left = -42
+		slot_badge.offset_top = 5
+		slot_badge.offset_right = -5
+		slot_badge.offset_bottom = 24
+		slot_badge.text = "%d칸" % slot_cost
+		slot_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		slot_badge.add_theme_font_override("font", font_ref)
+		slot_badge.add_theme_font_size_override("font_size", 10)
+		slot_badge.add_theme_color_override("font_color", Color("#f0c56f"))
+		slot_badge.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.95))
+		slot_badge.add_theme_constant_override("outline_size", 4)
+		button.add_child(slot_badge)
+	if bool(item.get("equipped", false)):
+		var equipped_badge := Label.new()
+		equipped_badge.name = "EquippedBadge"
+		equipped_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		equipped_badge.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		equipped_badge.offset_left = 6
+		equipped_badge.offset_top = 5
+		equipped_badge.offset_right = 29
+		equipped_badge.offset_bottom = 28
+		equipped_badge.text = "E"
+		equipped_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		equipped_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		equipped_badge.add_theme_font_override("font", font_ref)
+		equipped_badge.add_theme_font_size_override("font_size", 13)
+		equipped_badge.add_theme_color_override("font_color", Color("#171a17"))
+		equipped_badge.add_theme_color_override("font_outline_color", Color("#e9cf76"))
+		equipped_badge.add_theme_constant_override("outline_size", 7)
+		button.add_child(equipped_badge)
 	return button
 
 

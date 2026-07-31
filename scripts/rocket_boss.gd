@@ -1,6 +1,7 @@
 extends "res://scripts/enemy.gd"
 
 const ROCKET_PROJECTILE := preload("res://scripts/rocket_projectile.gd")
+const BOSS_MINE := preload("res://scripts/boss_mine.gd")
 const BOSS_ANIMATION_ROOT := "res://assets/enemies/rocket_boss"
 const BOSS_SCREEN_DIRECTIONS := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const BOSS_DIRECTIONS := {
@@ -17,6 +18,13 @@ const ROCKET_SHOT_RECOVERY := 0.72
 const BOSS_DASH_DURATION := 0.46
 const BOSS_DASH_APPROACH_DISTANCE := 6.4
 const BOSS_DASH_RETREAT_DISTANCE := 7.4
+const MINE_PATTERN_APPROACH_RANGE := 4.2
+const MINE_PATTERN_RETREAT_DISTANCE := 10.2
+const MINE_PATTERN_APPROACH_DURATION := 0.42
+const MINE_PATTERN_RETREAT_DURATION := 0.5
+const MINE_DEPLOY_INTERVAL := 0.14
+const MINE_DAMAGE := 24
+const MINE_BLAST_RADIUS := 2.35
 
 var boss_action := "combat"
 var boss_action_elapsed := 0.0
@@ -26,6 +34,11 @@ var boss_dash_start := Vector3.ZERO
 var boss_dash_end := Vector3.ZERO
 var boss_rng := RandomNumberGenerator.new()
 var rocket_shots_fired := 0
+var mine_pattern_cooldown := 0.0
+var mine_deploy_count := 0
+var mines_deployed_this_pattern := 0
+var mines_deployed_total := 0
+var mine_target_snapshot := Vector3.ZERO
 
 
 func configure_rocket_boss(target_body: CharacterBody3D, initial_threat: float) -> void:
@@ -48,6 +61,7 @@ func configure_rocket_boss(target_body: CharacterBody3D, initial_threat: float) 
 func _ready() -> void:
 	super._ready()
 	boss_rng.seed = get_instance_id() * 104729
+	mine_pattern_cooldown = boss_rng.randf_range(2.8, 4.2)
 	add_to_group("raid_boss")
 	add_to_group("rocket_boss")
 	sprite.sprite_frames = _create_boss_sprite_frames()
@@ -75,6 +89,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
 	boss_dash_cooldown = maxf(0.0, boss_dash_cooldown - delta)
+	mine_pattern_cooldown = maxf(0.0, mine_pattern_cooldown - delta)
 	_update_alert_marker(delta)
 	_update_enemy_health_bar(delta)
 	if dying:
@@ -102,6 +117,7 @@ func _physics_process(delta: float) -> void:
 	offset.y = 0.0
 	var distance := offset.length()
 	var direction := offset.normalized() if distance > 0.01 else facing_world_direction
+	var target_concealed_by_loaf := _is_target_concealed_by_loaf(distance)
 	var has_line_of_sight := _has_line_of_sight()
 	var boss_vision_range := _get_vision_range() + 4.0
 	if alerted and distance > 72.0:
@@ -110,7 +126,11 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		return
 	if not alerted:
-		var detected := _is_position_inside_vision_fan(target.global_position, boss_vision_range) and has_line_of_sight
+		var detected := (
+			_is_position_inside_vision_fan(target.global_position, boss_vision_range)
+			and has_line_of_sight
+			and not target_concealed_by_loaf
+		)
 		if detected:
 			_become_alerted()
 			pursuit_time = 60.0
@@ -118,14 +138,27 @@ func _physics_process(delta: float) -> void:
 			_update_patrol(delta)
 			move_and_slide()
 			return
+	elif target_concealed_by_loaf:
+		lost_sight_time += delta
+		if lost_sight_time >= LOAF_ESCAPE_CONFIRM_SECONDS:
+			_clear_alert()
+		else:
+			velocity = velocity.move_toward(Vector3.ZERO, 8.0 * delta)
+			_set_motion_state("idle")
+		move_and_slide()
+		return
 	else:
+		lost_sight_time = 0.0
 		last_known_position = target.global_position
 		pursuit_time = 60.0
 
 	_set_facing_from_world_direction(direction)
 	match boss_action:
-		"dash":
+		"dash", "mine_approach", "mine_retreat":
 			_update_boss_dash(delta)
+			return
+		"mine_deploy":
+			_update_mine_deploy(delta, direction)
 			return
 		"aim":
 			_update_rocket_aim(delta, direction)
@@ -141,6 +174,14 @@ func _physics_process(delta: float) -> void:
 			_update_boss_reload(delta, direction)
 			return
 
+	if (
+		mine_pattern_cooldown <= 0.0
+		and has_line_of_sight
+		and distance >= 6.5
+		and distance <= 22.0
+	):
+		_start_mine_pattern(direction, distance)
+		return
 	if magazine_ammo <= 0:
 		_start_boss_reload()
 		return
@@ -256,16 +297,120 @@ func _start_boss_dash(direction: Vector3, distance: float) -> void:
 	_set_motion_state("walk")
 
 
+func _start_mine_pattern(direction: Vector3, distance: float) -> void:
+	mine_target_snapshot = target.global_position + target.velocity * 0.34
+	mine_target_snapshot.y = 0.1
+	mine_deploy_count = boss_rng.randi_range(4, 6)
+	mines_deployed_this_pattern = 0
+	mine_pattern_cooldown = boss_rng.randf_range(8.5, 11.5)
+	boss_action = "mine_approach"
+	boss_action_elapsed = 0.0
+	boss_action_duration = MINE_PATTERN_APPROACH_DURATION
+	boss_dash_start = global_position
+	var approach_distance := clampf(distance - MINE_PATTERN_APPROACH_RANGE, 2.4, 10.0)
+	boss_dash_end = global_position + direction.normalized() * approach_distance
+	boss_dash_end.y = global_position.y
+	_set_facing_from_world_direction(direction)
+	_set_motion_state("walk")
+	threat_marker.text = "!"
+	threat_marker.modulate = Color("#ff9b45")
+	threat_marker.visible = true
+	threat_marker.scale = Vector3.ONE * 1.75
+
+
+func _start_mine_deploy() -> void:
+	boss_action = "mine_deploy"
+	boss_action_elapsed = 0.0
+	boss_action_duration = MINE_DEPLOY_INTERVAL * float(mine_deploy_count) + 0.3
+	velocity = Vector3.ZERO
+	_set_motion_state("attack")
+	threat_marker.visible = true
+
+
+func _update_mine_deploy(delta: float, direction_to_target: Vector3) -> void:
+	boss_action_elapsed += delta
+	velocity = Vector3.ZERO
+	_set_facing_from_world_direction(direction_to_target)
+	threat_marker.scale = Vector3.ONE * (1.55 + sin(boss_action_elapsed * 24.0) * 0.16)
+	while (
+		mines_deployed_this_pattern < mine_deploy_count
+		and boss_action_elapsed
+		>= MINE_DEPLOY_INTERVAL * float(mines_deployed_this_pattern + 1)
+	):
+		_deploy_boss_mine(mines_deployed_this_pattern)
+		mines_deployed_this_pattern += 1
+	if boss_action_elapsed < boss_action_duration:
+		return
+	threat_marker.visible = false
+	var retreat_direction := -direction_to_target
+	if retreat_direction.length_squared() <= 0.01:
+		retreat_direction = -facing_world_direction
+	boss_action = "mine_retreat"
+	boss_action_elapsed = 0.0
+	boss_action_duration = MINE_PATTERN_RETREAT_DURATION
+	boss_dash_start = global_position
+	boss_dash_end = global_position + retreat_direction.normalized() * MINE_PATTERN_RETREAT_DISTANCE
+	boss_dash_end.y = global_position.y
+	_set_facing_from_world_direction(retreat_direction)
+	_set_motion_state("walk")
+
+
+func _deploy_boss_mine(index: int) -> void:
+	if not is_instance_valid(target):
+		return
+	var forward := mine_target_snapshot - global_position
+	forward.y = 0.0
+	if forward.length_squared() <= 0.01:
+		forward = facing_world_direction
+	forward = forward.normalized()
+	var fraction := 0.5
+	if mine_deploy_count > 1:
+		fraction = float(index) / float(mine_deploy_count - 1)
+	var fan_angle := lerpf(-0.95, 0.95, fraction) + boss_rng.randf_range(-0.12, 0.12)
+	var spread_direction := forward.rotated(Vector3.UP, fan_angle)
+	var spread_distance := boss_rng.randf_range(1.35, 3.15)
+	var landing_position := mine_target_snapshot + spread_direction * spread_distance
+	landing_position.y = 0.1
+	var mine := Node3D.new()
+	mine.name = "BossMine_%02d" % (mines_deployed_total + 1)
+	mine.set_script(BOSS_MINE)
+	mine.call(
+		"configure",
+		self,
+		target,
+		global_position + forward * 0.58 + Vector3(0.0, 0.92, 0.0),
+		landing_position,
+		MINE_DAMAGE,
+		MINE_BLAST_RADIUS
+	)
+	get_parent().add_child(mine)
+	mines_deployed_total += 1
+	_spawn_enemy_muzzle_flash(forward)
+	if index == 0:
+		_play_enemy_gunshot()
+	_play_attack_feedback()
+
+
 func _update_boss_dash(delta: float) -> void:
+	var completed_action := boss_action
 	boss_action_elapsed += delta
 	var progress := clampf(boss_action_elapsed / boss_action_duration, 0.0, 1.0)
 	var eased := 1.0 - pow(1.0 - progress, 3.0)
 	var desired_position := boss_dash_start.lerp(boss_dash_end, eased)
 	var collision := move_and_collide(desired_position - global_position)
 	if collision != null or progress >= 1.0:
-		boss_action = "combat"
 		velocity = Vector3.ZERO
-		_set_motion_state("idle")
+		if completed_action == "mine_approach":
+			_start_mine_deploy()
+		elif completed_action == "mine_retreat":
+			boss_action = "recovery"
+			boss_action_elapsed = 0.0
+			boss_action_duration = 0.55
+			attack_cooldown = 0.45
+			_set_motion_state("idle")
+		else:
+			boss_action = "combat"
+			_set_motion_state("idle")
 
 
 func _create_boss_sprite_frames() -> SpriteFrames:
@@ -346,3 +491,7 @@ func get_rocket_magazine_ammo() -> int:
 
 func is_rocket_reloading() -> bool:
 	return boss_action == "reload"
+
+
+func get_mines_deployed_total() -> int:
+	return mines_deployed_total

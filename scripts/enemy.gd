@@ -44,16 +44,16 @@ const MELEE_WINDUP_TIME := 0.46
 const MELEE_STRIKE_TIME := 0.16
 const MELEE_RECOVERY_TIME := 0.34
 const HIT_STAGGER_TIME := 0.13
-const STEALTH_TAKEDOWN_MAX_RANGE := 1.7
-const MELEE_VISION_RANGE := 14.0
-const RANGED_VISION_RANGE := 14.0
-const GRENADIER_VISION_RANGE := 14.0
+const STEALTH_TAKEDOWN_MAX_RANGE := 2.05
+const MELEE_VISION_RANGE := 20.0
+const RANGED_VISION_RANGE := 20.0
+const GRENADIER_VISION_RANGE := 20.0
 const VISION_RANGE_THREAT_BONUS := 1.5
 const VISION_HALF_ANGLE_DEGREES := 60.0
-const NIGHT_VISION_RANGE_MULTIPLIER := 0.62
+const NIGHT_VISION_RANGE_MULTIPLIER := 0.72
 # Every visual detection fills the same gauge. Proximity only shortens fill time.
-const DETECTION_CLOSE_RADIUS := 2.2
-const DETECTION_PROXIMITY_RADIUS := 3.6
+const DETECTION_CLOSE_RADIUS := 0.85
+const DETECTION_PROXIMITY_RADIUS := 1.25
 const FAN_DETECTION_SECONDS_FAR := 2.2
 const FAN_DETECTION_SECONDS_NEAR := 0.62
 const PROXIMITY_DETECTION_SECONDS_FAR := 1.35
@@ -61,6 +61,9 @@ const PROXIMITY_DETECTION_SECONDS_NEAR := 0.38
 const DETECTION_DECAY_PER_SECOND := 0.72
 const SUSPICION_THRESHOLD := 0.12
 const SUSPICION_HOLD_SECONDS := 2.8
+const LOAF_STEALTH_REVEAL_RADIUS := 1.35
+const LOAF_ESCAPE_CONFIRM_SECONDS := 0.75
+const LOAF_AWARENESS_DECAY_MULTIPLIER := 3.5
 const ALERT_REACTION_SECONDS := 0.12
 const OPENING_PRESSURE_SECONDS := 3.2
 const OPENING_PRESSURE_SPEED := 5.25
@@ -79,6 +82,7 @@ const STEERING_LOCK_MSEC := 220
 const FACING_STABILITY_MSEC := 120
 const SENTRY_LOOK_INTERVAL_MIN := 0.75
 const SENTRY_LOOK_INTERVAL_MAX := 1.25
+const FACTION_COMBAT_DAMAGE_MULTIPLIER := 0.42
 
 var enemy_kind := "melee"
 var target: CharacterBody3D
@@ -450,13 +454,18 @@ func _physics_process(delta: float) -> void:
 	var distance := offset.length()
 	var vision_range := _get_vision_range()
 	var combat_lock_range := _get_combat_lock_range()
+	var target_concealed_by_loaf := _is_target_concealed_by_loaf(distance)
 	var has_line_of_sight := _has_line_of_sight()
 	var target_inside_detection_fan := _is_position_inside_vision_fan(
 		target.global_position,
 		vision_range
 	)
 	var target_inside_combat_view := distance <= combat_lock_range
-	var has_visual_contact := has_line_of_sight and target_inside_combat_view
+	var has_visual_contact := (
+		has_line_of_sight
+		and target_inside_combat_view
+		and not target_concealed_by_loaf
+	)
 	has_current_line_of_sight = alerted and has_visual_contact
 	if alerted and distance > _get_disengage_distance():
 		_clear_alert()
@@ -493,7 +502,7 @@ func _physics_process(delta: float) -> void:
 		_set_motion_state("idle")
 		move_and_slide()
 		return
-	if alerted and distance <= combat_lock_range:
+	if alerted and distance <= combat_lock_range and not target_concealed_by_loaf:
 		last_known_position = target.global_position
 		pursuit_time = COMBAT_MEMORY_BASE + COMBAT_MEMORY_THREAT_BONUS * threat_level
 		lost_sight_time = 0.0
@@ -512,8 +521,9 @@ func _physics_process(delta: float) -> void:
 		lost_sight_time += delta
 		target_stationary_time = maxf(0.0, target_stationary_time - delta * 0.35)
 		var active_pursuit_duration := (
-			ACTIVE_PURSUIT_BASE
-			+ ACTIVE_PURSUIT_THREAT_BONUS * threat_level
+			LOAF_ESCAPE_CONFIRM_SECONDS
+			if target_concealed_by_loaf
+			else ACTIVE_PURSUIT_BASE + ACTIVE_PURSUIT_THREAT_BONUS * threat_level
 		)
 		var target_escaped := distance >= _get_search_break_distance()
 		if lost_sight_time <= active_pursuit_duration and not target_escaped:
@@ -578,10 +588,13 @@ func _get_vision_range() -> float:
 
 
 func _get_combat_lock_range() -> float:
-	return (
+	var detection_range := (
 		(_get_base_vision_range() + VISION_RANGE_THREAT_BONUS * threat_level)
 		* detection_range_multiplier
 	)
+	if enemy_kind != "melee":
+		return maxf(detection_range, _get_weapon_engagement_range() * 0.92)
+	return detection_range
 
 
 func _get_search_break_distance() -> float:
@@ -595,6 +608,15 @@ func _get_target_visibility_multiplier() -> float:
 		float(primary_player_target.get_meta("stealth_visibility_multiplier", 1.0)),
 		0.35,
 		1.0
+	)
+
+
+func _is_target_concealed_by_loaf(distance: float) -> bool:
+	if target != primary_player_target or not is_instance_valid(primary_player_target):
+		return false
+	return (
+		bool(primary_player_target.get_meta("loafing_stealth", false))
+		and distance > LOAF_STEALTH_REVEAL_RADIUS
 	)
 
 
@@ -632,6 +654,9 @@ func _update_detection_awareness(
 	vision_range: float
 ) -> bool:
 	var visibility_multiplier := _get_target_visibility_multiplier()
+	if _is_target_concealed_by_loaf(distance):
+		_decay_detection_awareness(delta, LOAF_AWARENESS_DECAY_MULTIPLIER)
+		return false
 	if not has_line_of_sight:
 		_decay_detection_awareness(delta)
 		return false
@@ -717,10 +742,10 @@ func _get_detection_seconds(
 	)
 
 
-func _decay_detection_awareness(delta: float) -> void:
+func _decay_detection_awareness(delta: float, multiplier: float = 1.0) -> void:
 	detection_awareness = maxf(
 		0.0,
-		detection_awareness - DETECTION_DECAY_PER_SECOND * delta
+		detection_awareness - DETECTION_DECAY_PER_SECOND * multiplier * delta
 	)
 	if detection_awareness <= 0.0 and suspicion_hold_time <= 0.0:
 		perception_state = "patrol"
@@ -737,6 +762,16 @@ func _update_primary_player_override_detection(delta: float) -> void:
 	var player_offset := primary_player_target.global_position - global_position
 	player_offset.y = 0.0
 	var distance := player_offset.length()
+	if (
+		bool(primary_player_target.get_meta("loafing_stealth", false))
+		and distance > LOAF_STEALTH_REVEAL_RADIUS
+	):
+		player_override_awareness = maxf(
+			0.0,
+			player_override_awareness
+			- DETECTION_DECAY_PER_SECOND * LOAF_AWARENESS_DECAY_MULTIPLIER * delta
+		)
+		return
 	var visibility_multiplier := clampf(
 		float(primary_player_target.get_meta("stealth_visibility_multiplier", 1.0)),
 		0.35,
@@ -921,11 +956,31 @@ func _update_reload(delta: float) -> void:
 	var progress := clampf(reload_elapsed / reload_duration, 0.0, 1.0)
 	reload_indicator.texture = _get_reload_texture(roundi(progress * 20.0))
 	reload_indicator.visible = true
-	var away := global_position - target.global_position if is_instance_valid(target) else Vector3.ZERO
-	away.y = 0.0
-	if away.length_squared() > 0.01:
-		velocity = _steer_around_obstacles(away.normalized()) * PISTOL_SPEED * 0.42
-		_set_facing_from_world_direction(-away.normalized())
+	if is_instance_valid(target):
+		var toward_target := target.global_position - global_position
+		toward_target.y = 0.0
+		var target_distance := toward_target.length()
+		if target_distance > 0.01:
+			toward_target /= target_distance
+			_set_facing_from_world_direction(toward_target)
+			if target_distance > 5.5:
+				velocity = (
+					_steer_around_obstacles(toward_target)
+					* PISTOL_SPEED
+					* 1.22
+				)
+			else:
+				var strafe := Vector3(-toward_target.z, 0.0, toward_target.x) * strafe_sign
+				velocity = _steer_around_obstacles(strafe) * PISTOL_SPEED * 0.52
+	elif last_known_position != Vector3.INF:
+		var toward_last_known := last_known_position - global_position
+		toward_last_known.y = 0.0
+		if toward_last_known.length_squared() > 0.01:
+			velocity = (
+				_steer_around_obstacles(toward_last_known.normalized())
+				* PISTOL_SPEED
+				* 1.05
+			)
 	if progress >= 1.0:
 		magazine_ammo = magazine_size
 		combat_state = "normal"
@@ -1934,10 +1989,20 @@ func _perform_melee_strike() -> void:
 	offset.y = 0.0
 	if offset.length() > 1.75 or not _has_line_of_sight():
 		return
-	if target.has_method("take_damage"):
-		target.call("take_damage", 12 + roundi(6.0 * threat_level))
+	var strike_damage := 12 + roundi(6.0 * threat_level)
+	if target.has_method("take_hostile_hit"):
+		target.call("take_hostile_hit", strike_damage, pending_attack_direction, self)
+	elif target.has_method("take_damage"):
+		target.call("take_damage", strike_damage)
+	elif target.get_parent() != null and target.get_parent().has_method("take_hostile_hit"):
+		target.get_parent().call(
+			"take_hostile_hit",
+			strike_damage,
+			pending_attack_direction,
+			self
+		)
 	elif target.get_parent() != null and target.get_parent().has_method("take_damage"):
-		target.get_parent().call("take_damage", 12 + roundi(6.0 * threat_level))
+		target.get_parent().call("take_damage", strike_damage)
 
 
 func _update_stagger(delta: float) -> void:
@@ -2209,6 +2274,22 @@ func take_damage(amount: int) -> void:
 	take_hit(amount, Vector3.ZERO)
 
 
+func take_hostile_hit(amount: int, hit_direction: Vector3, attacker: Node3D) -> void:
+	var applied_damage := amount
+	if (
+		is_instance_valid(attacker)
+		and attacker != self
+		and attacker.has_method("get_faction_id")
+		and not faction_id.is_empty()
+		and str(attacker.call("get_faction_id")) != faction_id
+	):
+		applied_damage = maxi(
+			1,
+			roundi(float(amount) * FACTION_COMBAT_DAMAGE_MULTIPLIER)
+		)
+	take_hit(applied_damage, hit_direction)
+
+
 func is_backstab_from(attacker_position: Vector3) -> bool:
 	var direction_to_attacker := attacker_position - global_position
 	direction_to_attacker.y = 0.0
@@ -2267,6 +2348,7 @@ func take_melee_hit(amount: int, hit_direction: Vector3, backstab: bool) -> void
 	threat_marker.visible = true
 	alert_marker_time = 0.28
 	_set_motion_state("hit")
+	_spawn_stealth_takedown_flash(hit_direction)
 	_spawn_hit_burst(hit_direction, Color("#fff0a3"), 16, 0.34)
 	_play_hit_reaction(hit_direction)
 	get_tree().create_timer(0.24).timeout.connect(func() -> void:
@@ -2274,6 +2356,69 @@ func take_melee_hit(amount: int, hit_direction: Vector3, backstab: bool) -> void
 			backstab_stunned = false
 			_start_death(hit_direction)
 	)
+
+
+func _spawn_stealth_takedown_flash(hit_direction: Vector3) -> void:
+	if get_parent() == null:
+		return
+	var flash_material := StandardMaterial3D.new()
+	flash_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	flash_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	flash_material.albedo_color = Color(1.0, 0.93, 0.68, 0.96)
+	flash_material.emission_enabled = true
+	flash_material.emission = Color("#fff2ad")
+	flash_material.emission_energy_multiplier = 9.0
+	flash_material.no_depth_test = true
+
+	var flash_mesh := SphereMesh.new()
+	flash_mesh.radius = 0.34
+	flash_mesh.height = 0.68
+	flash_mesh.radial_segments = 18
+	flash_mesh.rings = 9
+	flash_mesh.material = flash_material
+	var flash := MeshInstance3D.new()
+	flash.name = "StealthImpactFlash"
+	flash.mesh = flash_mesh
+	flash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	get_parent().add_child(flash)
+	flash.global_position = global_position + Vector3(0.0, 0.72, 0.0) + hit_direction * 0.08
+
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.38
+	ring_mesh.outer_radius = 0.48
+	ring_mesh.rings = 32
+	ring_mesh.ring_segments = 8
+	ring_mesh.material = flash_material
+	var ring := MeshInstance3D.new()
+	ring.name = "StealthImpactRing"
+	ring.mesh = ring_mesh
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	get_parent().add_child(ring)
+	ring.global_position = global_position + Vector3(0.0, 0.18, 0.0)
+
+	var light := OmniLight3D.new()
+	light.name = "StealthImpactLight"
+	light.light_color = Color("#ffe29a")
+	light.light_energy = 6.5
+	light.omni_range = 4.2
+	light.shadow_enabled = false
+	get_parent().add_child(light)
+	light.global_position = global_position + Vector3(0.0, 0.85, 0.0)
+
+	var flash_tween := flash.create_tween().set_parallel(true)
+	flash_tween.set_ignore_time_scale(true)
+	flash_tween.tween_property(flash, "scale", Vector3.ONE * 3.2, 0.2).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	flash_tween.tween_property(flash, "transparency", 1.0, 0.25)
+	var ring_tween := ring.create_tween().set_parallel(true)
+	ring_tween.set_ignore_time_scale(true)
+	ring_tween.tween_property(ring, "scale", Vector3.ONE * 4.6, 0.28).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+	ring_tween.tween_property(ring, "transparency", 1.0, 0.3)
+	var light_tween := light.create_tween()
+	light_tween.set_ignore_time_scale(true)
+	light_tween.tween_property(light, "light_energy", 0.0, 0.24)
+	get_tree().create_timer(0.34, true, false, true).timeout.connect(flash.queue_free)
+	get_tree().create_timer(0.34, true, false, true).timeout.connect(ring.queue_free)
+	get_tree().create_timer(0.28, true, false, true).timeout.connect(light.queue_free)
 
 
 func take_projectile_hit(

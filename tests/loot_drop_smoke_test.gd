@@ -17,7 +17,11 @@ func _run() -> void:
 	assert(bool(main_scene.get("has_ak")))
 	assert(main_scene.get("ak_pickup") == null)
 	assert(bool(game_state.get("has_ak")))
-	assert((main_scene.get("ammo_pickups") as Array).is_empty())
+	var initial_pickups := main_scene.get("ammo_pickups") as Array
+	assert(initial_pickups.size() == 20)
+	for pickup in initial_pickups:
+		assert(str(pickup.get_meta("loot_type", "")) == "canned_food")
+		assert(bool(pickup.get_meta("guaranteed_field_supply", false)))
 	assert((main_scene.get("field_loot_containers") as Array).size() == 29)
 	var field_scrap_before := int(game_state.get("scrap"))
 
@@ -49,6 +53,7 @@ func _run() -> void:
 	main_scene.set("nearby_ammo_pickup", weapon_pickup)
 	main_scene.call("_collect_nearby_ammo")
 	assert(int(game_state.call("get_weapon_count", "mp5")) == mp5_before + 1)
+	assert(int(game_state.call("remove_raid_bag_item", "weapon", "mp5", 1)) == 1)
 
 	var armor_before := int(game_state.call("get_equipment_count", "scav_vest"))
 	var armor_pickup: Node3D = main_scene.call(

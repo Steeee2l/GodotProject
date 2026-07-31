@@ -2,6 +2,7 @@ extends SceneTree
 
 const ROCKET_BOSS := preload("res://scripts/rocket_boss.gd")
 const ROCKET_PROJECTILE := preload("res://scripts/rocket_projectile.gd")
+const BOSS_MINE := preload("res://scripts/boss_mine.gd")
 
 
 class DummyTarget:
@@ -59,7 +60,31 @@ func _run() -> void:
 	direct_rocket.call("_detonate")
 	assert(target.received_damage == 40)
 
-	print("ROCKET_BOSS_OK frames=64 magazine=4 damage=%d" % target.received_damage)
+	boss.call("_start_mine_pattern", Vector3.RIGHT, 8.0)
+	assert(str(boss.get("boss_action")) == "mine_approach")
+	boss.call("_update_boss_dash", 1.0)
+	assert(str(boss.get("boss_action")) == "mine_deploy")
+	for _step in 8:
+		if str(boss.get("boss_action")) != "mine_deploy":
+			break
+		boss.call("_update_mine_deploy", 0.18, Vector3.RIGHT)
+	assert(str(boss.get("boss_action")) == "mine_retreat")
+	var spawned_mines: Array[Node] = []
+	for child in arena.get_children():
+		if child.get_script() == BOSS_MINE:
+			spawned_mines.append(child)
+	assert(spawned_mines.size() >= 4 and spawned_mines.size() <= 6)
+	assert(int(boss.call("get_mines_deployed_total")) == spawned_mines.size())
+	var mine := spawned_mines[0] as Node3D
+	await process_frame
+	assert(mine.get_node_or_null("MineVisual/MineBody") is MeshInstance3D)
+	assert(mine.get_node_or_null("ProximityRing") is MeshInstance3D)
+	target.global_position = mine.global_position
+	var damage_before_mine := target.received_damage
+	mine.call("_detonate")
+	assert(target.received_damage > damage_before_mine)
+
+	print("ROCKET_BOSS_OK frames=64 magazine=4 mines=%d damage=%d" % [spawned_mines.size(), target.received_damage])
 	arena.queue_free()
 	await process_frame
 	quit(0)
