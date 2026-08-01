@@ -69,6 +69,13 @@ from runio import publish_guard, read_guard
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
 CURATOR_DIR = SCRIPTS_DIR / "curator"
+DEFAULT_DIRECTION_REFERENCE_PACK = (
+    SCRIPTS_DIR.parents[2]
+    / "assets"
+    / "generated"
+    / "sprite_reference_packs"
+    / "8way_cat_player_validated"
+)
 _MAX_PARALLEL_GENERATIONS = 3
 _generation_slots = threading.BoundedSemaphore(_MAX_PARALLEL_GENERATIONS)
 _generation_commit_lock = threading.Lock()
@@ -1000,7 +1007,8 @@ def _ordinal(value: int) -> str:
 
 
 def _generation_prompt(request: dict, state: str, extra_prompt: str, phase: int | None,
-                       pose_template: bool = False, direction_anchor: bool = False) -> str:
+                       pose_template: bool = False, direction_anchor: bool = False,
+                       directional_reference_pack: bool = False) -> str:
     spec = request["states"][state]
     frame_count = int(spec.get("frames", 4))
     direction = _state_direction(request, state)
@@ -1081,7 +1089,7 @@ def _generation_prompt(request: dict, state: str, extra_prompt: str, phase: int 
     if pose_template:
         frame_phrase = "four-frame" if frame_count == 4 else f"{frame_count}-frame"
         pose_index = 3 if direction_anchor else 2
-        strip_index = pose_index + 1 if phase is not None else pose_index
+        strip_index = pose_index + 1 if phase is not None else (4 if direction_anchor else 3)
         if phase is not None:
             pose_reference = (
                 f"The {_ordinal(pose_index)} attached image is the exact target-frame pose guide and the "
@@ -1102,17 +1110,23 @@ def _generation_prompt(request: dict, state: str, extra_prompt: str, phase: int 
 Pose skeleton lock: the first attached image is the ONLY identity, species, outfit, palette, and rendering reference.{anchor_reference} {pose_reference}
 Use the pose guide only for geometry and timing. Match its panel order, facing, head/torso/hip angle, limb placement, leading foot, left/right foot crossing, ground contact, silhouette, scale, and root position as closely as possible. Do not copy any character identity, clothing, colors, facial features, or accessories from the grayscale pose guide. When identity and pose references differ, take appearance exclusively from the first image and pose exclusively from the guide.
 """
+    reference_pack_contract = ""
+    if directional_reference_pack:
+        reference_pack_contract = """
+Directional reference-pack rule: an additional attached sprite is a screen-axis and layout reference only. Use it to resolve front/back/side/three-quarter facing, ground line, silhouette placement, and left-versus-right orientation. If it is a four-frame walk strip, use it only for motion rhythm, foot contacts, and leading-foot alternation. Never copy its species, face, clothing, palette, props, or accessories; those remain locked to the first base-character image.
+"""
     style = str(request.get("style") or "match the supplied reference exactly")
     phase_contract = "\n".join(f"{index + 1}. {description}" for index, description in enumerate(phases))
     return f"""Create a production-ready 2D game sprite strip from the supplied base character.
 
-Identity lock: preserve the exact character design, proportions, face, clothing, backpack, tail, palette, outline weight, and pixel-art rendering from the base reference. Do not redesign or beautify the character.
+Identity lock: the first attached image is the sole source of character identity. Preserve its exact species, face, body proportions, clothing, helmet, backpack, tail, palette, outline weight, accessories, and pixel-art rendering. Do not redesign, substitute, or beautify the character. Any later attached image is a pose/layout guide only and must never contribute a different cat, outfit, colors, face, or props.
 Direction: {direction} — {view}. {facing_rule}{screen_axis_rule}
 Action: {action}.
 Motion contract, left to right, exactly {frame_count} panels:
 {phase_contract}
 {motion_rules}{focus}{extra}
 {pose_contract}
+{reference_pack_contract}
 
 Output contract: one horizontal strip containing exactly {frame_count} isolated full-body sprites, in the specified order, evenly spaced, equal scale and ground line. Use a perfectly flat solid #FF00FF background. No text, labels, arrows, borders, grid, scenery, cast shadow, extra character, or extra panel. Keep generous magenta separation between panels. Do not add motion trails, slash arcs, glow, particles, or speed lines unless the user explicitly requested them. Outside colors already locked by the identity reference, never use pink, purple, fuchsia, magenta, or any color close to #FF00FF on the character, weapon, outline, highlight, shadow, or effect; those colors are reserved exclusively for the removable background.
 Style contract: {style}
@@ -1165,36 +1179,45 @@ def _accepted_direction_anchor_ref(run_dir: Path, request: dict, state: str) -> 
     return None
 
 
+def _directional_reference_pack_anchor(run_dir: Path, request: dict, state: str) -> Path | None:
+    """Return a same-direction layout or gait reference when no accepted anchor exists."""
+    direction = _state_direction(request, state)
+    if not direction:
+        return None
+    suffix = "walk" if state.endswith("_walk") else "idle"
+    candidates = [
+        run_dir / "references" / "anchors" / f"{direction}_{suffix}.png",
+        DEFAULT_DIRECTION_REFERENCE_PACK / f"{direction}_{suffix}.png",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def _generation_refs(run_dir: Path, request: dict, state: str,
                      pose_refs: list[Path] | None = None,
-                     direction_anchor_ref: Path | None = None) -> list[Path]:
+                     direction_anchor_ref: Path | None = None,
+                     directional_reference_pack_ref: Path | None = None) -> list[Path]:
     refs: list[Path] = []
     base = _base_image_path(run_dir)
     if base:
         refs.append(base)
+    # Explicitly supplied anchors are trusted by the caller (and retained for
+    # the curation API), but normal generation deliberately passes none: old
+    # colorful anchors can be mistaken for a second identity by the model.
     if direction_anchor_ref and direction_anchor_ref.is_file() and direction_anchor_ref not in refs:
         refs.append(direction_anchor_ref)
+    if (not direction_anchor_ref and directional_reference_pack_ref
+            and directional_reference_pack_ref.is_file()
+            and directional_reference_pack_ref not in refs):
+        refs.append(directional_reference_pack_ref)
     for pose_ref in pose_refs or []:
         if pose_ref.is_file() and pose_ref not in refs:
             refs.append(pose_ref)
-    try:
-        manifest = load_consistent_frames_manifest(run_dir, allow_pending_states=True) or {"rows": []}
-        row = next((row for row in manifest.get("rows", []) if row.get("state") == state), None)
-        curation, _ = load_curation_report(run_dir)
-        selected = (((curation or {}).get("states") or {}).get(state) or {}).get("selected") or []
-        if row:
-            for index in selected[:3]:
-                try:
-                    path = run_dir / row_frame_rel(row, int(index))
-                except (SystemExit, ValueError, TypeError):
-                    continue
-                if path.is_file() and path not in refs:
-                    refs.append(path)
-    except (OSError, ValueError, SystemExit):
-        pass
-    # Keep the provider input compact and deterministic: identity first, the
-    # same-character direction anchor second, pose guides next, then selected
-    # examples from this state up to five total references.
+    # Keep the provider input compact and deterministic: identity first, then
+    # grayscale pose guides. Previously selected generated frames are omitted
+    # because stale candidates can carry another character's identity.
     return refs[:5]
 
 
@@ -1316,10 +1339,15 @@ def generate_state_take(run_dir: Path, payload: dict) -> dict:
     take_rel = take_raw_rel(request, state, label)
     take_path = run_dir / take_rel
     pose_refs = _skeleton_generation_refs(run_dir, state, phase)
-    direction_anchor_ref = _accepted_direction_anchor_ref(run_dir, request, state)
+    # Existing generated rows and the global directional pack may belong to a
+    # different character. They remain visible for curation, but are not fed
+    # back into generation as identity references.
+    direction_anchor_ref = None
+    directional_reference_pack_ref = None
     prompt = _generation_prompt(
         request, state, extra_prompt, phase,
         bool(pose_refs), bool(direction_anchor_ref),
+        bool(directional_reference_pack_ref and not direction_anchor_ref),
     )
     prompt_path = run_dir / "prompts" / "studio" / state / f"{label}.txt"
     prompt_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1331,7 +1359,8 @@ def generate_state_take(run_dir: Path, payload: dict) -> dict:
             generated = generate_image(
                 "codex", prompt, take_path,
                 refs=_generation_refs(
-                    run_dir, request, state, pose_refs, direction_anchor_ref),
+                    run_dir, request, state, pose_refs, direction_anchor_ref,
+                    directional_reference_pack_ref),
                 keep_session=False,
             )
 
@@ -1781,10 +1810,11 @@ def _state_refs(run_dir, state, request):
                 direction = d
                 break
     if direction is not None:
-        anchor_rel = raw_rel(request, f"{direction}_idle")
-        anchor = run_dir / anchor_rel
-        if state != f"{direction}_idle" and anchor.is_file():
-            refs.append({"role": "anchor", "name": anchor.name, "url": _url("run", *anchor_rel.split("/"))})
+        # Do not advertise a raw directional anchor as generation material.
+        # Older runs may contain a different character in that file; the
+        # studio now uses the uploaded base plus grayscale skeleton guides as
+        # the only generation inputs, so showing the stale colour anchor here
+        # would be misleading even though it is retained for history.
         base = state[len(direction) + 1:] if state.startswith(direction + "_") else None
         if base and direction != "down":
             basis_rel = raw_rel(request, f"down_{base}")

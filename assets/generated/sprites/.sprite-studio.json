@@ -65,6 +65,31 @@
       "id": "character-11",
       "name": "헬창 고양이",
       "path": "character-11"
+    },
+    {
+      "id": "character-12",
+      "name": "공장 고양이",
+      "path": "character-12"
+    },
+    {
+      "id": "npc",
+      "name": "NPC 고양이",
+      "path": "npc"
+    },
+    {
+      "id": "npc2",
+      "name": "NPC2 고양이",
+      "path": "npc2"
+    },
+    {
+      "id": "npc3",
+      "name": "NPC3 고양이",
+      "path": "npc3"
+    },
+    {
+      "id": "npc4",
+      "name": "NPC4 고양이",
+      "path": "npc4"
     }
   ]
 }

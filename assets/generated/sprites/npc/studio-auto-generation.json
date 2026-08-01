@@ -1,0 +1,25 @@
+{
+  "id": "8c3007d2b6454e22a3f564d1e47061e5",
+  "status": "completed",
+  "total": 1,
+  "completed": 1,
+  "currentState": null,
+  "currentIndex": null,
+  "states": [
+    "up_right_idle"
+  ],
+  "results": [
+    {
+      "state": "up_right_idle",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    }
+  ],
+  "skeletonProfileId": "pose-20260716-134616-57c346",
+  "kind": "auto",
+  "label": null,
+  "startedAt": "2026-08-01T19:15:43+0900",
+  "regenerateExisting": true,
+  "finishedAt": "2026-08-01T19:16:51+0900"
+}

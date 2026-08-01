@@ -96,6 +96,16 @@ func _run() -> void:
 		_fail("integrated asphalt sewer asset is not assigned")
 	if str(opening.get("phase")) != "intro_walk":
 		_fail("opening must begin with the automatic bridge walk")
+	var opening_sprite := opening.get("player_sprite") as AnimatedSprite3D
+	if str(opening.get("current_facing")) != "ne" or opening_sprite.animation != "walk_ne":
+		_fail("opening player must face northeast while walking up the bridge")
+	var opening_weapon := opening.get("weapon_sprite") as Sprite3D
+	if opening_weapon == null or opening_weapon.render_priority >= opening_sprite.render_priority:
+		_fail("opening weapon must render behind the player body")
+	opening_player.position.z = 34.01
+	opening.call("_update_intro_walk", 1.0 / 60.0)
+	if str(opening.get("current_facing")) != "ne" or opening_sprite.animation != "idle_ne":
+		_fail("opening player must keep facing northeast when the intro walk stops")
 	var opening_environment := opening.get_node_or_null("OpeningEnvironment") as WorldEnvironment
 	if opening_environment == null or opening_environment.environment == null:
 		_fail("opening night environment is missing")
@@ -116,6 +126,44 @@ func _run() -> void:
 		var wreck_sprite := (wreck as Node).find_child("*", true, false) as Sprite3D
 		if wreck_sprite == null or wreck_sprite.position.y < 0.85:
 			_fail("opening wreck sprite can clip into the bridge deck")
+		var vehicle_collision := (wreck as Node).get_node_or_null("VehicleCollision") as CollisionShape3D
+		if vehicle_collision == null or not (vehicle_collision.shape is BoxShape3D):
+			_fail("opening wreck collision is missing")
+		var vehicle_shape := vehicle_collision.shape as BoxShape3D
+		if vehicle_shape.size.z <= vehicle_shape.size.x:
+			_fail("opening wreck collision length is not aligned with the bridge")
+		var collision_yaw := absf(vehicle_collision.rotation_degrees.y)
+		if collision_yaw < 65.0 or collision_yaw > 115.0:
+			_fail("opening wreck collision axis does not follow the visible vehicle")
+		var collision_debug := (wreck as Node).get_node_or_null("VehicleCollisionDebug") as MeshInstance3D
+		if collision_debug == null or not (collision_debug.mesh is PlaneMesh):
+			_fail("opening wreck collision debug marker is missing")
+		var debug_size := (collision_debug.mesh as PlaneMesh).size
+		if not debug_size.is_equal_approx(Vector2(vehicle_shape.size.x, vehicle_shape.size.z)):
+			_fail("opening wreck collision debug marker does not match its shape")
+		if Vector2(
+			collision_debug.position.x,
+			collision_debug.position.z
+		).distance_to(Vector2(vehicle_collision.position.x, vehicle_collision.position.z)) > 0.01:
+			_fail("opening wreck collision marker center differs from the collision shape")
+		var collision_center := vehicle_collision.global_position
+		var collision_axis := vehicle_collision.global_transform.basis.z.normalized()
+		var collision_probe := PhysicsPointQueryParameters3D.new()
+		collision_probe.position = collision_center + collision_axis * vehicle_shape.size.z * 0.42
+		collision_probe.collision_mask = 2
+		collision_probe.collide_with_areas = false
+		collision_probe.collide_with_bodies = true
+		var probe_hits := opening.get_world_3d().direct_space_state.intersect_point(
+			collision_probe,
+			16
+		)
+		var wreck_was_hit := false
+		for probe_hit in probe_hits:
+			if (probe_hit as Dictionary).get("collider") == wreck:
+				wreck_was_hit = true
+				break
+		if not wreck_was_hit:
+			_fail("opening wreck collision does not cover the visible vehicle length")
 	if opening.get("visibility_material") == null or opening.get("visibility_rect") == null:
 		_fail("opening gameplay visibility mask is missing")
 	if opening.get("mobile_controls_root") == null:
@@ -125,6 +173,9 @@ func _run() -> void:
 			_fail("opening mobile action is missing: %s" % mobile_button_name)
 	if opening.get("weapon_hud_panel") == null or opening.get("magazine_label") == null:
 		_fail("opening weapon HUD is incomplete")
+	var opening_medkit_button := opening.get("opening_medkit_button") as Button
+	if opening_medkit_button == null:
+		_fail("opening lower-left medkit slot is missing")
 
 	opening.call("_start_tutorial_move")
 	await process_frame
@@ -133,6 +184,8 @@ func _run() -> void:
 	var objective_panel := opening.get("objective_panel") as Control
 	if objective_panel == null or not objective_panel.visible:
 		_fail("tutorial objective panel is missing")
+	if not opening_medkit_button.visible:
+		_fail("opening medkit slot must appear when player control begins")
 	var visibility_rect := opening.get("visibility_rect") as ColorRect
 	if visibility_rect == null or not visibility_rect.visible:
 		_fail("gameplay visibility did not activate with player control")

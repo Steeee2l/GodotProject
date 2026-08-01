@@ -87,6 +87,13 @@ func _run() -> void:
 	var storage_grid := ui_layer.find_child("StorageGrid", true, false) as GridContainer
 	if storage_grid == null or storage_grid.get_child_count() != 42:
 		_fail("storage UI grid does not match upgraded capacity")
+	var storage_summary := ui_layer.find_child("StorageSummary", true, false) as GridContainer
+	if storage_summary == null or storage_summary.get_child_count() != 2:
+		_fail("storage summary must contain only slot usage and expansion")
+	for resource_id in ["scrap", "churu"]:
+		var resource_icon := ui_layer.find_child("ResourceIcon_%s" % str(resource_id), true, false) as TextureRect
+		if resource_icon == null or resource_icon.texture == null:
+			_fail("storage expansion does not show the %s resource icon" % str(resource_id))
 	var close := ui_layer.find_child("CloseButton", true, false) as Button
 	if close == null or not close.text.is_empty():
 		_fail("storage close control must be an icon-only button")

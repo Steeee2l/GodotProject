@@ -5,11 +5,12 @@ const FLOOR_TEXTURE_PATH := "res://assets/interiors/shelter_floor_topdown_v3.png
 const WALL_TEXTURE_PATH := "res://assets/interiors/shelter_wall_panel_v3.png"
 const BED_TEXTURE_PATH := "res://assets/interiors/shelter_bed_module_v2.png"
 const PIPE_TEXTURE_PATH := "res://assets/interiors/shelter_escape_pipe_v1.png"
-const WORKBENCH_TEXTURE_PATH := "res://assets/interiors/modules/shelter_workbench_wall_front_v5.png"
-const SCRATCHER_BANK_TEXTURE_PATH := "res://assets/interiors/modules/scratcher_bank_isometric_v6.png"
-const CATNIP_SCRAPER_TEXTURE_PATH := "res://assets/interiors/modules/catnip_scraper_isometric_v5.png"
-const TRAINING_TEXTURE_PATH := "res://assets/interiors/modules/shelter_training_isometric_v6.png"
-const STORAGE_TEXTURE_PATH := "res://assets/interiors/modules/shelter_storage_wall_front_v5.png"
+const FACTORY_CONVEYOR_TEXTURE_PATH := "res://assets/interiors/factory/factory_conveyor_spine_v1.png"
+const WORKBENCH_TEXTURE_PATH := "res://assets/interiors/factory/factory_gunsmith_cell_v1.png"
+const SCRATCHER_BANK_TEXTURE_PATH := "res://assets/interiors/factory/factory_scrap_press_v1.png"
+const CATNIP_SCRAPER_TEXTURE_PATH := "res://assets/interiors/factory/factory_catnip_refinery_v1.png"
+const TRAINING_TEXTURE_PATH := "res://assets/interiors/factory/factory_training_cell_v1.png"
+const STORAGE_TEXTURE_PATH := "res://assets/interiors/factory/factory_logistics_cell_v1.png"
 
 
 func _initialize() -> void:
@@ -25,6 +26,7 @@ func _run() -> void:
 	assert(ResourceLoader.exists(WALL_TEXTURE_PATH))
 	assert(ResourceLoader.exists(BED_TEXTURE_PATH))
 	assert(ResourceLoader.exists(PIPE_TEXTURE_PATH))
+	assert(ResourceLoader.exists(FACTORY_CONVEYOR_TEXTURE_PATH))
 	assert(ResourceLoader.exists(WORKBENCH_TEXTURE_PATH))
 	assert(ResourceLoader.exists(SCRATCHER_BANK_TEXTURE_PATH))
 	assert(ResourceLoader.exists(CATNIP_SCRAPER_TEXTURE_PATH))
@@ -83,57 +85,78 @@ func _run() -> void:
 	var workbench := get_nodes_in_group("shelter_workbench")[0] as Node
 	var workbench_sprite := workbench.get_node("WorkbenchSprite") as Sprite3D
 	assert(workbench_sprite.texture.resource_path == WORKBENCH_TEXTURE_PATH)
-	assert(workbench_sprite.billboard == BaseMaterial3D.BILLBOARD_DISABLED)
-	assert(workbench_sprite.region_enabled)
-	assert(workbench_sprite.region_rect == Rect2(122.0, 155.0, 1359.0, 669.0))
-	assert(is_equal_approx(workbench_sprite.position.y, 1.452))
-	assert(is_equal_approx(workbench_sprite.position.z, 0.055))
-	assert(is_equal_approx(workbench_sprite.pixel_size, 0.00434))
+	assert(workbench_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
+	assert(not workbench_sprite.region_enabled)
+	assert(is_equal_approx(workbench_sprite.position.y, 2.0))
+	assert(is_equal_approx(workbench_sprite.position.z, 0.02))
+	assert(is_equal_approx(workbench_sprite.pixel_size, 0.00385))
 	assert(workbench_sprite.scale == Vector3.ONE)
-	assert(workbench_sprite.no_depth_test)
+	assert(not workbench_sprite.no_depth_test)
 	assert(not (workbench.get_node("GroundShadow") as MeshInstance3D).visible)
 	assert(workbench.has_method("interact"))
 	var bank := get_nodes_in_group("scratcher_bank")[0] as Node
 	var bank_sprite := bank.get_node("BankSprite") as Sprite3D
 	assert(bank_sprite.texture.resource_path == SCRATCHER_BANK_TEXTURE_PATH)
 	assert(bank_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
-	assert(is_equal_approx(bank_sprite.position.y, 1.98))
+	assert(is_equal_approx(bank_sprite.position.y, 2.02))
 	assert(is_equal_approx(bank_sprite.position.z, 0.02))
-	assert(bank_sprite.no_depth_test)
-	assert(bank.get_node("GroundShadow") is MeshInstance3D)
+	assert(is_equal_approx(bank_sprite.pixel_size, 0.00385))
+	assert(not bank_sprite.no_depth_test)
+	assert(not (bank.get_node("GroundShadow") as MeshInstance3D).visible)
 	assert(bank.has_method("interact"))
 	var catnip_scraper := get_nodes_in_group("catnip_scraper")[0] as Node
 	var catnip_sprite := catnip_scraper.get_node("ScraperSprite") as Sprite3D
 	assert(catnip_sprite.texture.resource_path == CATNIP_SCRAPER_TEXTURE_PATH)
 	assert(catnip_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
+	assert(is_equal_approx(catnip_sprite.position.y, 2.05))
 	assert(is_equal_approx(catnip_sprite.position.z, 0.02))
-	assert(catnip_scraper.get_node("GroundShadow") is MeshInstance3D)
+	assert(is_equal_approx(catnip_sprite.pixel_size, 0.0038))
+	assert(not catnip_sprite.no_depth_test)
+	assert(not (catnip_scraper.get_node("GroundShadow") as MeshInstance3D).visible)
 	assert(catnip_scraper.has_method("interact"))
 	var training := get_nodes_in_group("training_facility")[0] as Node
 	var training_sprite := training.get_node("TrainingSprite") as Sprite3D
 	assert(training_sprite.texture.resource_path == TRAINING_TEXTURE_PATH)
 	assert(training_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
-	assert(is_equal_approx(training_sprite.position.y, 2.02))
+	assert(is_equal_approx(training_sprite.position.y, 2.1))
 	assert(is_equal_approx(training_sprite.position.z, 0.02))
-	assert(training.get_node("GroundShadow") is MeshInstance3D)
+	assert(is_equal_approx(training_sprite.pixel_size, 0.0039))
+	assert(not training_sprite.no_depth_test)
+	assert(not (training.get_node("GroundShadow") as MeshInstance3D).visible)
 	assert(training.has_method("interact"))
 	var storage := get_nodes_in_group("shelter_storage")[0] as Node
 	var storage_sprite := storage.get_node("StorageSprite") as Sprite3D
 	assert(storage_sprite.texture.resource_path == STORAGE_TEXTURE_PATH)
-	assert(storage_sprite.billboard == BaseMaterial3D.BILLBOARD_DISABLED)
-	assert(storage_sprite.region_enabled)
-	assert(storage_sprite.region_rect == Rect2(49.0, 145.0, 1515.0, 650.0))
-	assert(is_equal_approx(storage_sprite.position.y, 1.245))
-	assert(is_equal_approx(storage_sprite.position.z, 0.055))
-	assert(is_equal_approx(storage_sprite.pixel_size, 0.00383))
+	assert(storage_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
+	assert(not storage_sprite.region_enabled)
+	assert(is_equal_approx(storage_sprite.position.y, 2.02))
+	assert(is_equal_approx(storage_sprite.position.z, 0.02))
+	assert(is_equal_approx(storage_sprite.pixel_size, 0.0038))
 	assert(storage_sprite.scale == Vector3.ONE)
-	assert(storage_sprite.no_depth_test)
+	assert(not storage_sprite.no_depth_test)
 	assert(not (storage.get_node("GroundShadow") as MeshInstance3D).visible)
 	assert(storage.has_method("interact"))
-	assert(storage.position.z == catnip_scraper.position.z)
-	assert(workbench.position.z == catnip_scraper.position.z)
-	assert(bank.position.z == catnip_scraper.position.z)
-	assert(training.position.z == catnip_scraper.position.z)
+	assert(catnip_scraper.position.z < 0.0)
+	assert(bank.position.z < 0.0)
+	assert(storage.position.z > 0.0)
+	assert(workbench.position.z > 0.0)
+	assert(training.position.z > 0.0)
+	assert(absf(catnip_scraper.position.x) > 5.0)
+	assert(absf(bank.position.x) > 5.0)
+
+	var factory_root := module_root.get_node("FactoryInfrastructure") as Node3D
+	assert(int(factory_root.get_meta("shelter_tier")) == int(game_state.get("shelter_tier")))
+	var conveyor_sprite := factory_root.get_node("FactoryConveyorSpine") as Sprite3D
+	assert(conveyor_sprite.texture.resource_path == FACTORY_CONVEYOR_TEXTURE_PATH)
+	assert(conveyor_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
+	assert(not conveyor_sprite.no_depth_test)
+	assert(factory_root.get_node("FactoryConveyorCollision") is StaticBody3D)
+	assert(factory_root.find_children("MovingCargo*", "MeshInstance3D", true, false).size() == 5)
+	var worker_stations := module_root.get_node("FactoryWorkerStations") as Node3D
+	assert(worker_stations.get_node_or_null("ScratcherWorkerLane") != null)
+	assert(worker_stations.get_node_or_null("CatnipWorkerLane") != null)
+	assert(worker_stations.get_node_or_null("ScratcherLineSlot01") != null)
+	assert(worker_stations.get_node_or_null("CatnipLineSlot01") != null)
 
 	assert(shelter.get_node("ShelterPlayer") is CharacterBody3D)
 	assert(shelter.get("dash_button") is Button)
@@ -151,5 +174,5 @@ func _run() -> void:
 	key_event.pressed = true
 	assert(bool(shortcut.call("is_shelter_shortcut", key_event)))
 
-	print("SHELTER_MODULAR_OK beds=1 catnip_scraper=true training=true pipe_exit=true room=48x28")
+	print("SHELTER_MODULAR_OK factory_line=true workers=true beds=1 room=48x28")
 	quit(0)

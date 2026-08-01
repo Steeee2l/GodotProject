@@ -1,0 +1,573 @@
+{
+  "characterId": "character-12",
+  "engine": "component-row",
+  "game_input": "sprite-sheet-alpha.png",
+  "degraded_static_fallback": false,
+  "curation_applied": true,
+  "frame_variant": "pixel",
+  "sprite_sheet_alpha": "sprite-sheet-alpha.png",
+  "sprite_sheet_alpha_report": "sprite-sheet-alpha.report.json",
+  "base_image": "base-source.png",
+  "cell": {
+    "shape": "square",
+    "width": 256,
+    "height": 256,
+    "safe_margin_x": 24,
+    "safe_margin_y": 24,
+    "size": 256,
+    "safe_margin": 24
+  },
+  "chroma_key": {
+    "name": "magenta",
+    "hex": "#FF00FF",
+    "rgb": [
+      255,
+      0,
+      255
+    ],
+    "selection": "manual"
+  },
+  "animation": {
+    "cellWidth": 256,
+    "cellHeight": 256,
+    "columns": 4,
+    "rows": {
+      "down_idle": {
+        "row": 0,
+        "frames": 4,
+        "fps": 4,
+        "loop": true,
+        "frame_variant": "pixel"
+      },
+      "down_right_idle": {
+        "row": 1,
+        "frames": 4,
+        "fps": 4,
+        "loop": true,
+        "frame_variant": "pixel"
+      },
+      "right_idle": {
+        "row": 2,
+        "frames": 4,
+        "fps": 4,
+        "loop": true,
+        "frame_variant": "pixel"
+      },
+      "up_right_idle": {
+        "row": 3,
+        "frames": 4,
+        "fps": 4,
+        "loop": true,
+        "frame_variant": "pixel"
+      },
+      "up_idle": {
+        "row": 4,
+        "frames": 4,
+        "fps": 4,
+        "loop": true,
+        "frame_variant": "pixel"
+      },
+      "up_left_idle": {
+        "row": 5,
+        "frames": 4,
+        "fps": 4,
+        "loop": true,
+        "frame_variant": "pixel"
+      },
+      "left_idle": {
+        "row": 6,
+        "frames": 4,
+        "fps": 4,
+        "loop": true,
+        "frame_variant": "pixel"
+      },
+      "down_left_idle": {
+        "row": 7,
+        "frames": 4,
+        "fps": 4,
+        "loop": true,
+        "frame_variant": "pixel"
+      },
+      "down_walk": {
+        "row": 8,
+        "frames": 4,
+        "fps": 8,
+        "loop": true,
+        "frame_variant": "pixel"
+      },
+      "down_right_walk": {
+        "row": 9,
+        "frames": 4,
+        "fps": 8,
+        "loop": true,
+        "frame_variant": "pixel"
+      },
+      "right_walk": {
+        "row": 10,
+        "frames": 4,
+        "fps": 8,
+        "loop": true,
+        "frame_variant": "pixel"
+      },
+      "up_right_walk": {
+        "row": 11,
+        "frames": 4,
+        "fps": 8,
+        "loop": true,
+        "frame_variant": "pixel"
+      },
+      "up_walk": {
+        "row": 12,
+        "frames": 4,
+        "fps": 8,
+        "loop": true,
+        "frame_variant": "pixel"
+      },
+      "up_left_walk": {
+        "row": 13,
+        "frames": 4,
+        "fps": 8,
+        "loop": true,
+        "frame_variant": "pixel"
+      },
+      "left_walk": {
+        "row": 14,
+        "frames": 4,
+        "fps": 8,
+        "loop": true,
+        "frame_variant": "pixel"
+      },
+      "down_left_walk": {
+        "row": 15,
+        "frames": 4,
+        "fps": 8,
+        "loop": true,
+        "frame_variant": "pixel"
+      }
+    }
+  },
+  "frame_layout": {
+    "sheetWidth": 1024,
+    "sheetHeight": 4096,
+    "cellWidth": 256,
+    "cellHeight": 256,
+    "rows": {
+      "down_idle": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 256,
+          "y": 0,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 512,
+          "y": 0,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 768,
+          "y": 0,
+          "w": 256,
+          "h": 256
+        }
+      ],
+      "down_right_idle": [
+        {
+          "x": 0,
+          "y": 256,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 256,
+          "y": 256,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 512,
+          "y": 256,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 768,
+          "y": 256,
+          "w": 256,
+          "h": 256
+        }
+      ],
+      "right_idle": [
+        {
+          "x": 0,
+          "y": 512,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 256,
+          "y": 512,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 512,
+          "y": 512,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 768,
+          "y": 512,
+          "w": 256,
+          "h": 256
+        }
+      ],
+      "up_right_idle": [
+        {
+          "x": 0,
+          "y": 768,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 256,
+          "y": 768,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 512,
+          "y": 768,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 768,
+          "y": 768,
+          "w": 256,
+          "h": 256
+        }
+      ],
+      "up_idle": [
+        {
+          "x": 0,
+          "y": 1024,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 256,
+          "y": 1024,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 512,
+          "y": 1024,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 768,
+          "y": 1024,
+          "w": 256,
+          "h": 256
+        }
+      ],
+      "up_left_idle": [
+        {
+          "x": 0,
+          "y": 1280,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 256,
+          "y": 1280,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 512,
+          "y": 1280,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 768,
+          "y": 1280,
+          "w": 256,
+          "h": 256
+        }
+      ],
+      "left_idle": [
+        {
+          "x": 0,
+          "y": 1536,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 256,
+          "y": 1536,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 512,
+          "y": 1536,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 768,
+          "y": 1536,
+          "w": 256,
+          "h": 256
+        }
+      ],
+      "down_left_idle": [
+        {
+          "x": 0,
+          "y": 1792,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 256,
+          "y": 1792,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 512,
+          "y": 1792,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 768,
+          "y": 1792,
+          "w": 256,
+          "h": 256
+        }
+      ],
+      "down_walk": [
+        {
+          "x": 0,
+          "y": 2048,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 256,
+          "y": 2048,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 512,
+          "y": 2048,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 768,
+          "y": 2048,
+          "w": 256,
+          "h": 256
+        }
+      ],
+      "down_right_walk": [
+        {
+          "x": 0,
+          "y": 2304,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 256,
+          "y": 2304,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 512,
+          "y": 2304,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 768,
+          "y": 2304,
+          "w": 256,
+          "h": 256
+        }
+      ],
+      "right_walk": [
+        {
+          "x": 0,
+          "y": 2560,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 256,
+          "y": 2560,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 512,
+          "y": 2560,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 768,
+          "y": 2560,
+          "w": 256,
+          "h": 256
+        }
+      ],
+      "up_right_walk": [
+        {
+          "x": 0,
+          "y": 2816,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 256,
+          "y": 2816,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 512,
+          "y": 2816,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 768,
+          "y": 2816,
+          "w": 256,
+          "h": 256
+        }
+      ],
+      "up_walk": [
+        {
+          "x": 0,
+          "y": 3072,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 256,
+          "y": 3072,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 512,
+          "y": 3072,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 768,
+          "y": 3072,
+          "w": 256,
+          "h": 256
+        }
+      ],
+      "up_left_walk": [
+        {
+          "x": 0,
+          "y": 3328,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 256,
+          "y": 3328,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 512,
+          "y": 3328,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 768,
+          "y": 3328,
+          "w": 256,
+          "h": 256
+        }
+      ],
+      "left_walk": [
+        {
+          "x": 0,
+          "y": 3584,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 256,
+          "y": 3584,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 512,
+          "y": 3584,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 768,
+          "y": 3584,
+          "w": 256,
+          "h": 256
+        }
+      ],
+      "down_left_walk": [
+        {
+          "x": 0,
+          "y": 3840,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 256,
+          "y": 3840,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 512,
+          "y": 3840,
+          "w": 256,
+          "h": 256
+        },
+        {
+          "x": 768,
+          "y": 3840,
+          "w": 256,
+          "h": 256
+        }
+      ]
+    }
+  }
+}

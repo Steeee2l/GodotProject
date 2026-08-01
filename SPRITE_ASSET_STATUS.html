@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>그레이 던 · 현재 이미지 에셋 현황</title>
+  <style>
+    :root { --bg:#10151b; --panel:#1a242d; --panel2:#222f3a; --line:#3a4d5c; --text:#edf2f4; --muted:#a8b6bf; --green:#7ed5bf; --yellow:#f2cc83; --red:#ef9494; --blue:#91bbed; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:radial-gradient(circle at 0 0,rgba(58,99,110,.28),transparent 36rem),var(--bg); color:var(--text); font:14px/1.55 "Pretendard","Malgun Gothic",sans-serif; }
+    .wrap { max-width:1380px; margin:auto; padding:28px 22px 60px; }
+    header { display:flex; justify-content:space-between; gap:20px; align-items:flex-start; margin-bottom:20px; }
+    h1 { font-size:clamp(24px,4vw,40px); letter-spacing:-.04em; margin:0 0 6px; }
+    h2 { font-size:19px; margin:0 0 10px; }
+    h3 { font-size:16px; margin:0 0 7px; }
+    p { margin:5px 0; }
+    .muted { color:var(--muted); }
+    .stamp { text-align:right; color:var(--muted); white-space:nowrap; }
+    .grid { display:grid; gap:13px; }
+    .stats { grid-template-columns:repeat(6,minmax(110px,1fr)); margin-bottom:16px; }
+    .card,.panel { background:linear-gradient(145deg,rgba(33,47,58,.98),rgba(23,31,40,.98)); border:1px solid var(--line); border-radius:14px; box-shadow:0 12px 28px rgba(0,0,0,.2); }
+    .stat { padding:14px; }
+    .stat b { display:block; color:var(--green); font-size:26px; line-height:1; margin-bottom:7px; }
+    .stat span { color:var(--muted); }
+    .panel { padding:16px; margin-bottom:16px; }
+    .toolbar { display:flex; flex-wrap:wrap; gap:9px; align-items:center; justify-content:space-between; }
+    input,select,button { background:#111921; border:1px solid var(--line); border-radius:8px; color:var(--text); padding:9px 11px; font:inherit; }
+    input { min-width:260px; flex:1; }
+    button { cursor:pointer; background:var(--panel2); }
+    button:hover { border-color:var(--green); }
+    .tags { display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; }
+    .tag { padding:3px 8px; border:1px solid transparent; border-radius:99px; font-size:12px; }
+    .owned { color:#c8f3e8; background:rgba(71,157,137,.2); border-color:rgba(126,213,191,.5); }
+    .source { color:#d2e5ff; background:rgba(76,119,180,.2); border-color:rgba(145,187,237,.5); }
+    .applied { color:#d8f6b7; background:rgba(103,169,72,.2); border-color:rgba(155,214,112,.5); }
+    .qa { color:#ffe0a8; background:rgba(185,128,54,.2); border-color:rgba(232,174,86,.5); }
+    .partial { color:#ffe7b8; background:rgba(166,119,43,.2); border-color:rgba(242,204,131,.5); }
+    .missing { color:#ffd5d5; background:rgba(185,75,75,.2); border-color:rgba(239,148,148,.5); }
+    table { width:100%; border-collapse:collapse; }
+    th,td { border-bottom:1px solid rgba(58,77,92,.68); padding:10px 9px; text-align:left; vertical-align:top; }
+    th { color:var(--muted); font-size:12px; font-weight:600; }
+    tr:last-child td { border-bottom:0; }
+    .small { font-size:12px; color:var(--muted); }
+    .check { width:18px; height:18px; accent-color:var(--green); }
+    .two { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .list { margin:0; padding-left:19px; }
+    .list li { margin:5px 0; }
+    .hidden { display:none; }
+    footer { margin-top:20px; color:var(--muted); font-size:12px; }
+    @media(max-width:1000px){.stats{grid-template-columns:repeat(3,1fr)}.two{grid-template-columns:1fr}}
+    @media(max-width:650px){.wrap{padding:20px 12px 44px}header{display:block}.stamp{text-align:left;margin-top:10px}.stats{grid-template-columns:repeat(2,1fr)}input{min-width:100%}table{font-size:12px}th:nth-child(4),td:nth-child(4){display:none}}
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <div>
+      <h1>그레이 던 · 현재 이미지 에셋 현황</h1>
+      <p class="muted">프로젝트의 실제 PNG 파일과 이번 P0 생성 결과를 기준으로 만든 현황판이다. 체크는 브라우저에 저장되며, 최종 런타임 등록 여부를 따로 검증한다.</p>
+    </div>
+    <div class="stamp">스냅샷<br><strong>2026-08-01</strong><br>GodotProject</div>
+  </header>
+
+  <section class="grid stats">
+      <div class="card stat"><b>2,651</b><span>전체 PNG</span></div>
+    <div class="card stat"><b>305</b><span>캐릭터 PNG</span></div>
+    <div class="card stat"><b>142</b><span>적·보스 PNG</span></div>
+    <div class="card stat"><b>24</b><span>건물 PNG</span></div>
+    <div class="card stat"><b>45</b><span>실내·은신처 PNG</span></div>
+    <div class="card stat"><b id="verifiedCount">0</b><span>검증 완료 항목</span></div>
+  </section>
+
+  <section class="panel">
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="카테고리·경로·에셋 검색">
+      <select id="filter"><option value="all">전체 상태</option><option value="owned">보유</option><option value="applied">실제 적용</option><option value="qa">QA 대기</option><option value="source">이번 생성 소스</option><option value="partial">부분 보유</option><option value="missing">장기 생성 필요</option></select>
+      <button id="reset" type="button">검증 체크 초기화</button>
+      <a href="SPRITE_ASSET_CHECKLIST.html" style="color:#7ed5bf">전체 56개 체크리스트 →</a>
+    </div>
+    <div class="tags">
+      <span class="tag owned">보유·런타임 사용 중</span>
+      <span class="tag applied">이번에 실제 적용</span>
+      <span class="tag qa">QA 대기</span>
+      <span class="tag source">이번에 생성한 source</span>
+      <span class="tag partial">부분 보유·보강 필요</span>
+      <span class="tag missing">아직 생성 필요</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>현재 보유 및 신규 생성 현황</h2>
+    <table>
+      <thead><tr><th>검증</th><th>분류</th><th>에셋 묶음</th><th>현재 위치</th><th>상태</th><th>게임 적용 메모</th></tr></thead>
+      <tbody id="inventory"></tbody>
+    </table>
+  </section>
+
+  <section class="two">
+    <div class="panel">
+      <h2>이번 P0 생성 결과</h2>
+      <ul class="list">
+        <li><strong>추출 비콘:</strong> assets/extraction/extraction_beacon_generated_v1.png에 투명 PNG로 저장.</li>
+        <li><strong>전투 VFX 시트:</strong> 총구 섬광·탄착·금속 스파크·폭발·로켓·근접 아크 3×3 소스.</li>
+        <li><strong>미션/상태 아이콘:</strong> 조사·방어·제거·수집·잠입·추출·위협·보스·구조·지하철 3×4 소스.</li>
+        <li><strong>소모품 아이콘:</strong> 통조림·츄르·구급약·캣닢·탄약·부품·고철 3×4 소스.</li>
+        <li><strong>척탄병 콘셉트:</strong> 기존 고양이 렌더링을 기준으로 만든 신규 적 identity 소스.</li>
+        <li><strong>플레이어 피격:</strong> 정면 4프레임 hit-reaction 소스 스트립.</li>
+        <li><strong>P1 랜드마크:</strong> 지하철·시장·을지로·용산·남산·아파트 게이트 6종.</li>
+        <li><strong>P1 은신처/서사:</strong> 시설 6종, 세력·단서 6종, 날씨·환경 VFX 9종.</li>
+      </ul>
+      <p class="small">소스 시트는 assets/generated/p0_sliced에 37개 개별 PNG로 slice 완료했다. 추출 비콘과 임무 아이콘은 런타임에 연결했고, 방향 캐릭터는 참조 앵커를 포함한 별도 QA 런으로 준비했다.</p>
+    </div>
+    <div class="panel">
+      <h2>다음 생성 우선순위</h2>
+      <ol class="list">
+        <li><strong>P0 캐릭터 상태:</strong> 플레이어 8방향 피격·사망·상호작용, 척탄병 8방향 throw/reload, 보스 fire/reload/death.</li>
+        <li><strong>P0 전투 판독:</strong> 이번 VFX와 아이콘을 slice한 뒤 탄착·추출·경보·미션 마커에 연결.</li>
+        <li><strong>P1 지역 콘텐츠:</strong> 5개 지역 랜드마크, 건물 손상 변형, 문·계단·보안 게이트.</li>
+        <li><strong>P1 공동체:</strong> 주민 6~10종 초상과 생산·대화·거래 동작.</li>
+        <li><strong>P2 서사·분위기:</strong> 단서 6종, 세력 엠블럼, 지역 원경, 화재·먼지·데칼.</li>
+      </ol>
+    </div>
+  </section>
+
+  <footer>수량 근거: assets/ 하위 PNG 파일 스냅샷. 생성 소스: assets/generated/p0_sources/README.md. 모든 캐릭터는 8방향·기준선·피벗·프레임 수를 sprite-gen QA로 검수한 뒤 완료 처리한다.</footer>
+</main>
+
+<script>
+  const rows = [
+    {category:'플레이어', name:'cat_8way idle/walk', path:'assets/characters/cat_8way', status:'owned', note:'8방향 이동 핵심 세트'},
+    {category:'플레이어', name:'cat_roll / cat_melee', path:'assets/characters/cat_roll · assets/characters/cat_melee', status:'owned', note:'구르기·근접 핵심 세트'},
+    {category:'플레이어', name:'피격 4프레임 정면 소스 + 4 slices', path:'assets/generated/p0_sources · assets/generated/p0_sliced/player_hit', status:'source', note:'정면 slice 완료, 8방향 확장 필요'},
+    {category:'동료·주민', name:'female_cat_companion', path:'assets/characters/female_cat_companion', status:'partial', note:'idle/walk 기반, hit/death 보강 필요'},
+    {category:'동료·주민', name:'worker / cowering / merchant', path:'assets/characters/worker_cat · cowering_resident · merchant_cat', status:'partial', note:'주민 roster·작업 동작 확장 필요'},
+    {category:'적', name:'character_5 적 기본 세트', path:'assets/enemies/character_5', status:'owned', note:'idle/walk 기반'},
+    {category:'적', name:'로켓 보스 기본 세트', path:'assets/enemies/rocket_boss', status:'owned', note:'발사·재장전·사망 액션 필요'},
+    {category:'적', name:'척탄병 identity 콘셉트', path:'assets/generated/p0_sources/enemy_grenadier_concept_v1.png', status:'source', note:'8방향 행동 세트로 확장 필요'},
+    {category:'전투 VFX', name:'전투 VFX 3×3 source + 9 slices', path:'assets/generated/p0_sources · assets/generated/p0_sliced/combat_vfx', status:'source', note:'slice 완료, 실제 판정 연결 필요'},
+    {category:'아이콘', name:'미션·상태 3×4 source + 12 slices', path:'assets/generated/p0_sources · assets/generated/p0_sliced/mission_icons', status:'applied', note:'현장 임무 월드 마커 아이콘에 연결'},
+    {category:'아이템', name:'소모품·탄약·부품 3×4 source + 12 slices', path:'assets/generated/p0_sources · assets/generated/p0_sliced/item_icons', status:'applied', note:'medkit·ammo·parts UI fallback에 연결'},
+    {category:'추출', name:'추출 비콘 generated PNG', path:'assets/extraction/extraction_beacon_generated_v1.png', status:'applied', note:'탈출 지점 월드 스프라이트에 연결'},
+    {category:'스프라이트젠', name:'검증된 고양이 8방향 참조 앵커 pack', path:'assets/generated/sprite_reference_packs/8way_cat_player_validated', status:'applied', note:'기존 플레이어 고양이의 방향·기준선·걷기 리듬을 새 런에 자동 첨부'},
+    {category:'스프라이트젠', name:'enemy_grenadier 8방향 준비 런', path:'assets/generated/sprites/enemy_grenadier', status:'qa', note:'idle 8방향과 walk 일부 생성·추출 완료; 발 교대 QA 통과 행만 런타임 연결 대기'},
+    {category:'환경', name:'P1 지역 랜드마크 6 slices', path:'assets/generated/p1_sliced/landmarks', status:'source', note:'지역 카탈로그·footprint 연결 필요'},
+    {category:'은신처', name:'P1 은신처 모듈 6 slices', path:'assets/generated/p1_sliced/shelter_modules', status:'source', note:'단계별 교체·벽/바닥선 검수 필요'},
+    {category:'서사', name:'P1 세력·단서 6 slices', path:'assets/generated/p1_sliced/story', status:'source', note:'lore reader·미션 카드 연결 필요'},
+    {category:'환경 VFX', name:'P1 날씨·환경 VFX 9 slices', path:'assets/generated/p1_sliced/weather_vfx', status:'source', note:'파티클 대체·수명·레이어 검수 필요'},
+    {category:'무기', name:'무기 catalog', path:'assets/weapons/catalog · assets/weapons/catalog/generated', status:'owned', note:'픽업·인벤토리 이미지 확보'},
+    {category:'아이템', name:'루트 컨테이너 6종', path:'assets/loot/containers', status:'owned', note:'컨테이너 유형과 loot table 연결'},
+    {category:'환경', name:'건물 catalog 20종 이상', path:'assets/buildings', status:'owned', note:'지역 손상 변형·입구 시각화 보강'},
+    {category:'환경', name:'차량 10종', path:'assets/vehicles', status:'owned', note:'충돌 footprint와 접지선 검수'},
+    {category:'환경', name:'도로 cover·펜스·시장 소품', path:'assets/props', status:'owned', note:'원근·코너·끝 캡 변형 보강'},
+    {category:'환경', name:'지역 바닥·랜드마크', path:'assets/tiles · assets/landmarks', status:'partial', note:'5개 지역의 landmark 밀도 확장'},
+    {category:'실내', name:'오피스 실내 모듈', path:'assets/interiors/office_dungeon', status:'owned', note:'방 변형·파손·보안 소품 필요'},
+    {category:'은신처', name:'작업대·저장고·스크래처·캣닢·훈련', path:'assets/interiors/modules', status:'partial', note:'단계별 업그레이드 외형과 생산 VFX 필요'},
+    {category:'서사', name:'오프닝 배경 플레이트', path:'assets/opening', status:'owned', note:'컷 연결과 색보정 기준 확보'},
+    {category:'서사', name:'단서·세력·주민 초상', path:'assets/lore · assets/characters', status:'partial', note:'6개 단서와 세력 엠블럼 확장 필요'}
+  ];
+  const key='gray-dawn-asset-status-v1';
+  const checked=JSON.parse(localStorage.getItem(key)||'{}');
+  const body=document.getElementById('inventory');
+  const search=document.getElementById('search');
+  const filter=document.getElementById('filter');
+  function esc(v){return String(v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+  function label(v){return {owned:'보유·사용 중',applied:'실제 적용',qa:'QA 대기',source:'이번 생성 source',partial:'부분 보유',missing:'생성 필요'}[v]}
+  function render(){
+    const q=search.value.trim().toLowerCase();
+    body.innerHTML='';
+    rows.filter(function(r){return (filter.value==='all'||r.status===filter.value)&&(!q||[r.category,r.name,r.path,r.note].join(' ').toLowerCase().indexOf(q)>=0)}).forEach(function(r){
+      const tr=document.createElement('tr');
+      const id=r.category+'::'+r.name;
+      tr.innerHTML='<td><input class="check" type="checkbox" '+(checked[id]?'checked':'')+' aria-label="'+esc(r.name)+' 검증 완료"></td><td>'+esc(r.category)+'</td><td><strong>'+esc(r.name)+'</strong></td><td class="small">'+esc(r.path)+'</td><td><span class="tag '+r.status+'">'+label(r.status)+'</span></td><td class="small">'+esc(r.note)+'</td>';
+      tr.querySelector('input').addEventListener('change',function(e){checked[id]=e.target.checked;localStorage.setItem(key,JSON.stringify(checked));updateCount()});
+      body.appendChild(tr);
+    });
+    updateCount();
+  }
+  function updateCount(){document.getElementById('verifiedCount').textContent=Object.values(checked).filter(Boolean).length}
+  [search,filter].forEach(function(el){el.addEventListener('input',render);el.addEventListener('change',render)});
+  document.getElementById('reset').addEventListener('click',function(){if(!confirm('검증 체크를 초기화할까요?'))return;Object.keys(checked).forEach(function(k){delete checked[k]});localStorage.setItem(key,JSON.stringify(checked));render()});
+  render();
+</script>
+</body>
+</html>

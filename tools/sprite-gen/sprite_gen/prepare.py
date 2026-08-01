@@ -590,7 +590,16 @@ def normalize_directions(raw: dict[str, Any] | None, states: dict[str, Any]) -> 
             raise SystemExit(
                 f"state '{state}' does not start with a declared direction prefix "
                 f"({', '.join(dir_set)}) — direction-contract runs name states <direction>_<state>")
-    return {"set": dir_set, "mirror": mirror, "anchor_suffix": anchor_suffix}
+    # Direction names share prefixes (down/down_right/down_left). Preserve the
+    # request's explicit longest-prefix contract so taxonomy paths and frame
+    # extraction never classify a diagonal row as the shorter cardinal prefix.
+    match_longest = bool(raw.get("match_longest", True))
+    return {
+        "set": dir_set,
+        "mirror": mirror,
+        "anchor_suffix": anchor_suffix,
+        "match_longest": match_longest,
+    }
 
 
 def direction_anchor_states(directions: dict[str, Any]) -> dict[str, str]:
@@ -649,7 +658,7 @@ def build_generation_plan(request: dict[str, Any]) -> dict[str, Any] | None:
             "role": "action-row",
             "direction": state_direction(state, directions),
             "refs": [
-                f"<accepted single-pose crop of {raw_rel(request, anchors[state_direction(state, directions)])}>",
+                "base-source.*",
                 guide_rel(request, state),
             ],
         }
@@ -694,8 +703,9 @@ def direction_prefix_requirements(request: dict[str, Any], state: str) -> list[s
             "(subtle breathing) so a single frame can be cropped as the anchor.")
     else:
         requirements.append(
-            "Derive identity from the attached accepted direction anchor for this facing, "
-            "not from any base character image.")
+            "Keep identity exclusively from the attached base image for this facing. "
+            "Any pose or layout guide is geometry-only and must not replace the base character "
+            "or introduce another character's clothing, palette, face, or props.")
     return requirements
 
 

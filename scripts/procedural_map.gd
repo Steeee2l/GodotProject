@@ -12,6 +12,8 @@ const BUILDING_CATALOG := preload("res://scripts/building_catalog.gd")
 const LANDMARK_CATALOG := preload("res://scripts/urban_landmark_catalog.gd")
 const VEHICLE_CATALOG := preload("res://scripts/vehicle_catalog.gd")
 const STREET_PROP_CATALOG := preload("res://scripts/street_prop_catalog.gd")
+const RAID_REGION_CATALOG := preload("res://scripts/raid_region_catalog.gd")
+const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
 const BUILDING_ENTRANCE_SCENE := preload("res://scenes/modules/building_entrance_portal.tscn")
 const OPEN_SPACE_HIGH_RISE_BUFFER_CELLS := 2
 const OPEN_SPACE_MID_RISE_BUFFER_CELLS := 1
@@ -23,6 +25,12 @@ const ROAD_SETBACK_MODULES := 4
 const INTERIOR_SETBACK_MODULES := 1
 const ROAD_VEHICLE_CHANCE := 0.46
 const ROAD_COVER_OBSTACLE_CHANCE := 0.68
+const COLLISION_DEBUG_FOCUS_PROFILES := {
+	"vehicle_standard": true,
+	"vehicle_heavy": true,
+	"road_barricade": true,
+	"rubble_wall": true,
+}
 const DISTRICT_RADIUS_CELLS := 2
 const DISTRICT_MIN_SEPARATION_CELLS := 6
 const ROAD_COVER_DEFINITIONS := {
@@ -101,6 +109,7 @@ const FIELD_RETURN_CELL := Vector2i(2, 2)
 const MAX_ENTERABLE_BUILDINGS := 3
 
 @export var map_seed: int = 0
+@export var raid_zone_id: String = ""
 
 var rng := RandomNumberGenerator.new()
 var vertical_roads: Array[int] = []
@@ -120,7 +129,12 @@ var cell_zones := {}
 var building_type_by_cell := {}
 var district_anchors := {}
 var district_signature_road_cells := {}
+var cell_risk_bands := {}
 var enterable_building_count := 0
+var region_profile := {}
+var collision_debug_enabled := true
+var generated_obstacle_footprints: Array[Dictionary] = []
+var generated_overlap_report: Array[Dictionary] = []
 
 var asphalt_material: StandardMaterial3D
 var lot_material: StandardMaterial3D
@@ -140,6 +154,12 @@ var outer_ground_material: StandardMaterial3D
 
 
 func _ready() -> void:
+	if raid_zone_id.is_empty():
+		raid_zone_id = GameState.selected_raid_zone
+	region_profile = RAID_REGION_CATALOG.get_profile(raid_zone_id)
+	raid_zone_id = str(region_profile.get("zone_id", RAID_REGION_CATALOG.DEFAULT_ZONE_ID))
+	set_meta("raid_zone_id", raid_zone_id)
+	set_meta("region_identity", str(region_profile.get("identity", "")))
 	if map_seed == 0:
 		map_seed = GameState.map_seed
 	rng.seed = map_seed
@@ -150,17 +170,22 @@ func _ready() -> void:
 	_build_floor_collision()
 	_build_tiles()
 	_build_zoned_lots()
+	_audit_generated_obstacle_overlaps()
 
 
 func _generate_layout() -> void:
-	vertical_roads = [2, rng.randi_range(5, 6), rng.randi_range(9, 10), rng.randi_range(14, 15), 20]
-	horizontal_roads = [2, rng.randi_range(5, 6), rng.randi_range(9, 10), rng.randi_range(14, 15), 20]
+	_clear_layout_state()
+	vertical_roads = _roll_road_bands(region_profile.get("vertical_road_bands", []))
+	horizontal_roads = _roll_road_bands(region_profile.get("horizontal_road_bands", []))
 	vertical_roads.sort()
 	horizontal_roads.sort()
 
-	river_center_x = GRID_SIZE / 2 + rng.randi_range(-1, 0)
-	for z in range(GRID_SIZE):
-		river_columns.append(river_center_x)
+	if bool(region_profile.get("river_enabled", true)):
+		river_center_x = GRID_SIZE / 2 + rng.randi_range(-1, 0)
+		for z in range(GRID_SIZE):
+			river_columns.append(river_center_x)
+	else:
+		river_center_x = -100
 
 	var eligible_cells: Array[Vector2i] = []
 	for x in range(GRID_SIZE):
@@ -192,7 +217,8 @@ func _generate_layout() -> void:
 			"residential_buffer": 0.32,
 			"open_space_edge": 0.24,
 			"service_interior": 0.34,
-		}.get(zone, 0.42))
+		}.get(zone, 0.42)) * float(region_profile.get("building_chance_multiplier", 1.0))
+		building_chance = clampf(building_chance, 0.08, 0.92)
 		if district_anchors.values().has(cell) or rng.randf() < building_chance:
 			building_cells[cell] = true
 
@@ -203,10 +229,65 @@ func _generate_layout() -> void:
 			open_cells[cell] = true
 		elif _distance_to_cells(cell, subway_cells) <= 1:
 			open_cells[cell] = true
-		elif _touches_road(cell) and rng.randf() < 0.58:
+		elif _touches_road(cell) and rng.randf() < float(region_profile.get("parking_chance", 0.58)):
 			parking_cells[cell] = true
 		else:
 			open_cells[cell] = true
+	_assign_risk_bands()
+
+
+func _clear_layout_state() -> void:
+	vertical_roads.clear()
+	horizontal_roads.clear()
+	river_columns.clear()
+	building_cells.clear()
+	parking_cells.clear()
+	open_cells.clear()
+	waterfront_cells.clear()
+	park_cells.clear()
+	playground_cells.clear()
+	subway_cells.clear()
+	apartment_cells.clear()
+	cell_zones.clear()
+	building_type_by_cell.clear()
+	district_anchors.clear()
+	district_signature_road_cells.clear()
+	cell_risk_bands.clear()
+	generated_obstacle_footprints.clear()
+	generated_overlap_report.clear()
+	apartment_origin = Vector2i(-1, -1)
+	enterable_building_count = 0
+
+
+func _roll_road_bands(raw_bands: Array) -> Array[int]:
+	var roads: Array[int] = []
+	for raw_band in raw_bands:
+		var band: Vector2i = raw_band
+		var road_index := rng.randi_range(
+			clampi(band.x, 1, GRID_SIZE - 2),
+			clampi(band.y, 1, GRID_SIZE - 2)
+		)
+		if not roads.has(road_index):
+			roads.append(road_index)
+	if roads.is_empty():
+		roads = [2, 6, 10, 15, 20]
+	return roads
+
+
+func _assign_risk_bands() -> void:
+	var split: Vector2 = region_profile.get("risk_split", Vector2(0.34, 0.70))
+	var farthest_cell := Vector2i(GRID_SIZE - 1, GRID_SIZE - 1)
+	var maximum_distance := Vector2(farthest_cell - FIELD_RETURN_CELL).length()
+	for x in range(GRID_SIZE):
+		for z in range(GRID_SIZE):
+			var cell := Vector2i(x, z)
+			var normalized_distance := (
+				Vector2(cell - FIELD_RETURN_CELL).length() / maxf(1.0, maximum_distance)
+			)
+			var risk_band := "safe" if normalized_distance <= split.x else "scavenge"
+			if normalized_distance >= split.y:
+				risk_band = "restricted"
+			cell_risk_bands[cell] = risk_band
 
 
 func _assign_zoning_districts(eligible_cells: Array[Vector2i]) -> void:
@@ -250,6 +331,13 @@ func _select_district_anchors(eligible_cells: Array[Vector2i]) -> void:
 			district_signature_road_cells[district_name] = road_cell
 
 
+func _district_anchor_for(district_name: String) -> Vector2i:
+	if not district_anchors.has(district_name):
+		return Vector2i(-1, -1)
+	var anchor: Vector2i = district_anchors[district_name]
+	return anchor
+
+
 func _pick_district_anchor(
 	eligible_cells: Array[Vector2i],
 	occupied: Array[Vector2i],
@@ -266,7 +354,10 @@ func _pick_district_anchor(
 			continue
 		if _distance_to_cells(cell, apartment_cells) <= APARTMENT_HIGH_RISE_BUFFER_CELLS:
 			continue
-		if not occupied.is_empty() and _distance_to_cells(cell, occupied) < DISTRICT_MIN_SEPARATION_CELLS:
+		var minimum_separation := int(region_profile.get(
+			"district_min_separation", DISTRICT_MIN_SEPARATION_CELLS
+		))
+		if not occupied.is_empty() and _distance_to_cells(cell, occupied) < minimum_separation:
 			continue
 		var near_intersection := _is_near_road_intersection(cell, 1)
 		if require_intersection and not near_intersection:
@@ -283,12 +374,13 @@ func _pick_district_anchor(
 
 func _planned_district_for_cell(cell: Vector2i) -> String:
 	var closest_district := ""
-	var closest_distance := DISTRICT_RADIUS_CELLS + 1
+	var district_radius := int(region_profile.get("district_radius", DISTRICT_RADIUS_CELLS))
+	var closest_distance := district_radius + 1
 	for district_name in ["market_lane", "luxury_core", "multi_family"]:
 		if not district_anchors.has(district_name):
 			continue
 		var distance := _block_distance(cell, district_anchors[district_name])
-		if distance <= DISTRICT_RADIUS_CELLS and distance < closest_distance:
+		if distance <= district_radius and distance < closest_distance:
 			closest_distance = distance
 			closest_district = district_name
 	return closest_district
@@ -325,8 +417,10 @@ func _select_apartment_complex_site() -> void:
 func _select_planned_landmarks(eligible_cells: Array[Vector2i]) -> void:
 	var shuffled := eligible_cells.duplicate()
 	shuffled.shuffle()
+	var playground_target := int(region_profile.get("playground_count", TARGET_PLAYGROUND_COUNT))
+	var subway_target := int(region_profile.get("subway_count", TARGET_SUBWAY_COUNT))
 	for cell in shuffled:
-		if playground_cells.size() >= TARGET_PLAYGROUND_COUNT:
+		if playground_cells.size() >= playground_target:
 			break
 		if not _touches_road(cell):
 			continue
@@ -337,7 +431,7 @@ func _select_planned_landmarks(eligible_cells: Array[Vector2i]) -> void:
 		playground_cells.append(cell)
 
 	for cell in shuffled:
-		if subway_cells.size() >= TARGET_SUBWAY_COUNT:
+		if subway_cells.size() >= subway_target:
 			break
 		if _is_landmark_cell(cell) or not _touches_road(cell):
 			continue
@@ -402,11 +496,29 @@ func _touches_road(cell: Vector2i) -> bool:
 
 
 func _build_materials() -> void:
-	asphalt_material = _texture_material(ASPHALT_TEXTURE)
-	lot_material = _texture_material(CONCRETE_TEXTURE, Color("#77756f"))
-	sidewalk_material = _texture_material(CONCRETE_TEXTURE, Color("#aaa79e"))
+	var ground_texture: Texture2D = ASPHALT_TEXTURE
+	var ground_texture_path := str(region_profile.get("ground_texture_path", ""))
+	if not ground_texture_path.is_empty() and ResourceLoader.exists(ground_texture_path):
+		ground_texture = load(ground_texture_path) as Texture2D
+	var asphalt_tint: Color = region_profile.get("asphalt_tint", Color.WHITE)
+	var lot_tint: Color = region_profile.get("lot_tint", Color("#77756f"))
+	var sidewalk_tint: Color = region_profile.get("sidewalk_tint", Color("#aaa79e"))
+	var marking_tint: Color = region_profile.get("marking_tint", Color("#d1c87d"))
+	var outer_tint: Color = region_profile.get("outer_tint", Color(0.62, 0.66, 0.66, 1.0))
+	asphalt_material = _texture_material(
+		ground_texture,
+		asphalt_tint
+	)
+	lot_material = _texture_material(
+		ground_texture if raid_zone_id != RAID_REGION_CATALOG.DEFAULT_ZONE_ID else CONCRETE_TEXTURE,
+		lot_tint
+	)
+	sidewalk_material = _texture_material(
+		CONCRETE_TEXTURE,
+		sidewalk_tint
+	)
 	sidewalk_edge_material = _color_material(Color("#64645f"))
-	marking_material = _color_material(Color("#d1c87d"))
+	marking_material = _color_material(marking_tint)
 	curb_material = _color_material(Color("#8b8981"))
 	if ResourceLoader.exists(RIVER_TEXTURE_PATH):
 		water_material = _texture_material(load(RIVER_TEXTURE_PATH) as Texture2D, Color("#b9dce2"))
@@ -437,7 +549,7 @@ func _build_materials() -> void:
 	if ResourceLoader.exists(OUTER_GROUND_TEXTURE_PATH):
 		outer_ground_material = _texture_material(
 			load(OUTER_GROUND_TEXTURE_PATH) as Texture2D,
-			Color(0.62, 0.66, 0.66, 1.0)
+			outer_tint
 		)
 		outer_ground_material.texture_repeat = true
 		outer_ground_material.uv1_scale = Vector3(12.0, 12.0, 1.0)
@@ -537,7 +649,8 @@ func _build_floor_collision() -> void:
 	var body := StaticBody3D.new()
 	body.name = "MapFloor"
 	body.position.y = -0.1
-	body.collision_layer = 1
+	body.collision_layer = COLLISION_PROFILES.WORLD_MOVEMENT_LAYER
+	body.collision_mask = 0
 	add_child(body)
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
@@ -591,9 +704,9 @@ func _build_road_cell(cell: Vector2i, center: Vector3, vertical: bool, horizonta
 	):
 		if is_luxury_signature:
 			_spawn_road_cover_vehicle(center, vertical, "luxury_core", true)
-		elif rng.randf() < ROAD_VEHICLE_CHANCE:
+		elif rng.randf() < float(region_profile.get("vehicle_chance", ROAD_VEHICLE_CHANCE)):
 			_spawn_road_cover_vehicle(center, vertical, _road_district(cell))
-		elif rng.randf() < ROAD_COVER_OBSTACLE_CHANCE:
+		elif rng.randf() < float(region_profile.get("cover_chance", ROAD_COVER_OBSTACLE_CHANCE)):
 			_spawn_road_cover_obstacle(cell, center, vertical)
 
 
@@ -620,7 +733,8 @@ func _build_river_cell(center: Vector3, block_movement: bool) -> void:
 		var blocker := StaticBody3D.new()
 		blocker.name = "RiverBarrier"
 		blocker.position = center + Vector3(0, 0.45, 0)
-		blocker.collision_layer = 1
+		blocker.collision_layer = COLLISION_PROFILES.WORLD_MOVEMENT_LAYER
+		blocker.collision_mask = 0
 		add_child(blocker)
 		var collision := CollisionShape3D.new()
 		var shape := BoxShape3D.new()
@@ -769,6 +883,14 @@ func _spawn_road_cover_vehicle(center: Vector3, vertical: bool, district: String
 
 func _choose_vehicle_type(district: String, allow_large: bool) -> String:
 	var candidates: Array[String] = []
+	var profile_pool_key := "large_vehicle_pool" if allow_large else "parked_vehicle_pool"
+	var profile_pool: Array = region_profile.get(profile_pool_key, [])
+	for vehicle_type_variant in profile_pool:
+		var vehicle_type := str(vehicle_type_variant)
+		if VEHICLE_CATALOG.DEFINITIONS.has(vehicle_type):
+			candidates.append(vehicle_type)
+	if not candidates.is_empty():
+		return candidates[rng.randi_range(0, candidates.size() - 1)]
 	match district:
 		"luxury_core":
 			candidates = ["luxury_sedan", "luxury_sedan", "suv", "taxi", "sedan"]
@@ -798,11 +920,18 @@ func _choose_vehicle_type(district: String, allow_large: bool) -> String:
 
 
 func _spawn_road_cover_obstacle(cell: Vector2i, center: Vector3, vertical: bool) -> void:
-	var candidates := (
-		["concrete_barricade_axis_b", "rubble_wall_axis_b"]
-		if vertical
-		else ["concrete_barricade_axis_a", "rubble_wall_axis_a"]
-	)
+	var axis_suffix := "b" if vertical else "a"
+	var candidates: Array[String] = []
+	match str(region_profile.get("cover_style", "mixed")):
+		"barricade":
+			candidates = ["concrete_barricade_axis_%s" % axis_suffix]
+		"rubble":
+			candidates = ["rubble_wall_axis_%s" % axis_suffix]
+		_:
+			candidates = [
+				"concrete_barricade_axis_%s" % axis_suffix,
+				"rubble_wall_axis_%s" % axis_suffix,
+			]
 	var cover_type := str(candidates[rng.randi_range(0, candidates.size() - 1)])
 	var definition: Dictionary = ROAD_COVER_DEFINITIONS.get(cover_type, {})
 	if definition.is_empty():
@@ -823,7 +952,7 @@ func _spawn_road_cover_obstacle(cell: Vector2i, center: Vector3, vertical: bool)
 	var body := StaticBody3D.new()
 	body.name = "RoadCoverObstacle_%d_%d" % [cell.x, cell.y]
 	body.position = position
-	body.collision_layer = 1
+	body.collision_layer = 0
 	body.add_to_group("road_cover_obstacle")
 	body.add_to_group("cover_obstacle")
 	body.set_meta("cover_type", cover_type)
@@ -838,23 +967,18 @@ func _spawn_road_cover_obstacle(cell: Vector2i, center: Vector3, vertical: bool)
 	if footprint_corners.size() >= 4:
 		var left_corner := footprint_corners[0] as Vector2
 		var right_corner := footprint_corners[2] as Vector2
-		var bottom_corner := footprint_corners[3] as Vector2
+		var footprint_center_px := _footprint_centroid(footprint_corners)
 		var base_pixel_width := maxf(1.0, absf(right_corner.x - left_corner.x))
 		var projected_width := (collision_size.x + collision_size.z) / sqrt(2.0)
 		sprite.pixel_size = projected_width / base_pixel_width
-		sprite.offset.x = texture.get_width() * 0.5 - bottom_corner.x
-		sprite.position = Vector3(
-			collision_size.x * 0.5,
-			(
-				(bottom_corner.y - texture.get_height() * 0.5)
-				* sprite.pixel_size
-				/ ISOMETRIC_VERTICAL_PROJECTION
-			),
-			collision_size.z * 0.5
+		sprite.offset = Vector2(
+			texture.get_width() * 0.5 - footprint_center_px.x,
+			texture.get_height() * 0.5 - footprint_center_px.y
 		)
+		sprite.position = Vector3(0.0, -body.position.y + 0.02, 0.0)
 	else:
 		sprite.pixel_size = float(definition.get("pixel_size", 0.007))
-		sprite.position.y = collision_size.y
+		sprite.position.y = -body.position.y + 0.02
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.transparent = true
 	sprite.shaded = false
@@ -864,27 +988,27 @@ func _spawn_road_cover_obstacle(cell: Vector2i, center: Vector3, vertical: bool)
 
 	var collision_axis := "x" if collision_size.x >= collision_size.z else "z"
 	body.set_meta("cover_axis", collision_axis)
-	body.set_meta("collision_world_size", collision_size)
-	var collision := CollisionShape3D.new()
-	collision.name = "CoverCollision"
-	var shape := BoxShape3D.new()
-	shape.size = collision_size
-	collision.position.y = collision_size.y * 0.5
-	collision.shape = shape
-	body.add_child(collision)
+	var profile_id := "rubble_wall" if cover_type.begins_with("rubble") else "road_barricade"
+	var collision_center := Vector2.ZERO
+	var collision_profile: Dictionary = COLLISION_PROFILES.get_profile(profile_id, collision_size)
+	var movement_size: Vector3 = collision_profile["movement_size"]
+	if not _reserve_generated_obstacle(
+		body.global_position + Vector3(collision_center.x, 0.0, collision_center.y),
+		movement_size,
+		"road_cover"
+	):
+		body.queue_free()
+		return
+	_configure_profiled_collision(body, collision_size, profile_id, collision_center, -body.position.y)
 
-	var debug_mesh := MeshInstance3D.new()
-	debug_mesh.name = "CoverCollisionDebug"
-	debug_mesh.position = Vector3(0.0, 0.035, 0.0)
-	var footprint_mesh := PlaneMesh.new()
-	footprint_mesh.size = Vector2(collision_size.x, collision_size.z)
-	footprint_mesh.material = vehicle_collision_material
-	debug_mesh.mesh = footprint_mesh
-	debug_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	debug_mesh.set_meta("cover_type", cover_type)
-	debug_mesh.set_meta("cover_axis", collision_axis)
-	debug_mesh.set_meta("footprint_world_size", Vector2(collision_size.x, collision_size.z))
-	body.add_child(debug_mesh)
+
+func _footprint_centroid(corners: Array) -> Vector2:
+	if corners.is_empty():
+		return Vector2.ZERO
+	var centroid := Vector2.ZERO
+	for corner_variant in corners:
+		centroid += corner_variant as Vector2
+	return centroid / float(corners.size())
 
 
 func _build_parking_lot(cell: Vector2i) -> void:
@@ -916,17 +1040,19 @@ func _build_parking_lot(cell: Vector2i) -> void:
 func _build_district_props() -> void:
 	_build_market_district_props()
 	var spawned_count := 0
+	var target_count := int(region_profile.get("street_prop_count", 14))
+	var spawn_chance := float(region_profile.get("street_prop_chance", 0.14))
 	var cells: Array = building_cells.keys()
 	cells.shuffle()
 	for cell_variant in cells:
-		if spawned_count >= 14:
+		if spawned_count >= target_count:
 			break
 		var cell: Vector2i = cell_variant
 		if not _touches_road(cell):
 			continue
 		var zone := str(cell_zones.get(cell, "street_mixed"))
-		var is_anchor: bool = district_anchors.get(zone, Vector2i(-1, -1)) == cell
-		if not is_anchor and rng.randf() >= 0.14:
+		var is_anchor: bool = _district_anchor_for(zone) == cell
+		if not is_anchor and rng.randf() >= spawn_chance:
 			continue
 		var frontage := _get_road_frontage(cell)
 		if frontage.is_empty():
@@ -1001,14 +1127,15 @@ func _spawn_street_prop(
 	var body := StaticBody3D.new()
 	body.name = "StreetProp_%s_%d_%d_%d" % [prop_id, cell.x, cell.y, instance_index]
 	body.position = _cell_center(cell) + offset
-	body.collision_layer = 1
+	body.collision_layer = 0
 	body.add_to_group("district_prop")
 	body.add_to_group("street_prop_obstacle")
 	body.add_to_group("cover_obstacle")
 	body.set_meta("prop_id", prop_id)
 	body.set_meta("planning_cell", cell)
 	body.set_meta("zoning_district", str(cell_zones.get(cell, "street_mixed")))
-	body.set_meta("collision_world_size", collision_size)
+	body.set_meta("raid_zone_id", raid_zone_id)
+	body.set_meta("risk_band", str(cell_risk_bands.get(cell, "scavenge")))
 	add_child(body)
 
 	var sprite := Sprite3D.new()
@@ -1037,25 +1164,16 @@ func _spawn_street_prop(
 	sprite.render_priority = 4
 	body.add_child(sprite)
 
-	var collision := CollisionShape3D.new()
-	collision.name = "StreetPropCollision"
-	var shape := BoxShape3D.new()
-	shape.size = collision_size
-	collision.position.y = collision_size.y * 0.5 - body.position.y
-	collision.shape = shape
-	body.add_child(collision)
-
-	var debug_mesh := MeshInstance3D.new()
-	debug_mesh.name = "StreetPropCollisionDebug"
-	debug_mesh.position = Vector3(0.0, 0.035 - body.position.y, 0.0)
-	var footprint_mesh := PlaneMesh.new()
-	footprint_mesh.size = Vector2(collision_size.x, collision_size.z)
-	footprint_mesh.material = vehicle_collision_material
-	debug_mesh.mesh = footprint_mesh
-	debug_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	debug_mesh.set_meta("prop_id", prop_id)
-	debug_mesh.set_meta("footprint_world_size", Vector2(collision_size.x, collision_size.z))
-	body.add_child(debug_mesh)
+	var profile_id := str(definition.get("collision_profile", "street_cluster"))
+	var collision_center := Vector2(collision_size.x * 0.5, collision_size.z * 0.5)
+	if not _reserve_generated_obstacle(
+		body.global_position + Vector3(collision_center.x, 0.0, collision_center.y),
+		COLLISION_PROFILES.get_profile(profile_id, collision_size)["movement_size"],
+		"street_prop"
+	):
+		body.queue_free()
+		return
+	_configure_profiled_collision(body, collision_size, profile_id, collision_center, -body.position.y)
 
 
 func _build_market_district_props() -> void:
@@ -1063,10 +1181,11 @@ func _build_market_district_props() -> void:
 		return
 	var market_anchor: Vector2i = district_anchors["market_lane"]
 	var spawned_count := 0
+	var spawn_chance := float(region_profile.get("market_prop_chance", 0.42))
 	for cell in cell_zones:
 		if str(cell_zones[cell]) != "market_lane" or not _touches_road(cell):
 			continue
-		if cell != market_anchor and rng.randf() >= 0.42:
+		if cell != market_anchor and rng.randf() >= spawn_chance:
 			continue
 		var frontage := _get_road_frontage(cell)
 		if frontage.is_empty():
@@ -1096,11 +1215,10 @@ func _spawn_market_handcart(cell: Vector2i, frontage: String, instance_index: in
 	var body := StaticBody3D.new()
 	body.name = "MarketHandcart_%d_%d_%d" % [cell.x, cell.y, instance_index]
 	body.position = _cell_center(cell) + offset + Vector3(0, 0.08, 0)
-	body.collision_layer = 1
+	body.collision_layer = 0
 	body.add_to_group("district_prop")
 	body.add_to_group("market_handcart")
 	body.set_meta("zoning_district", "market_lane")
-	body.set_meta("collision_world_size", collision_size)
 	add_child(body)
 
 	var texture := load(MARKET_HANDCART_TEXTURE_PATH) as Texture2D
@@ -1127,13 +1245,15 @@ func _spawn_market_handcart(cell: Vector2i, frontage: String, instance_index: in
 	sprite.render_priority = 5
 	body.add_child(sprite)
 
-	var collision := CollisionShape3D.new()
-	collision.name = "HandcartCollision"
-	var shape := BoxShape3D.new()
-	shape.size = collision_size
-	collision.position.y = collision_size.y * 0.5 - body.position.y
-	collision.shape = shape
-	body.add_child(collision)
+	var collision_center := Vector2(collision_size.x * 0.5, collision_size.z * 0.5)
+	if not _reserve_generated_obstacle(
+		body.global_position + Vector3(collision_center.x, 0.0, collision_center.y),
+		COLLISION_PROFILES.get_profile("handcart", collision_size)["movement_size"],
+		"handcart"
+	):
+		body.queue_free()
+		return
+	_configure_profiled_collision(body, collision_size, "handcart", collision_center, -body.position.y)
 
 
 func _build_open_lot(cell: Vector2i) -> void:
@@ -1147,12 +1267,24 @@ func _try_build_building(cell: Vector2i) -> void:
 	var modules_per_cell := BUILDING_CATALOG.MODULES_PER_CELL
 	var zone := str(cell_zones.get(cell, "street_mixed"))
 	var definitions: Array[Dictionary] = []
+	var allowed_buildings: Array = region_profile.get("allowed_buildings", [])
+	var signature_building_id := str(region_profile.get("signature_building_id", ""))
+	var signature_district := str(region_profile.get("signature_district", ""))
 	for building_id in BUILDING_CATALOG.DEFINITIONS:
+		if not allowed_buildings.is_empty() and not allowed_buildings.has(str(building_id)):
+			continue
+		if (
+			not signature_building_id.is_empty()
+			and zone == signature_district
+			and _district_anchor_for(signature_district) == cell
+			and str(building_id) != signature_building_id
+		):
+			continue
 		var definition: Dictionary = BUILDING_CATALOG.get_definition(building_id)
 		var district_tags: Array = definition.get("districts", [])
 		if not district_tags.is_empty() and not district_tags.has(zone):
 			continue
-		var is_district_anchor: bool = district_anchors.get(zone, Vector2i(-1, -1)) == cell
+		var is_district_anchor: bool = _district_anchor_for(zone) == cell
 		if is_district_anchor and not district_tags.has(zone):
 			continue
 		var footprint: Vector2i = definition.get("footprint_modules", Vector2i.ZERO)
@@ -1247,6 +1379,8 @@ func _spawn_landmark_at(center: Vector3, landmark_id: String, instance_suffix: S
 	landmark.add_to_group("urban_landmark")
 	landmark.add_to_group("urban_%s" % landmark_id)
 	landmark.set_meta("landmark_kind", landmark_id)
+	landmark.set_meta("raid_zone_id", raid_zone_id)
+	landmark.set_meta("risk_band", get_risk_band(center))
 	add_child(landmark)
 
 	var sprite := Sprite3D.new()
@@ -1294,7 +1428,7 @@ func _spawn_building(building_id: String, definition: Dictionary, module_origin:
 	body.name = "%s_%d_%d" % [building_id, module_origin.x, module_origin.y]
 	body.position = Vector3(center_x, 0, center_z)
 	body.add_to_group("camera_occluder")
-	body.collision_layer = 1
+	body.collision_layer = 0
 	body.set_meta("building_id", building_id)
 	body.set_meta("height_class", str(definition.get("height_class", "mid")))
 	body.set_meta("planning_cell", Vector2i(
@@ -1303,6 +1437,8 @@ func _spawn_building(building_id: String, definition: Dictionary, module_origin:
 	))
 	var planning_cell: Vector2i = body.get_meta("planning_cell")
 	body.set_meta("zoning_district", str(cell_zones.get(planning_cell, "street_mixed")))
+	body.set_meta("raid_zone_id", raid_zone_id)
+	body.set_meta("risk_band", str(cell_risk_bands.get(planning_cell, "scavenge")))
 	var road_frontage := _get_road_frontage(planning_cell)
 	body.set_meta("road_frontage", road_frontage)
 	add_child(body)
@@ -1321,15 +1457,9 @@ func _spawn_building(building_id: String, definition: Dictionary, module_origin:
 	sprite.no_depth_test = true
 	sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	body.add_child(sprite)
-	var collision := CollisionShape3D.new()
-	collision.name = "BuildingCollision"
-	var shape := BoxShape3D.new()
 	var height := float(definition["height_world"]) * WORLD_SCALE
-	shape.size = Vector3(footprint_world.x, height, footprint_world.y)
-	collision.position.y = height * 0.5
-	collision.shape = shape
-	body.add_child(collision)
-	body.set_meta("collision_world_size", shape.size)
+	var building_collision_size := Vector3(footprint_world.x, height, footprint_world.y)
+	_configure_profiled_collision(body, building_collision_size, "building")
 	body.set_meta("occlusion_lateral_limit", (footprint_world.x + footprint_world.y) / (2.0 * sqrt(2.0)))
 	body.set_meta("occlusion_depth_limit", float(definition["occlusion_depth"]) * WORLD_SCALE)
 	_try_add_building_entrance(body, building_id, definition, footprint_world, road_frontage, module_origin)
@@ -1432,12 +1562,11 @@ func _spawn_vehicle(node_name: String, vehicle_type: String, position: Vector3, 
 	var body := StaticBody3D.new()
 	body.name = node_name
 	body.position = position
-	body.collision_layer = 1
+	body.collision_layer = 0
 	body.add_to_group("vehicle_obstacle")
 	body.set_meta("vehicle_type", vehicle_type)
 	body.set_meta("vehicle_state", str(definition.get("state", "wrecked")))
 	body.set_meta("vehicle_axis", "z" if along_z else "x")
-	body.set_meta("collision_world_size", collision_size)
 	add_child(body)
 	var sprite := Sprite3D.new()
 	sprite.name = "VehicleSprite"
@@ -1446,51 +1575,39 @@ func _spawn_vehicle(node_name: String, vehicle_type: String, position: Vector3, 
 	var base_pixel_width := absf((corners[2] as Vector2).x - (corners[0] as Vector2).x)
 	var projected_width := (footprint.x + footprint.z) / sqrt(2.0)
 	sprite.pixel_size = projected_width / base_pixel_width
-	var bottom_corner: Vector2 = corners[3]
-	var horizontal_offset := texture.get_width() * 0.5 - bottom_corner.x
+	var footprint_center_px := _footprint_centroid(corners)
+	var sprite_offset := Vector2(
+		texture.get_width() * 0.5 - footprint_center_px.x,
+		texture.get_height() * 0.5 - footprint_center_px.y
+	)
 	# The source art's long axis projects along world Z. Mirroring it turns that
 	# axis onto world X, so only horizontal-road vehicles should be flipped.
 	# The old rule did the opposite: the picture pointed across its own physics
 	# box even though the box dimensions themselves were correct.
 	var flip_vehicle := not along_z
-	sprite.offset.x = -horizontal_offset if flip_vehicle else horizontal_offset
+	if flip_vehicle:
+		sprite_offset.x = -sprite_offset.x
+	sprite.offset = sprite_offset
 	sprite.flip_h = flip_vehicle
-	sprite.position = Vector3(
-		collision_size.x * 0.5,
-		(bottom_corner.y - texture.get_height() * 0.5) * sprite.pixel_size / ISOMETRIC_VERTICAL_PROJECTION - position.y,
-		collision_size.z * 0.5
-	)
+	sprite.position = Vector3(0.0, -body.position.y + 0.02, 0.0)
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.transparent = true
 	sprite.shaded = false
 	sprite.no_depth_test = true
 	sprite.render_priority = 5
 	body.add_child(sprite)
-	var collision := CollisionShape3D.new()
-	collision.name = "VehicleCollision"
-	var shape := BoxShape3D.new()
-	shape.size = collision_size
-	collision.position.y = collision_size.y * 0.5 - position.y
-	collision.shape = shape
-	body.add_child(collision)
-	var debug_mesh := MeshInstance3D.new()
-	debug_mesh.name = "VehicleCollisionDebug"
-	# Draw the collision footprint at road level.  A box mesh placed at the
-	# collision centre exposes its *roof* to the isometric camera, which makes
-	# the red area appear displaced behind the vehicle by the full body height.
-	# The physics shape remains a full-height box; this plane is only an exact
-	# ground projection of that box so its length, width and direction line up
-	# with the tyres and bumpers in the vehicle artwork.
-	debug_mesh.position = Vector3(0.0, 0.035 - position.y, 0.0)
-	var footprint_mesh := PlaneMesh.new()
-	footprint_mesh.size = Vector2(collision_size.x, collision_size.z)
-	footprint_mesh.material = vehicle_collision_material
-	debug_mesh.mesh = footprint_mesh
-	debug_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	debug_mesh.set_meta("vehicle_type", vehicle_type)
-	debug_mesh.set_meta("vehicle_axis", "z" if along_z else "x")
-	debug_mesh.set_meta("footprint_world_size", Vector2(collision_size.x, collision_size.z))
-	body.add_child(debug_mesh)
+	var profile_id := str(definition.get("collision_profile", "vehicle_standard"))
+	var collision_center := Vector2.ZERO
+	var collision_profile: Dictionary = COLLISION_PROFILES.get_profile(profile_id, collision_size)
+	var movement_size: Vector3 = collision_profile["movement_size"]
+	if not _reserve_generated_obstacle(
+		body.global_position + Vector3(collision_center.x, 0.0, collision_center.y),
+		movement_size,
+		"vehicle"
+	):
+		body.queue_free()
+		return
+	_configure_profiled_collision(body, collision_size, profile_id, collision_center, -body.position.y)
 
 
 func get_shelter_exit_position() -> Vector3:
@@ -1527,6 +1644,8 @@ func get_extraction_position() -> Vector3:
 func get_map_snapshot_data() -> Dictionary:
 	return {
 		"map_seed": map_seed,
+		"raid_zone_id": raid_zone_id,
+		"region_identity": str(region_profile.get("identity", "")),
 		"grid_size": GRID_SIZE,
 		"map_size": MAP_SIZE,
 		"cell_size": CELL_SIZE,
@@ -1534,8 +1653,24 @@ func get_map_snapshot_data() -> Dictionary:
 		"horizontal_roads": horizontal_roads.duplicate(),
 		"river_columns": river_columns.duplicate(),
 		"building_cells": building_cells.keys(),
+		"risk_bands": cell_risk_bands.duplicate(),
 		"field_return_cell": FIELD_RETURN_CELL,
 	}
+
+
+func get_region_profile() -> Dictionary:
+	return region_profile.duplicate(true)
+
+
+func get_region_id() -> String:
+	return raid_zone_id
+
+
+func get_risk_band(world_position: Vector3) -> String:
+	var cell := _world_to_cell(world_position)
+	cell.x = clampi(cell.x, 0, GRID_SIZE - 1)
+	cell.y = clampi(cell.y, 0, GRID_SIZE - 1)
+	return str(cell_risk_bands.get(cell, "scavenge"))
 
 
 func get_long_road_patrol_route(
@@ -1669,7 +1804,7 @@ func _is_physical_space_open(
 		Basis.IDENTITY,
 		world_position + Vector3(0.0, maxf(0.42, clearance_radius + 0.18), 0.0)
 	)
-	query.collision_mask = 1
+	query.collision_mask = COLLISION_PROFILES.WORLD_MOVEMENT_LAYER
 	query.exclude = excluded_rids
 	return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
 
@@ -1679,11 +1814,19 @@ func _is_road_cell(cell: Vector2i) -> bool:
 
 
 func _is_river_cell(cell: Vector2i) -> bool:
-	return _cell_in_bounds(cell) and river_columns[cell.y] == cell.x
+	return (
+		_cell_in_bounds(cell)
+		and river_columns.size() == GRID_SIZE
+		and river_columns[cell.y] == cell.x
+	)
 
 
 func _is_waterfront_cell(cell: Vector2i) -> bool:
-	return _cell_in_bounds(cell) and abs(cell.x - river_center_x) == 1
+	return (
+		bool(region_profile.get("river_enabled", true))
+		and _cell_in_bounds(cell)
+		and abs(cell.x - river_center_x) == 1
+	)
 
 
 func _cell_in_bounds(cell: Vector2i) -> bool:
@@ -1765,24 +1908,160 @@ func _add_oriented_plane(
 	add_child(instance)
 
 
+func set_collision_debug_enabled(enabled: bool) -> void:
+	collision_debug_enabled = enabled
+	for node in get_tree().get_nodes_in_group("collision_debug_visual"):
+		if node is GeometryInstance3D and is_instance_valid(node):
+			node.visible = enabled and bool(node.get_meta("collision_debug_focus", false))
+
+
+func toggle_collision_debug() -> bool:
+	set_collision_debug_enabled(not collision_debug_enabled)
+	return collision_debug_enabled
+
+
+func get_generated_overlap_report() -> Array[Dictionary]:
+	return generated_overlap_report.duplicate(true)
+
+
+func _configure_profiled_collision(
+	body: StaticBody3D,
+	base_size: Vector3,
+	profile_id: String,
+	footprint_center: Vector2 = Vector2.ZERO,
+	ground_local_y: float = 0.0
+) -> void:
+	var profile := COLLISION_PROFILES.get_profile(profile_id, base_size)
+	var movement_size: Vector3 = profile["movement_size"]
+	var projectile_size: Vector3 = profile["projectile_size"]
+	body.collision_layer = COLLISION_PROFILES.WORLD_MOVEMENT_LAYER
+	body.collision_mask = 0
+	body.set_meta("collision_profile", profile_id)
+	body.set_meta("collision_world_size", movement_size)
+	body.set_meta("projectile_collision_world_size", projectile_size)
+	body.add_to_group("generated_collision_obstacle")
+
+	var movement_collision := CollisionShape3D.new()
+	var is_vehicle := profile_id.begins_with("vehicle_")
+	var is_road_cover := profile_id in ["road_barricade", "rubble_wall"]
+	movement_collision.name = "MovementCollision"
+	if is_vehicle:
+		movement_collision.name = "VehicleCollision"
+	elif is_road_cover:
+		movement_collision.name = "CoverCollision"
+	var movement_shape := BoxShape3D.new()
+	movement_shape.size = movement_size
+	movement_collision.shape = movement_shape
+	movement_collision.position = Vector3(
+		footprint_center.x,
+		ground_local_y + movement_size.y * 0.5,
+		footprint_center.y
+	)
+	body.add_child(movement_collision)
+
+	var projectile_body := StaticBody3D.new()
+	projectile_body.name = "ProjectileBlocker"
+	projectile_body.collision_layer = COLLISION_PROFILES.WORLD_PROJECTILE_LAYER
+	projectile_body.collision_mask = 0
+	projectile_body.add_to_group("projectile_blocker")
+	body.add_child(projectile_body)
+	var projectile_collision := CollisionShape3D.new()
+	projectile_collision.name = "ProjectileCollision"
+	var projectile_shape := BoxShape3D.new()
+	projectile_shape.size = projectile_size
+	projectile_collision.shape = projectile_shape
+	projectile_collision.position = Vector3(
+		footprint_center.x,
+		ground_local_y + projectile_size.y * 0.5,
+		footprint_center.y
+	)
+	projectile_body.add_child(projectile_collision)
+
+	var debug_mesh := MeshInstance3D.new()
+	debug_mesh.name = "MovementCollisionDebug"
+	if is_vehicle:
+		debug_mesh.name = "VehicleCollisionDebug"
+	elif is_road_cover:
+		debug_mesh.name = "CoverCollisionDebug"
+	debug_mesh.position = Vector3(
+		footprint_center.x,
+		ground_local_y + 0.035,
+		footprint_center.y
+	)
+	var footprint_mesh := PlaneMesh.new()
+	footprint_mesh.size = Vector2(movement_size.x, movement_size.z)
+	footprint_mesh.material = vehicle_collision_material
+	debug_mesh.mesh = footprint_mesh
+	debug_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var is_debug_focus := bool(COLLISION_DEBUG_FOCUS_PROFILES.get(profile_id, false))
+	debug_mesh.visible = collision_debug_enabled and is_debug_focus
+	debug_mesh.add_to_group("collision_debug_visual")
+	debug_mesh.set_meta("collision_profile", profile_id)
+	debug_mesh.set_meta("collision_debug_focus", is_debug_focus)
+	debug_mesh.set_meta("footprint_world_size", Vector2(movement_size.x, movement_size.z))
+	if is_vehicle:
+		debug_mesh.set_meta("vehicle_type", str(body.get_meta("vehicle_type", "")))
+		debug_mesh.set_meta("vehicle_axis", str(body.get_meta("vehicle_axis", "")))
+	body.add_child(debug_mesh)
+
+
+func _reserve_generated_obstacle(
+	center: Vector3,
+	size: Vector3,
+	category: String,
+	margin: float = 0.16
+) -> bool:
+	var footprint := Rect2(
+		Vector2(center.x - size.x * 0.5 - margin, center.z - size.z * 0.5 - margin),
+		Vector2(size.x + margin * 2.0, size.z + margin * 2.0)
+	)
+	for existing in generated_obstacle_footprints:
+		var existing_rect: Rect2 = existing["rect"]
+		if footprint.intersects(existing_rect, true):
+			generated_overlap_report.append({
+				"rejected_category": category,
+				"existing_category": str(existing.get("category", "unknown")),
+				"center": center,
+			})
+			return false
+	generated_obstacle_footprints.append({
+		"rect": footprint,
+		"category": category,
+		"center": center,
+	})
+	return true
+
+
+func _audit_generated_obstacle_overlaps() -> void:
+	var accepted_overlap_count := 0
+	for first_index in range(generated_obstacle_footprints.size()):
+		var first: Dictionary = generated_obstacle_footprints[first_index]
+		for second_index in range(first_index + 1, generated_obstacle_footprints.size()):
+			var second: Dictionary = generated_obstacle_footprints[second_index]
+			var first_rect: Rect2 = first["rect"]
+			var second_rect: Rect2 = second["rect"]
+			if first_rect.intersects(second_rect, true):
+				accepted_overlap_count += 1
+	set_meta("generated_obstacle_count", generated_obstacle_footprints.size())
+	set_meta("rejected_overlap_count", generated_overlap_report.size())
+	set_meta("accepted_overlap_count", accepted_overlap_count)
+
+
 func _add_static_collision_box(node_name: String, position: Vector3, size: Vector3) -> void:
 	var body := StaticBody3D.new()
 	body.name = node_name
 	body.position = position
-	body.collision_layer = 1
+	body.collision_layer = 0
 	add_child(body)
-	var collision := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = size
-	collision.shape = shape
-	body.add_child(collision)
+	_configure_profiled_collision(body, size, "thin_wall", Vector2.ZERO, -size.y * 0.5)
 
 
 func _add_static_box(node_name: String, position: Vector3, size: Vector3, material: Material) -> void:
 	var body := StaticBody3D.new()
 	body.name = node_name
 	body.position = position
-	body.collision_layer = 1
+	body.collision_layer = COLLISION_PROFILES.WORLD_MOVEMENT_LAYER | COLLISION_PROFILES.WORLD_PROJECTILE_LAYER
+	body.collision_mask = 0
 	add_child(body)
 	var mesh_instance := MeshInstance3D.new()
 	var mesh := BoxMesh.new()

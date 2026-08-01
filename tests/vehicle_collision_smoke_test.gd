@@ -1,6 +1,7 @@
 extends SceneTree
 
 const VEHICLE_CATALOG := preload("res://scripts/vehicle_catalog.gd")
+const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
 
 
 func _initialize() -> void:
@@ -19,18 +20,26 @@ func _assert_vehicle(city: Node3D, vehicle_type: String, along_z: bool, index: i
 	var body := city.get_node(node_name) as StaticBody3D
 	var definition: Dictionary = VEHICLE_CATALOG.get_definition(vehicle_type)
 	assert(body != null)
-	assert(body.collision_layer == 1)
+	assert(body.collision_layer == COLLISION_PROFILES.WORLD_MOVEMENT_LAYER)
 	assert(str(body.get_meta("vehicle_type")) == vehicle_type)
 	assert(str(body.get_meta("vehicle_state")) == str(definition.get("state", "wrecked")))
 	assert(str(body.get_meta("vehicle_axis")) == ("z" if along_z else "x"))
 
 	var measured: Vector3 = definition["collision_size"]
 	var expected := Vector3(measured.z, measured.y, measured.x) if along_z else measured
+	var profile := COLLISION_PROFILES.get_profile(
+		str(definition.get("collision_profile", "vehicle_standard")),
+		expected
+	)
+	var expected_movement: Vector3 = profile["movement_size"]
+	var expected_projectile: Vector3 = profile["projectile_size"]
 	var collision := body.get_node("VehicleCollision") as CollisionShape3D
 	var shape := collision.shape as BoxShape3D
-	assert(shape.size == expected)
+	assert(shape.size == expected_movement)
 	assert(collision.rotation == Vector3.ZERO)
 	assert(is_equal_approx(body.global_position.y + collision.position.y - shape.size.y * 0.5, 0.0))
+	assert(is_zero_approx(collision.position.x))
+	assert(is_zero_approx(collision.position.z))
 
 	var sprite := body.get_node("VehicleSprite") as Sprite3D
 	assert(sprite.flip_h == not along_z)
@@ -50,18 +59,35 @@ func _assert_vehicle(city: Node3D, vehicle_type: String, along_z: bool, index: i
 	var projected_width := (measured.x + measured.z) / sqrt(2.0)
 	var base_pixel_width := absf((corners[2] as Vector2).x - (corners[0] as Vector2).x)
 	assert(is_equal_approx(sprite.pixel_size, projected_width / base_pixel_width))
-	var expected_offset := sprite.texture.get_width() * 0.5 - (corners[3] as Vector2).x
-	assert(is_equal_approx(sprite.offset.x, expected_offset if along_z else -expected_offset))
+	var footprint_center := Vector2.ZERO
+	for corner in corners:
+		footprint_center += corner
+	footprint_center /= float(corners.size())
+	var expected_offset := Vector2(
+		sprite.texture.get_width() * 0.5 - footprint_center.x,
+		sprite.texture.get_height() * 0.5 - footprint_center.y
+	)
+	if not along_z:
+		expected_offset.x = -expected_offset.x
+	assert(sprite.offset.is_equal_approx(expected_offset))
+	assert(is_equal_approx(sprite.position.x, collision.position.x))
+	assert(is_equal_approx(sprite.position.z, collision.position.z))
 
 	var debug_mesh := body.get_node("VehicleCollisionDebug") as MeshInstance3D
 	var debug_footprint := debug_mesh.mesh as PlaneMesh
 	assert(debug_footprint != null)
-	assert(debug_footprint.size == Vector2(expected.x, expected.z))
+	assert(debug_footprint.size == Vector2(expected_movement.x, expected_movement.z))
 	assert(is_equal_approx(body.global_position.y + debug_mesh.position.y, 0.035))
 	assert(is_equal_approx(debug_mesh.position.x, collision.position.x))
 	assert(is_equal_approx(debug_mesh.position.z, collision.position.z))
+	assert(debug_mesh.visible)
 	assert(str(debug_mesh.get_meta("vehicle_type")) == vehicle_type)
 	assert(str(debug_mesh.get_meta("vehicle_axis")) == ("z" if along_z else "x"))
+	var projectile_collision := body.get_node(
+		"ProjectileBlocker/ProjectileCollision"
+	) as CollisionShape3D
+	var projectile_shape := projectile_collision.shape as BoxShape3D
+	assert(projectile_shape.size == expected_projectile)
 
 
 func _run() -> void:

@@ -4,6 +4,7 @@ extends RefCounted
 const DEFINITIONS := {
 	"sedan": {
 		"texture_path": "res://assets/vehicles/wrecked_sedan.png",
+		"collision_profile": "vehicle_standard",
 		"collision_size": Vector3(4.65, 1.45, 1.82),
 		"footprint_corners_px": [
 			Vector2(8, 358),
@@ -14,6 +15,7 @@ const DEFINITIONS := {
 	},
 	"truck": {
 		"texture_path": "res://assets/vehicles/wrecked_truck.png",
+		"collision_profile": "vehicle_heavy",
 		"collision_size": Vector3(6.65, 2.85, 2.28),
 		"footprint_corners_px": [
 			Vector2(15, 590),
@@ -24,6 +26,7 @@ const DEFINITIONS := {
 	},
 	"bus": {
 		"texture_path": "res://assets/vehicles/wrecked_bus.png",
+		"collision_profile": "vehicle_heavy",
 		"collision_size": Vector3(10.6, 3.15, 2.55),
 		"footprint_corners_px": [
 			Vector2(10, 487),
@@ -34,6 +37,7 @@ const DEFINITIONS := {
 	},
 	"luxury_sedan": {
 		"texture_path": "res://assets/vehicles/wrecked_luxury_sedan_v1.png",
+		"collision_profile": "vehicle_standard",
 		"collision_size": Vector3(5.25, 1.5, 1.95),
 		"footprint_corners_px": [
 			Vector2(28, 811),
@@ -44,6 +48,7 @@ const DEFINITIONS := {
 	},
 	"suv": {
 		"texture_path": "res://assets/vehicles/wrecked_suv_v1.png",
+		"collision_profile": "vehicle_standard",
 		"source_size": Vector2i(1774, 887),
 		"collision_size": Vector3(4.78, 1.72, 1.92),
 		"footprint_corners_px": [
@@ -55,6 +60,7 @@ const DEFINITIONS := {
 	},
 	"taxi": {
 		"texture_path": "res://assets/vehicles/wrecked_taxi_v1.png",
+		"collision_profile": "vehicle_standard",
 		"source_size": Vector2i(1774, 887),
 		"collision_size": Vector3(4.82, 1.48, 1.84),
 		"footprint_corners_px": [
@@ -66,6 +72,7 @@ const DEFINITIONS := {
 	},
 	"delivery_van": {
 		"texture_path": "res://assets/vehicles/wrecked_delivery_van_v1.png",
+		"collision_profile": "vehicle_heavy",
 		"source_size": Vector2i(1536, 1024),
 		"collision_size": Vector3(5.35, 2.25, 2.05),
 		"footprint_corners_px": [
@@ -77,6 +84,7 @@ const DEFINITIONS := {
 	},
 	"intact_hatchback": {
 		"texture_path": "res://assets/vehicles/abandoned_intact_hatchback_v1.png",
+		"collision_profile": "vehicle_standard",
 		"source_size": Vector2i(1774, 887),
 		"collision_size": Vector3(4.35, 1.55, 1.78),
 		"state": "abandoned_intact",
@@ -89,6 +97,7 @@ const DEFINITIONS := {
 	},
 	"burned_sedan": {
 		"texture_path": "res://assets/vehicles/burned_sedan_shell_v1.png",
+		"collision_profile": "vehicle_standard",
 		"source_size": Vector2i(1484, 1060),
 		"collision_size": Vector3(4.70, 1.25, 1.82),
 		"state": "burned_out",
@@ -101,6 +110,7 @@ const DEFINITIONS := {
 	},
 	"overturned_hatchback": {
 		"texture_path": "res://assets/vehicles/overturned_hatchback_v1.png",
+		"collision_profile": "vehicle_standard",
 		"source_size": Vector2i(1774, 887),
 		"collision_size": Vector3(4.50, 1.32, 1.88),
 		"state": "overturned",

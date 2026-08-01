@@ -1,0 +1,407 @@
+{
+  "version": 1,
+  "kind": "sprite-gen-curation",
+  "states": {
+    "down_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "e91c3a99dc7b"
+      ]
+    },
+    "down_right_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "3c9817850e9e"
+      ]
+    },
+    "right_idle": {
+      "selected": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "order": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "revision": [
+        "97443e58841b",
+        "4c0cb66c38a7",
+        "3fe63e4eb56f"
+      ]
+    },
+    "up_right_idle": {
+      "selected": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "order": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "revision": [
+        "8d9f53eb3bd5",
+        "7464280327e5",
+        "451fd246d621"
+      ]
+    },
+    "up_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "197795e9edb8"
+      ]
+    },
+    "up_left_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "d669d57aab11"
+      ]
+    },
+    "left_idle": {
+      "selected": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "order": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "revision": [
+        "62dbe9713cd2",
+        "fcc79e6fa4db",
+        "a749cd2d13bc"
+      ]
+    },
+    "down_left_idle": {
+      "selected": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "order": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "revision": [
+        "71439e09199b",
+        "c26d8ead31bd",
+        "560eec78bc98"
+      ]
+    },
+    "down_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "e1de8dcd4d07"
+      ]
+    },
+    "down_right_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "04a4bb9ba500"
+      ]
+    },
+    "right_walk": {
+      "selected": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "order": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "revision": [
+        "f9775be0b39c",
+        "399583edf8c0",
+        "12df7952afd6"
+      ]
+    },
+    "up_right_walk": {
+      "selected": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "order": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "revision": [
+        "50e559348607",
+        "8fff47b09ef2",
+        "0b399e664022"
+      ]
+    },
+    "up_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "b100aef0723f"
+      ]
+    },
+    "up_left_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "561bee7b5ea7"
+      ]
+    },
+    "left_walk": {
+      "selected": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "order": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "revision": [
+        "c3191417f3df",
+        "73492718227a",
+        "91904cb1cabd"
+      ]
+    },
+    "down_left_walk": {
+      "selected": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "order": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "revision": [
+        "0b13c18b2df5",
+        "20983489d80a",
+        "843004503ccc"
+      ]
+    }
+  },
+  "run_revision": "6cb58dd10e38dd1c"
+}

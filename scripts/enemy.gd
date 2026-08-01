@@ -11,6 +11,7 @@ const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
 const DAMAGE_FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const DAMAGE_NUMBER_SCRIPT := preload("res://scripts/damage_number.gd")
+const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
 const MELEE_SPEED := 5.1
 const PISTOL_SPEED := 3.15
 const PATROL_SPEED := 1.35
@@ -65,6 +66,7 @@ const LOAF_STEALTH_REVEAL_RADIUS := 1.35
 const LOAF_ESCAPE_CONFIRM_SECONDS := 0.75
 const LOAF_AWARENESS_DECAY_MULTIPLIER := 3.5
 const ALERT_REACTION_SECONDS := 0.12
+const RANGED_WINDUP_TIME := 0.18
 const OPENING_PRESSURE_SECONDS := 3.2
 const OPENING_PRESSURE_SPEED := 5.25
 const ACTIVE_PURSUIT_BASE := 4.5
@@ -339,8 +341,8 @@ func _ready() -> void:
 	add_to_group("raid_enemy")
 	weapon_random.seed = get_instance_id() * 7919 + int(threat_level * 1000.0)
 	grenade_cooldown = weapon_random.randf_range(2.4, 5.0)
-	collision_layer = 2
-	collision_mask = 3
+	collision_layer = COLLISION_PROFILES.ENEMY_LAYER
+	collision_mask = COLLISION_PROFILES.ENEMY_MOVEMENT_MASK
 
 	var collision := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
@@ -1600,7 +1602,7 @@ func _is_steering_direction_clear(direction: Vector3, probe_distance: float) -> 
 	var query := PhysicsRayQueryParameters3D.create(
 		from,
 		from + direction.normalized() * probe_distance,
-		1
+		COLLISION_PROFILES.WORLD_MOVEMENT_LAYER
 	)
 	query.exclude = [get_rid()]
 	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
@@ -1846,14 +1848,14 @@ func _start_pistol_burst(direction: Vector3) -> void:
 	if magazine_ammo <= 0:
 		_start_reload()
 		return
-	burst_shots_remaining = mini(magazine_ammo - 1, maxi(0, _get_weapon_burst_size() - 1))
-	combat_state = "pistol_burst"
-	state_timer = _get_enemy_fire_interval()
+	combat_state = "ranged_windup"
+	state_timer = RANGED_WINDUP_TIME
 	pending_attack_direction = direction
 	velocity = Vector3.ZERO
 	_set_motion_state("attack")
-	_fire_weapon(direction)
-	_start_recoil_pose()
+	threat_marker.text = "◆"
+	threat_marker.modulate = _with_player_visibility(Color("#ffd36a"))
+	threat_marker.visible = true
 
 
 func _update_grenadier(direction: Vector3, distance: float, delta: float) -> void:
@@ -1926,6 +1928,20 @@ func _update_combat_state(delta: float) -> void:
 		_update_reinforcement_call(delta)
 	elif combat_state == "reloading":
 		_update_reload(delta)
+	elif combat_state == "ranged_windup":
+		velocity = Vector3.ZERO
+		_set_facing_from_world_direction(pending_attack_direction)
+		_update_threat_marker()
+		if state_timer <= 0.0:
+			threat_marker.visible = false
+			burst_shots_remaining = mini(
+				magazine_ammo - 1,
+				maxi(0, _get_weapon_burst_size() - 1)
+			)
+			combat_state = "pistol_burst"
+			state_timer = _get_enemy_fire_interval()
+			_fire_weapon(pending_attack_direction)
+			_start_recoil_pose()
 	elif combat_state == "grenade_windup":
 		_set_facing_from_world_direction(pending_attack_direction)
 		if state_timer <= 0.0:
@@ -2025,7 +2041,7 @@ func _has_line_of_sight_to(body: CharacterBody3D) -> bool:
 		return false
 	# Check only for world obstruction. Requiring the ray to return the target
 	# body itself is unreliable when the endpoint lies inside its collider.
-	var collision_mask := 1 if body == primary_player_target else 3
+	var collision_mask := COLLISION_PROFILES.WORLD_ONLY_SIGHT_MASK
 	var excluded_rids: Array[RID] = [get_rid(), body.get_rid()]
 	var sight_heights := [0.42, 0.92]
 	for sight_height in sight_heights:
@@ -2073,6 +2089,16 @@ func _get_enemy_bullet_damage() -> int:
 		"ak47": return 9 + roundi(4.0 * threat_level)
 		"double_barrel": return 5 + roundi(2.0 * threat_level)
 	return 12 + roundi(4.0 * threat_level)
+
+
+func get_combat_identity() -> Dictionary:
+	var weapon_name := "근접 무기"
+	if weapon_id != "baseball_bat":
+		weapon_name = str(weapon_stats.get("display_name", weapon_id))
+	return {
+		"source_name": "적대 생존자",
+		"weapon_name": weapon_name,
+	}
 
 
 func _fire_weapon(direction: Vector3) -> void:
@@ -2274,7 +2300,7 @@ func take_damage(amount: int) -> void:
 	take_hit(amount, Vector3.ZERO)
 
 
-func take_hostile_hit(amount: int, hit_direction: Vector3, attacker: Node3D) -> void:
+func take_hostile_hit(amount: int, hit_direction: Vector3, attacker = null) -> void:
 	var applied_damage := amount
 	if (
 		is_instance_valid(attacker)
@@ -2427,7 +2453,7 @@ func take_projectile_hit(
 	is_critical: bool = false,
 	critical_multiplier: float = 1.65,
 	hit_zone: String = "body",
-	attacker: Node3D = null
+	attacker = null
 ) -> void:
 	_alert_to_projectile_attacker(attacker)
 	var critical := is_critical or hit_zone == "head"
@@ -2435,10 +2461,12 @@ func take_projectile_hit(
 	take_hit(final_damage, hit_direction, critical)
 
 
-func _alert_to_projectile_attacker(attacker: Node3D) -> void:
+func _alert_to_projectile_attacker(attacker = null) -> void:
 	if dying or backstab_stunned:
 		return
-	var retaliation_target := attacker as CharacterBody3D
+	var retaliation_target: CharacterBody3D = null
+	if is_instance_valid(attacker) and attacker is CharacterBody3D:
+		retaliation_target = attacker as CharacterBody3D
 	if not is_instance_valid(retaliation_target):
 		retaliation_target = primary_player_target
 	if not is_instance_valid(retaliation_target) or retaliation_target == self:

@@ -327,12 +327,14 @@ func _run() -> void:
 	assert(is_instance_valid(operations_map))
 	assert(operations_map.texture != null)
 	assert(root.find_child("RaidZoneBriefingPanel", true, false) is PanelContainer)
-	assert(root.find_child("RaidZoneLaunchButton", true, false) is Button)
+	var raid_launch_button := root.find_child("RaidZoneLaunchButton", true, false) as Button
+	assert(raid_launch_button is Button)
 	for zone_id in game_state.get_raid_zone_ids():
 		assert(root.find_child("RaidZoneMarker_%s" % zone_id, true, false) is Button)
 	shelter.call("_select_raid_zone_preview", "namdaemun_market")
 	assert(str(shelter.get("raid_zone_selected_id")) == "namdaemun_market")
-	shelter.call("_launch_raid_zone", "jongno_outskirts")
+	shelter.call("_select_raid_zone_preview", "jongno_outskirts")
+	raid_launch_button.pressed.emit()
 	await process_frame
 	var loadout_layer := root.find_child("RaidLoadoutConfirmLayer", true, false) as CanvasLayer
 	assert(is_instance_valid(loadout_layer))

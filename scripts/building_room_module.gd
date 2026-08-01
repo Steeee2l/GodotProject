@@ -8,6 +8,7 @@ const STORAGE_TEXTURE_PATH := "res://assets/interiors/office_dungeon/modules/sto
 const MEETING_TEXTURE_PATH := "res://assets/interiors/office_dungeon/modules/meeting_table_cluster_v1.png"
 const EXECUTIVE_TEXTURE_PATH := "res://assets/interiors/office_dungeon/modules/executive_lounge_cluster_v1.png"
 const FLOOR_TILE_SIZE := 4.0
+const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
 
 var room_index := 0
 var room_size := Vector2(18.0, 14.0)
@@ -148,6 +149,7 @@ func _add_image_furniture(node_name: String, texture_path: String, local_positio
 	sprite.position = Vector3(0, float(texture.get_height()) * pixel_size * 0.5, 0)
 	sprite.pixel_size = pixel_size
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	sprite.shaded = false
 	sprite.transparent = true
 	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
@@ -165,17 +167,35 @@ func _add_image_furniture(node_name: String, texture_path: String, local_positio
 
 
 func _add_collision_box(parent: Node, node_name: String, local_position: Vector3, size: Vector3) -> void:
+	var profile_id := "furniture_table" if size.x >= 1.1 and size.z >= 0.7 else "furniture_solid"
+	var profile := COLLISION_PROFILES.get_profile(profile_id, size)
+	var movement_size: Vector3 = profile["movement_size"]
+	var projectile_size: Vector3 = profile["projectile_size"]
 	var body := StaticBody3D.new()
 	body.name = node_name
 	body.position = local_position
-	body.collision_layer = 1
+	body.collision_layer = COLLISION_PROFILES.WORLD_MOVEMENT_LAYER
+	body.collision_mask = 0
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-	shape.size = size
+	shape.size = movement_size
 	collision.shape = shape
+	collision.position.y = -local_position.y + movement_size.y * 0.5
 	body.add_child(collision)
 	parent.add_child(body)
-	_add_collision_debug(parent, node_name, local_position, size)
+	var projectile_body := StaticBody3D.new()
+	projectile_body.name = "%sProjectileBlocker" % node_name
+	projectile_body.position = local_position
+	projectile_body.collision_layer = COLLISION_PROFILES.WORLD_PROJECTILE_LAYER
+	projectile_body.collision_mask = 0
+	var projectile_collision := CollisionShape3D.new()
+	var projectile_shape := BoxShape3D.new()
+	projectile_shape.size = projectile_size
+	projectile_collision.shape = projectile_shape
+	projectile_collision.position.y = -local_position.y + projectile_size.y * 0.5
+	projectile_body.add_child(projectile_collision)
+	parent.add_child(projectile_body)
+	_add_collision_debug(parent, node_name, local_position, movement_size)
 
 
 func _add_collision_debug(parent: Node, node_name: String, local_position: Vector3, size: Vector3) -> void:
@@ -183,6 +203,8 @@ func _add_collision_debug(parent: Node, node_name: String, local_position: Vecto
 	debug.name = "%sDebugRed" % node_name
 	debug.position = Vector3(local_position.x, 0.035, local_position.z)
 	debug.add_to_group("building_collision_debug")
+	debug.add_to_group("collision_debug_visual")
+	debug.visible = false
 	var mesh := BoxMesh.new()
 	mesh.size = Vector3(size.x, 0.035, size.z)
 	var material := StandardMaterial3D.new()
@@ -237,7 +259,8 @@ func _add_box_with_material(parent: Node, node_name: String, local_position: Vec
 	var body := StaticBody3D.new()
 	body.name = "%sCollision" % node_name
 	body.position = local_position
-	body.collision_layer = 1
+	body.collision_layer = COLLISION_PROFILES.WORLD_MOVEMENT_LAYER | COLLISION_PROFILES.WORLD_PROJECTILE_LAYER
+	body.collision_mask = 0
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = size

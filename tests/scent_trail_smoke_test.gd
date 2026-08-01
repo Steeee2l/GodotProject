@@ -25,15 +25,28 @@ func _run() -> void:
 	if float(manager.call("get_strength_near", player.position, "player", 3.0)) < 60.0:
 		_fail("stationary player scent did not accumulate")
 	manager.call("set_focus_active", true)
+	manager.call("set_guidance_trail", "test_objective", [
+		Vector3(2.5, 0.0, 2.5),
+		Vector3(5.0, 0.0, 5.0),
+		Vector3(10.0, 0.0, 10.0),
+	], "objective")
 	manager.call("_process", 0.1)
 	var visible_marker := false
+	var visible_objective_marker := false
 	for entry in (manager.get("trails") as Dictionary).values():
 		var marker := (entry as Dictionary).get("marker") as Sprite3D
 		if is_instance_valid(marker) and marker.visible:
 			visible_marker = true
-			break
+			if str((entry as Dictionary).get("kind", "")) == "objective":
+				visible_objective_marker = true
 	if not visible_marker:
 		_fail("scent focus did not reveal nearby markers")
+	if not visible_objective_marker:
+		_fail("objective guidance was not visible inside the focus radius")
+	var trail_count_before_clear := (manager.get("trails") as Dictionary).size()
+	manager.call("clear_guidance_trail", "test_objective")
+	if (manager.get("trails") as Dictionary).size() >= trail_count_before_clear:
+		_fail("objective guidance trail was not cleared")
 	enemy.queue_free()
 	await process_frame
 	manager.call("_update_movers", 0.2)

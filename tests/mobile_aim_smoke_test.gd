@@ -11,6 +11,9 @@ func _run() -> void:
 	root.add_child(main_scene)
 	await process_frame
 	await physics_frame
+	var medkit_button := main_scene.get_node("HUD/MedkitButton") as Button
+	assert(medkit_button.visible, "The lower-left medkit slot must remain visible on desktop HUDs.")
+	assert(medkit_button.text.contains("SHIFT"))
 
 	var player := main_scene.get("player") as CharacterBody3D
 	var enemies: Array[CharacterBody3D] = main_scene.get("enemies")

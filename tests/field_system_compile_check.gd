@@ -26,6 +26,9 @@ const SCRIPTS := [
 	"res://scripts/shelter_contract_trainer.gd",
 	"res://scripts/shelter_interior.gd",
 	"res://scripts/tactical_map.gd",
+	"res://scripts/field_mission_catalog.gd",
+	"res://scripts/raid_extraction_policy.gd",
+	"res://scripts/ui_safe_area.gd",
 ]
 
 
@@ -66,8 +69,11 @@ func _initialize() -> void:
 		push_error("FIELD_SYSTEM_COMPILE: fatigue HUD must stay clear of mobile movement controls")
 		quit(1)
 		return
+	var mission_catalog_source := FileAccess.get_file_as_string(
+		"res://scripts/field_mission_catalog.gd"
+	)
 	for mission_type in ["stealth", "investigate", "stealth_reach"]:
-		if not main_source.contains("\"type\": \"%s\"" % mission_type):
+		if not mission_catalog_source.contains("\"type\": \"%s\"" % mission_type):
 			push_error("FIELD_SYSTEM_COMPILE: missing survival mission type %s" % mission_type)
 			quit(1)
 			return
@@ -77,12 +83,18 @@ func _initialize() -> void:
 		push_error("FIELD_SYSTEM_COMPILE: stealth missions must use real enemy detection state")
 		quit(1)
 		return
-	if not main_source.contains("const FIELD_MISSION_REQUIRED_TYPES := ["):
+	if not main_source.contains(
+		"const FIELD_MISSION_CATALOG := preload(\"res://scripts/field_mission_catalog.gd\")"
+	):
+		push_error("FIELD_SYSTEM_COMPILE: main must use the shared mission catalog")
+		quit(1)
+		return
+	if not mission_catalog_source.contains("const REQUIRED_TYPES := ["):
 		push_error("FIELD_SYSTEM_COMPILE: each raid must define guaranteed mission coverage")
 		quit(1)
 		return
 	for mission_type in ["defense", "eliminate", "collect", "stealth", "investigate", "stealth_reach"]:
-		if not main_source.contains("\t\"%s\"," % mission_type):
+		if not mission_catalog_source.contains("\t\"%s\"," % mission_type):
 			push_error("FIELD_SYSTEM_COMPILE: mission coverage is missing %s" % mission_type)
 			quit(1)
 			return

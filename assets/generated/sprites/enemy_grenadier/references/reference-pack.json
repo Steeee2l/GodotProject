@@ -1,0 +1,16 @@
+﻿{
+    "copiedAt":  "2026-08-01T07:45:02.4660333Z",
+    "source":  "C:\\Users\\rain2\\Documents\\GitHub\\GodotProject\\assets\\generated\\sprite_reference_packs\\8way_cat_player_validated",
+    "purpose":  "direction-and-layout-only",
+    "version":  1,
+    "directions":  [
+                       "down",
+                       "down_right",
+                       "right",
+                       "up_right",
+                       "up",
+                       "up_left",
+                       "left",
+                       "down_left"
+                   ]
+}

@@ -8,10 +8,12 @@ const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const BULLET_SCRIPT := preload("res://scripts/bullet_projectile.gd")
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
+const WEAPON_HUD_PRESENTER := preload("res://scripts/weapon_hud_presenter.gd")
 const AIM_RETICLE_SCRIPT := preload("res://scripts/aim_reticle.gd")
 const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
+const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
 const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
 const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
@@ -59,12 +61,30 @@ var status_label: Label
 var floor_label: Label
 var health_bar: ProgressBar
 var ammo_label: Label
+var player_world_health_bar: Control
+var player_world_health_fill: Panel
+var player_health_fill_style: StyleBoxFlat
+var equipment_panel: PanelContainer
+var equipment_weapon_image: TextureRect
+var equipment_label: Label
+var equipment_ammo_label: Label
+var equipment_reserve_ammo_label: Label
+var equipment_condition_label: Label
+var equipment_reload_bar: ProgressBar
+var building_objective_panel: PanelContainer
+var building_objective_label: Label
+var floor_clear_banner: PanelContainer
+var floor_clear_title: Label
+var floor_clear_detail: Label
+var floor_clear_tween: Tween
+var floor_clear_announced := false
 var fire_button: Button
 var melee_button: Button
 var dash_button: Button
 var reload_button: Button
 var flashlight_button: Button
 var interact_button: Button
+var medkit_button: Button
 var current_interactable: Node3D
 var enemies: Array[CharacterBody3D] = []
 var floor_cells: Array[Vector2i] = []
@@ -105,8 +125,11 @@ var fatigue := 0.0
 var fatigue_panel: PanelContainer
 var fatigue_bar: ProgressBar
 var fatigue_label: Label
+var collision_debug_enabled := false
+var auto_paused_for_background := false
 @onready var BuildingRunState: Node = get_node("/root/BuildingRunState")
 @onready var GameState: Node = get_node("/root/GameState")
+@onready var accessibility_settings: Node = get_node("/root/AccessibilitySettings")
 
 
 func _ready() -> void:
@@ -127,6 +150,9 @@ func _ready() -> void:
 	_build_interface()
 	_build_visibility_fog()
 	_load_floor(BuildingRunState.current_floor, "entry")
+	if not get_viewport().size_changed.is_connected(_apply_mobile_safe_layout):
+		get_viewport().size_changed.connect(_apply_mobile_safe_layout)
+	_apply_mobile_safe_layout()
 
 
 func _physics_process(delta: float) -> void:
@@ -179,6 +205,7 @@ func _physics_process(delta: float) -> void:
 	_update_weapon_visual()
 	_update_aim_laser()
 	_update_camera(delta)
+	_update_player_world_health_bar()
 	_update_nearby_interactable()
 	_update_aim_reticle()
 	_update_visibility_fog()
@@ -197,12 +224,16 @@ func _input(event: InputEvent) -> void:
 			inventory_ui.call("toggle")
 		return
 	if event is InputEventKey and not event.echo:
-		if event.keycode == KEY_F and event.pressed:
+		if event.keycode == KEY_F8 and event.pressed:
+			_toggle_collision_debug()
+		elif event.keycode == KEY_F and event.pressed:
 			_interact()
 		elif event.keycode == KEY_SPACE and event.pressed:
 			_try_start_roll()
 		elif event.keycode == KEY_R and event.pressed:
 			_start_reload()
+		elif event.keycode == KEY_SHIFT and event.pressed:
+			_use_quick_medkit()
 		elif event.keycode in [KEY_E, KEY_I, KEY_B] and event.pressed and inventory_ui != null:
 			inventory_ui.call("toggle")
 		elif event.keycode == KEY_ESCAPE and event.pressed and BuildingRunState.current_floor == 1:
@@ -267,6 +298,16 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
+func _toggle_collision_debug() -> void:
+	collision_debug_enabled = not collision_debug_enabled
+	for node in get_tree().get_nodes_in_group("collision_debug_visual"):
+		if node is VisualInstance3D:
+			(node as VisualInstance3D).visible = collision_debug_enabled
+	_show_status(
+		"충돌 영역 표시 ON" if collision_debug_enabled else "충돌 영역 표시 OFF"
+	)
+
+
 func _mobile_button_contains(button: Button, screen_position: Vector2) -> bool:
 	return (
 		button != null
@@ -318,6 +359,9 @@ func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
 		flashlight_button.set_pressed_no_signal(enabled)
 		_on_flashlight_toggled(enabled)
 		return true
+	if _mobile_button_contains(medkit_button, touch.position):
+		_use_quick_medkit()
+		return true
 	return false
 
 
@@ -335,6 +379,17 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
 		_release_mobile_held_actions()
 		mouse_fire_held = false
+	if (
+		what == NOTIFICATION_APPLICATION_PAUSED
+		or (what == NOTIFICATION_WM_WINDOW_FOCUS_OUT and DisplayServer.is_touchscreen_available())
+	):
+		if not get_tree().paused:
+			auto_paused_for_background = true
+			get_tree().paused = true
+	elif what in [NOTIFICATION_APPLICATION_RESUMED, NOTIFICATION_WM_WINDOW_FOCUS_IN]:
+		if auto_paused_for_background:
+			auto_paused_for_background = false
+			get_tree().paused = false
 
 
 func take_damage(amount: int) -> void:
@@ -344,10 +399,15 @@ func take_damage(amount: int) -> void:
 	_show_status("피격 -%d · 체력 %d" % [applied_damage, GameState.player_health])
 	if GameState.player_health <= 0:
 		GameState.player_health = 35
+		GameState.store_carried_raid_loot_for_recovery(BuildingRunState.return_position)
+		GameState.clear_carried_raid_inventory_after_death()
 		BuildingRunState.active = false
 		if GameState.has_method("register_shelter_return"):
 			GameState.call("register_shelter_return")
-		get_tree().change_scene_to_file("res://scenes/shelter_interior.tscn")
+		get_node("/root/SceneTransition").call(
+			"transition_to",
+			"res://scenes/shelter_interior.tscn"
+		)
 
 
 func _build_environment() -> void:
@@ -386,8 +446,8 @@ func _build_player() -> void:
 	player.name = "BuildingPlayer"
 	player.add_to_group("player")
 	player.position = Vector3(0, 0.78, 0)
-	player.collision_layer = 1
-	player.collision_mask = 1
+	player.collision_layer = COLLISION_PROFILES.PLAYER_LAYER
+	player.collision_mask = COLLISION_PROFILES.PLAYER_MOVEMENT_MASK
 	add_child(player)
 	var collision := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
@@ -483,6 +543,7 @@ func _build_interface() -> void:
 	inventory_ui.connect("weapon_unequipped", _on_inventory_weapon_unequipped)
 	inventory_ui.connect("open_state_changed", _on_inventory_open_state_changed)
 	var panel := PanelContainer.new()
+	panel.name = "VitalsPanel"
 	panel.position = Vector2(18, 18)
 	panel.size = Vector2(332, 104)
 	var style := StyleBoxFlat.new()
@@ -492,6 +553,7 @@ func _build_interface() -> void:
 	style.set_corner_radius_all(5)
 	panel.add_theme_stylebox_override("panel", style)
 	canvas.add_child(panel)
+	panel.visible = false
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 14)
 	margin.add_theme_constant_override("margin_top", 10)
@@ -504,7 +566,7 @@ func _build_interface() -> void:
 	floor_label.add_theme_font_override("font", FONT)
 	floor_label.add_theme_font_size_override("font_size", 18)
 	box.add_child(floor_label)
-	floor_label.text = "윤서  ·  Lv. 01"
+	floor_label.text = ""
 	health_bar = ProgressBar.new()
 	health_bar.custom_minimum_size = Vector2(290, 10)
 	health_bar.max_value = 100
@@ -522,17 +584,17 @@ func _build_interface() -> void:
 	help.modulate = Color("#aeb7b3")
 	help.visible = false
 	box.add_child(help)
-	var objective := PanelContainer.new()
-	objective.position = Vector2(18, 132)
-	objective.size = Vector2(334, 72)
-	objective.add_theme_stylebox_override("panel", _make_panel_style(Color(0.015, 0.02, 0.022, 0.9), Color(0.42, 0.55, 0.52, 0.65)))
-	canvas.add_child(objective)
-	var objective_text := Label.new()
-	objective_text.text = "  오피스 타워 수색\n  · 적을 제압하고 물자를 회수하십시오"
-	objective_text.add_theme_font_override("font", FONT)
-	objective_text.add_theme_font_size_override("font_size", 15)
-	objective_text.modulate = Color(0.92, 0.76, 0.32)
-	objective.add_child(objective_text)
+	building_objective_panel = PanelContainer.new()
+	building_objective_panel.position = Vector2(18, 18)
+	building_objective_panel.size = Vector2(334, 72)
+	building_objective_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.015, 0.02, 0.022, 0.9), Color(0.42, 0.55, 0.52, 0.65)))
+	canvas.add_child(building_objective_panel)
+	building_objective_label = Label.new()
+	building_objective_label.text = "  건물 수색\n  · 적을 제압하고 물자를 회수하십시오"
+	building_objective_label.add_theme_font_override("font", FONT)
+	building_objective_label.add_theme_font_size_override("font_size", 15)
+	building_objective_label.modulate = Color(0.92, 0.76, 0.32)
+	building_objective_panel.add_child(building_objective_label)
 	building_info_label = Label.new()
 	building_info_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	building_info_label.position = Vector2(-330, 18)
@@ -542,24 +604,19 @@ func _build_interface() -> void:
 	building_info_label.add_theme_font_size_override("font_size", 15)
 	building_info_label.modulate = Color("#d6d2bd")
 	canvas.add_child(building_info_label)
-	var quick_slots := HBoxContainer.new()
-	quick_slots.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	quick_slots.position = Vector2(22, -86)
-	quick_slots.add_theme_constant_override("separation", 7)
-	canvas.add_child(quick_slots)
-	var slot_texts := ["소총\n%d" % int(GameState.magazine_ammo), "물\n2", "붕대\n3", "통조림\n1"]
-	for slot_text in slot_texts:
-		var slot := PanelContainer.new()
-		slot.custom_minimum_size = Vector2(62, 62)
-		slot.add_theme_stylebox_override("panel", _make_panel_style(Color(0.015, 0.02, 0.022, 0.9), Color(0.34, 0.4, 0.38, 0.8)))
-		var slot_label := Label.new()
-		slot_label.text = slot_text
-		slot_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		slot_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		slot_label.add_theme_font_override("font", FONT)
-		slot_label.add_theme_font_size_override("font_size", 12)
-		slot.add_child(slot_label)
-		quick_slots.add_child(slot)
+	medkit_button = Button.new()
+	medkit_button.name = "MedkitButton"
+	medkit_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	medkit_button.position = Vector2(22, -96)
+	medkit_button.size = Vector2(112, 74)
+	medkit_button.icon = UI_ICONS.get_icon("medkit", 34, Color("#f3eee1"))
+	medkit_button.expand_icon = true
+	medkit_button.add_theme_constant_override("icon_max_width", 34)
+	medkit_button.add_theme_font_override("font", FONT)
+	medkit_button.add_theme_font_size_override("font_size", 12)
+	if not touch_enabled:
+		medkit_button.pressed.connect(_use_quick_medkit)
+	canvas.add_child(medkit_button)
 	prompt_label = Label.new()
 	prompt_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	prompt_label.position = Vector2(-250, -82)
@@ -578,6 +635,8 @@ func _build_interface() -> void:
 	status_label.add_theme_font_size_override("font_size", 17)
 	status_label.modulate = Color("#d8e4dd")
 	canvas.add_child(status_label)
+	_build_shared_combat_hud(canvas)
+	_build_floor_clear_banner(canvas)
 	fire_button = Button.new()
 	fire_button.name = "FireButton"
 	fire_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
@@ -675,10 +734,171 @@ func _build_interface() -> void:
 	touch_knob.color = Color(0.72, 0.78, 0.75, 0.58)
 	touch_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	touch_stick.add_child(touch_knob)
+	touch_stick.visible = touch_enabled
+	for mobile_control: Control in [
+		fire_button,
+		melee_button,
+		interact_button,
+		dash_button,
+		reload_button,
+		flashlight_button,
+	]:
+		mobile_control.visible = touch_enabled
 	_build_fatigue_panel(canvas)
 	_update_health()
 	_update_ammo_label()
 	_update_fatigue_ui()
+	_update_medkit_button()
+
+
+func _build_shared_combat_hud(canvas: CanvasLayer) -> void:
+	player_world_health_bar = Control.new()
+	player_world_health_bar.name = "PlayerWorldHealthBar"
+	player_world_health_bar.size = Vector2(48, 7)
+	player_world_health_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	player_world_health_bar.z_index = 40
+	var health_background_panel := Panel.new()
+	health_background_panel.size = Vector2(48, 7)
+	health_background_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var health_background := StyleBoxFlat.new()
+	health_background.bg_color = Color(0.018, 0.022, 0.024, 0.84)
+	health_background.border_color = Color(0.82, 0.86, 0.8, 0.38)
+	health_background.set_border_width_all(1)
+	health_background.set_corner_radius_all(4)
+	health_background.anti_aliasing = true
+	health_background_panel.add_theme_stylebox_override("panel", health_background)
+	player_world_health_bar.add_child(health_background_panel)
+	player_world_health_fill = Panel.new()
+	player_world_health_fill.position = Vector2(1, 1)
+	player_world_health_fill.size = Vector2(46, 5)
+	player_world_health_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	player_health_fill_style = StyleBoxFlat.new()
+	player_health_fill_style.bg_color = Color(0.28, 0.86, 0.48, 0.96)
+	player_health_fill_style.set_corner_radius_all(3)
+	player_health_fill_style.anti_aliasing = true
+	player_world_health_fill.add_theme_stylebox_override("panel", player_health_fill_style)
+	player_world_health_bar.add_child(player_world_health_fill)
+	canvas.add_child(player_world_health_bar)
+
+	equipment_panel = PanelContainer.new()
+	equipment_panel.name = "EquipmentPanel"
+	equipment_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	equipment_panel.offset_left = -342
+	equipment_panel.offset_top = -136
+	equipment_panel.offset_right = -22
+	equipment_panel.offset_bottom = -24
+	equipment_panel.z_index = 30
+	equipment_panel.add_theme_stylebox_override(
+		"panel",
+		_make_panel_style(Color(0.012, 0.018, 0.019, 0.96), Color("#8da997"), 8)
+	)
+	canvas.add_child(equipment_panel)
+	var equipment_margin := MarginContainer.new()
+	equipment_margin.add_theme_constant_override("margin_left", 14)
+	equipment_margin.add_theme_constant_override("margin_top", 12)
+	equipment_margin.add_theme_constant_override("margin_right", 14)
+	equipment_margin.add_theme_constant_override("margin_bottom", 12)
+	equipment_panel.add_child(equipment_margin)
+	var equipment_row := HBoxContainer.new()
+	equipment_row.add_theme_constant_override("separation", 13)
+	equipment_margin.add_child(equipment_row)
+	equipment_weapon_image = TextureRect.new()
+	equipment_weapon_image.custom_minimum_size = Vector2(104, 72)
+	equipment_weapon_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	equipment_weapon_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	equipment_row.add_child(equipment_weapon_image)
+	var weapon_text_box := VBoxContainer.new()
+	weapon_text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	weapon_text_box.add_theme_constant_override("separation", 2)
+	equipment_row.add_child(weapon_text_box)
+	equipment_label = Label.new()
+	equipment_label.add_theme_font_override("font", FONT)
+	equipment_label.add_theme_font_size_override("font_size", 16)
+	equipment_label.add_theme_color_override("font_color", Color("#e7e3d2"))
+	weapon_text_box.add_child(equipment_label)
+	var ammo_row := HBoxContainer.new()
+	ammo_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ammo_row.add_theme_constant_override("separation", 8)
+	weapon_text_box.add_child(ammo_row)
+	equipment_ammo_label = Label.new()
+	equipment_ammo_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	equipment_ammo_label.add_theme_font_override("font", FONT)
+	equipment_ammo_label.add_theme_font_size_override("font_size", 22)
+	equipment_ammo_label.add_theme_color_override("font_color", Color("#f1ce70"))
+	ammo_row.add_child(equipment_ammo_label)
+	equipment_reserve_ammo_label = Label.new()
+	equipment_reserve_ammo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	equipment_reserve_ammo_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	equipment_reserve_ammo_label.add_theme_font_override("font", FONT)
+	equipment_reserve_ammo_label.add_theme_font_size_override("font_size", 14)
+	equipment_reserve_ammo_label.add_theme_color_override("font_color", Color("#c5d0c9"))
+	ammo_row.add_child(equipment_reserve_ammo_label)
+	equipment_condition_label = Label.new()
+	equipment_condition_label.custom_minimum_size = Vector2(0, 22)
+	equipment_condition_label.clip_text = true
+	equipment_condition_label.add_theme_font_override("font", FONT)
+	equipment_condition_label.add_theme_font_size_override("font_size", 12)
+	equipment_condition_label.add_theme_color_override("font_color", Color("#9fb0a7"))
+	weapon_text_box.add_child(equipment_condition_label)
+	equipment_reload_bar = ProgressBar.new()
+	equipment_reload_bar.custom_minimum_size = Vector2(0, 7)
+	equipment_reload_bar.max_value = 1.0
+	equipment_reload_bar.show_percentage = false
+	equipment_reload_bar.add_theme_stylebox_override(
+		"background",
+		_make_panel_style(Color("#171d1b"), Color("#3e4944"), 4)
+	)
+	equipment_reload_bar.add_theme_stylebox_override(
+		"fill",
+		_make_panel_style(Color("#d6b653"), Color("#f0d77d"), 4)
+	)
+	weapon_text_box.add_child(equipment_reload_bar)
+
+
+func _build_floor_clear_banner(canvas: CanvasLayer) -> void:
+	floor_clear_banner = PanelContainer.new()
+	floor_clear_banner.name = "FloorClearBanner"
+	floor_clear_banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	floor_clear_banner.offset_left = -260
+	floor_clear_banner.offset_top = 82
+	floor_clear_banner.offset_right = 260
+	floor_clear_banner.offset_bottom = 160
+	floor_clear_banner.z_index = 140
+	floor_clear_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	floor_clear_banner.add_theme_stylebox_override(
+		"panel",
+		_make_panel_style(Color(0.012, 0.024, 0.021, 0.97), Color("#74d8b5"), 8)
+	)
+	floor_clear_banner.visible = false
+	canvas.add_child(floor_clear_banner)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 18)
+	margin.add_theme_constant_override("margin_top", 12)
+	margin.add_theme_constant_override("margin_right", 18)
+	margin.add_theme_constant_override("margin_bottom", 12)
+	floor_clear_banner.add_child(margin)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	margin.add_child(row)
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(46, 46)
+	icon.texture = UI_ICONS.get_icon("secure", 48, Color("#89e8c4"))
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	row.add_child(icon)
+	var text_box := VBoxContainer.new()
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(text_box)
+	floor_clear_title = Label.new()
+	floor_clear_title.add_theme_font_override("font", FONT)
+	floor_clear_title.add_theme_font_size_override("font_size", 22)
+	floor_clear_title.add_theme_color_override("font_color", Color("#f3d879"))
+	text_box.add_child(floor_clear_title)
+	floor_clear_detail = Label.new()
+	floor_clear_detail.add_theme_font_override("font", FONT)
+	floor_clear_detail.add_theme_font_size_override("font_size", 14)
+	floor_clear_detail.add_theme_color_override("font_color", Color("#b9cec4"))
+	text_box.add_child(floor_clear_detail)
 
 
 func _build_fatigue_panel(canvas: CanvasLayer) -> void:
@@ -898,6 +1118,7 @@ func _update_enemy_visibility() -> void:
 
 func _load_floor(floor_number: int, arrival: String) -> void:
 	loading_floor = true
+	floor_clear_announced = BuildingRunState.is_floor_cleared(floor_number)
 	current_interactable = null
 	prompt_label.text = ""
 	for enemy in enemies:
@@ -923,7 +1144,10 @@ func _load_floor(floor_number: int, arrival: String) -> void:
 	_spawn_floor_enemies(random)
 	player.position = _get_arrival_position(arrival)
 	camera_focus = Vector3(player.position.x, 0, player.position.z)
-	building_info_label.text = "%s · %d / %d층\n경계 중\n실내 수색 구역" % [BuildingRunState.building_id, floor_number, BuildingRunState.max_floors]
+	var building_name := _get_building_display_name()
+	building_info_label.text = "%s · %d / %d층\n경계 중\n실내 수색 구역" % [building_name, floor_number, BuildingRunState.max_floors]
+	if building_objective_label != null:
+		building_objective_label.text = "  %s 수색\n  · 적을 제압하고 물자를 회수하십시오" % building_name
 	_show_status("%d층 진입 · 배치 시드 %d" % [floor_number, BuildingRunState.get_floor_seed(floor_number)])
 	loading_floor = false
 
@@ -1111,7 +1335,10 @@ func _spawn_floor_enemies(random: RandomNumberGenerator) -> void:
 func _on_enemy_died(enemy: CharacterBody3D, enemy_key: String) -> void:
 	BuildingRunState.mark_enemy_defeated(BuildingRunState.current_floor, enemy_key)
 	enemies.erase(enemy)
+	if enemies.is_empty():
+		call_deferred("_handle_floor_cleared")
 	GameState.raid_kills += 1
+	GameState.advance_contract("kills", 1)
 	var reward_key := "%s_drop" % enemy_key
 	if not BuildingRunState.is_loot_collected(BuildingRunState.current_floor, reward_key):
 		var stage_tier := LOOT_ECONOMY.get_stage_for_zone(GameState.get_raid_zone())
@@ -1150,6 +1377,65 @@ func _on_enemy_died(enemy: CharacterBody3D, enemy_key: String) -> void:
 
 func _on_loot_collected(_key: String, description: String) -> void:
 	_show_status(description)
+
+
+func _handle_floor_cleared() -> void:
+	if floor_clear_announced or not enemies.is_empty():
+		return
+	floor_clear_announced = true
+	var cleared_floor := int(BuildingRunState.current_floor)
+	BuildingRunState.mark_floor_cleared(cleared_floor)
+	var building_name := _get_building_display_name()
+	var full_clear: bool = bool(BuildingRunState.is_building_cleared())
+	var title := (
+		"%s 탐색 완료" % building_name
+		if full_clear
+		else "%s %d층 확보" % [building_name, cleared_floor]
+	)
+	var detail := (
+		"모든 층의 위협을 제거했습니다. 전리품을 확인하고 도시로 복귀하십시오."
+		if full_clear
+		else "현재 층의 위협을 모두 제거했습니다. 남은 층을 계속 수색할 수 있습니다."
+	)
+	_show_floor_clear_banner(title, detail)
+	if building_objective_label != null:
+		building_objective_label.text = (
+			"  %s 탐색 완료\n  · 전리품을 확인하고 도시로 복귀하십시오" % building_name
+			if full_clear
+			else "  %s %d층 확보\n  · 남은 층을 계속 수색하십시오" % [building_name, cleared_floor]
+		)
+
+
+func _show_floor_clear_banner(title: String, detail: String) -> void:
+	if floor_clear_banner == null:
+		return
+	if floor_clear_tween != null and floor_clear_tween.is_valid():
+		floor_clear_tween.kill()
+	floor_clear_title.text = title
+	floor_clear_detail.text = detail
+	floor_clear_banner.visible = true
+	floor_clear_banner.modulate = Color(1, 1, 1, 0)
+	floor_clear_tween = create_tween()
+	floor_clear_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	floor_clear_tween.tween_property(floor_clear_banner, "modulate:a", 1.0, 0.18)
+	floor_clear_tween.tween_interval(2.6)
+	floor_clear_tween.tween_property(floor_clear_banner, "modulate:a", 0.0, 0.42)
+	floor_clear_tween.tween_callback(func() -> void: floor_clear_banner.visible = false)
+
+
+func _get_building_display_name() -> String:
+	var identifier := str(BuildingRunState.building_id).to_lower()
+	if "pharmacy" in identifier or "clinic" in identifier:
+		return "약국"
+	if "market" in identifier:
+		return "시장 건물"
+	if "metalworks" in identifier:
+		return "을지로 공업소"
+	if "checkpoint" in identifier or "depot" in identifier:
+		return "봉쇄선 시설"
+	if "tower" in identifier or "office" in identifier:
+		return "오피스 타워"
+	return "도시 건물"
 
 
 func _on_transition_activated(_action: String, transition: Node3D) -> void:
@@ -1195,7 +1481,7 @@ func _interact() -> void:
 
 func _on_flashlight_toggled(enabled: bool) -> void:
 	laser_aim_held = enabled and _has_equipped_firearm()
-	if DisplayServer.is_touchscreen_available():
+	if DisplayServer.is_touchscreen_available() and bool(accessibility_settings.vibration_enabled):
 		Input.vibrate_handheld(12)
 
 
@@ -1211,7 +1497,10 @@ func _fire_at_nearest_enemy() -> void:
 func _get_mobile_aim_assist_enemy(facing_direction: Vector3) -> CharacterBody3D:
 	var closest: CharacterBody3D
 	var closest_distance := INF
-	var minimum_dot := cos(deg_to_rad(MOBILE_AIM_ASSIST_HALF_ANGLE_DEG))
+	var assist_strength := clampf(float(accessibility_settings.aim_assist_strength), 0.0, 1.0)
+	if assist_strength <= 0.01:
+		return null
+	var minimum_dot := cos(deg_to_rad(lerpf(12.0, MOBILE_AIM_ASSIST_HALF_ANGLE_DEG, assist_strength)))
 	for enemy in enemies:
 		if not is_instance_valid(enemy) or bool(enemy.get("dying")):
 			continue
@@ -1227,7 +1516,7 @@ func _get_mobile_aim_assist_enemy(facing_direction: Vector3) -> CharacterBody3D:
 		var query := PhysicsRayQueryParameters3D.create(
 			player.global_position + Vector3(0, 0.45, 0),
 			enemy.global_position + Vector3(0, 0.45, 0),
-			3
+			COLLISION_PROFILES.ENEMY_LAYER | COLLISION_PROFILES.WORLD_PROJECTILE_LAYER
 		)
 		query.exclude = [player.get_rid()]
 		var hit := player.get_world_3d().direct_space_state.intersect_ray(query)
@@ -1376,7 +1665,11 @@ func _update_aim_laser() -> void:
 	direction = direction.normalized()
 	var start := player.global_position + direction * 0.46 + Vector3(0, 0.47, 0)
 	var end := start + direction * 48.0
-	var query := PhysicsRayQueryParameters3D.create(start, end, 3)
+	var query := PhysicsRayQueryParameters3D.create(
+		start,
+		end,
+		COLLISION_PROFILES.ENEMY_LAYER | COLLISION_PROFILES.WORLD_PROJECTILE_LAYER
+	)
 	query.exclude = [player.get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	if not hit.is_empty():
@@ -1476,13 +1769,32 @@ func _set_reserve_ammo(value: int) -> void:
 func _update_ammo_label() -> void:
 	if ammo_label == null:
 		return
-	var reload_text := " · 재장전 %.1f" % reload_timer if weapon_reloading else ""
-	ammo_label.text = "체력  %d/100     수분  74     탄약  %d / %d%s" % [
+	var magazine_size := int(weapon_stats.get("magazine_size", 30))
+	var current_ammo := int(GameState.magazine_ammo)
+	var reserve_ammo := _get_reserve_ammo()
+	var ammo_name := str(
+		WEAPON_SYSTEM.get_ammo(GameState.equipped_ammo_id).get(
+			"display_name",
+			GameState.equipped_ammo_id
+		)
+	)
+	var hud_state := WEAPON_HUD_PRESENTER.build_state(
+		_has_equipped_firearm(),
+		current_ammo,
+		magazine_size,
+		reserve_ammo,
+		weapon_reloading,
+		reload_timer,
+		ammo_name
+	)
+	ammo_label.text = WEAPON_HUD_PRESENTER.build_interior_line(
 		int(GameState.player_health),
-		int(GameState.magazine_ammo),
-		_get_reserve_ammo(),
-		reload_text,
-	]
+		int(GameState.get_max_health()),
+		hud_state
+	)
+	var ammo_color: Color = hud_state.get("ammo_color", Color("#d6d2bd"))
+	ammo_label.add_theme_color_override("font_color", ammo_color)
+	_update_shared_equipment_hud(hud_state)
 	if inventory_ui != null:
 		var mods: Array[String] = []
 		var stored_mods = GameState.get("equipped_weapon_mods")
@@ -1495,6 +1807,32 @@ func _update_ammo_label() -> void:
 		if _has_equipped_firearm():
 			stored_weapon_count = maxi(0, stored_weapon_count - 1)
 		inventory_ui.call("update_state", _has_equipped_firearm(), int(GameState.magazine_ammo), _get_reserve_ammo(), str(weapon_stats.get("display_name", "AK-47")), int(weapon_stats.get("magazine_size", 30)), float(GameState.get("weapon_durability") if GameState.get("weapon_durability") != null else 100.0), mods, int(GameState.get("canned_food") if GameState.get("canned_food") != null else 0), stored_weapon_count, GameState.get("mod_component_inventory") if GameState.get("mod_component_inventory") is Dictionary else {}, 0, fatigue)
+
+
+func _update_shared_equipment_hud(hud_state: Dictionary) -> void:
+	if equipment_panel == null:
+		return
+	var has_weapon := _has_equipped_firearm()
+	var weapon_id := str(GameState.equipped_weapon_id)
+	var weapon_name := str(weapon_stats.get("display_name", "AK-47"))
+	var enhancement_level: int = int(GameState.get_weapon_enhancement_level(weapon_id))
+	equipment_label.text = "%s +%d" % [weapon_name, enhancement_level] if has_weapon else "무기 없음"
+	equipment_weapon_image.texture = WEAPON_VISUAL_CATALOG.get_weapon_texture(weapon_id)
+	equipment_weapon_image.visible = has_weapon
+	equipment_ammo_label.text = str(hud_state.get("ammo_text", "-- / --"))
+	var ammo_color: Color = hud_state.get("ammo_color", Color("#f1ce70"))
+	equipment_ammo_label.add_theme_color_override("font_color", ammo_color)
+	equipment_reserve_ammo_label.text = str(hud_state.get("reserve_text", "예비 없음"))
+	var reserve_color: Color = hud_state.get("reserve_color", Color("#c5d0c9"))
+	equipment_reserve_ammo_label.add_theme_color_override("font_color", reserve_color)
+	equipment_condition_label.text = str(hud_state.get("condition_text", ""))
+	var reload_duration := maxf(0.01, float(weapon_stats.get("reload_time", 2.15)))
+	equipment_reload_bar.value = (
+		1.0 - clampf(reload_timer / reload_duration, 0.0, 1.0)
+		if weapon_reloading
+		else 1.0
+	)
+	equipment_reload_bar.visible = weapon_reloading and has_weapon
 
 
 func _try_start_roll() -> void:
@@ -1659,6 +1997,89 @@ func _update_health() -> void:
 		health_bar.value = GameState.player_health
 	if ammo_label != null:
 		_update_ammo_label()
+	_update_player_world_health_bar()
+	_update_medkit_button()
+
+
+func _update_player_world_health_bar() -> void:
+	if player_world_health_bar == null or camera == null or player == null:
+		return
+	var max_health := maxi(1, int(GameState.get_max_health()))
+	var health_ratio := clampf(float(GameState.player_health) / float(max_health), 0.0, 1.0)
+	player_world_health_fill.size.x = 46.0 * health_ratio
+	player_health_fill_style.bg_color = (
+		Color(0.88, 0.18, 0.12, 0.98)
+		if health_ratio <= 0.3
+		else Color(0.94, 0.66, 0.16, 0.98)
+		if health_ratio <= 0.6
+		else Color(0.28, 0.86, 0.48, 0.96)
+	)
+	var head_position := camera.unproject_position(player.global_position + Vector3(0, 2.15, 0))
+	player_world_health_bar.position = head_position - Vector2(24.0, 3.0)
+	player_world_health_bar.visible = not camera.is_position_behind(player.global_position)
+
+
+func _use_quick_medkit() -> void:
+	if int(GameState.medkits) <= 0:
+		_show_status("구급약이 없습니다.")
+		return
+	var max_health := int(GameState.get_max_health())
+	if int(GameState.player_health) >= max_health:
+		_show_status("체력이 이미 가득 찼습니다.")
+		return
+	GameState.medkits = maxi(0, int(GameState.medkits) - 1)
+	GameState.player_health = mini(max_health, int(GameState.player_health) + 36)
+	GameState.save_persistent_state()
+	_update_health()
+	_show_status("구급약 사용 · 체력 %d/%d" % [GameState.player_health, max_health])
+	if DisplayServer.is_touchscreen_available() and bool(accessibility_settings.vibration_enabled):
+		Input.vibrate_handheld(18)
+
+
+func _update_medkit_button() -> void:
+	if not is_instance_valid(medkit_button):
+		return
+	medkit_button.text = (
+		"구급약\nx%d" % int(GameState.medkits)
+		if DisplayServer.is_touchscreen_available()
+		else "SHIFT\nx%d" % int(GameState.medkits)
+	)
+	medkit_button.disabled = int(GameState.medkits) <= 0
+
+
+func _apply_mobile_safe_layout() -> void:
+	var viewport_size := get_viewport().get_visible_rect().size
+	var safe := UISafeArea.get_margins(viewport_size)
+	var vitals := get_node_or_null("BuildingHUD/VitalsPanel") as Control
+	if vitals:
+		vitals.position = Vector2(18.0 + safe.x, 18.0 + safe.y)
+	if is_instance_valid(building_objective_panel):
+		building_objective_panel.position = Vector2(18.0 + safe.x, 18.0 + safe.y)
+	if is_instance_valid(touch_stick):
+		touch_stick.position = Vector2(34.0 + safe.x, -160.0 - safe.w)
+	if is_instance_valid(medkit_button):
+		medkit_button.position = Vector2(22.0 + safe.x, -96.0 - safe.w)
+	if is_instance_valid(equipment_panel):
+		equipment_panel.offset_right = -22.0 - safe.z
+		equipment_panel.offset_left = equipment_panel.offset_right - 320.0
+		equipment_panel.offset_bottom = (-318.0 if DisplayServer.is_touchscreen_available() else -24.0) - safe.w
+		equipment_panel.offset_top = equipment_panel.offset_bottom - 112.0
+	if is_instance_valid(floor_clear_banner):
+		floor_clear_banner.offset_top = 82.0 + safe.y
+		floor_clear_banner.offset_bottom = 160.0 + safe.y
+	var right_positions: Array = [
+		[fire_button, Vector2(-142, -128)],
+		[melee_button, Vector2(-260, -128)],
+		[interact_button, Vector2(-496, -128)],
+		[dash_button, Vector2(-378, -128)],
+		[reload_button, Vector2(-260, -218)],
+		[flashlight_button, Vector2(-142, -218)],
+	]
+	for entry in right_positions:
+		var button := entry[0] as Button
+		if is_instance_valid(button):
+			var base_position: Vector2 = entry[1]
+			button.position = base_position - Vector2(safe.z, safe.w)
 
 
 func _show_status(message: String) -> void:
@@ -1714,7 +2135,8 @@ func _add_static_box(parent: Node, node_name: String, position: Vector3, size: V
 	var body := StaticBody3D.new()
 	body.name = "%sCollision" % node_name
 	body.position = position
-	body.collision_layer = 1
+	body.collision_layer = COLLISION_PROFILES.WORLD_MOVEMENT_LAYER | COLLISION_PROFILES.WORLD_PROJECTILE_LAYER
+	body.collision_mask = 0
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = size
@@ -1735,7 +2157,8 @@ func _add_static_box_material(parent: Node, node_name: String, position: Vector3
 	var body := StaticBody3D.new()
 	body.name = "%sCollision" % node_name
 	body.position = position
-	body.collision_layer = 1
+	body.collision_layer = COLLISION_PROFILES.WORLD_MOVEMENT_LAYER | COLLISION_PROFILES.WORLD_PROJECTILE_LAYER
+	body.collision_mask = 0
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = size

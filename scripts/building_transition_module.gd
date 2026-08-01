@@ -1,6 +1,7 @@
 extends Node3D
 
 const ELEVATOR_TEXTURE_PATH := "res://assets/interiors/office_dungeon/modules/wall_elevator_front_v2.png"
+const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
 
 signal activated(action: String)
 
@@ -74,7 +75,8 @@ func _build_generated_elevator() -> void:
 	var body := StaticBody3D.new()
 	body.name = "ElevatorDoorCollision"
 	body.position = Vector3(0, 1.45, 0)
-	body.collision_layer = 1
+	body.collision_layer = COLLISION_PROFILES.WORLD_MOVEMENT_LAYER | COLLISION_PROFILES.WORLD_PROJECTILE_LAYER
+	body.collision_mask = 0
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(3.4, 2.9, 0.38)
@@ -109,7 +111,8 @@ func _add_box(node_name: String, local_position: Vector3, size: Vector3, color: 
 		var body := StaticBody3D.new()
 		body.name = "%sCollision" % node_name
 		body.position = local_position
-		body.collision_layer = 1
+		body.collision_layer = COLLISION_PROFILES.WORLD_MOVEMENT_LAYER | COLLISION_PROFILES.WORLD_PROJECTILE_LAYER
+		body.collision_mask = 0
 		var collision := CollisionShape3D.new()
 		var shape := BoxShape3D.new()
 		shape.size = size

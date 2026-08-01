@@ -32,6 +32,39 @@ sprite-request.json → layout guides + prompts → sprite-gen gen state rows
 → sprite-sheet-alpha.png + manifest.json.frame_layout
 ```
 
+## Directional reference pack in this project
+
+For new 8-direction runs, the project may keep the validated pack in
+`assets/generated/sprite_reference_packs/8way_cat_player_validated` as a local
+layout/QA reference. It is **not** attached to image-generation requests:
+the uploaded `base-source.*` image is the only colour identity reference, and
+grayscale skeleton guides are the only additional generation inputs. This
+prevents an anchor from another character leaking its face, outfit, or palette.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_sprite_pipeline.ps1 `
+  -CharacterId enemy_grenadier `
+  -BaseImage assets\generated\p0_sources\enemy_grenadier_concept_v1.png `
+  -RequestJson assets\generated\sprite_requests\enemy_grenadier_8way.json `
+  -ReferenceRun assets\generated\sprite_reference_packs\8way_cat_player_validated `
+  -Provider codex
+```
+
+The curation webview follows the same rule and never falls back to a
+colourful direction anchor when an accepted row is missing.
+
+If a provider returns a baked checkerboard instead of true alpha, normalize
+the raw rows before extraction:
+
+```powershell
+python .\tools\normalize_spritegen_rgba.py assets\generated\sprites\enemy_grenadier\raw\down_left\walk.png
+```
+
+For front/back and diagonal walks, `tools/qa_walk_cycle.py` also checks the
+bottom-foot connected components. This catches a leg swap even when the broad
+lower silhouette remains centered; a mirrored-silhouette fallback is recorded
+explicitly in the report for rear views.
+
 ```mermaid
 flowchart LR
     REQ["sprite-request.json<br/>(numeric SSoT)"] --> GUIDES["layout guides<br/>+ prompts"]

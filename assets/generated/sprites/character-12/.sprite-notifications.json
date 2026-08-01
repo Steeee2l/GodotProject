@@ -1,0 +1,188 @@
+{
+  "version": 1,
+  "notifications": [
+    {
+      "id": "47d88edee91a4accb885aea9608eb7bb",
+      "kind": "base_generated",
+      "state": "__base__",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "generated": false
+      },
+      "createdAt": "2026-08-01T17:11:33+0900",
+      "read": false
+    },
+    {
+      "id": "148327860640444da69b62dd2f85c299",
+      "kind": "auto_failed",
+      "state": "down_idle",
+      "phase": null,
+      "success": false,
+      "detail": {
+        "error": "codex-gen: OpenAI network access is blocked for the generation server. Restart serve_curation.py outside the restricted sandbox, then retry.",
+        "name": "8방향 이동",
+        "total": 16
+      },
+      "createdAt": "2026-08-01T17:12:13+0900",
+      "read": false
+    },
+    {
+      "id": "6247920ccf4f4a40b4f735216a515ce5",
+      "kind": "auto_failed",
+      "state": "down_idle",
+      "phase": null,
+      "success": false,
+      "detail": {
+        "error": "{\n  \"ok\": false,\n  \"engine\": \"component-row\",\n  \"engine_revision\": \"760766bab118\",\n  \"extract_args\": {\n    \"allow_slot_fallback\": true\n  },\n  \"run_dir\": \"C:\\\\Users\\\\rain2\\\\Documents\\\\GitHub\\\\GodotProject\\\\assets\\\\generated\\\\sprites\\\\character-12\",\n  \"cell\": {\n    \"shape\": \"square\",\n    \"width\": 256,\n    \"height\": 256,\n    \"safe_margin_x\": 24,\n    \"safe_margin_y\": 24,\n    \"size\": 256,\n    \"safe_margin\": 24\n  },\n  \"chroma_key\": {\n    \"name\": \"magenta\",\n    \"hex\": \"#FF00FF\",\n    \"rgb\": [\n      255,\n      0,\n      255\n    ],\n    \"selection\": \"manual\"\n  },\n  \"errors\": [\n    \"down_idle: frame 00 has 20331 chroma-adjacent pixels\",\n    \"down_idle: frame 01 has 20424 chroma-adjacent pixels\",\n    \"down_idle: frame 02 has 20444 chroma-adjacent pixels\",\n    \"down_idle: frame 03 has 20453 chroma-adjacent pixels\"\n  ],\n  \"warnings\": []\n}",
+        "name": "8방향 이동",
+        "total": 16
+      },
+      "createdAt": "2026-08-01T18:06:21+0900",
+      "read": false
+    },
+    {
+      "id": "e872875fc93f471f90298dd6f9dfc91f",
+      "kind": "auto_completed",
+      "state": "down_right_idle",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "name": null,
+        "total": 15
+      },
+      "createdAt": "2026-08-01T18:35:58+0900",
+      "read": false
+    },
+    {
+      "id": "ba90e36b15ed48e28ce1cd3bc551f8d0",
+      "kind": "state_generated",
+      "state": "right_walk",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "take": "studio-20260801-184027-422cd1",
+        "frameCount": 4
+      },
+      "createdAt": "2026-08-01T18:41:41+0900",
+      "read": false
+    },
+    {
+      "id": "f1a2fc631bab42e1b2599eeee0026ab0",
+      "kind": "state_generated",
+      "state": "right_idle",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "take": "studio-20260801-184024-7e591b",
+        "frameCount": 4
+      },
+      "createdAt": "2026-08-01T18:41:55+0900",
+      "read": false
+    },
+    {
+      "id": "3aebb6d0953b412c8b6e553ab01e0f09",
+      "kind": "state_generated",
+      "state": "up_right_idle",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "take": "studio-20260801-184030-9cde94",
+        "frameCount": 4
+      },
+      "createdAt": "2026-08-01T18:42:08+0900",
+      "read": false
+    },
+    {
+      "id": "7dffc8c5b76c4ace857fae83d7052d9f",
+      "kind": "state_generated",
+      "state": "left_idle",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "take": "studio-20260801-184040-c9d5c5",
+        "frameCount": 4
+      },
+      "createdAt": "2026-08-01T18:42:40+0900",
+      "read": false
+    },
+    {
+      "id": "29b00652f6f343cfbc2954c2adcd83cc",
+      "kind": "state_generated",
+      "state": "up_right_walk",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "take": "studio-20260801-184033-648cee",
+        "frameCount": 4
+      },
+      "createdAt": "2026-08-01T18:42:55+0900",
+      "read": false
+    },
+    {
+      "id": "ef4dc2f7e92f4bb59c3394245beaa192",
+      "kind": "state_generated",
+      "state": "left_walk",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "take": "studio-20260801-184042-cdefc1",
+        "frameCount": 4
+      },
+      "createdAt": "2026-08-01T18:43:09+0900",
+      "read": false
+    },
+    {
+      "id": "99856283ecf94ea08d8ba03fa1ae05ee",
+      "kind": "state_generated",
+      "state": "down_left_idle",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "take": "studio-20260801-184141-3214ab",
+        "frameCount": 4
+      },
+      "createdAt": "2026-08-01T18:43:37+0900",
+      "read": false
+    },
+    {
+      "id": "764511f2c4d840f8beeb51f702edc2a2",
+      "kind": "state_generated",
+      "state": "down_left_walk",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "take": "studio-20260801-184141-9280c0",
+        "frameCount": 4
+      },
+      "createdAt": "2026-08-01T18:43:51+0900",
+      "read": false
+    },
+    {
+      "id": "c78e0097ac454687a9f89acf92825d34",
+      "kind": "auto_completed",
+      "state": "right_idle",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "name": null,
+        "total": 2
+      },
+      "createdAt": "2026-08-01T18:56:36+0900",
+      "read": false
+    },
+    {
+      "id": "0a71e1f2f7044bf8afc050a522c1cc4a",
+      "kind": "auto_completed",
+      "state": "up_right_idle",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "name": null,
+        "total": 6
+      },
+      "createdAt": "2026-08-01T19:07:39+0900",
+      "read": false
+    }
+  ]
+}

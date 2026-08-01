@@ -19,7 +19,7 @@ func _ready() -> void:
 	add_to_group("building_entrance_portal")
 	add_to_group("field_interaction")
 	set_meta("interaction_type", "building_portal")
-	set_meta("display_name", "빌딩 진입")
+	set_meta("display_name", "건물 입구")
 	set_meta("hold_duration", 0.8)
 	set_meta("interaction_distance", 3.2)
 	collision_layer = 0
@@ -28,6 +28,21 @@ func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	body_exited.connect(_on_body_exited)
 	_build_visual_marker()
+	refresh_access_state()
+
+
+func refresh_access_state() -> void:
+	var closed: bool = bool(BuildingRunState.is_entrance_closed(building_id))
+	set_meta("completed", closed)
+	set_meta("display_name", "탐색 완료" if closed else "건물 입구")
+	monitoring = not closed
+	set_process(not closed)
+	if closed:
+		nearby_player = null
+	if portal_marker != null:
+		portal_marker.visible = not closed
+	if prompt != null:
+		prompt.visible = false
 
 
 func _process(_delta: float) -> void:
@@ -62,7 +77,7 @@ func _build_visual_marker() -> void:
 	add_child(portal_marker)
 	prompt = Label3D.new()
 	prompt.name = "EntrancePrompt"
-	prompt.text = "F  빌딩 진입"
+	prompt.text = "[F] 건물 진입"
 	prompt.position = Vector3(0, 1.5, 0)
 	prompt.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	prompt.font_size = 42
@@ -74,7 +89,7 @@ func _build_visual_marker() -> void:
 
 
 func enter_building(_player_body: Node3D) -> void:
-	if transition_pending:
+	if transition_pending or BuildingRunState.is_entrance_closed(building_id):
 		return
 	transition_pending = true
 	set_meta("completed", true)
@@ -94,7 +109,12 @@ func enter_building(_player_body: Node3D) -> void:
 		return_point,
 		floor_count
 	)
-	get_tree().call_deferred("change_scene_to_packed", BUILDING_SCENE)
+	GameState.save_persistent_state()
+	get_node("/root/SceneTransition").call(
+		"transition_to",
+		BUILDING_SCENE.resource_path,
+		source_path
+	)
 
 
 func _on_body_entered(body: Node3D) -> void:

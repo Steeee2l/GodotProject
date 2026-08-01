@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>GREY DAWN · Project Atlas</title>
+    <meta name="description" content="그레이 던: 서울 생존묘의 게임 디자인 문서와 에셋 카탈로그">
+    <link rel="stylesheet" href="styles.css?v=atlas-3">
+    <link rel="stylesheet" href="enhancements.css?v=atlas-3">
+    <link rel="stylesheet" href="operations.css?v=atlas-3">
+</head>
+<body>
+    <div class="shell">
+        <aside class="rail">
+            <div class="brand">
+                <span class="brand-mark">GD</span>
+                <div><strong>PROJECT ATLAS</strong><small>GREY DAWN · SEOUL</small></div>
+            </div>
+            <nav aria-label="문서 영역">
+                <button class="nav-item active" data-view="overview"><span>01</span>프로젝트 개요</button>
+                <button class="nav-item" data-view="design"><span>02</span>게임 디자인</button>
+                <button class="nav-item" data-view="systems"><span>03</span>시스템 지도</button>
+                <button class="nav-item" data-view="assets"><span>04</span>에셋 라이브러리</button>
+                <button class="nav-item" data-view="roadmap"><span>05</span>개발 현황</button>
+            </nav>
+            <div class="rail-foot">
+                <span class="pulse"></span><span id="buildStamp">데이터 준비 중</span>
+            </div>
+        </aside>
+
+        <main>
+            <header class="topbar">
+                <button class="mobile-menu" id="mobileMenu" aria-label="메뉴 열기">☰</button>
+                <div class="crumb"><span>GDD</span><b id="pageName">프로젝트 개요</b></div>
+                <label class="global-search"><span>⌕</span><input id="globalSearch" type="search" placeholder="에셋, 시스템, 기획 검색" autocomplete="off"><kbd>/</kbd></label>
+                <a class="doc-link" href="../GAME_DESIGN_DOCUMENT.md">원문 GDD ↗</a>
+            </header>
+
+            <section class="view active" id="overview">
+                <div class="hero">
+                    <div class="hero-copy">
+                        <span class="eyebrow">ISOMETRIC EXTRACTION SURVIVAL RPG</span>
+                        <h1>그레이 던:<br><em>서울 생존묘</em></h1>
+                        <p>폐허가 된 서울을 탐색하고, 제한된 가방에 무엇을 담을지 결정한 뒤 위험한 탈출을 감행한다. 살아 돌아온 고양이들은 전리품으로 쉘터와 구조대를 성장시킨다.</p>
+                        <div class="hero-actions">
+                            <button class="primary jump" data-target="design">핵심 기획 보기</button>
+                            <button class="secondary jump" data-target="assets">에셋 탐색하기</button>
+                        </div>
+                    </div>
+                    <div class="hero-visual" id="heroVisual" aria-label="프로젝트 대표 에셋">
+                        <div class="scanline"></div><div class="map-grid"></div>
+                        <div class="coordinate">37°34′N · 126°59′E<br>JONGNO OUTSKIRTS</div>
+                    </div>
+                </div>
+
+                <div class="stat-grid" id="overviewStats"></div>
+
+                <div class="section-head"><div><span class="index">MISSION LOOP</span><h2>한 판의 약속</h2></div><p>20~30분 동안 준비부터 복귀까지 끊기지 않는 하나의 이야기</p></div>
+                <div class="loop-grid">
+                    <article><b>01</b><i>준비</i><h3>쉘터에서 목표 설정</h3><p>장비와 탄약을 챙기고 현재 필요한 물자와 주민 의뢰를 선택한다.</p></article>
+                    <article><b>02</b><i>탐색</i><h3>서울 폐허 진입</h3><p>구역과 빌딩을 수색하며 전투, 은신, 루팅 사이에서 판단한다.</p></article>
+                    <article><b>03</b><i>선택</i><h3>가방의 가치 결정</h3><p>15칸 제한 속에서 생존품, 장비, 청사진 중 무엇을 남길지 선택한다.</p></article>
+                    <article><b>04</b><i>탈출</i><h3>위험을 감수하고 복귀</h3><p>서로 다른 조건과 보상 배율을 가진 탈출로를 선택한다.</p></article>
+                    <article><b>05</b><i>성장</i><h3>고양이 구조대 확장</h3><p>전리품을 수리·분해·납품하고 쉘터와 다음 원정을 강화한다.</p></article>
+                </div>
+
+                <section class="genre-core">
+                    <div class="section-head"><div><span class="index">TWO-ENGINE CORE LOOP</span><h2>익스트랙션의 긴장 × 인크리멘탈의 축적</h2></div><p>한 판의 불확실성이 영구적인 구조대 성장으로 전환된다.</p></div>
+                    <div class="engine-grid">
+                        <article class="engine extraction">
+                            <header><span>01 · SESSION ENGINE</span><b>익스트랙션</b></header>
+                            <h3>이번에는 어디까지 욕심낼 것인가?</h3>
+                            <p>짧은 시간 안에 위험 지역으로 깊이 들어가 더 좋은 전리품을 확보하고, 가방이 차거나 상태가 악화되기 전에 탈출 여부를 결정한다.</p>
+                            <ul><li>지역 티어와 적 밀도</li><li>15칸 가방의 기회비용</li><li>서로 다른 탈출 조건</li><li>사망 시 손실과 시체 회수</li></ul>
+                            <footer>감정: 긴장 · 욕심 · 즉흥 판단</footer>
+                        </article>
+                        <div class="engine-bridge"><span>RAID VALUE</span><i>→</i><b>전리품<br>정보<br>구조묘</b><i>→</i><span>PERMANENT VALUE</span></div>
+                        <article class="engine incremental">
+                            <header><span>02 · META ENGINE</span><b>인크리멘탈</b></header>
+                            <h3>어제보다 강한 구조대를 만든다</h3>
+                            <p>살아 돌아올 때마다 설비, 주민 역할, 제작법과 정보망이 조금씩 쌓인다. 축적된 능력은 다음 레이드의 선택지를 넓힌다.</p>
+                            <ul><li>쉘터 모듈과 공간 확장</li><li>구조 고양이 역할 해금</li><li>청사진·장비 제작</li><li>지역 정보와 안전망 구축</li></ul>
+                            <footer>감정: 소유 · 애착 · 장기적 성취</footer>
+                        </article>
+                    </div>
+                    <div class="core-rule"><b>핵심 연결 규칙</b><p>레이드는 성장 재료를 공급하고, 쉘터 성장은 단순 수치 상승이 아니라 다음 레이드에서 <em>새로운 경로·정보·생존 방식</em>을 열어야 한다.</p></div>
+                </section>
+
+                <div class="two-col">
+                    <section class="panel manifesto">
+                        <span class="index">DESIGN PILLARS</span><h2>디자인 원칙</h2>
+                        <div class="pillar"><b>위험에는 이유가 있다</b><p>더 위험한 구역일수록 기대 전리품 가치와 새로운 선택지가 커진다.</p></div>
+                        <div class="pillar"><b>모든 전리품은 결정이다</b><p>직접 사용, 분해, 납품, 쉘터 설치 중 현재 상황에 맞는 용도를 고른다.</p></div>
+                        <div class="pillar"><b>장소만 바뀌고 조작은 그대로</b><p>필드·빌딩·쉘터에서 플레이어 상태와 조작 경험을 일관되게 유지한다.</p></div>
+                    </section>
+                    <section class="panel snapshot">
+                        <span class="index">CURRENT SNAPSHOT</span><h2>현재 프로젝트</h2>
+                        <div id="snapshotList"></div>
+                        <p class="note">이 화면의 수치는 저장소를 다시 스캔할 때 갱신됩니다.</p>
+                    </section>
+                </div>
+            </section>
+
+            <section class="view" id="design">
+                <div class="page-intro"><span class="eyebrow">GAME DESIGN DOCUMENT</span><h1>게임 디자인</h1><p>게임의 정체성, 플레이 동기, 세션 구조와 성장 구조를 빠르게 파악합니다.</p></div>
+                <div class="design-tabs" aria-label="게임 디자인 하위 항목">
+                    <button class="design-tab active" type="button"><span>CORE DESIGN</span><b>핵심 설계</b><small>판타지 · 세션 · 전투 · 경제</small></button>
+                    <button class="design-tab prototype jump" type="button" data-target="operations"><span>PLAYABLE PROTOTYPE</span><b>심야 구조 관제실</b><small>잡음 속 구조 신호를 분석하는 4분 스낵 콘텐츠</small><i>열기 →</i></button>
+                </div>
+                <div class="design-grid" id="designGrid"></div>
+                <section class="panel economy-map">
+                    <div class="section-head compact"><div><span class="index">VALUE FLOW</span><h2>전리품 가치 순환</h2></div></div>
+                    <div class="value-flow">
+                        <div><span>FIELD</span><b>부품 · 장비 · 정보</b><small>구역 티어 × 컨테이너 유형</small></div><i>→</i>
+                        <div><span>CHOICE</span><b>15칸 레이드 가방</b><small>칸당 가치와 생존 필요도</small></div><i>→</i>
+                        <div><span>EXTRACT</span><b>위험한 확보</b><small>탈출 조건 × 보상 배율</small></div><i>→</i>
+                        <div><span>SHELTER</span><b>사용 · 분해 · 납품</b><small>성장과 다음 원정 준비</small></div>
+                    </div>
+                </section>
+                <section class="shelter-lab">
+                    <div class="section-head"><div><span class="index">SHELTER CORE LAB</span><h2>쉘터의 능동 플레이 후보</h2></div><p>레이드에서 가져온 것들이 3~5분의 짧고 손맛 있는 교대로 이어진다.</p></div>
+                    <div class="shelter-idea-grid">
+                        <article class="recommended">
+                            <header><span>추천 코어</span><b>01</b></header><h3>야간 배급소</h3>
+                            <p>귀환한 주민들의 식량·약품·장비 요청을 보고 제한된 물자로 직접 배급한다. 긴급 환자, 신규 구조묘, 경비대를 누구부터 도울지 판단한다.</p>
+                            <dl><dt>레이드 입력</dt><dd>식량·약품·생활품</dd><dt>능동 행동</dt><dd>운반·조합·우선 배급</dd><dt>다음 판 효과</dt><dd>사기·버프·주민 해금</dd></dl>
+                        </article>
+                        <article>
+                            <header><span>제작 코어</span><b>02</b></header><h3>구조대 복구 공방</h3>
+                            <p>손상 장비를 감정하고 부품을 골라 수리한다. 직접 쓸지, 의뢰에 납품할지, 분해해 설비에 투입할지 선택한다.</p>
+                            <dl><dt>레이드 입력</dt><dd>폐품·총기·전자부품</dd><dt>능동 행동</dt><dd>감정·분해·조립</dd><dt>다음 판 효과</dt><dd>장비·도구·새 경로</dd></dl>
+                        </article>
+                        <article>
+                            <header><span>정보 코어</span><b>03</b></header><h3>심야 무전 관제</h3>
+                            <p>동시에 들어오는 구조 신호와 거래 요청을 분석한다. 제한된 전력과 구조팀을 어느 구역에 보낼지 짧은 교대 동안 결정한다.</p>
+                            <dl><dt>레이드 입력</dt><dd>지도·주파수·단서</dd><dt>능동 행동</dt><dd>신호 해독·팀 배치</dd><dt>다음 판 효과</dt><dd>핫스폿·탈출 정보</dd></dl>
+                        </article>
+                        <article>
+                            <header><span>거래 코어</span><b>04</b></header><h3>지하 물물교환장</h3>
+                            <p>밤마다 다른 상인과 생존자가 방문한다. 전리품의 용도와 미래 가격을 고려해 흥정하고 희귀 주문을 받아온다.</p>
+                            <dl><dt>레이드 입력</dt><dd>희귀품·완제품·화폐</dd><dt>능동 행동</dt><dd>진열·흥정·주문 선택</dd><dt>다음 판 효과</dt><dd>계약·키카드·청사진</dd></dl>
+                        </article>
+                    </div>
+                </section>
+            </section>
+
+            <section class="view" id="systems">
+                <div class="page-intro"><span class="eyebrow">SYSTEM ARCHITECTURE</span><h1>시스템 지도</h1><p>어떤 게임 요소가 구현되어 있고 서로 어떻게 연결되는지 확인합니다.</p></div>
+                <div class="filter-row" id="systemFilters"></div>
+                <div class="system-grid" id="systemGrid"></div>
+            </section>
+
+            <section class="view" id="assets">
+                <div class="page-intro asset-intro">
+                    <div><span class="eyebrow">ASSET LIBRARY</span><h1>에셋 라이브러리</h1><p>프로젝트 이미지 에셋을 종류와 상태별로 검색합니다.</p></div>
+                    <div class="asset-total"><strong id="assetTotal">0</strong><span>IMAGE ASSETS</span></div>
+                </div>
+                <div class="category-band panel">
+                    <span class="index">QUICK CATEGORY</span>
+                    <div class="category-chips" id="categoryChips"></div>
+                </div>
+                <div class="character-browser panel" id="characterBrowser">
+                    <div class="character-browser-head"><div><span class="index">CHARACTER ROSTER</span><h2>캐릭터 이름으로 찾기</h2></div><p>이름을 선택하면 해당 캐릭터의 방향·행동·제작 스프라이트만 모아봅니다.</p></div>
+                    <div class="character-tabs" id="characterTabs"></div>
+                    <div class="character-profile" id="characterProfile"></div>
+                </div>
+                <div class="asset-toolbar panel">
+                    <label><span>검색</span><input id="assetSearch" type="search" placeholder="파일명, 경로, 캐릭터 이름"></label>
+                    <label><span>상태</span><select id="statusFilter"><option value="all">전체 상태</option><option value="runtime">게임 에셋</option><option value="generated">생성 작업물</option><option value="reference">참고 자료</option></select></label>
+                    <label><span>정렬</span><select id="sortAssets"><option value="category">분류순</option><option value="name">이름순</option><option value="size">용량순</option><option value="newest">최신순</option></select></label>
+                </div>
+                <div class="catalog-meta"><span id="assetResultCount">0개 표시</span><div class="view-toggle"><button class="active" data-mode="grid" aria-label="격자 보기">▦</button><button data-mode="list" aria-label="목록 보기">☷</button></div></div>
+                <div class="asset-grid" id="assetGrid"></div>
+                <button class="load-more" id="loadMore">더 보기</button>
+                <div class="empty-state" id="emptyAssets"><b>검색 결과가 없습니다.</b><p>다른 검색어나 분류를 선택해 보세요.</p></div>
+            </section>
+
+            <section class="view" id="operations">
+                <button class="prototype-back jump" type="button" data-target="design">← 게임 디자인 / 프로토타입 목록</button>
+                <div class="ops-hero">
+                    <div class="ops-hero-copy">
+                        <span class="eyebrow">SHELTER SNACK CONTENT · OPERATION NIGHTWATCH</span>
+                        <h1>심야 구조<br><em>관제실</em></h1>
+                        <p>잡음 속 목소리, 서울의 생활음, 구조자의 말투를 조합해 사건의 위치와 진위를 추론한다. 정답을 맞히는 퀴즈가 아니라, 제한된 전력과 시간으로 다음 출정을 얼마나 유리하게 만들지 결정하는 4분짜리 보드게임이다.</p>
+                        <div class="ops-crew-strip">
+                            <img src="../assets/characters/cat_8way/down_idle_0.png" alt="관제묘 모카">
+                            <div><small>TONIGHT'S OPERATOR</small><b>관제묘 모카</b><span>특기 · 잡음 속 발소리 분리</span></div>
+                            <strong>집중력 3</strong>
+                        </div>
+                    </div>
+                    <div class="ops-promise">
+                        <span>PLAYER QUESTION</span>
+                        <blockquote>“이 신호를 믿고 어디까지 준비할 것인가?”</blockquote>
+                        <div><b>쉽게 시작</b><small>들리는 단서를 지도에 놓는다</small></div>
+                        <div><b>어렵게 숙련</b><small>모순·교란·시간·자원을 함께 읽는다</small></div>
+                    </div>
+                </div>
+
+                <div class="ops-loop-strip">
+                    <div><b>01</b><span>주파수 조율</span><small>신호 대 잡음비 확보</small></div><i>→</i>
+                    <div><b>02</b><span>단서 채집</span><small>소리·언어·환경 기록</small></div><i>→</i>
+                    <div><b>03</b><span>지도 추론</span><small>서울 보드에 마커 배치</small></div><i>→</i>
+                    <div><b>04</b><span>상황 판정</span><small>진위·위험·필요 장비</small></div><i>→</i>
+                    <div><b>05</b><span>출정 브리핑</span><small>실제 레이드 규칙 변화</small></div>
+                </div>
+
+                <section class="ops-demo">
+                    <div class="ops-demo-head">
+                        <div><span class="index">PLAYABLE DESIGN MOCKUP</span><h2>CASE 07 · 끊어진 지하 신호</h2></div>
+                        <div class="shift-resources"><span>전력 <b id="powerCount">3</b></span><span>구조팀 <b>1</b></span><span>교대 <b>01/03</b></span></div>
+                        <div class="case-clock"><span>결정까지</span><b id="opsClock">04:00</b></div>
+                    </div>
+                    <div class="signal-deck" id="signalDeck" aria-label="오늘 밤 구조 신호">
+                        <button class="signal-card active" data-case="subway"><span>CASE 07 · 98.7</span><b>끊어진 지하 신호</b><small>보라색 표지 · 셔터음 · 3명</small><i>보상 미확인</i></button>
+                        <button class="signal-card" data-case="rooftop"><span>CASE 11 · 103.2</span><b>약국 옥상 섬광</b><small>헬기장 경고음 · 아이 울음</small><i>의약품 기대</i></button>
+                        <button class="signal-card danger" data-case="river"><span>CASE 14 · 91.4</span><b>남산 중계기의 반복음</b><small>같은 문장 · 17초 간격</small><i>함정 가능성 ↑</i></button>
+                    </div>
+                    <div class="ops-console">
+                        <section class="radio-console">
+                            <header><span>CH-A / ANALOG</span><b id="signalState">신호 탐색 중</b></header>
+                            <div class="cat-operator">
+                                <img id="operatorSprite" src="../assets/characters/cat_8way/down_idle_0.png" alt="관제묘 모카">
+                                <p id="operatorLine">“주파수를 천천히 돌려봐. 진짜 목소리는 잡음 사이에서 호흡이 보여.”</p>
+                            </div>
+                            <div class="wave-window"><div class="wave-noise" id="waveNoise"></div><div class="wave-scan"></div></div>
+                            <div class="frequency-readout"><strong id="frequencyValue">94.0</strong><span>MHz</span><i id="signalQuality">SNR 08%</i></div>
+                            <input id="frequencyDial" type="range" min="88" max="108" step="0.1" value="94" aria-label="무전 주파수">
+                            <div class="dial-labels"><span>88.0</span><span>98.0</span><span>108.0</span></div>
+                            <div class="radio-actions"><button id="cleanSignal">잡음 제거 <small>BATTERY 2</small></button><button id="captureClue">단서 기록</button></div>
+                            <div class="transcript" id="radioTranscript"><span>LIVE TRANSCRIPT</span><p>“…치직… 누구든 듣고 있으면… 지하… 문이…”</p></div>
+                        </section>
+
+                        <section class="seoul-board">
+                            <header><span>SEOUL RESCUE GRID · JONGNO</span><b>위치 마커를 선택하세요</b></header>
+                            <div class="board-objective"><span>현재 목표</span><b id="caseObjective">보라색 노선과 얕은 배수음이 겹치는 장소</b></div>
+                            <div class="board-map" id="opsMap">
+                                <div class="map-road r1"></div><div class="map-road r2"></div><div class="map-road r3"></div><div class="map-road r4"></div>
+                                <button class="map-node" style="--x:18%;--y:26%" data-location="gwanghwamun"><i></i><span>광화문</span><small>A-2</small></button>
+                                <button class="map-node" style="--x:52%;--y:19%" data-location="jongmyo"><i></i><span>종묘 지하</span><small>C-1</small></button>
+                                <button class="map-node" style="--x:75%;--y:37%" data-location="dongdaemun"><i></i><span>동대문</span><small>D-3</small></button>
+                                <button class="map-node" style="--x:38%;--y:55%" data-location="jongno3"><i></i><span>종로3가</span><small>B-4</small></button>
+                                <button class="map-node" style="--x:69%;--y:72%" data-location="euljiro"><i></i><span>을지로</span><small>D-6</small></button>
+                                <button class="map-node" style="--x:20%;--y:78%" data-location="namsan"><i></i><span>남산 북측</span><small>A-7</small></button>
+                                <div class="board-compass">N<br>↑</div><div class="board-rain">RAIN / WIND SW</div>
+                            </div>
+                            <div class="clue-tray">
+                                <div class="clue-slot discovered"><b>환경음</b><p>금속 셔터와 얕은 배수음</p></div>
+                                <div class="clue-slot" id="clueTransit"><b>교통 단서</b><p>주파수를 맞춰 기록</p></div>
+                                <div class="clue-slot" id="clueVoice"><b>발언 검증</b><p>신호를 정제해 확인</p></div>
+                            </div>
+                        </section>
+
+                        <section class="analysis-console">
+                            <header><span>FIELD ASSESSMENT</span><b id="confidenceValue">확신도 18%</b></header>
+                            <div class="risk-ticket"><span>예상 획득</span><b id="caseReward">구조묘 3 · 지하 통행증</b><small id="caseRisk">실패 시: 지하 매복 +1</small></div>
+                            <div class="assessment-group"><label>요청 진위</label><div class="choice-row" data-choice="truth"><button data-value="real">진짜</button><button data-value="uncertain">불확실</button><button data-value="trap">함정</button></div></div>
+                            <div class="assessment-group"><label>현장 위험</label><div class="choice-row" data-choice="threat"><button data-value="low">낮음</button><button data-value="medium">중간</button><button data-value="high">높음</button></div></div>
+                            <div class="assessment-group"><label>브리핑 장비 <small>2개 선택</small></label><div class="kit-row" id="kitChoices"><button data-kit="filter">방독 필터</button><button data-kit="battery">예비 배터리</button><button data-kit="medkit">응급 키트</button><button data-kit="armor">중장 방어구</button></div></div>
+                            <div class="confidence-bar"><i id="confidenceBar"></i></div>
+                            <button class="dispatch-button" id="confirmBriefing">분석 확정 · 출정 브리핑 생성</button>
+                            <div class="ops-result" id="opsResult"><span>분석이 아직 완료되지 않았습니다.</span></div>
+                        </section>
+                    </div>
+                    <div class="raid-preview" id="raidPreview">
+                        <span>NEXT RAID PREVIEW</span>
+                        <div><b>?</b><small>진입 좌표</small></div><div><b>?</b><small>첫 매복</small></div><div><b>?</b><small>환경 보정</small></div><div><b>?</b><small>추가 보상</small></div>
+                    </div>
+                </section>
+
+                <div class="section-head"><div><span class="index">RULE SET</span><h2>캐주얼하지만 마스터는 어렵게</h2></div><p>실패를 막는 시험이 아니라, 출정의 정보 품질을 결정하는 게임</p></div>
+                <div class="mastery-grid">
+                    <article><span>입문 · 듣기</span><h3>명확한 단서 연결</h3><p>지역 방송, 지하철 안내음, 종소리처럼 알아보기 쉬운 단서를 지도에 연결한다.</p><footer>정답 후보 3개 · 교란 없음</footer></article>
+                    <article><span>중급 · 검증</span><h3>발언과 환경의 모순</h3><p>구조자의 설명과 배경음을 비교하고, 착각인지 강요된 거짓말인지 판단한다.</p><footer>중첩 신호 · 제한된 정제 횟수</footer></article>
+                    <article><span>고급 · 추론</span><h3>서울의 소리 문법</h3><p>비와 바람, 건물 반향, 노선 환승음, 세력 호출 부호까지 종합해 범위를 좁힌다.</p><footer>시간 압박 · 동시 사건 · 적 통신 교란</footer></article>
+                    <article><span>마스터 · 결단</span><h3>정답 없는 작전 판단</h3><p>진짜 구조 신호라도 비용이 너무 클 수 있다. 불완전한 확신으로 장비와 출정 목표를 결정한다.</p><footer>도덕적 선택 · 영구적 도시 변화</footer></article>
+                </div>
+
+                <div class="ops-detail-grid">
+                    <section class="panel scoring-panel">
+                        <span class="index">SCORING MODEL</span><h2>분석 점수는 출정 정보가 된다</h2>
+                        <div><b>40</b><span>위치 정확도</span><p>정확한 진입 좌표와 수색 반경</p></div>
+                        <div><b>20</b><span>진위 판정</span><p>매복·허위 신호 사전 탐지</p></div>
+                        <div><b>15</b><span>위험 판정</span><p>적 구성과 증원 가능성</p></div>
+                        <div><b>15</b><span>장비 적합성</span><p>환경 페널티와 구조 방식</p></div>
+                        <div><b>10</b><span>처리 시간</span><p>레이드 시작 시간과 선점 효과</p></div>
+                    </section>
+                    <section class="panel raid-impact-panel">
+                        <span class="index">RAID CONSEQUENCE</span><h2>실제 출정에 미치는 영향</h2>
+                        <ul>
+                            <li><b>정확한 위치</b><span>지도에 구조 반경 축소, 가까운 진입점 개방</span></li>
+                            <li><b>진위 성공</b><span>첫 매복 제거 또는 가짜 구조대 식별</span></li>
+                            <li><b>위험 성공</b><span>예상 적 병과와 증원 방향 표시</span></li>
+                            <li><b>장비 성공</b><span>독성·정전·침수 환경 페널티 완화</span></li>
+                            <li><b>부분 실패</b><span>잘못된 정보가 생기지만 임무 자체는 계속 가능</span></li>
+                        </ul>
+                    </section>
+                </div>
+
+                <div class="section-head"><div><span class="index">SESSION CADENCE</span><h2>4분짜리 출정 전 스낵</h2></div></div>
+                <div class="cadence-track">
+                    <div><time>00:00</time><b>신호 선택</b><p>오늘 포착된 2~3개 사건 중 하나를 선택</p></div>
+                    <div><time>00:30</time><b>주파수 조율</b><p>다이얼을 움직여 핵심 음성과 환경음 확보</p></div>
+                    <div><time>01:20</time><b>단서 배치</b><p>카드와 마커를 서울 보드에 올려 후보 압축</p></div>
+                    <div><time>02:30</time><b>진위·위험 판정</b><p>모순을 찾아 함정 가능성과 필요 장비 판단</p></div>
+                    <div><time>03:30</time><b>브리핑 확정</b><p>보너스와 불확실성을 안고 실제 출정 시작</p></div>
+                </div>
+
+                <section class="panel progression-panel">
+                    <div><span class="index">INCREMENTAL EXPANSION</span><h2>관제실이 성장하면 답이 아니라 도구가 늘어난다</h2><p>업그레이드는 자동 정답률을 올리기보다 플레이어가 더 깊게 추론할 새로운 장치를 제공한다.</p></div>
+                    <div class="progression-steps">
+                        <article><b>LV.1</b><h3>아날로그 수신기</h3><p>채널 1개, 단순 위치 단서, 후보 3곳</p></article>
+                        <article><b>LV.2</b><h3>녹음·파형 분석</h3><p>단서 재생, 특정 소리 분리, 주민 자문</p></article>
+                        <article><b>LV.3</b><h3>삼각측량 테이블</h3><p>다중 안테나, 신호 반사와 날씨 보정</p></article>
+                        <article><b>LV.4</b><h3>적 통신 감청</h3><p>호출 부호 사전, 위장 신호와 암호 해독</p></article>
+                        <article><b>LV.5</b><h3>서울 구조 네트워크</h3><p>동시 사건 비교, 분대 지원, 도시 변화 예측</p></article>
+                    </div>
+                </section>
+            </section>
+
+            <section class="view" id="roadmap">
+                <div class="page-intro"><span class="eyebrow">PRODUCTION STATUS</span><h1>개발 현황</h1><p>현재 구현 범위와 수직 슬라이스를 완성하기 위한 우선순위를 정리합니다.</p></div>
+                <div class="health-grid" id="healthGrid"></div>
+                <div class="roadmap-board" id="roadmapBoard"></div>
+                <section class="panel docs-panel">
+                    <span class="index">SOURCE DOCUMENTS</span><h2>연결 문서</h2>
+                    <div class="doc-cards">
+                        <a href="../GAME_DESIGN_DOCUMENT.md"><b>게임 디자인 문서</b><small>전체 GDD 원문 열기</small><i>↗</i></a>
+                        <a href="CHARACTER_ROSTER.md"><b>캐릭터 명부</b><small>공식 이름과 코드명 확인</small><i>↗</i></a>
+                        <a href="../SPRITE_ASSET_STATUS.html"><b>스프라이트 현황</b><small>캐릭터·적 이미지 작업 현황</small><i>↗</i></a>
+                        <a href="../SPRITE_ASSET_CHECKLIST.html"><b>스프라이트 체크리스트</b><small>제작·검수 항목 확인</small><i>↗</i></a>
+                        <a href="../README.md"><b>프로젝트 안내</b><small>실행과 제작 파이프라인</small><i>↗</i></a>
+                    </div>
+                </section>
+            </section>
+        </main>
+    </div>
+
+    <dialog id="assetDialog">
+        <button class="dialog-close" aria-label="닫기">×</button>
+        <div class="dialog-preview"><img id="dialogImage" alt=""></div>
+        <div class="dialog-info"><span id="dialogCategory"></span><h2 id="dialogTitle"></h2><p id="dialogPath"></p><dl id="dialogMeta"></dl><button id="copyPath">경로 복사</button></div>
+    </dialog>
+    <script src="project-data.js?v=atlas-3"></script>
+    <script src="app.js?v=atlas-3"></script>
+    <script src="operations.js?v=atlas-3"></script>
+</body>
+</html>

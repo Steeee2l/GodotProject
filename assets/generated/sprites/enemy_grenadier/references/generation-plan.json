@@ -1,0 +1,171 @@
+{
+  "version": 1,
+  "kind": "sprite-gen-generation-plan",
+  "order": [
+    {
+      "stage": 1,
+      "name": "direction-anchors",
+      "items": [
+        {
+          "state": "down_idle",
+          "role": "direction-anchor",
+          "direction": "down",
+          "refs": [
+            "base-source.*",
+            "references/layout-guides/down/idle.png"
+          ],
+          "note": "base 는 방향 앵커 생성까지만 identity 소스다 — 앵커 수락 후 행 생성에 base 를 재부착하지 않는다"
+        },
+        {
+          "state": "down_right_idle",
+          "role": "direction-anchor",
+          "direction": "down_right",
+          "refs": [
+            "base-source.*",
+            "references/layout-guides/down_right/idle.png"
+          ],
+          "note": "base 는 방향 앵커 생성까지만 identity 소스다 — 앵커 수락 후 행 생성에 base 를 재부착하지 않는다"
+        },
+        {
+          "state": "right_idle",
+          "role": "direction-anchor",
+          "direction": "right",
+          "refs": [
+            "base-source.*",
+            "references/layout-guides/right/idle.png"
+          ],
+          "note": "base 는 방향 앵커 생성까지만 identity 소스다 — 앵커 수락 후 행 생성에 base 를 재부착하지 않는다"
+        },
+        {
+          "state": "up_right_idle",
+          "role": "direction-anchor",
+          "direction": "up_right",
+          "refs": [
+            "base-source.*",
+            "references/layout-guides/up_right/idle.png"
+          ],
+          "note": "base 는 방향 앵커 생성까지만 identity 소스다 — 앵커 수락 후 행 생성에 base 를 재부착하지 않는다"
+        },
+        {
+          "state": "up_idle",
+          "role": "direction-anchor",
+          "direction": "up",
+          "refs": [
+            "base-source.*",
+            "references/layout-guides/up/idle.png"
+          ],
+          "note": "base 는 방향 앵커 생성까지만 identity 소스다 — 앵커 수락 후 행 생성에 base 를 재부착하지 않는다"
+        },
+        {
+          "state": "up_left_idle",
+          "role": "direction-anchor",
+          "direction": "up_left",
+          "refs": [
+            "base-source.*",
+            "references/layout-guides/up_left/idle.png"
+          ],
+          "note": "base 는 방향 앵커 생성까지만 identity 소스다 — 앵커 수락 후 행 생성에 base 를 재부착하지 않는다"
+        },
+        {
+          "state": "left_idle",
+          "role": "direction-anchor",
+          "direction": "left",
+          "refs": [
+            "base-source.*",
+            "references/layout-guides/left/idle.png"
+          ],
+          "note": "base 는 방향 앵커 생성까지만 identity 소스다 — 앵커 수락 후 행 생성에 base 를 재부착하지 않는다"
+        },
+        {
+          "state": "down_left_idle",
+          "role": "direction-anchor",
+          "direction": "down_left",
+          "refs": [
+            "base-source.*",
+            "references/layout-guides/down_left/idle.png"
+          ],
+          "note": "base 는 방향 앵커 생성까지만 identity 소스다 — 앵커 수락 후 행 생성에 base 를 재부착하지 않는다"
+        }
+      ]
+    },
+    {
+      "stage": 2,
+      "name": "action-rows",
+      "items": [
+        {
+          "state": "down_walk",
+          "role": "action-row",
+          "direction": "down",
+          "refs": [
+            "<accepted single-pose crop of raw/down/idle.png>",
+            "references/layout-guides/down/walk.png"
+          ]
+        },
+        {
+          "state": "down_right_walk",
+          "role": "action-row",
+          "direction": "down_right",
+          "refs": [
+            "<accepted single-pose crop of raw/down_right/idle.png>",
+            "references/layout-guides/down_right/walk.png"
+          ]
+        },
+        {
+          "state": "right_walk",
+          "role": "action-row",
+          "direction": "right",
+          "refs": [
+            "<accepted single-pose crop of raw/right/idle.png>",
+            "references/layout-guides/right/walk.png"
+          ]
+        },
+        {
+          "state": "up_right_walk",
+          "role": "action-row",
+          "direction": "up_right",
+          "refs": [
+            "<accepted single-pose crop of raw/up_right/idle.png>",
+            "references/layout-guides/up_right/walk.png"
+          ]
+        },
+        {
+          "state": "up_walk",
+          "role": "action-row",
+          "direction": "up",
+          "refs": [
+            "<accepted single-pose crop of raw/up/idle.png>",
+            "references/layout-guides/up/walk.png"
+          ]
+        },
+        {
+          "state": "up_left_walk",
+          "role": "action-row",
+          "direction": "up_left",
+          "refs": [
+            "<accepted single-pose crop of raw/up_left/idle.png>",
+            "references/layout-guides/up_left/walk.png"
+          ]
+        },
+        {
+          "state": "left_walk",
+          "role": "action-row",
+          "direction": "left",
+          "refs": [
+            "<accepted single-pose crop of raw/left/idle.png>",
+            "references/layout-guides/left/walk.png"
+          ]
+        },
+        {
+          "state": "down_left_walk",
+          "role": "action-row",
+          "direction": "down_left",
+          "refs": [
+            "<accepted single-pose crop of raw/down_left/idle.png>",
+            "references/layout-guides/down_left/walk.png"
+          ]
+        }
+      ]
+    }
+  ],
+  "mirrored_directions": []
+}

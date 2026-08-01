@@ -1,0 +1,60 @@
+{
+  "id": "482c3c7c52094b1f948f35ef766bcfa4",
+  "status": "completed",
+  "total": 6,
+  "completed": 6,
+  "currentState": null,
+  "currentIndex": null,
+  "states": [
+    "up_right_idle",
+    "left_idle",
+    "down_left_idle",
+    "up_right_walk",
+    "left_walk",
+    "down_left_walk"
+  ],
+  "results": [
+    {
+      "state": "up_right_idle",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "left_idle",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "down_left_idle",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "up_right_walk",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "left_walk",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "down_left_walk",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    }
+  ],
+  "skeletonProfileId": "pose-20260716-201338-5886ab",
+  "kind": "auto",
+  "label": null,
+  "startedAt": "2026-08-01T18:59:37+0900",
+  "regenerateExisting": true,
+  "finishedAt": "2026-08-01T19:07:39+0900"
+}

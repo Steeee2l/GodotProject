@@ -1,0 +1,6 @@
+{
+  "ok": false,
+  "kind": "walk-cycle-qa",
+  "state": "down_left_walk",
+  "error": "contact frames do not alternate leading feet: frame0=-4.30, frame2=-5.89"
+}

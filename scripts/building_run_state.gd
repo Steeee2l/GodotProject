@@ -12,6 +12,23 @@ var source_scene_path := FIELD_SCENE_PATH
 var return_position := Vector3.ZERO
 var pending_field_return := false
 var floor_state: Dictionary = {}
+var field_raid_seed := 0
+var closed_entrance_ids: Dictionary = {}
+
+
+func begin_field_raid(seed_value: int) -> void:
+	field_raid_seed = seed_value
+	closed_entrance_ids.clear()
+
+
+func close_current_entrance() -> void:
+	if building_id.is_empty():
+		return
+	closed_entrance_ids[building_id] = true
+
+
+func is_entrance_closed(entrance_id: String) -> bool:
+	return bool(closed_entrance_ids.get(entrance_id, false))
 
 
 func begin_run(
@@ -41,6 +58,7 @@ func get_floor_state(floor_number: int) -> Dictionary:
 		floor_state[floor_number] = {
 			"collected_loot": {},
 			"defeated_enemies": {},
+			"cleared": false,
 		}
 	return floor_state[floor_number] as Dictionary
 
@@ -65,12 +83,35 @@ func is_enemy_defeated(floor_number: int, enemy_key: String) -> bool:
 	return bool((state["defeated_enemies"] as Dictionary).get(enemy_key, false))
 
 
+func mark_floor_cleared(floor_number: int) -> void:
+	get_floor_state(floor_number)["cleared"] = true
+
+
+func is_floor_cleared(floor_number: int) -> bool:
+	return bool(get_floor_state(floor_number).get("cleared", false))
+
+
+func is_building_cleared() -> bool:
+	for floor_number in range(1, max_floors + 1):
+		if not is_floor_cleared(floor_number):
+			return false
+	return true
+
+
 func leave_building() -> void:
 	if not active:
 		return
+	close_current_entrance()
 	active = false
 	pending_field_return = true
-	get_tree().change_scene_to_file(source_scene_path)
+	var game_state := get_node_or_null("/root/GameState")
+	if game_state != null and game_state.has_method("save_persistent_state"):
+		game_state.call("save_persistent_state")
+	get_node("/root/SceneTransition").call(
+		"transition_to",
+		source_scene_path,
+		"res://scenes/shelter_interior.tscn"
+	)
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -94,7 +135,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		5
 	)
 	get_viewport().set_input_as_handled()
-	get_tree().call_deferred("change_scene_to_file", BUILDING_SCENE_PATH)
+	get_node("/root/SceneTransition").call(
+		"transition_to",
+		BUILDING_SCENE_PATH,
+		FIELD_SCENE_PATH
+	)
 
 
 func _process(_delta: float) -> void:

@@ -1,0 +1,279 @@
+{
+  "version": 1,
+  "kind": "sprite-gen-curation",
+  "states": {
+    "down_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "afad35888326"
+      ]
+    },
+    "down_right_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "c7f940025eac"
+      ]
+    },
+    "right_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "bc1a91192c54"
+      ]
+    },
+    "up_right_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "0d0819830954"
+      ]
+    },
+    "up_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "fbeda3cd4787"
+      ]
+    },
+    "up_left_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "52a26f20550f"
+      ]
+    },
+    "left_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "41ab073327ff"
+      ]
+    },
+    "down_left_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "bc6ee3a902cb"
+      ]
+    },
+    "down_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "e2880fadc92d"
+      ]
+    },
+    "down_right_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "25191cefa165"
+      ]
+    },
+    "right_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "4a2099d64cc3"
+      ]
+    },
+    "up_right_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "17d2df89f284"
+      ]
+    },
+    "up_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "3fa358bedd6b"
+      ]
+    },
+    "up_left_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "34406884189d"
+      ]
+    },
+    "left_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "09693e82eec8"
+      ]
+    },
+    "down_left_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "0b6a655c6f51"
+      ]
+    }
+  },
+  "run_revision": "d794a40e0acec4ab"
+}

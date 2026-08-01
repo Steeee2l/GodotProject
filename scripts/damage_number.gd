@@ -22,8 +22,9 @@ func setup(
 	name = "DamageNumber"
 	text = str(maxi(0, damage))
 	font = damage_font
-	font_size = 78 if is_critical else 58
-	outline_size = 18 if is_critical else 14
+	var text_scale := clampf(float(AccessibilitySettings.combat_text_scale), 0.8, 1.4)
+	font_size = roundi(float(78 if is_critical else 58) * text_scale)
+	outline_size = roundi(float(18 if is_critical else 14) * text_scale)
 	base_color = Color("#ffd84a") if is_critical else Color("#f2f0e8")
 	modulate = base_color
 	outline_modulate = Color(0.16, 0.08, 0.01, 0.96) if is_critical else Color(0.02, 0.025, 0.025, 0.94)

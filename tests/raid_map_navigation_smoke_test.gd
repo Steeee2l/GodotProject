@@ -65,6 +65,16 @@ func _run() -> void:
 	assert(screen_right.x > center.x and absf(screen_right.y - center.y) < 0.01)
 	assert(screen_down.y > center.y and absf(screen_down.x - center.x) < 0.01)
 
+	var main_source := FileAccess.get_file_as_string("res://scripts/main.gd")
+	assert(main_source.contains("map_layer.layer = 170"), "Tactical map must render above combat HUD layers.")
+	var callback_start := main_source.find("func _on_tactical_map_open_state_changed")
+	var callback_end := main_source.find("\nfunc ", callback_start + 1)
+	var callback_source := main_source.substr(callback_start, callback_end - callback_start)
+	assert(
+		callback_source.contains("_update_combat_overlay_visibility()"),
+		"Opening or closing the tactical map must refresh aim and world-health overlays."
+	)
+
 	print("RAID_MAP_NAVIGATION_SMOKE: PASS seeds=%d/%d patrol_span=%.1f" % [first_seed, second_seed, patrol_span])
 	tactical_map.free()
 	map_player.queue_free()

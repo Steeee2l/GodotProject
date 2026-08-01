@@ -15,10 +15,13 @@ var capacity_label: Label
 var candidate_icon: TextureRect
 var candidate_title: Label
 var candidate_detail: Label
+var value_summary_label: Label
 var item_grid: GridContainer
 var claim_button: Button
+var auto_discard_button: Button
 var feedback_label: Label
 var candidate_data: Dictionary = {}
+var lowest_value_entry: Dictionary = {}
 
 
 func setup(font: Font) -> void:
@@ -75,7 +78,7 @@ func _build_ui() -> void:
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 10)
 	content.add_child(header)
-	var title := _label("가방 정리", 27, Color("#f1d287"))
+	var title := _label("전리품 교체", 27, Color("#f1d287"))
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
 	var close_button := Button.new()
@@ -118,7 +121,7 @@ func _build_ui() -> void:
 	candidate_row.add_theme_constant_override("separation", 14)
 	candidate_margin.add_child(candidate_row)
 	candidate_icon = TextureRect.new()
-	candidate_icon.custom_minimum_size = Vector2(86, 86)
+	candidate_icon.custom_minimum_size = Vector2(64, 76)
 	candidate_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	candidate_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	candidate_row.add_child(candidate_icon)
@@ -132,13 +135,13 @@ func _build_ui() -> void:
 	candidate_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	candidate_copy.add_child(candidate_detail)
 	claim_button = Button.new()
-	claim_button.custom_minimum_size = Vector2(150, 58)
+	claim_button.custom_minimum_size = Vector2(118, 58)
 	claim_button.text = "획득"
 	claim_button.icon = UI_ICONS.get_icon("backpack", 28, Color("#1b211d"))
 	claim_button.expand_icon = true
 	claim_button.focus_mode = Control.FOCUS_NONE
 	claim_button.add_theme_font_override("font", font_ref)
-	claim_button.add_theme_font_size_override("font_size", 17)
+	claim_button.add_theme_font_size_override("font_size", 15)
 	claim_button.add_theme_stylebox_override(
 		"normal",
 		_panel_style(Color("#d5a451"), Color("#f3cf7a"), 6)
@@ -147,7 +150,10 @@ func _build_ui() -> void:
 	claim_button.pressed.connect(func() -> void: claim_requested.emit())
 	candidate_row.add_child(claim_button)
 
-	var section := _label("가방에서 내놓을 물건", 16, Color("#b8c8c0"))
+	value_summary_label = _label("교체 후 가치 변화", 14, Color("#9eb5aa"))
+	content.add_child(value_summary_label)
+
+	var section := _label("탭하여 바닥에 내려놓기", 16, Color("#b8c8c0"))
 	content.add_child(section)
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(0, 250)
@@ -160,6 +166,19 @@ func _build_ui() -> void:
 	item_grid.add_theme_constant_override("h_separation", 8)
 	item_grid.add_theme_constant_override("v_separation", 8)
 	scroll.add_child(item_grid)
+	auto_discard_button = Button.new()
+	auto_discard_button.text = "가치가 가장 낮은 물건 정리"
+	auto_discard_button.icon = UI_ICONS.get_icon("down", 24, Color("#e6c77c"))
+	auto_discard_button.expand_icon = true
+	auto_discard_button.focus_mode = Control.FOCUS_NONE
+	auto_discard_button.add_theme_font_override("font", font_ref)
+	auto_discard_button.add_theme_font_size_override("font_size", 14)
+	auto_discard_button.add_theme_stylebox_override(
+		"normal",
+		_panel_style(Color("#17130d"), Color("#9c7845"), 6)
+	)
+	auto_discard_button.pressed.connect(_discard_lowest_value_entry)
+	content.add_child(auto_discard_button)
 
 	feedback_label = _label("", 13, Color("#ff9d82"))
 	feedback_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -172,7 +191,7 @@ func _refresh(candidate: Dictionary, entries: Array[Dictionary], used: int, capa
 	var required := maxi(0, int(candidate.get("required_slots", 1)))
 	for index in capacity:
 		var cell := PanelContainer.new()
-		cell.custom_minimum_size = Vector2(18, 22)
+		cell.custom_minimum_size = Vector2(10, 22)
 		var fill := Color("#456c5b") if index < used else Color("#151c1a")
 		if index >= used and index < used + required:
 			fill = Color("#d09245")
@@ -186,19 +205,47 @@ func _refresh(candidate: Dictionary, entries: Array[Dictionary], used: int, capa
 	)
 	candidate_icon.texture = candidate.get("texture") as Texture2D
 	candidate_title.text = str(candidate.get("title", "전리품"))
-	candidate_detail.text = "%s\n가방 %d칸 필요" % [
+	var total_value := int(candidate.get("total_value", 0))
+	var value_per_slot := int(round(float(candidate.get("value_per_slot", 0.0))))
+	candidate_detail.text = "%s\n가방 %d칸 · 가치 %d · 칸당 %d" % [
 		str(candidate.get("description", "")),
-		required,
+		maxi(1, int(candidate.get("display_slots", required))),
+		total_value,
+		value_per_slot,
 	]
 	claim_button.disabled = used + required > capacity
-	claim_button.text = "획득 가능" if not claim_button.disabled else "%d칸 부족" % (used + required - capacity)
+	claim_button.text = "바로 획득" if not claim_button.disabled else "%d칸 부족" % (used + required - capacity)
 
 	for child in item_grid.get_children():
 		child.queue_free()
+	lowest_value_entry.clear()
+	var bag_value := 0
+	var lowest_value_per_slot := INF
 	for entry in entries:
-		if str(entry.get("type", "")) in ["special_cargo", "mod"]:
-			continue
+		bag_value += int(entry.get("total_value", 0))
+		if not bool(entry.get("protected", false)):
+			var entry_value_per_slot := float(entry.get("value_per_slot", 0.0))
+			if entry_value_per_slot < lowest_value_per_slot:
+				lowest_value_per_slot = entry_value_per_slot
+				lowest_value_entry = entry.duplicate(true)
 		item_grid.add_child(_entry_button(entry))
+	var value_delta := total_value
+	if claim_button.disabled and not lowest_value_entry.is_empty():
+		value_delta -= int(lowest_value_entry.get("drop_value", 0))
+	value_summary_label.text = "현재 가방 가치 %d  ·  교체 예상 %s%d" % [
+		bag_value,
+		"+" if value_delta >= 0 else "",
+		value_delta,
+	]
+	value_summary_label.add_theme_color_override(
+		"font_color",
+		Color("#81d7aa") if value_delta >= 0 else Color("#ff9d82")
+	)
+	auto_discard_button.visible = claim_button.disabled and not lowest_value_entry.is_empty()
+	if auto_discard_button.visible:
+		auto_discard_button.text = "낮은 가치 물품 정리 · %s" % str(
+			lowest_value_entry.get("title", "휴대품")
+		)
 	if item_grid.get_child_count() == 0:
 		var empty := _label("내놓을 수 있는 휴대품이 없습니다.", 14, Color("#819188"))
 		empty.custom_minimum_size = Vector2(0, 80)
@@ -211,11 +258,14 @@ func _entry_button(entry: Dictionary) -> Button:
 	var button := Button.new()
 	button.custom_minimum_size = Vector2(0, 82)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	button.text = "%s  x%d\n%d칸 사용  ·  %d개 내놓기" % [
+	var protected := bool(entry.get("protected", false))
+	button.text = "%s  x%d%s\n%d칸 · 가치 %d · 칸당 %d" % [
 		str(entry.get("title", entry.get("id", "아이템"))),
 		int(entry.get("count", 0)),
+		"  [보호]" if protected else "",
 		int(entry.get("slot_cost", 1)),
-		int(entry.get("drop_amount", 1)),
+		int(entry.get("total_value", 0)),
+		int(round(float(entry.get("value_per_slot", 0.0)))),
 	]
 	button.icon = entry.get("texture") as Texture2D
 	button.expand_icon = true
@@ -232,8 +282,23 @@ func _entry_button(entry: Dictionary) -> Button:
 		"hover",
 		_panel_style(Color("#18120e"), Color("#d09a4f"), 6)
 	)
+	button.disabled = protected
+	button.tooltip_text = (
+		"중요 물품은 전리품 교체 중 버릴 수 없습니다."
+		if protected
+		else "%s\n탭하면 %d개를 바닥에 내려놓습니다." % [
+			str(entry.get("description", "")),
+			int(entry.get("drop_amount", 1)),
+		]
+	)
 	button.pressed.connect(func() -> void: discard_requested.emit(entry))
 	return button
+
+
+func _discard_lowest_value_entry() -> void:
+	if lowest_value_entry.is_empty():
+		return
+	discard_requested.emit(lowest_value_entry)
 
 
 func show_feedback(message: String) -> void:
@@ -244,14 +309,14 @@ func _apply_layout() -> void:
 	if panel == null:
 		return
 	var viewport := get_viewport_rect().size
-	var width := clampf(viewport.x - 36.0, 520.0, 920.0)
-	var height := clampf(viewport.y - 32.0, 480.0, 660.0)
+	var width := minf(920.0, maxf(320.0, viewport.x - 24.0))
+	var height := minf(680.0, maxf(420.0, viewport.y - 24.0))
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.offset_left = -width * 0.5
 	panel.offset_top = -height * 0.5
 	panel.offset_right = width * 0.5
 	panel.offset_bottom = height * 0.5
-	item_grid.columns = 1 if width < 700.0 else 2
+	item_grid.columns = 1 if width < 720.0 else 2
 
 
 func _label(text_value: String, font_size: int, color: Color) -> Label:

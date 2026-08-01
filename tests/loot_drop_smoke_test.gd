@@ -23,6 +23,16 @@ func _run() -> void:
 		assert(str(pickup.get_meta("loot_type", "")) == "canned_food")
 		assert(bool(pickup.get_meta("guaranteed_field_supply", false)))
 	assert((main_scene.get("field_loot_containers") as Array).size() == 29)
+	var opened_container := (main_scene.get("field_loot_containers") as Array)[0] as Node3D
+	main_scene.call("_complete_field_interaction", opened_container)
+	await process_frame
+	assert(is_instance_valid(opened_container))
+	assert(bool(opened_container.get_meta("opened", false)))
+	assert(not opened_container.is_in_group("field_interaction"))
+	assert(not (main_scene.get("field_loot_containers") as Array).has(opened_container))
+	var opened_sprite := opened_container.get_node("ContainerSprite") as Sprite3D
+	assert(opened_sprite.modulate.a < 0.7)
+	assert(opened_container.get_node_or_null("ContainerTypeIcon") != null)
 	var field_scrap_before := int(game_state.get("scrap"))
 
 	var player := main_scene.get("player") as Node3D

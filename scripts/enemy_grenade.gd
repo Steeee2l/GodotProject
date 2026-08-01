@@ -1,6 +1,8 @@
 class_name EnemyGrenade
 extends Node3D
 
+const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
+
 var source_body: CollisionObject3D
 var target_body: CharacterBody3D
 var launch_origin := Vector3.ZERO
@@ -59,7 +61,11 @@ func _physics_process(delta: float) -> void:
 func _update_flight(delta: float) -> void:
 	velocity.y -= 13.0 * delta
 	var next_position := global_position + velocity * delta
-	var query := PhysicsRayQueryParameters3D.create(global_position, next_position, 1)
+	var query := PhysicsRayQueryParameters3D.create(
+		global_position,
+		next_position,
+		COLLISION_PROFILES.WORLD_ONLY_SIGHT_MASK
+	)
 	if is_instance_valid(source_body):
 		query.exclude = [source_body.get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
@@ -175,7 +181,7 @@ func _has_clear_blast_path(body: CollisionObject3D) -> bool:
 	var query := PhysicsRayQueryParameters3D.create(
 		global_position + Vector3(0.0, 0.15, 0.0),
 		body.global_position + Vector3(0.0, 0.35, 0.0),
-		1
+		COLLISION_PROFILES.WORLD_ONLY_SIGHT_MASK
 	)
 	if is_instance_valid(source_body):
 		query.exclude = [source_body.get_rid()]

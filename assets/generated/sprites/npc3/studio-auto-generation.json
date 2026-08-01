@@ -1,0 +1,130 @@
+{
+  "id": "c07eacf1b9ea4da29fe7e37f661677f3",
+  "status": "completed",
+  "total": 16,
+  "completed": 16,
+  "currentState": null,
+  "currentIndex": null,
+  "states": [
+    "down_idle",
+    "down_right_idle",
+    "right_idle",
+    "up_right_idle",
+    "up_idle",
+    "up_left_idle",
+    "left_idle",
+    "down_left_idle",
+    "down_walk",
+    "down_right_walk",
+    "right_walk",
+    "up_right_walk",
+    "up_walk",
+    "up_left_walk",
+    "left_walk",
+    "down_left_walk"
+  ],
+  "results": [
+    {
+      "state": "down_idle",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "down_right_idle",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "right_idle",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "up_right_idle",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "up_idle",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "up_left_idle",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "left_idle",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "down_left_idle",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "down_walk",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "down_right_walk",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "right_walk",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "up_right_walk",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "up_walk",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "up_left_walk",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "left_walk",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "down_left_walk",
+      "poseTemplateUsed": true,
+      "recovered": false,
+      "qualityRetry": false
+    }
+  ],
+  "skeletonProfileId": "pose-20260716-134616-57c346",
+  "kind": "skeleton_generation",
+  "label": "8방향 이동",
+  "startedAt": "2026-08-01T21:15:47+0900",
+  "regenerateExisting": false,
+  "finishedAt": "2026-08-01T21:33:51+0900"
+}

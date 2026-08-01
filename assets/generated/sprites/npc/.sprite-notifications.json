@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "notifications": [
+    {
+      "id": "9d72852d39234a0a94df3da19f3617e3",
+      "kind": "base_generated",
+      "state": "__base__",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "generated": false
+      },
+      "createdAt": "2026-08-01T18:47:07+0900",
+      "read": false
+    },
+    {
+      "id": "a804c9078e964c1c8af6fe79925b15a9",
+      "kind": "auto_completed",
+      "state": "down_idle",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "name": "8방향 이동",
+        "total": 16
+      },
+      "createdAt": "2026-08-01T19:06:36+0900",
+      "read": false
+    },
+    {
+      "id": "00318804afb74421856b1738f884cd3e",
+      "kind": "auto_completed",
+      "state": "up_right_idle",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "name": null,
+        "total": 1
+      },
+      "createdAt": "2026-08-01T19:16:51+0900",
+      "read": false
+    }
+  ]
+}

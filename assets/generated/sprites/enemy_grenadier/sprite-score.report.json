@@ -1,0 +1,181 @@
+{
+  "ok": false,
+  "kind": "sprite-gen-score-report",
+  "source_report": "C:\\Users\\rain2\\Documents\\GitHub\\GodotProject\\assets\\generated\\sprites\\enemy_grenadier",
+  "overall_score": 98.12,
+  "candidate_rank": 6398,
+  "rows": [
+    {
+      "state": "down_idle",
+      "score": 85.0,
+      "candidate_rank": 399,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [
+        "down_idle: motion presence is too low (0.0066 < 0.0100)"
+      ],
+      "hints": [
+        "down_idle: Adjacent frames are too similar (motion presence 0.0066). Make the action visibly progress across the row while preserving the same character identity and foot baseline."
+      ]
+    },
+    {
+      "state": "down_right_idle",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "right_idle",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "up_right_idle",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "up_idle",
+      "score": 85.0,
+      "candidate_rank": 399,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [
+        "up_idle: motion presence is too low (0.0051 < 0.0100)"
+      ],
+      "hints": [
+        "up_idle: Adjacent frames are too similar (motion presence 0.0051). Make the action visibly progress across the row while preserving the same character identity and foot baseline."
+      ]
+    },
+    {
+      "state": "up_left_idle",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "left_idle",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "down_left_idle",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "down_walk",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "down_right_walk",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "right_walk",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "up_right_walk",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "up_walk",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "up_left_walk",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "left_walk",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "down_left_walk",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    }
+  ],
+  "hints": [
+    "down_idle: Adjacent frames are too similar (motion presence 0.0066). Make the action visibly progress across the row while preserving the same character identity and foot baseline.",
+    "up_idle: Adjacent frames are too similar (motion presence 0.0051). Make the action visibly progress across the row while preserving the same character identity and foot baseline."
+  ]
+}

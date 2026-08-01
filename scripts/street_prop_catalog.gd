@@ -4,6 +4,7 @@ extends RefCounted
 const DEFINITIONS := {
     "dumpster_cluster": {
         "texture_path": "res://assets/props/street_dumpster_cluster_v1.png",
+        "collision_profile": "street_cluster",
         "source_size": Vector2i(1774, 887),
         "collision_size": Vector3(3.4, 1.65, 1.55),
         "footprint_corners_px": [
@@ -17,6 +18,7 @@ const DEFINITIONS := {
     },
     "vending_cluster": {
         "texture_path": "res://assets/props/street_vending_cluster_v1.png",
+        "collision_profile": "furniture_solid",
         "source_size": Vector2i(1774, 887),
         "collision_size": Vector3(2.65, 2.25, 0.95),
         "footprint_corners_px": [
@@ -30,6 +32,7 @@ const DEFINITIONS := {
     },
     "construction_cluster": {
         "texture_path": "res://assets/props/street_construction_cluster_v1.png",
+        "collision_profile": "street_cluster",
         "source_size": Vector2i(1774, 887),
         "collision_size": Vector3(3.15, 1.45, 1.75),
         "footprint_corners_px": [

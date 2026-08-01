@@ -5,9 +5,11 @@ signal weapon_mods_changed
 signal weapon_equipped(weapon_id: String)
 signal weapon_unequipped
 signal equipment_changed
+signal item_discard_requested(item_type: String, item_id: String, amount: int)
 
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
 
 const SLOT_ORDER := ["sight", "muzzle", "stock", "magazine", "tactical", "special"]
 const MOD_COMPONENTS := {
@@ -76,6 +78,7 @@ var item_detail_icon: TextureRect
 var item_detail_title: Label
 var item_detail_description: Label
 var item_action_button: Button
+var item_discard_button: Button
 var item_detail_reason: Label
 var bag_empty_hint: Label
 
@@ -105,7 +108,6 @@ var bag_filter: String = "all"
 var feedback_tween: Tween
 var visible_bag_items := 0
 var responsive_compact := false
-const BAG_SLOT_CAPACITY := 15
 const BAG_GRID_COLUMNS := 5
 
 
@@ -233,6 +235,7 @@ func _build_modal() -> void:
 	modal.add_child(dim)
 
 	var safe_margin := _margin(16, 16, 16, 16)
+	safe_margin.name = "InventorySafeMargin"
 	safe_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	modal.add_child(safe_margin)
 	var center := CenterContainer.new()
@@ -297,7 +300,14 @@ func _build_inventory_panel() -> Control:
 	var bag_title := _section("가방")
 	bag_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bag_header.add_child(bag_title)
-	bag_slot_usage_label = _label("0 / %d칸" % BAG_SLOT_CAPACITY, 12, Color("#b7c8c0"))
+	bag_slot_usage_label = _label(
+		"남은 슬롯 %d / %d" % [
+			int(game_state.get_raid_bag_capacity()),
+			int(game_state.get_raid_bag_capacity()),
+		],
+		12,
+		Color("#b7c8c0")
+	)
 	bag_slot_usage_label.name = "BagSlotUsage"
 	bag_slot_usage_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	bag_slot_usage_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -340,8 +350,8 @@ func _build_inventory_panel() -> Control:
 func _build_item_detail_panel() -> Control:
 	var panel := PanelContainer.new()
 	panel.name = "SelectedItemDetail"
-	panel.custom_minimum_size = Vector2(0, 90)
-	panel.clip_contents = true
+	panel.custom_minimum_size = Vector2(0, 132)
+	panel.clip_contents = false
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.018, 0.025, 0.029, 0.96), Color(0.43, 0.58, 0.52, 0.58), 7))
 	var margin := _margin(10, 8, 10, 8)
 	panel.add_child(margin)
@@ -350,23 +360,27 @@ func _build_item_detail_panel() -> Control:
 	margin.add_child(row)
 
 	item_detail_icon = TextureRect.new()
-	item_detail_icon.custom_minimum_size = Vector2(52, 52)
+	item_detail_icon.custom_minimum_size = Vector2(60, 60)
 	item_detail_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	item_detail_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	row.add_child(item_detail_icon)
 	var text_box := VBoxContainer.new()
 	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	text_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	text_box.clip_contents = true
+	text_box.clip_contents = false
+	text_box.add_theme_constant_override("separation", 4)
 	row.add_child(text_box)
 	item_detail_title = _label("아이템을 선택하세요", 14, Color("#e8e0c7"))
 	item_detail_title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	item_detail_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(item_detail_title)
 	item_detail_description = _label("가방 슬롯에는 아이콘과 수량만 표시됩니다.", 11, Color("#9aaba4"))
+	item_detail_description.custom_minimum_size = Vector2(0, 64)
 	item_detail_description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	item_detail_description.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	item_detail_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	item_detail_description.max_lines_visible = 3
+	item_detail_description.max_lines_visible = 6
 	item_detail_description.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(item_detail_description)
 	item_detail_reason = _label("", 10, Color("#ffc77f"))
@@ -376,11 +390,22 @@ func _build_item_detail_panel() -> Control:
 	item_detail_reason.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	item_detail_reason.visible = false
 	text_box.add_child(item_detail_reason)
+	var action_box := VBoxContainer.new()
+	action_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	action_box.add_theme_constant_override("separation", 5)
+	row.add_child(action_box)
 	item_action_button = _icon_text_button("", "", "all")
-	item_action_button.custom_minimum_size = Vector2(82, 42)
+	item_action_button.custom_minimum_size = Vector2(86, 36)
 	item_action_button.visible = false
 	item_action_button.pressed.connect(_on_selected_item_action)
-	row.add_child(item_action_button)
+	action_box.add_child(item_action_button)
+	item_discard_button = _icon_text_button("버리기", "close", "all")
+	item_discard_button.custom_minimum_size = Vector2(86, 36)
+	item_discard_button.add_theme_color_override("font_color", Color("#f0b09a"))
+	item_discard_button.add_theme_color_override("icon_normal_color", Color("#f0b09a"))
+	item_discard_button.visible = false
+	item_discard_button.pressed.connect(_on_selected_item_discard)
+	action_box.add_child(item_discard_button)
 	return panel
 
 
@@ -438,7 +463,11 @@ func _build_weapon_panel() -> Control:
 	preview.add_child(weapon_stats)
 
 	box.add_child(_section("부착 슬롯"))
-	var help := _label("가방의 부품을 누르면 즉시 장착됩니다. 장착 슬롯을 누르면 해제됩니다.", 11, Color("#8fa59b"))
+	var help := _label(
+		"완성 부착물만 가방에서 장착할 수 있습니다. 제작 재료는 쉘터 작업대에서 완성품 제작에 사용합니다.",
+		11,
+		Color("#8fa59b")
+	)
 	box.add_child(help)
 	mod_slot_grid = GridContainer.new()
 	mod_slot_grid.name = "AttachmentSlots"
@@ -908,7 +937,6 @@ func _refresh_contents() -> void:
 			"title": str(ammo_names.get(ammo_id, ammo_id)),
 			"description": "총기에 장전하는 소모 탄약입니다. 무기 구경과 맞아야 사용할 수 있습니다.",
 			"quantity": ammo_count,
-			"slot_cost": game_state.get_raid_item_slot_cost("ammo", ammo_id, ammo_count),
 			"texture": ammo_texture if ammo_id == "762_fmj" else UI_ICONS.get_icon(
 				"ammo",
 				64,
@@ -921,11 +949,6 @@ func _refresh_contents() -> void:
 		"title": "통조림",
 		"description": "레이드에서 확보하는 핵심 식량이자 쉘터 노동 자원입니다.",
 		"quantity": game_state.get_backpack_storage_count("food", "canned_food"),
-		"slot_cost": game_state.get_raid_item_slot_cost(
-			"food",
-			"canned_food",
-			game_state.get_backpack_storage_count("food", "canned_food")
-		),
 		"texture": UI_ICONS.get_icon("food", 64, Color("#e6b65c")),
 	})
 	_add_bag_item({
@@ -934,7 +957,6 @@ func _refresh_contents() -> void:
 		"title": "구급약",
 		"description": "전투 중 체력을 회복하는 응급 치료품입니다. SHIFT 또는 모바일 치료 버튼으로 사용합니다.",
 		"quantity": int(game_state.medkits),
-		"slot_cost": game_state.get_raid_item_slot_cost("medkit", "medkit", int(game_state.medkits)),
 		"texture": UI_ICONS.get_icon("medkit", 64, Color("#dce8df")),
 	})
 	_add_bag_item({
@@ -943,7 +965,6 @@ func _refresh_contents() -> void:
 		"title": "츄르",
 		"description": "희귀 구역과 보스에게서 확보하는 쉘터 확장 재화입니다.",
 		"quantity": int(game_state.churu),
-		"slot_cost": game_state.get_raid_item_slot_cost("churu", "churu", int(game_state.churu)),
 		"texture": UI_ICONS.get_icon("churu", 64, Color("#e7b561")),
 	})
 
@@ -969,11 +990,6 @@ func _refresh_contents() -> void:
 			),
 			"quantity": count,
 			"equipped": weapon_equipped,
-			"slot_cost": game_state.get_raid_item_slot_cost(
-				"weapon",
-				weapon_id,
-				game_state.get_backpack_storage_count("weapon", weapon_id)
-			),
 			"texture": weapon_textures.get(weapon_id) as Texture2D,
 		})
 
@@ -998,11 +1014,6 @@ func _refresh_contents() -> void:
 			"description": str(equipment_definition.get("description", "")),
 			"quantity": equipment_count,
 			"equipped": equipment_equipped,
-			"slot_cost": game_state.get_raid_item_slot_cost(
-				"equipment",
-				equipment_id,
-				game_state.get_equipment_count(equipment_id)
-			),
 			"texture": _equipment_texture(equipment_id, 64),
 		})
 
@@ -1019,7 +1030,6 @@ func _refresh_contents() -> void:
 			"title": _component_name(component_id),
 			"description": _component_description(component_id),
 			"quantity": component_count,
-			"slot_cost": game_state.get_raid_item_slot_cost("component", component_id, component_count),
 			"texture": component_textures.get(component_id) as Texture2D,
 		})
 
@@ -1038,11 +1048,6 @@ func _refresh_contents() -> void:
 			"title": _progression_item_name(progression_item_id),
 			"description": _progression_item_description(progression_item_id),
 			"quantity": progression_item_count,
-			"slot_cost": game_state.get_raid_item_slot_cost(
-				"progression",
-				progression_item_id,
-				progression_item_count
-			),
 			"texture": UI_ICONS.get_icon(
 				"secure" if progression_item_id == "sealed_zone_keycard" else "craft",
 				64,
@@ -1065,7 +1070,6 @@ func _refresh_contents() -> void:
 			"title": _mod_name(mod_id),
 			"description": _mod_description(mod_id),
 			"quantity": available,
-			"slot_cost": game_state.get_raid_item_slot_cost("mod", mod_id, available),
 			"texture": component_textures.get(component_id) as Texture2D,
 		})
 
@@ -1080,19 +1084,19 @@ func _refresh_contents() -> void:
 				"인간 격리구역에서 회수한 대형 화물입니다. 탈출해야 내용물을 확인할 수 있습니다."
 			)),
 			"quantity": 1,
-			"slot_cost": int(cargo.get("slot_size", 6)),
 			"texture": UI_ICONS.get_icon("secure", 64, Color("#f0ad55")),
 		})
 
 	var occupied_slots := int(game_state.get_raid_bag_used_slots())
-	var empty_slots := maxi(0, BAG_SLOT_CAPACITY - occupied_slots)
+	var bag_capacity := int(game_state.get_raid_bag_capacity())
+	var empty_slots := maxi(0, bag_capacity - occupied_slots)
 	for index in range(empty_slots):
 		bag_grid.add_child(_empty_slot())
 	if bag_slot_usage_label:
-		bag_slot_usage_label.text = "%d / %d칸" % [occupied_slots, int(game_state.get_raid_bag_capacity())]
+		bag_slot_usage_label.text = "남은 슬롯 %d / %d" % [empty_slots, bag_capacity]
 		bag_slot_usage_label.add_theme_color_override(
 			"font_color",
-			Color("#ff9595") if occupied_slots > BAG_SLOT_CAPACITY else Color("#b7c8c0")
+			Color("#ff9595") if occupied_slots >= bag_capacity else Color("#b7c8c0")
 		)
 
 	if scrap_label:
@@ -1240,7 +1244,7 @@ func _on_bag_item_pressed(item: Dictionary) -> void:
 	var definition := WEAPON_SYSTEM.get_mod(mod_id)
 	var installed := _get_mod_in_slot(str(definition.get("slot", "")))
 	if installed != mod_id:
-		_install_mod(mod_id)
+		call_deferred("_install_mod", mod_id)
 
 
 func _update_bag_selection_visual(selected_id: String) -> void:
@@ -1258,6 +1262,8 @@ func _refresh_item_detail() -> void:
 		return
 	item_action_button.visible = false
 	item_action_button.disabled = false
+	item_discard_button.visible = false
+	item_discard_button.disabled = false
 	if item_detail_reason:
 		item_detail_reason.text = ""
 		item_detail_reason.visible = false
@@ -1313,7 +1319,12 @@ func _refresh_item_detail() -> void:
 				item_detail_reason.visible = true
 	elif item_type == "component":
 		var item_id := str(selected_item.get("id", ""))
-		item_detail_description.text = "%s\n쉘터 작업대에서 완성 부착물 제작에 사용합니다." % _component_description(item_id)
+		item_detail_title.text = "제작 재료 · %s" % _component_name(item_id)
+		item_detail_description.text = (
+			"%s\n\n제작 재료 · 총기에 직접 장착할 수 없습니다.\n"
+			+ "쉘터 작업대에서 완성 부착물을 제작할 때 사용합니다.\n"
+			+ "보유 수량 %d개"
+		) % [_component_description(item_id), int(selected_item.get("quantity", 0))]
 	elif item_type == "ammo":
 		item_detail_description.text = "%s\n보유 수량 %d발" % [
 			str(selected_item.get("description", "총기용 탄약입니다.")),
@@ -1330,10 +1341,9 @@ func _refresh_item_detail() -> void:
 			int(selected_item.get("quantity", 0)),
 		]
 	elif item_type == "special_cargo":
-		item_detail_description.text = "%s\n가방 %d칸 사용 · 탈출 시 정산" % [
-			str(selected_item.get("description", "봉인된 대형 화물입니다.")),
-			int(selected_item.get("slot_cost", 6)),
-		]
+		item_detail_description.text = "%s\n특수 화물 · 탈출 시 정산" % str(
+			selected_item.get("description", "봉인된 대형 화물입니다.")
+		)
 	elif item_type == "progression":
 		item_detail_description.text = "%s\n보유 수량 %d개" % [
 			str(selected_item.get("description", "진행에 필요한 중요 아이템입니다.")),
@@ -1344,14 +1354,76 @@ func _refresh_item_detail() -> void:
 		var equipment_definition: Dictionary = game_state.get_equipment_definition(equipment_id)
 		var equipment_slot := str(equipment_definition.get("slot", "body"))
 		var equipped_id := str(game_state.get_equipped_equipment(equipment_slot))
-		item_detail_description.text = "%s\n%s" % [
-			str(equipment_definition.get("description", "방어 장비")),
+		var equipment_detail_lines: Array[String] = [
+			str(equipment_definition.get("description", "생존 장비입니다.")),
 			_format_equipment_stats(equipment_definition),
 		]
+		var comparison := _format_equipment_comparison(equipment_id, equipment_definition)
+		if not comparison.is_empty():
+			equipment_detail_lines.append(comparison)
+		item_detail_description.text = "\n".join(equipment_detail_lines)
 		item_action_button.text = "해제" if equipped_id == equipment_id else "장착"
 		var equipment_icon := str(equipment_definition.get("icon", "armor"))
 		item_action_button.icon = UI_ICONS.get_icon("close" if equipped_id == equipment_id else equipment_icon, 28, Color("#bce6ca"))
 		item_action_button.visible = true
+
+	_configure_discard_button(item_type)
+
+
+func _configure_discard_button(item_type: String) -> void:
+	if item_discard_button == null or item_type == "empty_slot":
+		return
+	var item_id := str(selected_item.get("id", ""))
+	item_discard_button.visible = true
+	item_discard_button.text = "버리기"
+	item_discard_button.icon = UI_ICONS.get_icon("close", 24, Color("#f0b09a"))
+	var protected_item: bool = RAID_ITEM_ECONOMY.is_protected(item_type, item_id)
+	var equipped_item: bool = bool(selected_item.get("equipped", false))
+	if item_type == "weapon":
+		equipped_item = has_weapon_state and item_id == str(game_state.equipped_weapon_id)
+	elif item_type == "equipment":
+		var definition: Dictionary = game_state.get_equipment_definition(item_id)
+		var slot := str(definition.get("slot", "body"))
+		equipped_item = str(game_state.get_equipped_equipment(slot)) == item_id
+	item_discard_button.disabled = protected_item or equipped_item
+	if item_discard_button.disabled and item_detail_reason:
+		item_detail_reason.text = (
+			"중요 임무 물품은 버릴 수 없습니다."
+			if protected_item
+			else "장착을 해제한 뒤 버릴 수 있습니다."
+		)
+		item_detail_reason.visible = true
+
+
+func _on_selected_item_discard() -> void:
+	if selected_item.is_empty() or item_discard_button.disabled:
+		return
+	var item_type := str(selected_item.get("type", ""))
+	var item_id := str(selected_item.get("id", ""))
+	var discard_type: String = item_type
+	if item_type == "resource":
+		discard_type = str({
+			"canned_food": "food",
+			"medkit": "medkit",
+			"churu": "churu",
+		}.get(item_id, ""))
+	if discard_type.is_empty():
+		apply_discard_result(false, "버릴 수 없는 아이템입니다.")
+		return
+	var quantity := maxi(1, int(selected_item.get("quantity", 1)))
+	var amount: int = mini(quantity, int(game_state.get_raid_item_stack_limit(discard_type)))
+	item_discard_requested.emit(discard_type, item_id, amount)
+
+
+func apply_discard_result(success: bool, message: String) -> void:
+	if success:
+		selected_item = {}
+		weapon_detail_open = false
+		_refresh_contents()
+	_show_inventory_feedback(
+		message,
+		Color("#e7c26e") if success else Color("#ff9d8f")
+	)
 
 
 func _on_selected_item_action() -> void:
@@ -1393,16 +1465,62 @@ func _on_selected_item_action() -> void:
 
 func _format_equipment_stats(definition: Dictionary) -> String:
 	var stats: Array[String] = []
+	var slot := str(definition.get("slot", "body"))
+	stats.append("[%s]" % _equipment_slot_display_name(slot))
 	var reduction_percent := roundi(float(definition.get("damage_reduction", 0.0)) * 100.0)
 	if reduction_percent > 0:
-		stats.append("피해 감소 %d%%" % reduction_percent)
+		stats.append("받는 피해 -%d%%" % reduction_percent)
 	var move_speed_percent := roundi(float(definition.get("move_speed_bonus", 0.0)) * 100.0)
 	if move_speed_percent != 0:
 		stats.append("이동 속도 %s%d%%" % ["+" if move_speed_percent > 0 else "", move_speed_percent])
 	var stamina_cost_percent := roundi((float(definition.get("stamina_cost_multiplier", 1.0)) - 1.0) * 100.0)
 	if stamina_cost_percent != 0:
-		stats.append("대시 스태미나 소모 %s%d%%" % ["+" if stamina_cost_percent > 0 else "", stamina_cost_percent])
+		stats.append("대시 스태미나 %s%d%%" % ["+" if stamina_cost_percent > 0 else "", stamina_cost_percent])
 	return "  ·  ".join(stats)
+
+
+func _format_equipment_comparison(equipment_id: String, definition: Dictionary) -> String:
+	var slot := str(definition.get("slot", "body"))
+	var equipped_id := str(game_state.get_equipped_equipment(slot))
+	if equipped_id == equipment_id:
+		return "현재 장착 중"
+	if equipped_id.is_empty():
+		return "현재 비어 있는 %s 슬롯에 장착 가능" % _equipment_slot_display_name(slot)
+
+	var equipped_definition: Dictionary = game_state.get_equipment_definition(equipped_id)
+	var differences: Array[String] = []
+	var damage_difference := roundi(
+		(float(definition.get("damage_reduction", 0.0))
+		- float(equipped_definition.get("damage_reduction", 0.0))) * 100.0
+	)
+	if damage_difference != 0:
+		differences.append("피해 감소 %s%d%%p" % ["+" if damage_difference > 0 else "", damage_difference])
+	var speed_difference := roundi(
+		(float(definition.get("move_speed_bonus", 0.0))
+		- float(equipped_definition.get("move_speed_bonus", 0.0))) * 100.0
+	)
+	if speed_difference != 0:
+		differences.append("이동 속도 %s%d%%p" % ["+" if speed_difference > 0 else "", speed_difference])
+	var stamina_difference := roundi(
+		(float(equipped_definition.get("stamina_cost_multiplier", 1.0))
+		- float(definition.get("stamina_cost_multiplier", 1.0))) * 100.0
+	)
+	if stamina_difference != 0:
+		differences.append("스태미나 효율 %s%d%%p" % ["+" if stamina_difference > 0 else "", stamina_difference])
+	if differences.is_empty():
+		return "현재 %s와 동일한 기본 성능" % str(equipped_definition.get("display_name", "장비"))
+	return "현재 %s 대비  %s" % [
+		str(equipped_definition.get("display_name", "장비")),
+		"  ·  ".join(differences),
+	]
+
+
+func _equipment_slot_display_name(slot: String) -> String:
+	return str({
+		"body": "몸 방어구",
+		"head": "머리 방어구",
+		"feet": "신발",
+	}.get(slot, "장비"))
 
 
 func _request_weapon_unequip() -> void:
@@ -1429,7 +1547,7 @@ func _build_mod_slot_button(slot: String) -> Button:
 	button.expand_icon = true
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	if not installed.is_empty():
-		button.pressed.connect(func() -> void: _unequip_mod(installed))
+		button.pressed.connect(func() -> void: call_deferred("_unequip_mod", installed))
 	return button
 
 
@@ -1438,19 +1556,34 @@ func _can_install_mod(mod_id: String) -> bool:
 
 
 func _get_mod_install_check(mod_id: String) -> Dictionary:
-	var result := {"can_install": false, "reason": ""}
+	var result: Dictionary = _get_mod_compatibility_check(mod_id)
+	if not bool(result.get("can_install", false)):
+		return result
+	var available_mods: int = int(game_state.get_weapon_mod_count(mod_id))
+	if available_mods < 1:
+		result["can_install"] = false
+		result["reason"] = "완성 부착물이 없습니다. 제작 재료는 쉘터 작업대에서 먼저 제작해야 합니다."
+		return result
+	result["reason"] = "설치 가능"
+	return result
+
+
+func _get_mod_compatibility_check(mod_id: String) -> Dictionary:
+	var result: Dictionary = {"can_install": false, "reason": ""}
 	if not MOD_COMPONENTS.has(mod_id):
 		result["reason"] = "모듈 정보가 없습니다."
 		return result
-	var definition := WEAPON_SYSTEM.get_mod(mod_id)
+	if not has_weapon_state or str(game_state.equipped_weapon_id).is_empty():
+		result["reason"] = "먼저 주무기를 장착하세요."
+		return result
+	var definition: Dictionary = WEAPON_SYSTEM.get_mod(mod_id)
 	if definition.is_empty():
 		result["reason"] = "알 수 없는 모듈입니다."
 		return result
-	var slot := str(definition.get("slot", ""))
-	var available_mods: int = int(game_state.get_weapon_mod_count(mod_id))
+	var slot: String = str(definition.get("slot", ""))
 	var next_mods: Array[String] = []
 	next_mods.assign(game_state.equipped_weapon_mods)
-	var currently_installed := _get_mod_in_slot(slot)
+	var currently_installed: String = _get_mod_in_slot(slot)
 	if not currently_installed.is_empty():
 		next_mods.erase(currently_installed)
 	next_mods.append(mod_id)
@@ -1460,13 +1593,9 @@ func _get_mod_install_check(mod_id: String) -> Dictionary:
 	if not WEAPON_SYSTEM.validate_mod_loadout(next_mods, game_state.equipped_weapon_id):
 		result["reason"] = "슬롯 충돌 또는 장착 불가 부품입니다."
 		return result
-	if available_mods < 1:
-		result["reason"] = "제작된 부착물을 보유하고 있지 않습니다."
-		return result
 	result["can_install"] = true
 	result["reason"] = "설치 가능"
 	return result
-
 
 func _install_mod(mod_id: String) -> void:
 	var check := _get_mod_install_check(mod_id)
@@ -1485,7 +1614,6 @@ func _install_mod(mod_id: String) -> void:
 	_show_inventory_feedback("%s 장착" % _mod_name(mod_id), Color("#a3ff92"))
 	weapon_mods_changed.emit()
 	_refresh_contents()
-
 
 func _unequip_mod(mod_id: String) -> void:
 	if not game_state.equipped_weapon_mods.has(mod_id):
@@ -1546,6 +1674,7 @@ func _apply_responsive_layout() -> void:
 	var viewport_size := get_viewport_rect().size
 	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
 		return
+	var safe := UISafeArea.get_margins(viewport_size)
 
 	var ui_scale := clampf(minf(viewport_size.x / 1360.0, viewport_size.y / 780.0), 0.65, 1.25)
 	responsive_compact = viewport_size.x < 1100.0
@@ -1555,16 +1684,16 @@ func _apply_responsive_layout() -> void:
 		var open_w := clampf(minf(118.0 * ui_scale, viewport_size.x * 0.11), 78.0, 118.0)
 		var open_h := clampf(minf(46.0 * ui_scale, viewport_size.y * 0.08), 32.0, 48.0)
 		open_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-		open_button.offset_left = -open_margin - open_w
-		open_button.offset_top = open_margin + clampf(94.0 * ui_scale, 68.0, 106.0)
-		open_button.offset_right = -open_margin
+		open_button.offset_left = -safe.z - open_margin - open_w
+		open_button.offset_top = safe.y + open_margin + clampf(94.0 * ui_scale, 68.0, 106.0)
+		open_button.offset_right = -safe.z - open_margin
 		open_button.offset_bottom = open_button.offset_top + open_h
 		open_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER if responsive_compact else HORIZONTAL_ALIGNMENT_LEFT
 		open_button.text = "가방"
 		open_button.add_theme_font_size_override("font_size", 14 if viewport_size.x >= 760 else 11)
 
-	var safe_width := clampf(viewport_size.x - 24.0, 320.0, 1600.0)
-	var safe_height := clampf(viewport_size.y - 26.0, 360.0, 1200.0)
+	var safe_width := clampf(viewport_size.x - safe.x - safe.z - 24.0, 300.0, 1600.0)
+	var safe_height := clampf(viewport_size.y - safe.y - safe.w - 26.0, 340.0, 1200.0)
 	var panel_width := clampf(460.0 * ui_scale, 320.0, 540.0)
 	if responsive_compact:
 		panel_width = clampf(minf(500.0, safe_width - 20.0), 300.0, 520.0)
@@ -1574,6 +1703,12 @@ func _apply_responsive_layout() -> void:
 	var showing_weapon := weapon_detail_open and has_weapon_state
 	if modal:
 		modal.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		var safe_margin := modal.get_node_or_null("InventorySafeMargin") as MarginContainer
+		if safe_margin:
+			safe_margin.add_theme_constant_override("margin_left", roundi(12.0 + safe.x))
+			safe_margin.add_theme_constant_override("margin_top", roundi(12.0 + safe.y))
+			safe_margin.add_theme_constant_override("margin_right", roundi(12.0 + safe.z))
+			safe_margin.add_theme_constant_override("margin_bottom", roundi(12.0 + safe.w))
 		inventory_panel.custom_minimum_size = Vector2(panel_width, panel_height)
 		weapon_panel.custom_minimum_size = Vector2(panel_width, panel_height)
 		var visible_panel_count := 2 if showing_weapon and not responsive_compact else 1
@@ -1639,10 +1774,11 @@ func _bag_item_button(item: Dictionary) -> Button:
 	)
 	button.custom_minimum_size = Vector2(82, 74)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var slot_cost := maxi(0, int(item.get("slot_cost", 1)))
-	button.tooltip_text = "%s  x%d  ·  %d칸" % [str(item.get("title", "")), quantity, slot_cost]
+	button.tooltip_text = "%s  x%d" % [str(item.get("title", "")), quantity]
 	if not has_quantity:
 		button.tooltip_text += " (보유하지 않음)"
+	elif item_type == "component":
+		button.tooltip_text += " · 제작 재료 (직접 장착 불가)"
 	elif item_type == "mod" and not _can_install_mod(item_id):
 		var check: Dictionary = _get_mod_install_check(item_id)
 		button.tooltip_text += " · %s" % str(check.get("reason", "장착 불가"))
@@ -1667,23 +1803,24 @@ func _bag_item_button(item: Dictionary) -> Button:
 	badge.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	badge.add_theme_constant_override("outline_size", 4)
 	button.add_child(badge)
-	if slot_cost > 0:
-		var slot_badge := Label.new()
-		slot_badge.name = "SlotCostBadge"
-		slot_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		slot_badge.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-		slot_badge.offset_left = -42
-		slot_badge.offset_top = 5
-		slot_badge.offset_right = -5
-		slot_badge.offset_bottom = 24
-		slot_badge.text = "%d칸" % slot_cost
-		slot_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		slot_badge.add_theme_font_override("font", font_ref)
-		slot_badge.add_theme_font_size_override("font_size", 10)
-		slot_badge.add_theme_color_override("font_color", Color("#f0c56f"))
-		slot_badge.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.95))
-		slot_badge.add_theme_constant_override("outline_size", 4)
-		button.add_child(slot_badge)
+	if item_type == "component":
+		var material_badge := Label.new()
+		material_badge.name = "CraftingMaterialBadge"
+		material_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		material_badge.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		material_badge.offset_left = 5
+		material_badge.offset_top = 4
+		material_badge.offset_right = 43
+		material_badge.offset_bottom = 24
+		material_badge.text = "재료"
+		material_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		material_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		material_badge.add_theme_font_override("font", font_ref)
+		material_badge.add_theme_font_size_override("font_size", 9)
+		material_badge.add_theme_color_override("font_color", Color("#171a17"))
+		material_badge.add_theme_color_override("font_outline_color", Color("#79d4bd"))
+		material_badge.add_theme_constant_override("outline_size", 6)
+		button.add_child(material_badge)
 	if bool(item.get("equipped", false)):
 		var equipped_badge := Label.new()
 		equipped_badge.name = "EquippedBadge"
@@ -1897,12 +2034,12 @@ func _component_name(component_id: String) -> String:
 func _component_description(component_id: String) -> String:
 	match component_id:
 		"rubber_gasket":
-			return "소음기와 완충 개머리판 제작에 쓰는 탄성 부품입니다."
+			return "소음기와 완충 개머리판의 제작 재료로 쓰는 탄성 부품입니다."
 		"scope_lens":
-			return "배율 조준경과 정밀 모듈 제작에 쓰는 광학 부품입니다."
+			return "배율 조준경과 정밀 모듈의 제작 재료로 쓰는 광학 부품입니다."
 		"magazine_spring":
-			return "고속 탄창과 전술 부품 제작에 쓰는 기계 부품입니다."
-	return "총기 부착물 제작에 쓰는 핵심 부품입니다."
+			return "고속 탄창과 전술 부품의 제작 재료로 쓰는 기계 부품입니다."
+	return "총기 부착물 제작에 쓰는 핵심 제작 재료입니다."
 
 
 func _progression_item_name(item_id: String) -> String:

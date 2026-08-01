@@ -2,6 +2,8 @@ extends Node3D
 
 signal detonated(world_position: Vector3, radius: float)
 
+const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
+
 const FLIGHT_DURATION := 0.42
 const ARC_HEIGHT := 1.65
 const ARM_DELAY := 0.72
@@ -291,6 +293,7 @@ func _detonate() -> void:
 	if exploded:
 		return
 	exploded = true
+	var valid_source: CollisionObject3D = source_body if is_instance_valid(source_body) else null
 	if is_instance_valid(target_body):
 		var offset := target_body.global_position - global_position
 		offset.y = 0.0
@@ -299,8 +302,12 @@ func _detonate() -> void:
 			var falloff := lerpf(1.0, 0.42, distance / blast_radius)
 			var applied_damage := maxi(6, roundi(float(damage) * falloff))
 			var hit_direction := offset.normalized() if distance > 0.01 else Vector3.RIGHT
-			if target_body.has_method("take_hit"):
+			if target_body.has_method("take_hostile_hit"):
+				target_body.call("take_hostile_hit", applied_damage, hit_direction, valid_source)
+			elif target_body.has_method("take_hit"):
 				target_body.call("take_hit", applied_damage, hit_direction)
+			elif target_body.get_parent() != null and target_body.get_parent().has_method("take_hostile_hit"):
+				target_body.get_parent().call("take_hostile_hit", applied_damage, hit_direction, valid_source)
 			elif target_body.get_parent() != null and target_body.get_parent().has_method("take_hit"):
 				target_body.get_parent().call("take_hit", applied_damage, hit_direction)
 	_spawn_explosion_fx()
@@ -316,7 +323,7 @@ func _has_clear_blast_path(body: CollisionObject3D) -> bool:
 	var query := PhysicsRayQueryParameters3D.create(
 		global_position + Vector3(0.0, 0.16, 0.0),
 		body.global_position + Vector3(0.0, 0.36, 0.0),
-		1
+		COLLISION_PROFILES.WORLD_ONLY_SIGHT_MASK
 	)
 	if is_instance_valid(source_body):
 		query.exclude = [source_body.get_rid()]

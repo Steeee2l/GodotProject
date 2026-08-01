@@ -10,9 +10,13 @@ const SCRATCHER_BANK_MODULE_SCENE := preload("res://scenes/modules/scratcher_ban
 const CATNIP_SCRAPER_MODULE_SCENE := preload("res://scenes/modules/catnip_scraper_module.tscn")
 const STORAGE_MODULE_SCENE := preload("res://scenes/modules/shelter_storage_module.tscn")
 const TRAINING_MODULE_SCENE := preload("res://scenes/modules/shelter_training_module.tscn")
+const FACTORY_CONVEYOR_TEXTURE := preload(
+	"res://assets/interiors/factory/factory_conveyor_spine_v1.png"
+)
 const SHELTER_RESIDENT_SCRIPT := preload("res://scripts/shelter_resident_cat.gd")
 const SHELTER_MERCHANT_SCRIPT := preload("res://scripts/shelter_merchant.gd")
 const SHELTER_CONTRACT_TRAINER_SCRIPT := preload("res://scripts/shelter_contract_trainer.gd")
+const SHELTER_STORY_CHARACTER_SCRIPT := preload("res://scripts/shelter_story_character.gd")
 const MERCHANT_TEXTURE := preload("res://assets/characters/merchant_cat/merchant_down_left_idle.png")
 const MOVE_SPEED := 4.6
 const CAT_ANIMATION_ROOT := "res://assets/characters/cat_8way"
@@ -23,6 +27,7 @@ const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
 const AMMO_TEXTURE := preload("res://assets/items/ammo_762.png")
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
 const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
@@ -90,13 +95,6 @@ const MERCHANT_GOODS := [
 		"description": "탄창과 전술 부품 제작에 사용하는 복원력 높은 스프링입니다.",
 	},
 ]
-const CONTRACT_AGENT_INTRO_LINES := [
-	"세 번이나 도시에서 살아 돌아왔군. 빈 방으로 끝내기엔 네 목숨이 아깝다.",
-	"창고와 생존 체력 훈련장을 먼저 세워 뒀다. 장비는 맡기고 몸은 단련해.",
-	"내 현장 계약을 끝내면 꾹꾹이 고철 생산기, 스크래핑 캣닢 생산기, 무기 작업대를 차례로 지어주지.",
-	"계약을 수락하고 도시에서 조건을 채운 뒤 내게 보고해. 이 쉘터가 살아 움직이는 건 그때부터다.",
-]
-
 var player: CharacterBody3D
 var survivor: AnimatedSprite3D
 var shelter_camera: Camera3D
@@ -113,6 +111,7 @@ var scrap_gain_label: Label
 var shelter_upgrade_button: Button
 var interact_button: Button
 var dash_button: Button
+var shelter_medkit_button: Button
 var roll_cooldown_indicator: Control
 var touch_stick: Control
 var touch_knob: Control
@@ -143,15 +142,12 @@ var merchant_sell_tab: Button
 var merchant_shop_mode := "buy"
 var merchant_ui_open := false
 var contract_agent: Node3D
+var iron_trainer: Node3D
+var juhong_character: Node3D
 var contract_ui_layer: CanvasLayer
 var contract_ui_body: VBoxContainer
 var contract_ui_open := false
 var contract_report_message := ""
-var contract_intro_layer: CanvasLayer
-var contract_intro_body_label: Label
-var contract_intro_next_button: Button
-var contract_intro_index := 0
-var contract_intro_open := false
 var contract_story_layer: CanvasLayer
 var contract_story_title_label: Label
 var contract_story_body_label: Label
@@ -160,6 +156,10 @@ var contract_story_next_button: Button
 var contract_story_lines: Array[String] = []
 var contract_story_index := 0
 var contract_story_open := false
+var contract_story_speaker_name := "사자"
+var contract_story_portrait: Texture2D
+var contract_story_completion_owner := ""
+var contract_story_completion_id := ""
 var shelter_stats_refresh_time := 0.0
 var shelter_save_time := 0.0
 var raid_zone_ui_layer: CanvasLayer
@@ -174,9 +174,14 @@ var raid_zone_detail_threat_bar: ProgressBar
 var raid_zone_detail_reward: Label
 var raid_zone_detail_requirement: Label
 var raid_zone_launch_button: Button
+var raid_zone_resupply_button: Button
+var auto_paused_for_background := false
 var raid_loadout_ui_layer: CanvasLayer
 var raid_loadout_ui_open := false
+var raid_launch_in_progress := false
 var inventory_ui: Control
+var factory_flow_nodes: Array[MeshInstance3D] = []
+var factory_flow_phase := 0.0
 
 
 func _room_art_size() -> Vector2:
@@ -196,32 +201,59 @@ func _north_module_z() -> float:
 	return -_room_half_extents().y + 0.76
 
 
+func _factory_cell_offset() -> float:
+	return 4.15 + minf(1.0, float(maxi(0, GameState.shelter_tier - 1)) * 0.22)
+
+
+func _factory_line_half_span() -> float:
+	return minf(
+		7.2 + float(maxi(0, GameState.shelter_tier - 1)) * 0.75,
+		_room_half_extents().x - 7.0
+	)
+
+
+func _has_factory_facility() -> bool:
+	for facility_id in ["workbench", "scratcher_bank", "catnip_scraper", "storage", "training"]:
+		if GameState.is_shelter_facility_unlocked(facility_id):
+			return true
+	return false
+
+
 func _player_bed_position() -> Vector3:
 	return Vector3(-_room_half_extents().x + 1.95, 0.0, -5.4)
 
 
 func _workbench_position() -> Vector3:
-	return Vector3(-2.0, 0.0, _north_module_z())
+	return Vector3(-2.4, 0.0, _factory_cell_offset())
 
 
 func _scratcher_bank_position() -> Vector3:
-	return Vector3(_room_half_extents().x - 11.0, 0.0, _north_module_z())
+	return Vector3(7.4, 0.0, -_factory_cell_offset())
 
 
 func _catnip_scraper_position() -> Vector3:
-	return Vector3(-_room_half_extents().x + 8.0, 0.0, _north_module_z())
+	return Vector3(-7.4, 0.0, -_factory_cell_offset())
 
 
 func _storage_position() -> Vector3:
-	return Vector3(-9.4, 0.0, _north_module_z())
+	return Vector3(-9.0, 0.0, _factory_cell_offset())
 
 
 func _training_position() -> Vector3:
-	return Vector3(5.2, 0.0, _north_module_z())
+	return Vector3(5.0, 0.0, _factory_cell_offset())
 
 
 func _contract_agent_position() -> Vector3:
+	return Vector3(2.8, 0.78, _north_module_z() + 3.55)
+
+
+func _iron_trainer_position() -> Vector3:
 	return Vector3(7.6, 0.78, _north_module_z() + 3.15)
+
+
+func _juhong_position() -> Vector3:
+	var pipe := _pipe_position()
+	return Vector3(pipe.x - 3.7, 0.78, pipe.z + 2.7)
 
 
 func _pipe_position() -> Vector3:
@@ -259,18 +291,23 @@ func _ready() -> void:
 	roll_stamina = GameState.get_max_stamina()
 	_build_shelter_residents()
 	_setup_contract_agent()
+	_setup_iron_trainer()
+	_setup_juhong_story_character()
 	_build_roll_audio()
 	_build_interface()
+	if not get_viewport().size_changed.is_connected(_apply_shelter_safe_layout):
+		get_viewport().size_changed.connect(_apply_shelter_safe_layout)
+	_apply_shelter_safe_layout()
 	_setup_merchant_visit()
 	_update_stats()
 	_show_status(_build_offline_status_text(offline_notice))
-	if is_instance_valid(contract_agent) and not GameState.contract_agent_intro_seen:
-		call_deferred("_open_contract_agent_intro")
+	call_deferred("_open_pending_shelter_story")
 
 
 func _physics_process(delta: float) -> void:
 	if not is_instance_valid(player):
 		return
+	_update_factory_flow(delta)
 	_update_space_hold(delta)
 	if loafing:
 		roll_stamina = maxf(
@@ -292,6 +329,8 @@ func _physics_process(delta: float) -> void:
 		)
 	if dash_button:
 		dash_button.disabled = roll_active or roll_stamina < ROLL_STAMINA_COST
+	if shelter_medkit_button:
+		shelter_medkit_button.visible = not _ui_blocks_player()
 	var input_vector := Vector2.ZERO
 	if not _ui_blocks_player():
 		input_vector = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
@@ -481,6 +520,7 @@ func _refresh_unlocked_facilities(module_root: Node3D = null, animate: bool = tr
 				Tween.TRANS_BACK
 			).set_ease(Tween.EASE_OUT)
 		created.append(facility_id)
+	_build_factory_infrastructure(module_root)
 	_build_production_lines(module_root)
 	if animate and not created.is_empty():
 		refresh_shelter_residents(true)
@@ -488,57 +528,202 @@ func _refresh_unlocked_facilities(module_root: Node3D = null, animate: bool = tr
 
 
 func _build_production_lines(module_root: Node3D) -> void:
-	if (
-		GameState.is_shelter_facility_unlocked("scratcher_bank")
-		and module_root.get_node_or_null("ScratcherConveyor") == null
-	):
-		var scratcher_slots := GameState.get_scratcher_worker_slots()
-		var scratcher_rows := ceili(float(scratcher_slots) / 2.0)
-		_build_production_track(
-			module_root,
-			_scratcher_bank_position().x,
-			_north_module_z() + 3.0,
-			scratcher_rows,
-			3.35,
-			"scratcher"
-		)
-		for index in scratcher_slots:
-			_build_production_slot(module_root, _scratcher_work_position(index), index, "scratcher")
-	if (
-		GameState.is_shelter_facility_unlocked("catnip_scraper")
-		and module_root.get_node_or_null("CatnipConveyor") == null
-	):
-		var catnip_slots := GameState.get_catnip_worker_slots()
-		_build_production_track(
-			module_root,
-			_catnip_scraper_position().x,
-			_north_module_z() + 3.0,
-			catnip_slots,
-			1.75,
-			"catnip"
-		)
-		for index in catnip_slots:
-			_build_production_slot(module_root, _catnip_work_position(index), index, "catnip")
-
-
-func _build_production_track(parent: Node3D, x: float, first_z: float, rows: int, width: float, kind: String) -> void:
-	if rows <= 0:
+	if not _has_factory_facility():
 		return
-	var length := 1.0 + float(rows - 1) * 1.35
-	var center_z := first_z + float(rows - 1) * 0.675
-	var track_root := Node3D.new()
-	track_root.name = "CatnipConveyor" if kind == "catnip" else "ScratcherConveyor"
-	track_root.position = Vector3(x, 0.008, center_z)
-	parent.add_child(track_root)
-	var base_color := Color("#14221b") if kind == "catnip" else Color("#252016")
-	var rail_color := Color("#557e58") if kind == "catnip" else Color("#7e6b42")
-	_add_plane("TrackBed", Vector3.ZERO, Vector2(width, length + 0.42), _material(base_color), track_root)
-	var rail_material := _material(rail_color)
-	_add_visual_box("LeftRail", Vector3(-width * 0.5, 0.02, 0), Vector3(0.07, 0.04, length + 0.42), rail_material, track_root)
-	_add_visual_box("RightRail", Vector3(width * 0.5, 0.02, 0), Vector3(0.07, 0.04, length + 0.42), rail_material, track_root)
-	for row in rows + 1:
-		var cross_z := -length * 0.5 + float(row) * (length / float(maxi(1, rows)))
-		_add_visual_box("CrossTie%02d" % row, Vector3(0, 0.018, cross_z), Vector3(width, 0.025, 0.055), rail_material, track_root)
+	var station_root := module_root.get_node_or_null("FactoryWorkerStations") as Node3D
+	if station_root == null:
+		station_root = Node3D.new()
+		station_root.name = "FactoryWorkerStations"
+		module_root.add_child(station_root)
+	if GameState.is_shelter_facility_unlocked("scratcher_bank"):
+		var scratcher_slots: int = GameState.get_scratcher_worker_slots()
+		_build_factory_worker_lane(station_root, "ScratcherWorkerLane", scratcher_slots, "scratcher")
+		for index in scratcher_slots:
+			_build_production_slot(station_root, _scratcher_work_position(index), index, "scratcher")
+	if GameState.is_shelter_facility_unlocked("catnip_scraper"):
+		var catnip_slots: int = GameState.get_catnip_worker_slots()
+		_build_factory_worker_lane(station_root, "CatnipWorkerLane", catnip_slots, "catnip")
+		for index in catnip_slots:
+			_build_production_slot(station_root, _catnip_work_position(index), index, "catnip")
+
+
+func _build_factory_infrastructure(module_root: Node3D) -> void:
+	if not _has_factory_facility() or module_root.get_node_or_null("FactoryInfrastructure") != null:
+		return
+	var factory_root := Node3D.new()
+	factory_root.name = "FactoryInfrastructure"
+	factory_root.set_meta("shelter_tier", GameState.shelter_tier)
+	module_root.add_child(factory_root)
+	var half_span: float = _factory_line_half_span()
+	var deck_material := _material(Color("#131b1a"))
+	_add_plane(
+		"FactoryDeck",
+		Vector3(0.0, 0.012, 0.0),
+		Vector2(half_span * 2.0 + 1.2, 2.8),
+		deck_material,
+		factory_root
+	)
+	var edge_material := _emissive_material(Color("#46c7cc"), 1.7)
+	_add_visual_box(
+		"NorthSafetyRail",
+		Vector3(0.0, 0.035, -1.38),
+		Vector3(half_span * 2.0 + 1.2, 0.045, 0.07),
+		edge_material,
+		factory_root
+	)
+	_add_visual_box(
+		"SouthSafetyRail",
+		Vector3(0.0, 0.035, 1.38),
+		Vector3(half_span * 2.0 + 1.2, 0.045, 0.07),
+		edge_material,
+		factory_root
+	)
+	var spine := Sprite3D.new()
+	spine.name = "FactoryConveyorSpine"
+	spine.position = Vector3(0.0, 2.16, 0.02)
+	spine.texture = FACTORY_CONVEYOR_TEXTURE
+	spine.pixel_size = 0.00445
+	spine.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	spine.shaded = false
+	spine.transparent = true
+	spine.no_depth_test = false
+	spine.render_priority = 10
+	var native_width: float = float(FACTORY_CONVEYOR_TEXTURE.get_width()) * spine.pixel_size
+	spine.scale.x = (half_span * 2.0) / maxf(1.0, native_width)
+	factory_root.add_child(spine)
+	var conveyor_body := StaticBody3D.new()
+	conveyor_body.name = "FactoryConveyorCollision"
+	conveyor_body.position = Vector3(0.0, 0.55, 0.0)
+	conveyor_body.collision_layer = 1
+	conveyor_body.collision_mask = 0
+	factory_root.add_child(conveyor_body)
+	var conveyor_collision := CollisionShape3D.new()
+	var conveyor_shape := BoxShape3D.new()
+	conveyor_shape.size = Vector3(half_span * 2.0 - 0.8, 1.1, 1.85)
+	conveyor_collision.shape = conveyor_shape
+	conveyor_body.add_child(conveyor_collision)
+	for facility_data in [
+		["catnip_scraper", _catnip_scraper_position(), Color("#75c86c")],
+		["scratcher_bank", _scratcher_bank_position(), Color("#d4ad55")],
+		["storage", _storage_position(), Color("#67b9bd")],
+		["workbench", _workbench_position(), Color("#d19b4e")],
+		["training", _training_position(), Color("#d97855")],
+	]:
+		var facility_id: String = str(facility_data[0])
+		if GameState.is_shelter_facility_unlocked(facility_id):
+			_build_factory_connector(
+				factory_root,
+				facility_id,
+				facility_data[1] as Vector3,
+				facility_data[2] as Color
+			)
+	_build_factory_flow(factory_root, half_span)
+
+
+func _build_factory_connector(parent: Node3D, facility_id: String, station: Vector3, color: Color) -> void:
+	var direction: float = signf(station.z)
+	var connector_length: float = maxf(0.9, absf(station.z) - 1.35)
+	var connector_z: float = direction * (1.35 + connector_length * 0.5)
+	var connector_root := Node3D.new()
+	connector_root.name = "%sConnector" % facility_id.to_pascal_case()
+	parent.add_child(connector_root)
+	_add_plane(
+		"ServiceLane",
+		Vector3(station.x, 0.018, connector_z),
+		Vector2(1.3, connector_length),
+		_material(Color(color, 0.18)),
+		connector_root
+	)
+	var line_material := _emissive_material(color, 1.55)
+	for side in [-1.0, 1.0]:
+		_add_visual_box(
+			"LaneEdge",
+			Vector3(station.x + side * 0.62, 0.038, connector_z),
+			Vector3(0.045, 0.035, connector_length),
+			line_material,
+			connector_root
+		)
+	_add_plane(
+		"OperatorDock",
+		Vector3(station.x, 0.022, station.z - direction * 1.48),
+		Vector2(2.15, 0.86),
+		_material(Color(color, 0.24)),
+		connector_root
+	)
+
+
+func _build_factory_flow(parent: Node3D, half_span: float) -> void:
+	var cargo_material := _emissive_material(Color("#e5a847"), 2.0)
+	for index in 5:
+		var cargo := MeshInstance3D.new()
+		cargo.name = "MovingCargo%02d" % (index + 1)
+		cargo.set_meta("flow_offset", float(index) / 5.0)
+		cargo.set_meta("flow_half_span", half_span * 0.78)
+		var cargo_mesh := BoxMesh.new()
+		cargo_mesh.size = Vector3(0.48, 0.22, 0.38)
+		cargo_mesh.material = cargo_material
+		cargo.mesh = cargo_mesh
+		cargo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		cargo.position = Vector3(-half_span * 0.78, 0.21, -0.05)
+		parent.add_child(cargo)
+		factory_flow_nodes.append(cargo)
+
+
+func _update_factory_flow(delta: float) -> void:
+	if factory_flow_nodes.is_empty():
+		return
+	factory_flow_phase = fmod(factory_flow_phase + delta * 0.12, 1.0)
+	for cargo in factory_flow_nodes:
+		if not is_instance_valid(cargo):
+			continue
+		var offset: float = float(cargo.get_meta("flow_offset", 0.0))
+		var half_span: float = float(cargo.get_meta("flow_half_span", 5.0))
+		var progress: float = fmod(factory_flow_phase + offset, 1.0)
+		cargo.position.x = lerpf(-half_span, half_span, progress)
+		var pulse: float = 1.0 + sin((progress + offset) * TAU) * 0.08
+		cargo.scale = Vector3(pulse, 1.0, pulse)
+
+
+func _build_factory_worker_lane(parent: Node3D, lane_name: String, slot_count: int, kind: String) -> void:
+	if slot_count <= 0 or parent.get_node_or_null(lane_name) != null:
+		return
+	var positions: Array[Vector3] = []
+	for index in slot_count:
+		positions.append(
+			_catnip_work_position(index) if kind == "catnip" else _scratcher_work_position(index)
+		)
+	var minimum_x: float = positions[0].x
+	var maximum_x: float = positions[0].x
+	var minimum_z: float = positions[0].z
+	var maximum_z: float = positions[0].z
+	for position in positions:
+		minimum_x = minf(minimum_x, position.x)
+		maximum_x = maxf(maximum_x, position.x)
+		minimum_z = minf(minimum_z, position.z)
+		maximum_z = maxf(maximum_z, position.z)
+	var lane_root := Node3D.new()
+	lane_root.name = lane_name
+	parent.add_child(lane_root)
+	var lane_color := Color("#2a4a35") if kind == "catnip" else Color("#4a3d28")
+	var edge_color := Color("#78cf76") if kind == "catnip" else Color("#dcad52")
+	var center := Vector3((minimum_x + maximum_x) * 0.5, 0.015, (minimum_z + maximum_z) * 0.5)
+	var lane_size := Vector2(maximum_x - minimum_x + 1.25, maximum_z - minimum_z + 1.05)
+	_add_plane("LaneDeck", center, lane_size, _material(lane_color), lane_root)
+	var edge_material := _emissive_material(edge_color, 1.35)
+	_add_visual_box(
+		"LaneFrontEdge",
+		Vector3(center.x, 0.035, maximum_z + 0.52),
+		Vector3(lane_size.x, 0.035, 0.05),
+		edge_material,
+		lane_root
+	)
+	_add_visual_box(
+		"LaneBackEdge",
+		Vector3(center.x, 0.035, minimum_z - 0.52),
+		Vector3(lane_size.x, 0.035, 0.05),
+		edge_material,
+		lane_root
+	)
 
 
 func _build_production_slot(parent: Node3D, slot_position: Vector3, index: int, kind: String) -> void:
@@ -546,18 +731,21 @@ func _build_production_slot(parent: Node3D, slot_position: Vector3, index: int, 
 	var plate_color := Color("#173026") if is_catnip else Color("#30291b")
 	var edge_color := Color("#79b86b") if is_catnip else Color("#c2a358")
 	var slot_name := "CatnipLineSlot" if is_catnip else "ScratcherLineSlot"
+	var node_name := "%s%02d" % [slot_name, index + 1]
+	if parent.get_node_or_null(node_name) != null:
+		return
 	var slot_root := Node3D.new()
-	slot_root.name = "%s%02d" % [slot_name, index + 1]
+	slot_root.name = node_name
 	slot_root.position = Vector3(slot_position.x, 0.022, slot_position.z)
 	slot_root.set_meta("production_kind", kind)
 	slot_root.set_meta("slot_index", index)
 	parent.add_child(slot_root)
-	_add_plane("Plate", Vector3.ZERO, Vector2(1.35, 1.0), _material(plate_color), slot_root)
+	_add_plane("Plate", Vector3.ZERO, Vector2(1.04, 0.82), _material(plate_color), slot_root)
 	var edge_material := _emissive_material(edge_color, 1.5)
-	_add_visual_box("NorthEdge", Vector3(0, 0.018, -0.5), Vector3(1.35, 0.025, 0.035), edge_material, slot_root)
-	_add_visual_box("SouthEdge", Vector3(0, 0.018, 0.5), Vector3(1.35, 0.025, 0.035), edge_material, slot_root)
-	_add_visual_box("WestEdge", Vector3(-0.675, 0.018, 0), Vector3(0.035, 0.025, 1.0), edge_material, slot_root)
-	_add_visual_box("EastEdge", Vector3(0.675, 0.018, 0), Vector3(0.035, 0.025, 1.0), edge_material, slot_root)
+	_add_visual_box("NorthEdge", Vector3(0, 0.018, -0.41), Vector3(1.04, 0.025, 0.035), edge_material, slot_root)
+	_add_visual_box("SouthEdge", Vector3(0, 0.018, 0.41), Vector3(1.04, 0.025, 0.035), edge_material, slot_root)
+	_add_visual_box("WestEdge", Vector3(-0.52, 0.018, 0), Vector3(0.035, 0.025, 0.82), edge_material, slot_root)
+	_add_visual_box("EastEdge", Vector3(0.52, 0.018, 0), Vector3(0.035, 0.025, 0.82), edge_material, slot_root)
 	var number := Label3D.new()
 	number.text = "%02d" % (index + 1)
 	number.position = Vector3(0.0, 0.035, 0.0)
@@ -658,107 +846,160 @@ func _unlock_all_facilities_debug() -> void:
 
 
 func _setup_contract_agent() -> void:
-	if not GameState.is_contract_agent_available() or is_instance_valid(contract_agent):
+	if not GameState.is_saja_available() or is_instance_valid(contract_agent):
 		return
-	contract_agent = SHELTER_CONTRACT_TRAINER_SCRIPT.new() as Node3D
+	contract_agent = SHELTER_STORY_CHARACTER_SCRIPT.new() as Node3D
+	contract_agent.call(
+		"configure",
+		"saja",
+		"사자",
+		"쉘터 지킴이 · 시설 감독",
+		"사자와 대화하기",
+		"res://assets/characters/saja",
+		"down_left",
+		0.0105
+	)
 	contract_agent.position = _contract_agent_position()
 	add_child(contract_agent)
+	contract_agent.call("set_player_target", player)
 
 
-func _open_contract_agent_intro() -> void:
-	if (
-		contract_intro_open
-		or GameState.contract_agent_intro_seen
-		or not is_instance_valid(contract_agent)
-	):
+func _setup_iron_trainer() -> void:
+	if not GameState.is_iron_trainer_available() or is_instance_valid(iron_trainer):
 		return
-	contract_intro_open = true
-	contract_intro_index = 0
-	touch_vector = Vector2.ZERO
-	roll_active = false
-	_set_motion_state("idle")
-	contract_intro_layer = CanvasLayer.new()
-	contract_intro_layer.name = "ContractAgentArrivalLayer"
-	contract_intro_layer.layer = 75
-	contract_intro_layer.add_to_group("shelter_modal_ui")
-	add_child(contract_intro_layer)
-	var root := Control.new()
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	root.mouse_filter = Control.MOUSE_FILTER_STOP
-	contract_intro_layer.add_child(root)
-	var dim := ColorRect.new()
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dim.color = Color(0.005, 0.008, 0.008, 0.64)
-	dim.mouse_filter = Control.MOUSE_FILTER_STOP
-	root.add_child(dim)
-	var panel := PanelContainer.new()
-	panel.name = "ContractAgentArrivalPanel"
-	panel.anchor_left = 0.12
-	panel.anchor_top = 0.64
-	panel.anchor_right = 0.88
-	panel.anchor_bottom = 0.94
-	panel.add_theme_stylebox_override(
-		"panel",
-		_rounded_panel_style(Color(0.018, 0.025, 0.023, 0.98), Color("#b29350"), 8)
+	iron_trainer = SHELTER_CONTRACT_TRAINER_SCRIPT.new() as Node3D
+	iron_trainer.position = _iron_trainer_position()
+	add_child(iron_trainer)
+
+
+func _setup_juhong_story_character() -> void:
+	if is_instance_valid(juhong_character):
+		return
+	var event: Dictionary = GameState.get_pending_juhong_event()
+	if event.is_empty():
+		return
+	juhong_character = SHELTER_STORY_CHARACTER_SCRIPT.new() as Node3D
+	juhong_character.call(
+		"configure",
+		"juhong",
+		"주홍",
+		"붉은 칼의 전령",
+		"주홍과 대화하기",
+		"res://assets/characters/juhong",
+		"down_right",
+		0.0105
 	)
-	root.add_child(panel)
-	var margin := MarginContainer.new()
-	for margin_name in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
-		margin.add_theme_constant_override(margin_name, 20)
-	panel.add_child(margin)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 18)
-	margin.add_child(row)
-	var portrait := TextureRect.new()
-	portrait.custom_minimum_size = Vector2(118, 118)
-	portrait.texture = contract_agent.call("get_portrait_texture") as Texture2D
-	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(portrait)
-	var text_box := VBoxContainer.new()
-	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	text_box.add_theme_constant_override("separation", 8)
-	row.add_child(text_box)
-	var speaker := Label.new()
-	speaker.text = "훈련교관 철근"
-	speaker.add_theme_font_override("font", FONT)
-	speaker.add_theme_font_size_override("font_size", 18)
-	speaker.add_theme_color_override("font_color", Color("#e8ca76"))
-	text_box.add_child(speaker)
-	contract_intro_body_label = Label.new()
-	contract_intro_body_label.name = "ContractAgentArrivalText"
-	contract_intro_body_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	contract_intro_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	contract_intro_body_label.add_theme_font_override("font", FONT)
-	contract_intro_body_label.add_theme_font_size_override("font_size", 21)
-	contract_intro_body_label.add_theme_color_override("font_color", Color("#e5ece7"))
-	text_box.add_child(contract_intro_body_label)
-	var actions := HBoxContainer.new()
-	actions.alignment = BoxContainer.ALIGNMENT_END
-	text_box.add_child(actions)
-	contract_intro_next_button = _merchant_button("다음", true, "collect")
-	contract_intro_next_button.custom_minimum_size = Vector2(170, 46)
-	contract_intro_next_button.pressed.connect(_advance_contract_agent_intro)
-	actions.add_child(contract_intro_next_button)
-	_refresh_contract_agent_intro()
+	juhong_character.position = _juhong_position()
+	add_child(juhong_character)
+	juhong_character.call("set_player_target", player)
 
 
-func _refresh_contract_agent_intro() -> void:
-	if not is_instance_valid(contract_intro_body_label):
+func _open_pending_shelter_story() -> void:
+	if contract_story_open or not is_instance_valid(contract_agent):
 		return
-	contract_intro_body_label.text = CONTRACT_AGENT_INTRO_LINES[contract_intro_index]
-	contract_intro_next_button.text = (
-		"계약 확인"
-		if contract_intro_index >= CONTRACT_AGENT_INTRO_LINES.size() - 1
-		else "다음"
+	var event: Dictionary = GameState.get_pending_shelter_story_event()
+	if event.is_empty():
+		return
+	_open_contract_story(
+		str(event.get("title", "사자의 이야기")),
+		_string_array(event.get("lines", [])),
+		str(event.get("speaker", "사자")),
+		_character_portrait(contract_agent),
+		"saja",
+		str(event.get("id", ""))
 	)
 
 
-func _open_contract_story(title_text: String, lines: Array[String]) -> void:
+func _interact_with_saja() -> void:
+	var event: Dictionary = GameState.get_pending_shelter_story_event()
+	if not event.is_empty():
+		_open_pending_shelter_story()
+		return
+	if not GameState.is_contract_agent_available():
+		_show_status("사자 · 첫 출정에서 살아 돌아오면 쉘터 재건 계획을 맡기겠다.")
+		return
+	_open_contract_ui()
+
+
+func _open_juhong_story() -> void:
+	var event: Dictionary = GameState.get_pending_juhong_event()
+	if event.is_empty():
+		_show_status("주홍은 더 남길 말 없이 도시로 돌아갔습니다.")
+		return
+	_open_contract_story(
+		str(event.get("title", "붉은 칼의 전령")),
+		_string_array(event.get("lines", [])),
+		str(event.get("speaker", "주홍")),
+		_character_portrait(juhong_character),
+		"juhong",
+		str(event.get("id", ""))
+	)
+
+
+func _open_iron_mission_dialog() -> void:
+	var state: Dictionary = GameState.get_iron_mission_state()
+	var definition: Dictionary = state.get("definition", {}) as Dictionary
+	var status := str(state.get("status", "available"))
+	var title := str(definition.get("title", "철근의 특별 훈련"))
+	var lines: Array[String] = []
+	match status:
+		"available":
+			var accept_result: Dictionary = GameState.accept_current_iron_mission()
+			if not bool(accept_result.get("ok", false)):
+				_show_status("철근의 훈련을 지금 시작할 수 없습니다.")
+				return
+			lines.append(str(definition.get("accept_dialogue", "몸부터 단련하고 다시 와.")))
+			lines.append("시험 목표 · %s" % str(definition.get("brief", "생존 시험을 완수하세요.")))
+		"active":
+			lines.append("아직 끝난 게 아니다. 숫자가 아니라 끝까지 살아 돌아오는 걸 보여 줘.")
+			lines.append("현재 진행 · %d / %d\n%s" % [
+				int(state.get("progress", 0)),
+				int(state.get("target", 1)),
+				str(definition.get("brief", "")),
+			])
+		"complete":
+			var claim_result: Dictionary = GameState.claim_current_iron_mission_reward()
+			if not bool(claim_result.get("ok", false)):
+				_show_status("철근의 훈련 보상을 정산하지 못했습니다.")
+				return
+			lines.append(str(definition.get("complete_dialogue", "이번 시험은 통과다.")))
+			lines.append("영구 강화 획득 · %s" % str(definition.get("reward_text", "생존 능력 강화")))
+			_update_stats()
+		_:
+			title = "철근의 생존 훈련"
+			lines.append("가르칠 건 다 가르쳤다. 이제 살아 돌아오는 건 네 몫이야.")
+	_open_contract_story(title, lines, "철근", _character_portrait(iron_trainer))
+
+
+func _character_portrait(character: Node3D) -> Texture2D:
+	if is_instance_valid(character) and character.has_method("get_portrait_texture"):
+		return character.call("get_portrait_texture") as Texture2D
+	return null
+
+
+func _string_array(value: Variant) -> Array[String]:
+	var result: Array[String] = []
+	if value is Array:
+		for entry in value as Array:
+			result.append(str(entry))
+	return result
+
+
+func _open_contract_story(
+	title_text: String,
+	lines: Array[String],
+	speaker_name: String = "사자",
+	portrait_texture: Texture2D = null,
+	completion_owner: String = "",
+	completion_id: String = ""
+) -> void:
 	if lines.is_empty() or contract_story_open:
 		return
 	contract_story_open = true
+	contract_story_speaker_name = speaker_name
+	contract_story_portrait = portrait_texture
+	contract_story_completion_owner = completion_owner
+	contract_story_completion_id = completion_id
 	contract_story_lines.assign(lines)
 	contract_story_index = 0
 	touch_vector = Vector2.ZERO
@@ -818,7 +1059,9 @@ func _open_contract_story(title_text: String, lines: Array[String]) -> void:
 	)
 	row.add_child(portrait_frame)
 	var portrait := TextureRect.new()
-	if is_instance_valid(contract_agent) and contract_agent.has_method("get_portrait_texture"):
+	if contract_story_portrait != null:
+		portrait.texture = contract_story_portrait
+	elif is_instance_valid(contract_agent) and contract_agent.has_method("get_portrait_texture"):
 		portrait.texture = contract_agent.call("get_portrait_texture") as Texture2D
 	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -831,7 +1074,7 @@ func _open_contract_story(title_text: String, lines: Array[String]) -> void:
 	var speaker_row := HBoxContainer.new()
 	text_box.add_child(speaker_row)
 	var speaker := Label.new()
-	speaker.text = "훈련교관 철근"
+	speaker.text = contract_story_speaker_name
 	speaker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	speaker.add_theme_font_override("font", FONT)
 	speaker.add_theme_font_size_override("font_size", 18)
@@ -888,6 +1131,13 @@ func _advance_contract_story() -> void:
 	if contract_story_index < contract_story_lines.size():
 		_refresh_contract_story()
 		return
+	if contract_story_completion_owner == "saja":
+		GameState.mark_shelter_story_event_seen(contract_story_completion_id)
+	elif contract_story_completion_owner == "juhong":
+		GameState.mark_juhong_event_seen(contract_story_completion_id)
+		if is_instance_valid(juhong_character):
+			juhong_character.queue_free()
+		juhong_character = null
 	contract_story_open = false
 	if is_instance_valid(contract_story_layer):
 		contract_story_layer.queue_free()
@@ -898,24 +1148,10 @@ func _advance_contract_story() -> void:
 	contract_story_next_button = null
 	contract_story_lines.clear()
 	contract_story_index = 0
-
-
-func _advance_contract_agent_intro() -> void:
-	if not contract_intro_open:
-		return
-	contract_intro_index += 1
-	if contract_intro_index < CONTRACT_AGENT_INTRO_LINES.size():
-		_refresh_contract_agent_intro()
-		return
-	GameState.contract_agent_intro_seen = true
-	GameState.save_persistent_state()
-	contract_intro_open = false
-	if is_instance_valid(contract_intro_layer):
-		contract_intro_layer.queue_free()
-	contract_intro_layer = null
-	contract_intro_body_label = null
-	contract_intro_next_button = null
-	_show_status("철근이 창고와 체력 훈련장을 열었습니다. 현장 계약을 확인하세요.")
+	contract_story_speaker_name = "사자"
+	contract_story_portrait = null
+	contract_story_completion_owner = ""
+	contract_story_completion_id = ""
 
 
 func _setup_merchant_visit() -> void:
@@ -1050,22 +1286,32 @@ func _resident_wait_position(index: int) -> Vector3:
 
 func _scratcher_work_position(index: int) -> Vector3:
 	var station := _scratcher_bank_position()
-	var column := maxi(0, index) % 2
-	var row := maxi(0, index) / 2
+	var column := maxi(0, index) % 10
+	var row := maxi(0, index) / 10
 	return Vector3(
-		station.x - 0.85 + float(column) * 1.7,
+		station.x + _factory_worker_x_offset(column),
 		0.78,
-		_north_module_z() + 3.0 + float(row) * 1.35
+		station.z + 2.35 - float(row) * 1.08
 	)
 
 
 func _catnip_work_position(index: int) -> Vector3:
 	var station := _catnip_scraper_position()
+	var column := maxi(0, index) % 5
+	var row := maxi(0, index) / 5
 	return Vector3(
-		station.x,
+		station.x + _factory_worker_x_offset(column),
 		0.78,
-		_north_module_z() + 3.0 + float(maxi(0, index)) * 1.35
+		station.z + 2.35 - float(row) * 1.08
 	)
+
+
+func _factory_worker_x_offset(column: int) -> float:
+	if column <= 0:
+		return 0.0
+	var step: int = (column + 1) / 2
+	var side: float = -1.0 if column % 2 == 1 else 1.0
+	return float(step) * 1.2 * side
 
 
 func _update_camera(delta: float) -> void:
@@ -1082,7 +1328,6 @@ func _ui_blocks_player() -> bool:
 	return (
 		merchant_ui_open
 		or contract_ui_open
-		or contract_intro_open
 		or contract_story_open
 		or raid_zone_ui_open
 		or raid_loadout_ui_open
@@ -1093,13 +1338,15 @@ func _ui_blocks_player() -> bool:
 
 func _build_interface() -> void:
 	var canvas := CanvasLayer.new()
+	canvas.name = "ShelterHUD"
 	canvas.layer = 5
 	add_child(canvas)
 	var theme := Theme.new()
 	theme.default_font = FONT
 	var panel := PanelContainer.new()
+	panel.name = "ShelterStatsPanel"
 	panel.position = Vector2(24, 22)
-	panel.size = Vector2(370, 220)
+	panel.custom_minimum_size = Vector2(370, 0)
 	panel.theme = theme
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.015, 0.025, 0.023, 0.92), Color("#577a69")))
 	canvas.add_child(panel)
@@ -1145,8 +1392,10 @@ func _build_interface() -> void:
 	stats_box.add_child(scrap_gain_label)
 	prompt_label = Label.new()
 	prompt_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	prompt_label.position = Vector2(-220, -112)
-	prompt_label.size = Vector2(440, 52)
+	prompt_label.offset_left = -220.0
+	prompt_label.offset_top = -112.0
+	prompt_label.offset_right = 220.0
+	prompt_label.offset_bottom = -60.0
 	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	prompt_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	prompt_label.add_theme_font_override("font", FONT)
@@ -1156,8 +1405,10 @@ func _build_interface() -> void:
 	canvas.add_child(prompt_label)
 	status_label = Label.new()
 	status_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	status_label.position = Vector2(-270, 24)
-	status_label.size = Vector2(540, 58)
+	status_label.offset_left = -270.0
+	status_label.offset_top = 24.0
+	status_label.offset_right = 270.0
+	status_label.offset_bottom = 82.0
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	status_label.add_theme_font_override("font", FONT)
@@ -1169,8 +1420,10 @@ func _build_interface() -> void:
 	_build_merchant_arrival_notice(canvas)
 	interact_button = Button.new()
 	interact_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	interact_button.position = Vector2(-154, -142)
-	interact_button.size = Vector2(118, 72)
+	interact_button.offset_left = -154.0
+	interact_button.offset_top = -142.0
+	interact_button.offset_right = -36.0
+	interact_button.offset_bottom = -70.0
 	interact_button.text = "상호작용"
 	interact_button.icon = UI_ICONS.get_icon("interact", 32, Color("#dce8e1"))
 	interact_button.expand_icon = true
@@ -1182,8 +1435,10 @@ func _build_interface() -> void:
 	dash_button = Button.new()
 	dash_button.name = "DashButton"
 	dash_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	dash_button.position = Vector2(-284, -142)
-	dash_button.size = Vector2(118, 72)
+	dash_button.offset_left = -284.0
+	dash_button.offset_top = -142.0
+	dash_button.offset_right = -166.0
+	dash_button.offset_bottom = -70.0
 	dash_button.text = "대시"
 	dash_button.icon = UI_ICONS.get_icon("dash", 32, Color("#d8e5de"))
 	dash_button.expand_icon = true
@@ -1193,6 +1448,38 @@ func _build_interface() -> void:
 		dash_button.pressed.connect(_try_start_roll)
 	dash_button.visible = DisplayServer.is_touchscreen_available()
 	canvas.add_child(dash_button)
+	shelter_medkit_button = Button.new()
+	shelter_medkit_button.name = "ShelterMedkitButton"
+	shelter_medkit_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	var medkit_left := 174.0 if DisplayServer.is_touchscreen_available() else 24.0
+	shelter_medkit_button.offset_left = medkit_left
+	shelter_medkit_button.offset_top = -104.0
+	shelter_medkit_button.offset_right = medkit_left + 104.0
+	shelter_medkit_button.offset_bottom = -24.0
+	shelter_medkit_button.icon = UI_ICONS.get_icon("medkit", 36, Color("#f0eee4"))
+	shelter_medkit_button.expand_icon = true
+	shelter_medkit_button.add_theme_constant_override("icon_max_width", 36)
+	shelter_medkit_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	shelter_medkit_button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+	shelter_medkit_button.focus_mode = Control.FOCUS_NONE
+	shelter_medkit_button.add_theme_font_override("font", FONT)
+	shelter_medkit_button.add_theme_font_size_override("font_size", 13)
+	shelter_medkit_button.add_theme_stylebox_override(
+		"normal",
+		_rounded_panel_style(Color(0.018, 0.025, 0.025, 0.94), Color("#718a7e"), 7)
+	)
+	shelter_medkit_button.add_theme_stylebox_override(
+		"hover",
+		_rounded_panel_style(Color(0.055, 0.08, 0.07, 0.97), Color("#b9d1c4"), 7)
+	)
+	shelter_medkit_button.add_theme_stylebox_override(
+		"pressed",
+		_rounded_panel_style(Color(0.11, 0.17, 0.13, 0.98), Color("#dff0e5"), 7)
+	)
+	if not DisplayServer.is_touchscreen_available():
+		shelter_medkit_button.pressed.connect(_use_shelter_medkit)
+	canvas.add_child(shelter_medkit_button)
+	_update_shelter_medkit_button()
 	inventory_ui = INVENTORY_UI_SCRIPT.new()
 	inventory_ui.name = "InventoryUI"
 	canvas.add_child(inventory_ui)
@@ -1206,6 +1493,7 @@ func _build_interface() -> void:
 	inventory_ui.connect("weapon_equipped", _on_inventory_weapon_equipped)
 	inventory_ui.connect("weapon_unequipped", _on_inventory_weapon_unequipped)
 	inventory_ui.connect("equipment_changed", _on_inventory_equipment_changed)
+	inventory_ui.connect("item_discard_requested", _on_inventory_item_discard_requested)
 	_refresh_inventory_state()
 	roll_cooldown_indicator = ROLL_COOLDOWN_INDICATOR_SCRIPT.new() as Control
 	roll_cooldown_indicator.name = "ShelterRollCooldownIndicator"
@@ -1313,7 +1601,7 @@ func _open_contract_ui() -> void:
 	contract_ui_body.name = "ContractContent"
 	contract_ui_body.add_theme_constant_override("separation", 12)
 	margin.add_child(contract_ui_body)
-	_refresh_contract_ui()
+	call_deferred("_refresh_contract_ui")
 
 
 func _refresh_contract_ui() -> void:
@@ -1344,19 +1632,19 @@ func _refresh_contract_ui() -> void:
 	title_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	header.add_child(title_box)
 	var eyebrow := Label.new()
-	eyebrow.text = "훈련교관 철근  ·  살아 돌아온 녀석만 받는다"
+	eyebrow.text = "쉘터 지킴이 사자  ·  공생 시설 건설 계약"
 	eyebrow.add_theme_font_override("font", FONT)
 	eyebrow.add_theme_font_size_override("font_size", 14)
 	eyebrow.add_theme_color_override("font_color", Color("#9fb2a9"))
 	title_box.add_child(eyebrow)
 	var title := Label.new()
-	title.text = "철근의 계약판"
+	title.text = "사자의 쉘터 재건 계획"
 	title.add_theme_font_override("font", FONT)
 	title.add_theme_font_size_override("font_size", 26)
 	title.add_theme_color_override("font_color", Color("#ead69c"))
 	title_box.add_child(title)
 	var chain_progress := Label.new()
-	chain_progress.text = "완료한 계약  %d / %d" % [completed_count, total_count]
+	chain_progress.text = "완료한 건설 계약  %d / %d" % [completed_count, total_count]
 	chain_progress.add_theme_font_override("font", FONT)
 	chain_progress.add_theme_font_size_override("font_size", 13)
 	chain_progress.add_theme_color_override("font_color", Color("#b9c8c1"))
@@ -1386,25 +1674,25 @@ func _refresh_contract_ui() -> void:
 
 	if status == "finished" or definition.is_empty():
 		var finished_title := Label.new()
-		finished_title.text = "이제 네가 길을 고를 차례다"
+		finished_title.text = "쉘터의 기본 생산망이 완성되었습니다"
 		finished_title.add_theme_font_override("font", FONT)
 		finished_title.add_theme_font_size_override("font_size", 24)
 		finished_title.add_theme_color_override("font_color", Color("#82d5aa"))
 		contract_box.add_child(finished_title)
 		var finished_body := Label.new()
-		finished_body.text = "내가 아는 건 전부 넘겼다. 이제 종로 어디를 파고들지는 네가 정해.\n살아서 돌아오기만 해. 다음 기록은 네가 쓰는 거다."
+		finished_body.text = "사자가 약속한 시설은 모두 가동되었습니다.\n이제 주민 배치와 업그레이드로 쉘터를 거대한 생존 공장으로 키우세요."
 		finished_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		finished_body.add_theme_font_override("font", FONT)
 		finished_body.add_theme_font_size_override("font_size", 16)
 		finished_body.add_theme_color_override("font_color", Color("#d1ddd6"))
 		contract_box.add_child(finished_body)
 	else:
-		var status_text := "내가 맡길 일"
+		var status_text := "새 건설 계약"
 		match status:
 			"active":
-				status_text = "도시에서 처리 중"
+				status_text = "현장 목표 진행 중"
 			"complete":
-				status_text = "돌아왔으면 보고해"
+				status_text = "사자에게 결과 보고"
 		var contract_heading := HBoxContainer.new()
 		contract_heading.add_theme_constant_override("separation", 10)
 		contract_box.add_child(contract_heading)
@@ -1462,7 +1750,7 @@ func _refresh_contract_ui() -> void:
 		)
 		contract_box.add_child(progress_bar)
 		var reward_title := Label.new()
-		reward_title.text = "내가 챙겨 줄 몫"
+		reward_title.text = "완료 보상과 건설 결과"
 		reward_title.add_theme_font_override("font", FONT)
 		reward_title.add_theme_font_size_override("font_size", 14)
 		reward_title.add_theme_color_override("font_color", Color("#8fa89c"))
@@ -1510,13 +1798,13 @@ func _refresh_contract_ui() -> void:
 	action.custom_minimum_size = Vector2(250, 44)
 	match status:
 		"available":
-			action.text = "철근의 계약 받기"
+			action.text = "사자의 계약 받기"
 			action.pressed.connect(_accept_current_contract)
 		"active":
-			action.text = "도시에서 끝내고 돌아와"
+			action.text = "현장 목표 진행 중"
 			action.disabled = true
 		"complete":
-			action.text = "철근에게 결과 보고"
+			action.text = "사자에게 결과 보고"
 			action.pressed.connect(_claim_current_contract)
 		_:
 			action.text = "모든 계약 완료"
@@ -1558,7 +1846,7 @@ func _add_contract_reward_chips(
 func _accept_current_contract() -> void:
 	var result := GameState.accept_current_contract()
 	if not bool(result.get("ok", false)):
-		contract_report_message = "철근: 지금 맡긴 일부터 끝내. 발만 바쁘다고 일이 되는 건 아니다."
+		contract_report_message = "사자: 지금 맡긴 계약부터 끝내자. 쉘터는 순서대로 세워야 해."
 	else:
 		var definition := result.get("definition", {}) as Dictionary
 		var story_lines: Array[String] = []
@@ -1567,20 +1855,20 @@ func _accept_current_contract() -> void:
 		story_lines.append("목표는 %s. 살아서 돌아와 보고해." % str(
 			definition.get("objective", "현장 목표 완수")
 		))
-		_show_status("철근에게서 현장 계약을 받았습니다.")
+		_show_status("사자에게서 시설 건설 계약을 받았습니다.")
 		_close_contract_ui()
 		_open_contract_story(
 			"계약 수락 · %s" % str(definition.get("title", "현장 계약")),
 			story_lines
 		)
 		return
-	_refresh_contract_ui()
+	call_deferred("_refresh_contract_ui")
 
 
 func _claim_current_contract() -> void:
 	var result := GameState.claim_current_contract_reward()
 	if not bool(result.get("ok", false)):
-		contract_report_message = "철근: 빈손 보고는 받지 않는다. 목표부터 확인하고 와."
+		contract_report_message = "사자: 아직 재료가 모자라. 계약 목표부터 확인하고 와."
 	else:
 		var definition := result.get("definition", {}) as Dictionary
 		var construction_line := ""
@@ -1592,7 +1880,7 @@ func _claim_current_contract() -> void:
 		for line in definition.get("complete_dialogue", []) as Array:
 			story_lines.append(str(line))
 		story_lines.append("기록 해독 · %s\n%s" % [
-			str(definition.get("lore_title", "철근의 기록")),
+			str(definition.get("lore_title", "사자의 기록")),
 			str(definition.get("lore", "")),
 		])
 		var reward_line := "보고 보상 · %s" % _format_contract_reward_text(
@@ -1602,7 +1890,7 @@ func _claim_current_contract() -> void:
 			reward_line += construction_line
 		story_lines.append(reward_line)
 		_show_status(
-			"철근이 %s 공사를 완료했습니다." % str(result.get("facility_name", "새 시설"))
+			"사자가 %s 공사를 완료했습니다." % str(result.get("facility_name", "새 시설"))
 			if not facility_id.is_empty()
 			else "계약 보상을 받고 새로운 세계 기록을 해금했습니다."
 		)
@@ -1613,7 +1901,7 @@ func _claim_current_contract() -> void:
 			story_lines
 		)
 		return
-	_refresh_contract_ui()
+	call_deferred("_refresh_contract_ui")
 
 
 func _format_contract_reward_text(reward: Dictionary) -> String:
@@ -2131,7 +2419,7 @@ func _trade_merchant_good(good: Dictionary, buying: bool) -> void:
 		GameState.canned_food += price
 		merchant_shop_message_label.text = "%s을(를) 판매하고 통조림 %d개를 받았습니다." % [str(good["title"]), price]
 	_update_stats()
-	_refresh_merchant_shop()
+	call_deferred("_refresh_merchant_shop")
 
 
 func _merchant_item_count(good: Dictionary) -> int:
@@ -2246,8 +2534,10 @@ func _rounded_panel_style(background: Color, border: Color, radius: int) -> Styl
 func _build_touch_stick(canvas: CanvasLayer) -> void:
 	touch_stick = Control.new()
 	touch_stick.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	touch_stick.position = Vector2(34, -160)
-	touch_stick.size = Vector2(128, 128)
+	touch_stick.offset_left = 34.0
+	touch_stick.offset_top = -160.0
+	touch_stick.offset_right = 162.0
+	touch_stick.offset_bottom = -32.0
 	touch_stick.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	canvas.add_child(touch_stick)
 	var ring := ColorRect.new()
@@ -2264,8 +2554,47 @@ func _build_touch_stick(canvas: CanvasLayer) -> void:
 	touch_stick.visible = DisplayServer.is_touchscreen_available()
 
 
+func _apply_shelter_safe_layout() -> void:
+	var viewport_size := get_viewport().get_visible_rect().size
+	var safe := UISafeArea.get_margins(viewport_size)
+	var stats_panel := get_node_or_null("ShelterHUD/ShelterStatsPanel") as Control
+	if stats_panel:
+		stats_panel.position = Vector2(24.0 + safe.x, 22.0 + safe.y)
+	if is_instance_valid(touch_stick):
+		touch_stick.offset_left = 34.0 + safe.x
+		touch_stick.offset_top = -160.0 - safe.w
+		touch_stick.offset_right = touch_stick.offset_left + 128.0
+		touch_stick.offset_bottom = touch_stick.offset_top + 128.0
+	if is_instance_valid(shelter_medkit_button):
+		var medkit_left := 174.0 if DisplayServer.is_touchscreen_available() else 24.0
+		shelter_medkit_button.offset_left = medkit_left + safe.x
+		shelter_medkit_button.offset_top = -104.0 - safe.w
+		shelter_medkit_button.offset_right = shelter_medkit_button.offset_left + 104.0
+		shelter_medkit_button.offset_bottom = shelter_medkit_button.offset_top + 80.0
+	if is_instance_valid(interact_button):
+		interact_button.offset_right = -36.0 - safe.z
+		interact_button.offset_bottom = -70.0 - safe.w
+		interact_button.offset_left = interact_button.offset_right - 118.0
+		interact_button.offset_top = interact_button.offset_bottom - 72.0
+	if is_instance_valid(dash_button):
+		dash_button.offset_right = -166.0 - safe.z
+		dash_button.offset_bottom = -70.0 - safe.w
+		dash_button.offset_left = dash_button.offset_right - 118.0
+		dash_button.offset_top = dash_button.offset_bottom - 72.0
+	if is_instance_valid(prompt_label):
+		prompt_label.offset_left = -220.0
+		prompt_label.offset_right = 220.0
+		prompt_label.offset_bottom = -60.0 - safe.w
+		prompt_label.offset_top = prompt_label.offset_bottom - 52.0
+	if is_instance_valid(status_label):
+		status_label.offset_left = -270.0
+		status_label.offset_top = 24.0 + safe.y
+		status_label.offset_right = 270.0
+		status_label.offset_bottom = status_label.offset_top + 58.0
+
+
 func _update_nearby_station() -> void:
-	if merchant_ui_open or contract_ui_open or contract_intro_open or contract_story_open:
+	if merchant_ui_open or contract_ui_open or contract_story_open:
 		interact_button.visible = false
 		prompt_label.visible = false
 		return
@@ -2294,6 +2623,26 @@ func _update_nearby_station() -> void:
 		if contract_distance <= contract_radius and contract_distance < nearest_distance:
 			nearest = "contract_agent"
 			nearest_distance = contract_distance
+	if is_instance_valid(iron_trainer):
+		var iron_distance := player.global_position.distance_to(iron_trainer.global_position)
+		var iron_radius := (
+			float(iron_trainer.call("get_interaction_radius"))
+			if iron_trainer.has_method("get_interaction_radius")
+			else 2.45
+		)
+		if iron_distance <= iron_radius and iron_distance < nearest_distance:
+			nearest = "iron_trainer"
+			nearest_distance = iron_distance
+	if is_instance_valid(juhong_character):
+		var juhong_distance := player.global_position.distance_to(juhong_character.global_position)
+		var juhong_radius := (
+			float(juhong_character.call("get_interaction_radius"))
+			if juhong_character.has_method("get_interaction_radius")
+			else 2.45
+		)
+		if juhong_distance <= juhong_radius and juhong_distance < nearest_distance:
+			nearest = "juhong"
+			nearest_distance = juhong_distance
 	var exit_distance := player_ground.distance_to(exit_station["position"])
 	if exit_distance <= float(exit_station["radius"]) and exit_distance < nearest_distance:
 		nearest = "pipe_exit"
@@ -2347,11 +2696,20 @@ func _update_nearby_station() -> void:
 		var contract_prompt := (
 			str(contract_agent.call("get_interaction_prompt"))
 			if is_instance_valid(contract_agent) and contract_agent.has_method("get_interaction_prompt")
-			else "철근에게 현장 계약 확인"
+			else "사자에게 시설 계약 확인"
 		)
 		prompt_label.text = "[F]  %s" % contract_prompt
-		interact_button.text = "계약"
+		interact_button.text = "대화"
 		interact_button.icon = UI_ICONS.get_icon("collect", 32, Color("#e4c874"))
+	elif current_station == "iron_trainer":
+		var iron_prompt := str(iron_trainer.call("get_interaction_prompt"))
+		prompt_label.text = "[F]  %s" % iron_prompt
+		interact_button.text = "훈련"
+		interact_button.icon = UI_ICONS.get_icon("fitness", 32, Color("#e4c874"))
+	elif current_station == "juhong":
+		prompt_label.text = "[F]  주홍과 대화하기"
+		interact_button.text = "대화"
+		interact_button.icon = UI_ICONS.get_icon("lore", 32, Color("#dc7667"))
 	else:
 		prompt_label.text = "[F]  %s" % _pipe_exit_station()["label"]
 		interact_button.text = "탐색"
@@ -2359,7 +2717,7 @@ func _update_nearby_station() -> void:
 
 
 func _interact() -> void:
-	if merchant_ui_open or contract_ui_open or contract_intro_open or contract_story_open:
+	if merchant_ui_open or contract_ui_open or contract_story_open:
 		return
 	match current_station:
 		"module":
@@ -2372,7 +2730,11 @@ func _interact() -> void:
 		"merchant_shop":
 			_open_merchant_shop()
 		"contract_agent":
-			_open_contract_ui()
+			_interact_with_saja()
+		"iron_trainer":
+			_open_iron_mission_dialog()
+		"juhong":
+			_open_juhong_story()
 	_update_stats()
 
 
@@ -2423,6 +2785,41 @@ func _update_stats() -> void:
 				GameState.format_compact_number(churu_cost),
 			]
 			shelter_upgrade_button.disabled = GameState.scrap < scrap_cost or GameState.churu < churu_cost
+	_update_shelter_medkit_button()
+
+
+func _update_shelter_medkit_button() -> void:
+	if shelter_medkit_button == null:
+		return
+	shelter_medkit_button.text = (
+		"구급약\nx%d" % GameState.medkits
+		if DisplayServer.is_touchscreen_available()
+		else "SHIFT\nx%d" % GameState.medkits
+	)
+	shelter_medkit_button.disabled = (
+		GameState.medkits <= 0
+		or GameState.player_health <= 0
+		or GameState.player_health >= GameState.get_max_health()
+	)
+	shelter_medkit_button.tooltip_text = "구급약 사용 (Shift)"
+
+
+func _use_shelter_medkit() -> void:
+	if _ui_blocks_player():
+		return
+	var maximum_health := GameState.get_max_health()
+	if GameState.medkits <= 0:
+		_show_status("보유한 구급약이 없습니다.")
+		return
+	if GameState.player_health >= maximum_health:
+		_show_status("체력이 이미 가득 찼습니다.")
+		return
+	GameState.medkits -= 1
+	var recovered := mini(38, maximum_health - GameState.player_health)
+	GameState.player_health += recovered
+	GameState.save_persistent_state()
+	_update_stats()
+	_show_status("구급약 회복 +%d" % recovered)
 
 
 func _refresh_inventory_state() -> void:
@@ -2493,6 +2890,48 @@ func _on_inventory_weapon_unequipped() -> void:
 func _on_inventory_equipment_changed() -> void:
 	GameState.save_persistent_state()
 	_refresh_inventory_state()
+
+
+func _on_inventory_item_discard_requested(item_type: String, item_id: String, amount: int) -> void:
+	if RAID_ITEM_ECONOMY.is_protected(item_type, item_id):
+		inventory_ui.call("apply_discard_result", false, "중요 임무 물품은 버릴 수 없습니다.")
+		return
+	if item_type == "weapon" and bool(GameState.has_ak) and item_id == str(GameState.equipped_weapon_id):
+		inventory_ui.call("apply_discard_result", false, "장착을 해제한 뒤 버릴 수 있습니다.")
+		return
+	if item_type == "equipment":
+		var definition: Dictionary = GameState.get_equipment_definition(item_id)
+		var slot := str(definition.get("slot", "body"))
+		if str(GameState.get_equipped_equipment(slot)) == item_id:
+			inventory_ui.call("apply_discard_result", false, "장착을 해제한 뒤 버릴 수 있습니다.")
+			return
+	var removed: int = GameState.remove_raid_bag_item(item_type, item_id, amount)
+	if removed <= 0:
+		inventory_ui.call("apply_discard_result", false, "버릴 수 없는 아이템입니다.")
+		return
+	GameState.save_persistent_state()
+	inventory_ui.call("apply_discard_result", true, "%s x%d을 폐기했습니다." % [
+		_inventory_discard_display_name(item_type, item_id),
+		removed,
+	])
+	_refresh_inventory_state()
+	_update_shelter_medkit_button()
+
+
+func _inventory_discard_display_name(item_type: String, item_id: String) -> String:
+	if item_type == "weapon":
+		return str(WEAPON_SYSTEM.get_weapon(item_id).get("display_name", item_id))
+	if item_type == "equipment":
+		return str(GameState.get_equipment_definition(item_id).get("display_name", item_id))
+	var names := {
+		"canned_food": "통조림",
+		"medkit": "구급약",
+		"churu": "츄르",
+		"rubber_gasket": "고무 패킹",
+		"scope_lens": "스코프 렌즈",
+		"magazine_spring": "탄창 스프링",
+	}
+	return str(names.get(item_id, item_id))
 
 
 func _upgrade_shelter_tier() -> void:
@@ -2728,13 +3167,19 @@ func _open_raid_zone_select() -> void:
 	raid_zone_detail_requirement = Label.new()
 	raid_zone_detail_requirement.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	detail_box.add_child(_build_raid_zone_detail_entry("secure", "진입 조건", raid_zone_detail_requirement))
+	raid_zone_resupply_button = _merchant_button("창고에서 빠른 보충", false, "backpack")
+	raid_zone_resupply_button.name = "RaidZoneResupplyButton"
+	raid_zone_resupply_button.custom_minimum_size.y = 44
+	raid_zone_resupply_button.tooltip_text = "장착 무기 탄약 90발과 구급약 2개까지 창고에서 꺼냅니다."
+	raid_zone_resupply_button.pressed.connect(_quick_resupply_for_raid, CONNECT_DEFERRED)
+	detail_box.add_child(raid_zone_resupply_button)
 	var detail_spacer := Control.new()
 	detail_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	detail_box.add_child(detail_spacer)
 	raid_zone_launch_button = _merchant_button("선택 구역으로 출정", true, "raid")
 	raid_zone_launch_button.name = "RaidZoneLaunchButton"
 	raid_zone_launch_button.custom_minimum_size.y = 58
-	raid_zone_launch_button.pressed.connect(_launch_selected_raid_zone)
+	raid_zone_launch_button.pressed.connect(_launch_selected_raid_zone, CONNECT_DEFERRED)
 	detail_box.add_child(raid_zone_launch_button)
 
 	var initial_zone_id := ""
@@ -2900,7 +3345,14 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 		and GameState.get_progression_item_count("sealed_zone_keycard") <= 0
 	)
 	raid_zone_detail_title.text = str(zone.get("name", zone_id))
-	raid_zone_detail_description.text = str(zone.get("description", ""))
+	var identity := str(zone.get("identity", ""))
+	var base_description := str(zone.get("description", ""))
+	var tactical_rule := str(zone.get("tactical_rule", ""))
+	raid_zone_detail_description.text = (
+		"%s\n%s\n전술: %s" % [identity, base_description, tactical_rule]
+		if not identity.is_empty()
+		else base_description
+	)
 	var threat_percent := roundi(float(zone.get("threat", 0.0)) * 100.0)
 	raid_zone_detail_threat.text = "%d%%" % threat_percent
 	raid_zone_detail_threat_bar.value = threat_percent
@@ -2910,17 +3362,65 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 		"fill",
 		_rounded_panel_style(threat_color, threat_color.lightened(0.12), 7)
 	)
-	raid_zone_detail_reward.text = str(zone.get("reward", "-"))
+	raid_zone_detail_reward.text = str(zone.get("loot_focus", zone.get("reward", "-")))
 	if unlocked:
-		raid_zone_detail_state.text = "● 진입 가능"
-		raid_zone_detail_state.add_theme_color_override("font_color", Color("#72d6a0"))
-		raid_zone_detail_requirement.text = "진입 조건 충족 · 장비 확인 후 출정 가능"
+		var manifest := GameState.build_raid_loadout_manifest(zone_id)
+		var duration := int(zone.get("recommended_duration_minutes", 25))
+		var enemy_count := int(zone.get("target_enemy_count", 24))
+		var ammo_count := int(manifest.get("ammo_count", 0))
+		var medkit_count := int(manifest.get("medkits", 0))
+		var preparation := "가방 %d/%d칸 · 탄약 %d발 · 구급약 %d개" % [
+			GameState.get_raid_bag_used_slots(),
+			GameState.get_raid_bag_capacity(),
+			ammo_count,
+			medkit_count,
+		]
+		var readiness_warnings: Array[String] = []
+		if ammo_count < 60:
+			readiness_warnings.append("탄약 약 2회 교전 미만")
+		if medkit_count <= 0:
+			readiness_warnings.append("구급약 없음")
+		if readiness_warnings.is_empty():
+			raid_zone_detail_state.text = "● 준비 완료"
+			raid_zone_detail_state.add_theme_color_override("font_color", Color("#72d6a0"))
+		else:
+			raid_zone_detail_state.text = "▲ 준비 확인"
+			raid_zone_detail_state.add_theme_color_override("font_color", Color("#e3bd67"))
+		var warning_line := (
+			"\n경고: %s" % " · ".join(readiness_warnings)
+			if not readiness_warnings.is_empty()
+			else ""
+		)
+		raid_zone_detail_requirement.text = (
+			"예상 %d분 · 적 약 %d명\n%s%s"
+			% [duration, enemy_count, preparation, warning_line]
+		)
+		var weapon_id := str(manifest.get("weapon_id", ""))
+		var ammo_id := str(GameState.equipped_ammo_id) if not weapon_id.is_empty() else ""
+		var stored_ammo := (
+			GameState.get_stored_storage_count("ammo", ammo_id)
+			if not ammo_id.is_empty()
+			else 0
+		)
+		var stored_medkits := GameState.get_stored_storage_count("medkit", "medkit")
+		var can_resupply := (
+			(ammo_count < 90 and stored_ammo > 0)
+			or (medkit_count < 2 and stored_medkits > 0)
+		)
+		raid_zone_resupply_button.visible = true
+		raid_zone_resupply_button.disabled = not can_resupply
+		raid_zone_resupply_button.text = (
+			"창고에서 보충 · 탄약 %d / 구급약 %d" % [stored_ammo, stored_medkits]
+			if can_resupply
+			else "창고에 보충 가능한 물품 없음"
+		)
 	else:
 		raid_zone_detail_state.text = "■ 봉쇄 구역"
 		raid_zone_detail_state.add_theme_color_override("font_color", Color("#d78371"))
 		raid_zone_detail_requirement.text = (
 			"봉쇄 구역 키카드 필요" if needs_keycard else "쉘터 Tier %d 필요" % required_tier
 		)
+		raid_zone_resupply_button.visible = false
 	raid_zone_launch_button.disabled = not unlocked
 	raid_zone_launch_button.text = (
 		"선택 구역으로 출정"
@@ -2967,9 +3467,38 @@ func _raid_zone_marker_style(unlocked: bool, selected: bool, hovered: bool) -> S
 
 
 func _launch_selected_raid_zone() -> void:
-	if raid_zone_selected_id.is_empty():
+	if raid_launch_in_progress or raid_zone_selected_id.is_empty():
 		return
 	_launch_raid_zone(raid_zone_selected_id)
+
+
+func _quick_resupply_for_raid() -> void:
+	if raid_zone_selected_id.is_empty():
+		return
+	var manifest := GameState.build_raid_loadout_manifest(raid_zone_selected_id)
+	var moved_ammo := 0
+	var moved_medkits := 0
+	var failure_reason := ""
+	var weapon_id := str(manifest.get("weapon_id", ""))
+	var ammo_id := str(GameState.equipped_ammo_id) if not weapon_id.is_empty() else ""
+	if not ammo_id.is_empty():
+		var ammo_needed := maxi(0, 90 - int(manifest.get("ammo_count", 0)))
+		if ammo_needed > 0:
+			var ammo_result := GameState.withdraw_storage_item_by_type("ammo", ammo_id, ammo_needed)
+			moved_ammo = int(ammo_result.get("moved", 0))
+			if moved_ammo <= 0:
+				failure_reason = str(ammo_result.get("reason", ""))
+	var medkits_needed := maxi(0, 2 - int(manifest.get("medkits", 0)))
+	if medkits_needed > 0:
+		var medkit_result := GameState.withdraw_storage_item_by_type("medkit", "medkit", medkits_needed)
+		moved_medkits = int(medkit_result.get("moved", 0))
+		if moved_medkits <= 0 and failure_reason.is_empty():
+			failure_reason = str(medkit_result.get("reason", ""))
+	if moved_ammo > 0 or moved_medkits > 0:
+		_show_status("출정 보급 완료 · 탄약 +%d · 구급약 +%d" % [moved_ammo, moved_medkits])
+	else:
+		_show_status(failure_reason if not failure_reason.is_empty() else "추가로 보충할 물품이 없습니다.")
+	_select_raid_zone_preview(raid_zone_selected_id)
 
 
 func _launch_raid_zone(zone_id: String) -> void:
@@ -3079,7 +3608,10 @@ func _open_raid_loadout_confirmation(zone_id: String) -> void:
 	var confirm_button := _merchant_button("맨손으로 출정", true, "raid")
 	confirm_button.name = "ConfirmRaidLoadoutButton"
 	confirm_button.custom_minimum_size = Vector2(190, 50)
-	confirm_button.pressed.connect(_confirm_launch_raid_zone.bind(zone_id))
+	confirm_button.pressed.connect(
+		_confirm_launch_raid_zone.bind(zone_id),
+		CONNECT_DEFERRED
+	)
 	actions.add_child(confirm_button)
 
 
@@ -3093,13 +3625,38 @@ func _raid_loadout_label(text: String, font_size: int, color: Color) -> Label:
 
 
 func _confirm_launch_raid_zone(zone_id: String) -> void:
-	if not GameState.select_raid_zone(zone_id):
+	if raid_launch_in_progress:
 		return
+	if not GameState.select_raid_zone(zone_id):
+		_show_raid_launch_error("선택한 구역에 진입할 수 없습니다.")
+		return
+	raid_launch_in_progress = true
+	if is_instance_valid(raid_zone_launch_button):
+		raid_zone_launch_button.disabled = true
+		raid_zone_launch_button.text = "출정 준비 중..."
 	GameState.confirm_raid_loadout(zone_id)
 	GameState.start_new_raid()
 	GameState.returning_from_shelter = true
 	GameState.save_persistent_state()
-	get_tree().change_scene_to_file("res://scenes/main.tscn")
+	call_deferred("_change_to_raid_scene")
+
+
+func _change_to_raid_scene() -> void:
+	if SceneTransition.transition_to("res://scenes/main.tscn", "res://scenes/shelter_interior.tscn"):
+		return
+	raid_launch_in_progress = false
+	GameState.returning_from_shelter = false
+	_show_raid_launch_error("도시 진입에 실패했습니다. 다시 시도해 주세요.")
+	if is_instance_valid(raid_zone_launch_button):
+		raid_zone_launch_button.disabled = false
+		raid_zone_launch_button.text = "선택 구역으로 출정"
+
+
+func _show_raid_launch_error(message: String) -> void:
+	if is_instance_valid(raid_zone_detail_requirement):
+		raid_zone_detail_requirement.text = message
+		raid_zone_detail_requirement.add_theme_color_override("font_color", Color("#ee806c"))
+	_show_status(message)
 
 
 func _close_raid_loadout_confirmation() -> void:
@@ -3125,6 +3682,7 @@ func _close_raid_zone_select() -> void:
 	raid_zone_detail_threat_bar = null
 	raid_zone_detail_reward = null
 	raid_zone_detail_requirement = null
+	raid_zone_resupply_button = null
 	raid_zone_launch_button = null
 
 
@@ -3152,6 +3710,10 @@ func _build_module_plate(parent: Node3D, position: Vector3, slot_index: int, rot
 
 
 func _show_status(message: String) -> void:
+	if message.is_empty():
+		status_label.text = ""
+		status_label.modulate.a = 0.0
+		return
 	status_label.text = message
 	status_label.modulate.a = 1.0
 
@@ -3166,7 +3728,12 @@ func _build_offline_status_text(progress: Dictionary) -> String:
 			GameState.format_compact_number(catnip_gain),
 			repair_gain,
 		]
-	return "쉘터에 복귀했습니다. 생산기에 주민을 배치할 수 있습니다."
+	if (
+		GameState.is_shelter_facility_unlocked("scratcher_bank")
+		or GameState.is_shelter_facility_unlocked("catnip_scraper")
+	):
+		return "쉘터에 복귀했습니다. 생산기에 주민을 배치할 수 있습니다."
+	return ""
 
 
 func _update_facing(screen_direction: Vector2) -> void:
@@ -3259,19 +3826,6 @@ func _input(event: InputEvent) -> void:
 			_advance_contract_story()
 			get_viewport().set_input_as_handled()
 		return
-	if contract_intro_open:
-		if (
-			event is InputEventKey
-			and event.pressed
-			and not event.echo
-			and event.keycode in [KEY_SPACE, KEY_ENTER, KEY_F, KEY_ESCAPE]
-		):
-			_advance_contract_agent_intro()
-			get_viewport().set_input_as_handled()
-		elif event is InputEventScreenTouch and event.pressed:
-			_advance_contract_agent_intro()
-			get_viewport().set_input_as_handled()
-		return
 	if event is InputEventKey and not event.echo:
 		var key_event := event as InputEventKey
 		var key := key_event.keycode if key_event.keycode != 0 else key_event.physical_keycode
@@ -3305,6 +3859,8 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode in [KEY_E, KEY_I, KEY_B]:
 			inventory_ui.call("toggle")
+		elif event.keycode == KEY_SHIFT:
+			_use_shelter_medkit()
 		elif event.keycode == KEY_F:
 			_interact()
 		elif event.keycode == KEY_8:
@@ -3340,6 +3896,23 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		touch_id = -1
+		touch_vector = Vector2.ZERO
+	if (
+		what == NOTIFICATION_APPLICATION_PAUSED
+		or (what == NOTIFICATION_WM_WINDOW_FOCUS_OUT and DisplayServer.is_touchscreen_available())
+	):
+		if not get_tree().paused:
+			auto_paused_for_background = true
+			get_tree().paused = true
+	elif what in [NOTIFICATION_APPLICATION_RESUMED, NOTIFICATION_WM_WINDOW_FOCUS_IN]:
+		if auto_paused_for_background:
+			auto_paused_for_background = false
+			get_tree().paused = false
+
+
 func _is_inventory_button_at(screen_position: Vector2) -> bool:
 	if inventory_ui == null or bool(inventory_ui.call("is_open")):
 		return false
@@ -3361,12 +3934,17 @@ func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
 		return false
 	if _mobile_button_contains(dash_button, touch.position):
 		_try_start_roll()
-		if DisplayServer.is_touchscreen_available():
+		if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
 			Input.vibrate_handheld(24)
+		return true
+	if _mobile_button_contains(shelter_medkit_button, touch.position):
+		_use_shelter_medkit()
+		if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
+			Input.vibrate_handheld(16)
 		return true
 	if _mobile_button_contains(interact_button, touch.position):
 		_interact()
-		if DisplayServer.is_touchscreen_available():
+		if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
 			Input.vibrate_handheld(16)
 		return true
 	return false

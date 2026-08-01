@@ -13,6 +13,19 @@ var corpse_recovery_available := false
 var boss_targets: Array[Node3D] = []
 var extraction_profiles: Array[Dictionary] = []
 var raid_markers: Array[Dictionary] = []
+var visited_cells: Dictionary = {}
+var manual_marker_position := Vector3.INF
+var current_bag_value := 0
+var current_bag_slots := 0
+var current_bag_capacity := 0
+var current_risk_label := "위험 정보 확인 중"
+var visit_update_timer := 0.0
+var last_map_rect := Rect2()
+var last_map_size := 0.0
+var map_paused_tree := false
+var tree_was_paused_before_map := false
+var opened_at_msec := 0
+var close_button: Button
 
 
 func setup(
@@ -27,7 +40,18 @@ func setup(
 	discovered_extraction_indices.clear()
 	extraction_profiles.clear()
 	raid_markers.clear()
+	visited_cells.clear()
+	manual_marker_position = Vector3.INF
 	set_corpse_recovery(recovery_position)
+	_record_player_visit(true)
+
+
+func set_raid_status(bag_value: int, used_slots: int, capacity: int, risk_label: String) -> void:
+	current_bag_value = maxi(0, bag_value)
+	current_bag_slots = maxi(0, used_slots)
+	current_bag_capacity = maxi(0, capacity)
+	current_risk_label = risk_label
+	queue_redraw()
 
 
 func set_corpse_recovery(world_position: Vector3) -> void:
@@ -114,7 +138,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	visible = false
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	var close_button := Button.new()
+	close_button = Button.new()
 	close_button.name = "MapCloseButton"
 	close_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	close_button.offset_left = -78.0
@@ -139,19 +163,42 @@ func _ready() -> void:
 	))
 	close_button.pressed.connect(close)
 	add_child(close_button)
+	if not get_viewport().size_changed.is_connected(_apply_safe_layout):
+		get_viewport().size_changed.connect(_apply_safe_layout)
+	_apply_safe_layout()
+
+
+func _apply_safe_layout() -> void:
+	if not is_instance_valid(close_button):
+		return
+	var safe := UISafeArea.get_margins(get_viewport().get_visible_rect().size)
+	close_button.offset_left = -78.0 - safe.z
+	close_button.offset_top = 18.0 + safe.y
+	close_button.offset_right = -18.0 - safe.z
+	close_button.offset_bottom = 78.0 + safe.y
 
 
 func toggle() -> void:
-	visible = not visible
-	open_state_changed.emit(visible)
 	if visible:
-		queue_redraw()
+		close()
+		return
+	visible = true
+	opened_at_msec = Time.get_ticks_msec()
+	tree_was_paused_before_map = get_tree().paused
+	if not tree_was_paused_before_map:
+		get_tree().paused = true
+		map_paused_tree = true
+	open_state_changed.emit(true)
+	queue_redraw()
 
 
 func close() -> void:
 	if not visible:
 		return
 	visible = false
+	if map_paused_tree:
+		get_tree().paused = tree_was_paused_before_map
+	map_paused_tree = false
 	open_state_changed.emit(false)
 
 
@@ -159,8 +206,79 @@ func is_open() -> bool:
 	return visible
 
 
-func _process(_delta: float) -> void:
+func _input(event: InputEvent) -> void:
+	if not visible or Time.get_ticks_msec() - opened_at_msec < 180:
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		var key_event := event as InputEventKey
+		var key := key_event.keycode if key_event.keycode != 0 else key_event.physical_keycode
+		if key in [KEY_TAB, KEY_ESCAPE]:
+			close()
+			get_viewport().set_input_as_handled()
+
+
+func _exit_tree() -> void:
+	if map_paused_tree and is_instance_valid(get_tree()):
+		get_tree().paused = tree_was_paused_before_map
+
+
+func _process(delta: float) -> void:
+	visit_update_timer -= delta
+	if visit_update_timer <= 0.0:
+		visit_update_timer = 0.25
+		_record_player_visit(false)
 	if visible:
+		queue_redraw()
+
+
+func _gui_input(event: InputEvent) -> void:
+	if not visible or last_map_rect.size.x <= 0.0 or last_map_size <= 0.0:
+		return
+	var pointer_position := Vector2.ZERO
+	var should_mark := false
+	var should_clear := false
+	if event is InputEventMouseButton and event.pressed:
+		pointer_position = event.position
+		should_mark = event.button_index == MOUSE_BUTTON_LEFT
+		should_clear = event.button_index == MOUSE_BUTTON_RIGHT
+	elif event is InputEventScreenTouch and event.pressed:
+		pointer_position = event.position
+		should_mark = true
+	if should_clear:
+		manual_marker_position = Vector3.INF
+		queue_redraw()
+		accept_event()
+		return
+	if should_mark:
+		var world_position := _map_point_to_world_position(pointer_position, last_map_rect, last_map_size)
+		if world_position != Vector3.INF:
+			manual_marker_position = world_position
+			queue_redraw()
+			accept_event()
+
+
+func _record_player_visit(force: bool) -> void:
+	if not is_instance_valid(world) or not is_instance_valid(player):
+		return
+	if not world.has_method("get_map_snapshot_data"):
+		return
+	var data: Dictionary = world.call("get_map_snapshot_data")
+	var grid_size := maxi(1, int(data.get("grid_size", 22)))
+	var map_size := maxf(1.0, float(data.get("map_size", grid_size * 20.0)))
+	var cell_size := map_size / float(grid_size)
+	var half_map := map_size * 0.5
+	var center_x := clampi(floori((player.global_position.x + half_map) / cell_size), 0, grid_size - 1)
+	var center_z := clampi(floori((player.global_position.z + half_map) / cell_size), 0, grid_size - 1)
+	var changed := false
+	for z_offset in range(-1, 2):
+		for x_offset in range(-1, 2):
+			var cell := Vector2i(center_x + x_offset, center_z + z_offset)
+			if cell.x < 0 or cell.y < 0 or cell.x >= grid_size or cell.y >= grid_size:
+				continue
+			if not visited_cells.has(cell):
+				visited_cells[cell] = true
+				changed = true
+	if force or changed:
 		queue_redraw()
 
 
@@ -172,13 +290,15 @@ func _draw() -> void:
 	var panel_size := Vector2(minf(1040.0, viewport_size.x - 64.0), minf(720.0, viewport_size.y - 54.0))
 	var panel_rect := Rect2((viewport_size - panel_size) * 0.5, panel_size)
 	draw_style_box(_panel_style(), panel_rect)
-	draw_string(UI_FONT, panel_rect.position + Vector2(28, 40), "종로 생존구역 전술 지도", HORIZONTAL_ALIGNMENT_LEFT, -1, 25, Color("#e4e1d3"))
-	draw_string(UI_FONT, panel_rect.position + Vector2(28, 65), "청록 원: 현재 위치 · 색상 원: 탈출 보상 · 청록 마름모: 고가치 보급 · 주황 마름모: 돌발 사건", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#aebbb4"))
+	draw_string(UI_FONT, panel_rect.position + Vector2(28, 40), "현장 전술 지도", HORIZONTAL_ALIGNMENT_LEFT, -1, 25, Color("#e4e1d3"))
+	draw_string(UI_FONT, panel_rect.position + Vector2(28, 65), "이동한 구역만 기록 · 클릭/터치: 개인 표식 · 우클릭: 삭제 · 확인 중 전투 일시정지", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#aebbb4"))
 
 	var data: Dictionary = world.call("get_map_snapshot_data")
 	var grid_size := int(data.get("grid_size", 22))
 	var map_size := float(data.get("map_size", grid_size * 20.0))
 	var map_rect := Rect2(panel_rect.position + Vector2(52, 78), panel_rect.size - Vector2(104, 142))
+	last_map_rect = map_rect
+	last_map_size = map_size
 	var map_center := map_rect.get_center()
 	var map_boundary := PackedVector2Array([
 		map_center + Vector2(0, -map_rect.size.y * 0.49),
@@ -193,16 +313,22 @@ func _draw() -> void:
 	for z in grid_size:
 		for x in grid_size:
 			var cell_polygon := _cell_polygon(x, z, grid_size, map_rect)
-			var fill_color := Color("#252c2a")
+			var is_visited := visited_cells.has(Vector2i(x, z))
+			var fill_color := Color("#151918")
 			if z < river_columns.size() and int(river_columns[z]) == x:
-				fill_color = Color("#234653")
+				fill_color = Color("#234653") if is_visited else Color("#12242a")
 			elif vertical_roads.has(x) or horizontal_roads.has(z):
-				fill_color = Color("#474d4b")
+				fill_color = Color("#474d4b") if is_visited else Color("#202523")
+			elif is_visited:
+				fill_color = Color("#252c2a")
 			draw_colored_polygon(cell_polygon, fill_color)
-			draw_polyline(_closed_polygon(cell_polygon), Color(0.44, 0.5, 0.47, 0.12), 1.0)
+			if is_visited:
+				draw_polyline(_closed_polygon(cell_polygon), Color(0.44, 0.5, 0.47, 0.16), 1.0)
 
 	for cell_value in data.get("building_cells", []):
 		var cell: Vector2i = cell_value
+		if not visited_cells.has(cell):
+			continue
 		var building_polygon := _shrink_polygon(_cell_polygon(cell.x, cell.y, grid_size, map_rect), 0.76)
 		draw_colored_polygon(building_polygon, Color("#101514"))
 		draw_polyline(_closed_polygon(building_polygon), Color("#69726d"), 1.2)
@@ -338,6 +464,23 @@ func _draw() -> void:
 			Color("#ffd0a2")
 		)
 
+	if manual_marker_position != Vector3.INF:
+		var manual_center := _world_position_to_map_point(manual_marker_position, map_rect, map_size)
+		var manual_pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.009)
+		var manual_radius := marker_size * (0.48 + manual_pulse * 0.08)
+		draw_circle(manual_center, manual_radius * 1.65, Color(0.95, 0.79, 0.32, 0.14))
+		draw_circle(manual_center, manual_radius, Color("#f2cb62"), false, 3.0)
+		draw_circle(manual_center, 3.0, Color("#fff2bf"))
+		draw_string(
+			UI_FONT,
+			manual_center + Vector2(manual_radius + 7.0, 4.0),
+			"개인 표식",
+			HORIZONTAL_ALIGNMENT_LEFT,
+			90,
+			13,
+			Color("#f2d481")
+		)
+
 	for boss in boss_targets.duplicate():
 		if not is_instance_valid(boss) or bool(boss.get("dying")):
 			boss_targets.erase(boss)
@@ -384,13 +527,15 @@ func _draw() -> void:
 		var sector := str(world.call("get_sector_label", player.global_position))
 		var label_position := player_center + Vector2(outer_radius + 7.0, -outer_radius * 0.45)
 		draw_string(UI_FONT, label_position, "내 위치  %s" % sector, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
-		var footer := "현재 %s   ·   발견한 탈출구 %d / %d   ·   TAB 닫기" % [
+		var footer := "현재 %s   ·   가방 %d/%d칸   ·   회수 가치 %s   ·   %s" % [
 			sector,
-			discovered_extraction_indices.size(),
-			extraction_positions.size(),
+			current_bag_slots,
+			current_bag_capacity,
+			_compact_number(current_bag_value),
+			current_risk_label,
 		]
 		if nearest_distance < INF:
-			footer = "현재 %s   ·   가장 가까운 발견 탈출구 %.0fm   ·   TAB 닫기" % [sector, nearest_distance]
+			footer += "   ·   발견 탈출구 %.0fm" % nearest_distance
 		draw_string(UI_FONT, panel_rect.position + Vector2(28, panel_rect.size.y - 22), footer, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#d7d4b9"))
 	if discovered_extraction_indices.is_empty():
 		draw_string(UI_FONT, map_rect.get_center() + Vector2(-170, 6), "탈출구 미발견 · 직접 시야로 찾아야 합니다", HORIZONTAL_ALIGNMENT_CENTER, 340, 17, Color("#d9c579"))
@@ -423,6 +568,26 @@ func _world_position_to_map_point(world_position: Vector3, map_rect: Rect2, map_
 		clampf((world_position.z + half_map) / map_size, 0.0, 1.0)
 	)
 	return _normalized_to_isometric(normalized, map_rect)
+
+
+func _map_point_to_world_position(point: Vector2, map_rect: Rect2, map_size: float) -> Vector3:
+	var center := map_rect.get_center()
+	var iso_x := (point.x - center.x) / maxf(1.0, map_rect.size.x * 0.49)
+	var iso_y := (point.y - center.y) / maxf(1.0, map_rect.size.y * 0.49)
+	var normalized_x := (iso_x + iso_y + 1.0) * 0.5
+	var normalized_z := (iso_y + 1.0 - iso_x) * 0.5
+	if normalized_x < 0.0 or normalized_x > 1.0 or normalized_z < 0.0 or normalized_z > 1.0:
+		return Vector3.INF
+	var half_map := map_size * 0.5
+	return Vector3(normalized_x * map_size - half_map, 0.0, normalized_z * map_size - half_map)
+
+
+func _compact_number(value: int) -> String:
+	if value >= 1000000:
+		return "%.1fM" % (float(value) / 1000000.0)
+	if value >= 1000:
+		return "%.1fK" % (float(value) / 1000.0)
+	return str(value)
 
 
 func _draw_player_heading(center: Vector2, length: float, map_rect: Rect2) -> void:

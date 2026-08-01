@@ -8,9 +8,14 @@ const BOSS_MINE := preload("res://scripts/boss_mine.gd")
 class DummyTarget:
 	extends CharacterBody3D
 	var received_damage := 0
+	var last_attacker_was_valid := false
 
 	func take_hit(amount: int, _direction: Vector3) -> void:
 		received_damage += amount
+
+	func take_hostile_hit(amount: int, direction: Vector3, attacker = null) -> void:
+		last_attacker_was_valid = is_instance_valid(attacker)
+		take_hit(amount, direction)
 
 
 func _initialize() -> void:
@@ -79,10 +84,13 @@ func _run() -> void:
 	await process_frame
 	assert(mine.get_node_or_null("MineVisual/MineBody") is MeshInstance3D)
 	assert(mine.get_node_or_null("ProximityRing") is MeshInstance3D)
+	boss.queue_free()
+	await process_frame
 	target.global_position = mine.global_position
 	var damage_before_mine := target.received_damage
 	mine.call("_detonate")
 	assert(target.received_damage > damage_before_mine)
+	assert(not target.last_attacker_was_valid, "A surviving mine must discard its freed boss reference.")
 
 	print("ROCKET_BOSS_OK frames=64 magazine=4 mines=%d damage=%d" % [spawned_mines.size(), target.received_damage])
 	arena.queue_free()

@@ -7,6 +7,7 @@ param(
     [string]$Description = "",
     [string]$RunDir,
     [string]$RequestJson,
+    [string]$ReferenceRun = "assets\generated\sprite_reference_packs\8way_cat_player_validated",
     [string]$Python,
     [ValidateSet("none", "codex", "grok")]
     [string]$Provider = "none",
@@ -72,6 +73,48 @@ function Invoke-SpriteGen {
     }
 }
 
+function Install-DirectionalReferencePack {
+    param([string]$SourcePath, [string]$TargetRun)
+    if ([string]::IsNullOrWhiteSpace($SourcePath)) { return }
+    $source = $SourcePath
+    if (-not [IO.Path]::IsPathRooted($source)) { $source = Join-Path $projectRoot $source }
+    $source = [IO.Path]::GetFullPath($source)
+    if (-not (Test-Path $source -PathType Container)) {
+        Write-Host "Directional reference pack not found; continuing without it: $source" -ForegroundColor Yellow
+        return
+    }
+    $anchorDir = Join-Path $TargetRun "references\anchors"
+    New-Item -ItemType Directory -Force -Path $anchorDir | Out-Null
+    $directions = @("down", "down_right", "right", "up_right", "up", "up_left", "left", "down_left")
+    $copied = 0
+    foreach ($direction in $directions) {
+        $candidate = Join-Path $source ("{0}_idle.png" -f $direction)
+        if (-not (Test-Path $candidate)) {
+            $candidate = Join-Path $source ("{0}_idle-frame-0.png" -f $direction)
+        }
+        if (Test-Path $candidate) {
+            Copy-Item -LiteralPath $candidate -Destination (Join-Path $anchorDir ("{0}_idle.png" -f $direction)) -Force
+            $copied++
+        }
+        $walkCandidate = Join-Path $source ("{0}_walk.png" -f $direction)
+        if (Test-Path $walkCandidate) {
+            Copy-Item -LiteralPath $walkCandidate -Destination (Join-Path $anchorDir ("{0}_walk.png" -f $direction)) -Force
+            $copied++
+        }
+    }
+    if ($copied -gt 0) {
+        $metadata = @{
+            version = 1
+            source = $source
+            purpose = "direction-and-layout-only"
+            directions = $directions
+            copiedAt = (Get-Date).ToUniversalTime().ToString("o")
+        }
+        $metadata | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $TargetRun "references\reference-pack.json") -Encoding UTF8
+        Write-Host "Attached $copied directional reference anchors from $source" -ForegroundColor DarkGray
+    }
+}
+
 if (-not $SkipPrepare) {
     if (-not $RequestJson -and [string]::IsNullOrWhiteSpace($BaseImage)) {
         throw "BaseImage is required for a new run. Use -RequestJson for a custom request or -SkipPrepare for an existing run."
@@ -97,6 +140,7 @@ if (-not $SkipPrepare) {
         if ($Description) { $prepareArgs += @("--description", $Description) }
     }
     Invoke-SpriteGen $prepareScript $prepareArgs
+    Install-DirectionalReferencePack -SourcePath $ReferenceRun -TargetRun $RunDir
     if ($PrepareOnly) {
         Write-Host "Run prepared. Add row PNGs under $RunDir\raw, then rerun with -SkipPrepare." -ForegroundColor Green
         exit 0
@@ -106,6 +150,8 @@ if (-not $SkipPrepare) {
 if (-not (Test-Path (Join-Path $RunDir "sprite-request.json"))) {
     throw "Run directory is not prepared: $RunDir"
 }
+
+Install-DirectionalReferencePack -SourcePath $ReferenceRun -TargetRun $RunDir
 
 if ($Provider -ne "none") {
     $promptRoot = Join-Path $RunDir "prompts"
@@ -124,15 +170,15 @@ if ($Provider -ne "none") {
         $rawPath = Join-Path (Join-Path $RunDir "raw") ($state + ".png")
         $guidePath = Join-Path (Join-Path $RunDir "references\layout-guides") ($state + ".png")
         $genArgs = @("--provider", $Provider, "--prompt-file", $prompt.FullName, "--out", $rawPath, "--report", ($rawPath + ".report.json"))
-        $identityReference = $baseSource
+        # The uploaded/generated base is the only colour identity reference.
+        # Never replace it with a raw directional anchor or a shared reference
+        # pack: those files can belong to another character and the image
+        # provider cannot reliably infer their intended role from pixels.
+        if ($baseSource) { $genArgs += @("--ref", $baseSource.FullName) }
+        $direction = $null
         if ($directionSet.Count -gt 0) {
-            $direction = $directionSet | Where-Object { $state.StartsWith("$_`_") } | Select-Object -First 1
-            $anchorPath = if ($direction) { Join-Path $RunDir ("raw\{0}_idle.png" -f $direction) } else { $null }
-            if ($anchorPath -and (Test-Path $anchorPath) -and $state -ne ("{0}_idle" -f $direction)) {
-                $identityReference = Get-Item $anchorPath
-            }
+            $direction = $directionSet | Where-Object { $state.StartsWith("$_`_") } | Sort-Object Length -Descending | Select-Object -First 1
         }
-        if ($identityReference) { $genArgs += @("--ref", $identityReference.FullName) }
         if (Test-Path $guidePath) { $genArgs += @("--ref", $guidePath) }
         Invoke-SpriteGen $generateScript $genArgs
     }

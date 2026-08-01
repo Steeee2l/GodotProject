@@ -8,6 +8,11 @@ const GENERATED_CURRENCY_PATHS := {
 	"food": "res://assets/ui/currency/canned_food.png",
 	"churu": "res://assets/ui/currency/churu.png",
 }
+const GENERATED_ITEM_ICON_PATHS := {
+	"medkit": "res://assets/generated/p0_sliced/item_icons/medkit.png",
+	"ammo": "res://assets/generated/p0_sliced/item_icons/ammo_box.png",
+	"parts": "res://assets/generated/p0_sliced/item_icons/scrap_bundle.png",
+}
 
 
 static func get_icon(icon_name: String, size := 64, color := Color("#d9e3dc")) -> Texture2D:
@@ -15,6 +20,8 @@ static func get_icon(icon_name: String, size := 64, color := Color("#d9e3dc")) -
 	if _cache.has(key):
 		return _cache[key] as Texture2D
 	var generated_path := str(GENERATED_CURRENCY_PATHS.get(icon_name, ""))
+	if generated_path.is_empty():
+		generated_path = str(GENERATED_ITEM_ICON_PATHS.get(icon_name, ""))
 	if not generated_path.is_empty() and ResourceLoader.exists(generated_path):
 		var generated_texture := load(generated_path) as Texture2D
 		if generated_texture != null:
@@ -33,6 +40,9 @@ static func get_icon(icon_name: String, size := 64, color := Color("#d9e3dc")) -
 		"close":
 			_line(image, _v(17, 17, scale), _v(47, 47, scale), color, 4.5 * scale)
 			_line(image, _v(47, 17, scale), _v(17, 47, scale), color, 4.5 * scale)
+		"check":
+			_line(image, _v(12, 33, scale), _v(27, 48, scale), color, 6.0 * scale)
+			_line(image, _v(27, 48, scale), _v(53, 17, scale), color, 6.0 * scale)
 		"weapon":
 			_line(image, _v(10, 38, scale), _v(51, 23, scale), color, 5.0 * scale)
 			_rect(image, Rect2i(_p(16, 35, scale), _p(18, 7, scale)), color.darkened(0.18))

@@ -1,0 +1,18 @@
+Create a production-ready 2D game sprite strip from the supplied base character.
+
+Identity lock: preserve the exact character design, proportions, face, clothing, backpack, tail, palette, outline weight, and pixel-art rendering from the base reference. Do not redesign or beautify the character.
+Direction: down — front view, facing the viewer. The head, torso, hips, legs, and feet must all face this same direction. The character stays in place.
+Action: standing idle, facing the viewer (front view); subtle breathing; canonical direction anchor derived from the base.
+Motion contract, left to right, exactly 4 panels:
+1. frame 1: neutral resting pose at the midpoint of the breath; both feet planted
+2. frame 2: gentle inhale; chest and shoulders rise subtly while both feet stay planted
+3. frame 3: return to the neutral resting pose; both feet remain in exactly the same positions
+4. frame 4: gentle exhale; chest and shoulders settle subtly while both feet stay planted
+This is a breathing idle, not a walk cycle. Lock both feet to the ground in the exact same positions in every panel. No stepping, stride, leg alternation, foot sliding, or locomotion. Keep the root position and ground line fixed. Motion must be subtle and limited to breathing in the chest/shoulders and a very small body bob; a restrained ear or tail secondary motion is allowed.
+
+Pose skeleton lock: the first attached image is the ONLY identity, species, outfit, palette, and rendering reference. The second attached image is the complete four-frame pose strip.
+Use the pose guide only for geometry and timing. Match its panel order, facing, head/torso/hip angle, limb placement, leading foot, left/right foot crossing, ground contact, silhouette, scale, and root position as closely as possible. Do not copy any character identity, clothing, colors, facial features, or accessories from the grayscale pose guide. When identity and pose references differ, take appearance exclusively from the first image and pose exclusively from the guide.
+
+
+Output contract: one horizontal strip containing exactly 4 isolated full-body sprites, in the specified order, evenly spaced, equal scale and ground line. Use a perfectly flat solid #FF00FF background. No text, labels, arrows, borders, grid, scenery, cast shadow, extra character, or extra panel. Keep generous magenta separation between panels. Do not add motion trails, slash arcs, glow, particles, or speed lines unless the user explicitly requested them. Outside colors already locked by the identity reference, never use pink, purple, fuchsia, magenta, or any color close to #FF00FF on the character, weapon, outline, highlight, shadow, or effect; those colors are reserved exclusively for the removable background.
+Style contract: match the supplied base character exactly: preserve its proportions, face, clothing, accessories, palette, outline weight, and rendering style; do not redesign it

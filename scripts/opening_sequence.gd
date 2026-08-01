@@ -54,6 +54,8 @@ const AIM_CAMERA_SIZE := 28.0
 const AIM_VISIBILITY_INNER_FACTOR := 0.50
 const AIM_VISIBILITY_OUTER_FACTOR := 0.80
 const TUTORIAL_KILL_GRACE_MSEC := 900
+const INTRO_WALK_DIRECTION := Vector3(0, 0, -1)
+const SHOW_VEHICLE_COLLISION_DEBUG := true
 
 var phase := "intro_walk"
 var dialogue_index := 0
@@ -63,7 +65,7 @@ var weapon_sprite: Sprite3D
 var camera_rig: Node3D
 var camera: Camera3D
 var survivor_frames: SpriteFrames
-var current_facing := "n"
+var current_facing := "ne"
 var current_motion := "walk"
 var current_aim_direction := Vector3(0, 0, -1)
 var camera_tracks_player := true
@@ -111,6 +113,7 @@ var weapon_hud_panel: PanelContainer
 var weapon_hud_image: TextureRect
 var health_bar: ProgressBar
 var health_label: Label
+var opening_medkit_button: Button
 var interaction_panel: PanelContainer
 var interaction_label: Label
 var fade_rect: ColorRect
@@ -126,6 +129,7 @@ var mobile_dash_button: Button
 var mobile_aim_button: Button
 var mobile_fire_button: Button
 var mobile_interact_button: Button
+var auto_paused_for_background := false
 
 
 func _ready() -> void:
@@ -136,10 +140,29 @@ func _ready() -> void:
 	_build_player()
 	_build_extraction()
 	_build_hud()
+	get_viewport().size_changed.connect(_apply_mobile_safe_layout)
+	_apply_mobile_safe_layout()
 	_build_visibility_fog()
 	_spawn_cinematic_enemies()
-	_set_player_animation("walk", "n")
+	_set_facing_from_world_direction(INTRO_WALK_DIRECTION)
+	_set_player_animation("walk", current_facing)
 	_fade_from_black()
+
+
+func _notification(what: int) -> void:
+	if what in [NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_WINDOW_FOCUS_OUT]:
+		mobile_joystick_touch = -1
+		mobile_move_vector = Vector2.ZERO
+		fire_held = false
+		if mobile_joystick:
+			mobile_joystick.queue_redraw()
+		if touch_enabled and not get_tree().paused:
+			auto_paused_for_background = true
+			get_tree().paused = true
+	elif what in [NOTIFICATION_APPLICATION_RESUMED, NOTIFICATION_WM_WINDOW_FOCUS_IN]:
+		if auto_paused_for_background:
+			auto_paused_for_background = false
+			get_tree().paused = false
 
 
 func _detect_touch_controls() -> bool:
@@ -237,6 +260,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		if key_event.keycode == KEY_SPACE:
 			_try_dash()
 			get_viewport().set_input_as_handled()
+		elif key_event.keycode == KEY_SHIFT:
+			_use_opening_medkit()
+			get_viewport().set_input_as_handled()
 		elif key_event.keycode == KEY_F and phase == "tutorial_extract":
 			_try_enter_shelter()
 			get_viewport().set_input_as_handled()
@@ -289,10 +315,17 @@ func _build_environment() -> void:
 	)
 	_add_bridge_rail(-6.15)
 	_add_bridge_rail(6.15)
-	_add_vehicle("res://assets/opening/opening_wrecked_taxi_v1.png", Vector3(-3.5, 0.84, 27.0), 0.0036, 12.0, Vector3(4.1, 1.1, 1.8))
-	_add_vehicle("res://assets/opening/opening_wrecked_truck_v1.png", Vector3(2.4, 0.95, 2.0), 0.0040, -8.0, Vector3(5.0, 1.3, 2.1))
-	_add_vehicle("res://assets/opening/opening_wrecked_taxi_v1.png", Vector3(3.7, 0.82, -19.0), 0.0032, -18.0, Vector3(3.7, 1.0, 1.7))
-	_add_vehicle("res://assets/opening/opening_wrecked_bus_v1.png", Vector3(-1.8, 1.0, -35.0), 0.0044, 4.0, Vector3(5.8, 1.3, 2.2))
+	_add_vehicle("res://assets/opening/opening_wrecked_taxi_v1.png", Vector3(-3.5, 0.84, 27.0), 0.0036, 12.0, Vector3(1.75, 1.1, 4.0))
+	_add_vehicle(
+		"res://assets/opening/opening_wrecked_truck_v1.png",
+		Vector3(2.4, 0.95, 2.0),
+		0.0040,
+		-8.0,
+		Vector3(2.05, 1.3, 4.8),
+		Vector3(-0.23, -0.2, 0.23)
+	)
+	_add_vehicle("res://assets/opening/opening_wrecked_taxi_v1.png", Vector3(3.7, 0.82, -19.0), 0.0032, -18.0, Vector3(1.6, 1.0, 3.55))
+	_add_vehicle("res://assets/opening/opening_wrecked_bus_v1.png", Vector3(-1.8, 1.0, -35.0), 0.0044, 4.0, Vector3(2.15, 1.3, 5.65))
 	_add_fire(Vector3(-3.2, 0.35, 26.7), 0.72)
 	_add_fire(Vector3(2.9, 0.4, 1.8), 0.82)
 	_add_fire(Vector3(-5.5, 0.3, -27.0), 0.62)
@@ -362,7 +395,8 @@ func _add_vehicle(
 	world_position: Vector3,
 	pixel_size: float,
 	screen_rotation: float,
-	collision_size: Vector3
+	collision_size: Vector3,
+	collision_offset: Vector3 = Vector3(0.0, -0.2, 0.0)
 ) -> void:
 	var body := StaticBody3D.new()
 	body.name = "OpeningWreck"
@@ -380,12 +414,49 @@ func _add_vehicle(
 	sprite.position.y = maxf(0.9, float(sprite.texture.get_height()) * pixel_size * 0.32)
 	body.add_child(sprite)
 	var collision := CollisionShape3D.new()
+	collision.name = "VehicleCollision"
 	var shape := BoxShape3D.new()
 	shape.size = collision_size
 	collision.shape = shape
-	collision.position.y = -0.2
+	collision.position = collision_offset
+	var collision_yaw := 90.0 + screen_rotation
+	collision.rotation_degrees.y = collision_yaw
 	body.add_child(collision)
+	body.set_meta("collision_size", collision_size)
+	body.set_meta("collision_yaw", collision_yaw)
+	body.set_meta("collision_offset", collision_offset)
+	if SHOW_VEHICLE_COLLISION_DEBUG:
+		_add_vehicle_collision_debug(body, collision_size, collision_yaw, collision_offset)
 	add_child(body)
+
+
+func _add_vehicle_collision_debug(
+	body: StaticBody3D,
+	collision_size: Vector3,
+	world_yaw: float,
+	collision_offset: Vector3
+) -> void:
+	var material := StandardMaterial3D.new()
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(0.95, 0.045, 0.035, 0.38)
+	material.no_depth_test = true
+	material.render_priority = 126
+	var mesh := PlaneMesh.new()
+	mesh.size = Vector2(collision_size.x, collision_size.z)
+	mesh.material = material
+	var marker := MeshInstance3D.new()
+	marker.name = "VehicleCollisionDebug"
+	marker.position = Vector3(
+		collision_offset.x,
+		-body.position.y + 0.035,
+		collision_offset.z
+	)
+	marker.rotation_degrees.y = world_yaw
+	marker.mesh = mesh
+	marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	marker.add_to_group("opening_vehicle_collision_debug")
+	body.add_child(marker)
 
 
 func _add_fire(world_position: Vector3, scale_multiplier: float) -> void:
@@ -544,7 +615,7 @@ func _build_player() -> void:
 	weapon_sprite.shaded = false
 	weapon_sprite.transparent = true
 	weapon_sprite.no_depth_test = true
-	weapon_sprite.render_priority = 121
+	weapon_sprite.render_priority = 119
 	player.add_child(weapon_sprite)
 	_build_muzzle_flash()
 
@@ -802,6 +873,35 @@ func _build_status_ui(hud: CanvasLayer) -> void:
 	health_bar.add_theme_stylebox_override("background", _panel_style(Color("#182322"), Color("#445a55"), 1, 8))
 	health_bar.add_theme_stylebox_override("fill", _panel_style(Color("#59cf8f"), Color("#a9f2c9"), 1, 8))
 	health_column.add_child(health_bar)
+	opening_medkit_button = Button.new()
+	opening_medkit_button.name = "OpeningMedkitButton"
+	opening_medkit_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	var medkit_left := 214.0 if touch_enabled else 30.0
+	opening_medkit_button.position = Vector2(medkit_left, -116)
+	opening_medkit_button.size = Vector2(96, 92)
+	opening_medkit_button.icon = UI_ICONS.get_icon("medkit", 38, Color("#f0eee4"))
+	opening_medkit_button.expand_icon = true
+	opening_medkit_button.add_theme_constant_override("icon_max_width", 38)
+	opening_medkit_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	opening_medkit_button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+	opening_medkit_button.focus_mode = Control.FOCUS_NONE
+	opening_medkit_button.add_theme_font_override("font", FONT)
+	opening_medkit_button.add_theme_font_size_override("font_size", 13)
+	opening_medkit_button.add_theme_stylebox_override(
+		"normal",
+		_panel_style(Color(0.018, 0.025, 0.025, 0.94), Color("#718a7e"), 2, 7)
+	)
+	opening_medkit_button.add_theme_stylebox_override(
+		"hover",
+		_panel_style(Color(0.055, 0.08, 0.07, 0.97), Color("#b9d1c4"), 2, 7)
+	)
+	opening_medkit_button.add_theme_stylebox_override(
+		"pressed",
+		_panel_style(Color(0.11, 0.17, 0.13, 0.98), Color("#dff0e5"), 2, 7)
+	)
+	opening_medkit_button.pressed.connect(_use_opening_medkit)
+	opening_medkit_button.visible = false
+	hud.add_child(opening_medkit_button)
 
 	weapon_hud_panel = PanelContainer.new()
 	weapon_hud_panel.name = "OpeningWeaponHUD"
@@ -954,6 +1054,34 @@ func _build_mobile_controls(hud: CanvasLayer) -> void:
 	mobile_interact_button.offset_bottom = -124
 	mobile_interact_button.pressed.connect(_try_enter_shelter)
 	mobile_controls_root.add_child(mobile_interact_button)
+	_apply_mobile_safe_layout()
+
+
+func _apply_mobile_safe_layout() -> void:
+	if not touch_enabled or mobile_controls_root == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	var safe := UISafeArea.get_margins(viewport_size)
+	if mobile_joystick:
+		mobile_joystick.offset_left = 24.0 + safe.x
+		mobile_joystick.offset_top = -204.0 - safe.w
+		mobile_joystick.offset_right = 204.0 + safe.x
+		mobile_joystick.offset_bottom = -24.0 - safe.w
+	var button_layout: Array = [
+		[mobile_fire_button, Vector4(-116, -116, -24, -24)],
+		[mobile_aim_button, Vector4(-216, -116, -124, -24)],
+		[mobile_dash_button, Vector4(-316, -116, -224, -24)],
+		[mobile_interact_button, Vector4(-116, -216, -24, -124)],
+	]
+	for entry in button_layout:
+		var button := entry[0] as Button
+		if not is_instance_valid(button):
+			continue
+		var offsets: Vector4 = entry[1]
+		button.offset_left = offsets.x - safe.z
+		button.offset_top = offsets.y - safe.w
+		button.offset_right = offsets.z - safe.z
+		button.offset_bottom = offsets.w - safe.w
 
 
 func _make_mobile_action_button(
@@ -1110,15 +1238,16 @@ func _spawn_cinematic_enemies() -> void:
 
 
 func _update_intro_walk(delta: float) -> void:
-	player.velocity = Vector3(0, 0, -2.25)
+	player.velocity = INTRO_WALK_DIRECTION * 2.25
 	player.move_and_slide()
-	_set_player_animation("walk", "n")
+	_set_facing_from_world_direction(INTRO_WALK_DIRECTION)
+	_set_player_animation("walk", current_facing)
 	if player.position.z <= INTRO_TARGET_Z:
 		player.position.z = INTRO_TARGET_Z
 		player.velocity = Vector3.ZERO
 		phase = "intro_dialogue"
 		dialogue_index = 0
-		_set_player_animation("idle", "n")
+		_set_player_animation("idle", current_facing)
 		_show_dialogue()
 
 
@@ -1484,7 +1613,8 @@ func _try_enter_shelter() -> void:
 	tween.tween_property(fade_rect, "color:a", 1.0, 0.9)
 	await tween.finished
 	GameState.complete_opening_and_prepare_shelter()
-	get_tree().change_scene_to_file(SHELTER_SCENE)
+	if not SceneTransition.transition_to(SHELTER_SCENE, OPENING_SCENE):
+		restarting = false
 
 
 func take_damage(amount: int) -> void:
@@ -1561,7 +1691,8 @@ func _restart_opening_after_death() -> void:
 	tween.tween_property(fade_rect, "color:a", 1.0, 0.72)
 	await tween.finished
 	await get_tree().create_timer(0.55).timeout
-	get_tree().change_scene_to_file(OPENING_SCENE)
+	if not SceneTransition.transition_to(OPENING_SCENE, OPENING_SCENE):
+		restarting = false
 
 
 func _set_player_animation(state: String, direction: String) -> void:
@@ -1671,6 +1802,18 @@ func _update_hud() -> void:
 		health_bar.value = player_health
 	if health_label:
 		health_label.text = "체력  %d / %d" % [player_health, PLAYER_MAX_HEALTH]
+	if opening_medkit_button:
+		opening_medkit_button.text = (
+			"구급약\nx%d" % GameState.medkits
+			if touch_enabled
+			else "SHIFT\nx%d" % GameState.medkits
+		)
+		opening_medkit_button.disabled = (
+			GameState.medkits <= 0
+			or player_health <= 0
+			or player_health >= PLAYER_MAX_HEALTH
+		)
+		opening_medkit_button.visible = GAMEPLAY_PHASES.has(phase)
 	if ammo_label:
 		ammo_label.text = "AK-47  ·  7.62mm"
 	if magazine_label:
@@ -1695,6 +1838,16 @@ func _update_hud() -> void:
 			phase == "tutorial_extract"
 			and extraction_ready
 		)
+
+
+func _use_opening_medkit() -> void:
+	if not GAMEPLAY_PHASES.has(phase):
+		return
+	if GameState.medkits <= 0 or player_health <= 0 or player_health >= PLAYER_MAX_HEALTH:
+		return
+	GameState.medkits -= 1
+	player_health = mini(PLAYER_MAX_HEALTH, player_health + 38)
+	_update_hud()
 
 
 func _update_ambient_animation() -> void:

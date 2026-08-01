@@ -9,6 +9,8 @@ const COMPONENT_TEXTURES := {
 }
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
+const FLOOR_DROP_MAX_WIDTH := 0.9
+const FLOOR_DROP_MAX_HEIGHT := 0.72
 
 signal collected(loot_key: String, description: String)
 
@@ -116,6 +118,13 @@ func interact() -> String:
 		)
 	else:
 		definitions.append(fixed_definition)
+	var pending_items: Array[Dictionary] = []
+	for definition in definitions:
+		var pending_item: Dictionary = _raid_item_from_definition(definition)
+		if not pending_item.is_empty():
+			pending_items.append(pending_item)
+	if not GameState.can_add_raid_items(pending_items):
+		return "가방이 꽉 찼습니다. 가방에서 물품을 버린 뒤 다시 시도하세요."
 	var acquired_names: Array[String] = []
 	for definition in definitions:
 		if (
@@ -142,43 +151,45 @@ func interact() -> String:
 
 
 func _grant_definition(definition: Dictionary) -> String:
-	var type_name := str(definition.get("type", "canned_food"))
-	var data := definition.get("data", {}) as Dictionary
-	var item_amount := maxi(1, int(data.get("amount", 1)))
-	var display_name := str(data.get("display_name", "전리품"))
+	var data: Dictionary = definition.get("data", {}) as Dictionary
+	var item_amount: int = maxi(1, int(data.get("amount", 1)))
+	var display_name: String = str(data.get("display_name", "전리품"))
+	var raid_item: Dictionary = _raid_item_from_definition(definition)
+	if raid_item.is_empty():
+		return ""
+	if not GameState.try_add_raid_item(
+		str(raid_item.get("type", "")),
+		str(raid_item.get("id", "")),
+		int(raid_item.get("amount", 1))
+	):
+		return ""
+	return "%s x%d" % [display_name, item_amount]
+
+
+func _raid_item_from_definition(definition: Dictionary) -> Dictionary:
+	var type_name: String = str(definition.get("type", "canned_food"))
+	var data: Dictionary = definition.get("data", {}) as Dictionary
+	var item_amount: int = maxi(1, int(data.get("amount", 1)))
 	match type_name:
 		"ammo":
-			var ammo_id := str(data.get("ammo_id", "762_fmj"))
-			GameState.set_ammo_count(
-				ammo_id,
-				GameState.get_ammo_count(ammo_id) + item_amount
-			)
+			return {"type": "ammo", "id": str(data.get("ammo_id", "762_fmj")), "amount": item_amount}
 		"canned_food":
-			GameState.canned_food += item_amount
+			return {"type": "food", "id": "canned_food", "amount": item_amount}
 		"medkit":
-			GameState.medkits += item_amount
+			return {"type": "medkit", "id": "medkit", "amount": item_amount}
 		"churu":
-			GameState.churu += item_amount
+			return {"type": "churu", "id": "churu", "amount": item_amount}
 		"mod_component":
-			GameState.add_mod_component(
-				str(data.get("component_id", "rubber_gasket")),
-				item_amount
-			)
+			return {"type": "component", "id": str(data.get("component_id", "rubber_gasket")), "amount": item_amount}
+		"weapon_mod":
+			return {"type": "mod", "id": str(data.get("weapon_mod_id", "scope_2x")), "amount": item_amount}
 		"progression_item":
-			GameState.add_progression_item(
-				str(data.get("progression_item_id", "rifle_blueprint")),
-				item_amount
-			)
+			return {"type": "progression", "id": str(data.get("progression_item_id", "rifle_blueprint")), "amount": item_amount}
 		"weapon":
-			GameState.add_weapon(str(data.get("weapon_id", "m1911")), item_amount)
+			return {"type": "weapon", "id": str(data.get("weapon_id", "m1911")), "amount": item_amount}
 		"armor":
-			GameState.add_equipment(
-				str(data.get("equipment_id", "scav_vest")),
-				item_amount
-			)
-		_:
-			return ""
-	return "%s x%d" % [display_name, item_amount]
+			return {"type": "equipment", "id": str(data.get("equipment_id", "scav_vest")), "amount": item_amount}
+	return {}
 
 
 func _build_visual() -> void:
@@ -232,11 +243,14 @@ func _build_visual() -> void:
 				texture = UI_ICONS.get_icon("armor", 96, Color("#a9c8b8"))
 				pixel_size = 0.007
 				icon_name = "armor"
+	if container_type.is_empty():
+		pixel_size = _fit_floor_drop_pixel_size(texture, pixel_size)
+	var visual_height: float = float(texture.get_height()) * pixel_size
 	var sprite := Sprite3D.new()
 	sprite.name = "GeneratedLootVisual"
 	sprite.texture = texture
 	sprite.pixel_size = pixel_size
-	sprite.position = Vector3(0, float(texture.get_height()) * pixel_size * 0.5, 0)
+	sprite.position = Vector3(0, visual_height * 0.5, 0)
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.shaded = false
 	sprite.transparent = true
@@ -248,12 +262,20 @@ func _build_visual() -> void:
 	marker.name = "LootMarker"
 	marker.texture = UI_ICONS.get_icon(icon_name, 64, Color("#e0ba55"))
 	marker.pixel_size = 0.006
-	marker.position = Vector3(0, 1.25, 0)
+	marker.position = Vector3(0, maxf(0.82, visual_height + 0.28), 0)
 	marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	marker.no_depth_test = true
 	marker.shaded = false
 	marker.transparent = true
 	add_child(marker)
+
+
+func _fit_floor_drop_pixel_size(texture: Texture2D, preferred_pixel_size: float) -> float:
+	var texture_width: float = float(maxi(1, texture.get_width()))
+	var texture_height: float = float(maxi(1, texture.get_height()))
+	var width_limit: float = FLOOR_DROP_MAX_WIDTH / texture_width
+	var height_limit: float = FLOOR_DROP_MAX_HEIGHT / texture_height
+	return minf(preferred_pixel_size, minf(width_limit, height_limit))
 
 
 func _definition_display_name(definition: Dictionary) -> String:

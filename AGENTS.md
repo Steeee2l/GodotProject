@@ -13,6 +13,7 @@ Use assets/ for authored and generated runtime assets. The vendored sprite pipel
 - Export Windows: godot --headless --path . --export-release "Windows Desktop"
 - Export Web: godot --headless --path . --export-release "Web"
 - Run a targeted smoke test: godot --headless --path . --script res://tests/weapon_system_smoke_test.gd
+- Run local smoke tests through `powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_safe_godot_smoke_test.ps1 -ScriptPath <res://test_path>`. It refuses to start a second Godot process while the editor or embedded game is open.
 - Prepare sprite generation: .\tools\run_sprite_pipeline.ps1 -CharacterId <id> -BaseImage <path> -PrepareOnly
 
 The CI workflow in .github/workflows/build.yml validates the project and produces Windows and Web artifacts.
@@ -24,6 +25,8 @@ Use four-space indentation in GDScript. Functions and variables use snake_case, 
 ## Testing Guidelines
 
 Tests are Godot smoke tests named <feature>_smoke_test.gd; visual checks use matching .tscn scenes. Run focused tests while iterating, then project validation and the relevant export. There is no coverage threshold; add a focused smoke test for new gameplay when practical.
+
+Never launch a headless editor, smoke test, import, or export while the interactive Godot editor or its embedded game is running. Both processes share project import state and `user://` data, which can destabilize the editor. Let the user perform visible playtests; run automated validation only after the interactive process has closed, always with a dedicated `--log-file`.
 
 ## Commit & Pull Request Guidelines
 

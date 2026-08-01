@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>그레이 던 · 스프라이트 & 이미지 에셋 체크리스트</title>
+  <style>
+    :root {
+      --bg: #10151b;
+      --panel: #18212a;
+      --panel-2: #202c37;
+      --line: #344553;
+      --text: #e9eef2;
+      --muted: #a6b5bf;
+      --accent: #79d1bd;
+      --accent-2: #f1c77d;
+      --danger: #ef8e8e;
+      --blue: #8bb9ef;
+      --shadow: 0 12px 30px rgba(0, 0, 0, .22);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 15% 0%, rgba(59, 97, 107, .28), transparent 35rem),
+        var(--bg);
+      font: 14px/1.55 "Pretendard", "Malgun Gothic", sans-serif;
+    }
+    .wrap { max-width: 1420px; margin: 0 auto; padding: 28px 24px 60px; }
+    header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; margin-bottom: 22px; }
+    h1 { margin: 0 0 8px; font-size: clamp(24px, 4vw, 40px); letter-spacing: -.04em; }
+    h2 { margin: 0 0 12px; font-size: 20px; }
+    h3 { margin: 0; font-size: 17px; }
+    p { margin: 6px 0; }
+    .lead { color: var(--muted); max-width: 860px; }
+    .stamp { color: var(--muted); text-align: right; white-space: nowrap; }
+    .grid { display: grid; gap: 14px; }
+    .summary { grid-template-columns: repeat(5, minmax(120px, 1fr)); margin-bottom: 18px; }
+    .stat, .panel, .section-card { background: linear-gradient(145deg, rgba(32, 44, 55, .96), rgba(23, 31, 40, .96)); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+    .stat { padding: 14px 16px; }
+    .stat b { display: block; font-size: 28px; color: var(--accent); line-height: 1; margin-bottom: 7px; }
+    .stat span { color: var(--muted); }
+    .panel { padding: 16px; margin-bottom: 18px; }
+    .controls { display: grid; grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(150px, 1fr)) auto; gap: 10px; align-items: center; }
+    input, select, button {
+      border: 1px solid var(--line); border-radius: 9px; background: #121a21; color: var(--text);
+      padding: 10px 12px; font: inherit;
+    }
+    input:focus, select:focus, button:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    button { cursor: pointer; background: var(--panel-2); }
+    button:hover { border-color: var(--accent); }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; color: var(--muted); }
+    .badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 99px; font-size: 12px; border: 1px solid transparent; }
+    .p0 { color: #ffd7d7; background: rgba(185, 72, 72, .22); border-color: rgba(239, 142, 142, .5); }
+    .p1 { color: #ffe7b7; background: rgba(167, 117, 38, .22); border-color: rgba(241, 199, 125, .5); }
+    .p2 { color: #cae0ff; background: rgba(65, 111, 172, .22); border-color: rgba(139, 185, 239, .5); }
+    .owned { color: #c7f3e8; background: rgba(72, 157, 137, .19); border-color: rgba(121, 209, 189, .5); }
+    .partial { color: #ffe5b8; background: rgba(167, 117, 38, .18); border-color: rgba(241, 199, 125, .45); }
+    .proposal { color: #d6e5f6; background: rgba(65, 111, 172, .18); border-color: rgba(139, 185, 239, .45); }
+    .section-card { overflow: hidden; margin-bottom: 16px; }
+    .section-head { display: flex; justify-content: space-between; gap: 15px; align-items: center; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+    .section-head p { color: var(--muted); font-size: 13px; }
+    .section-count { color: var(--accent); white-space: nowrap; }
+    .items { padding: 0; }
+    .item { display: grid; grid-template-columns: 30px minmax(240px, 1.25fr) minmax(220px, 1fr) minmax(250px, 1.15fr) auto; gap: 14px; align-items: start; padding: 15px 18px; border-bottom: 1px solid rgba(52, 69, 83, .66); }
+    .item:last-child { border-bottom: 0; }
+    .item.hidden { display: none; }
+    .check { width: 20px; height: 20px; margin-top: 3px; accent-color: var(--accent); }
+    .title { font-weight: 700; }
+    .meta, .evidence, .acceptance { color: var(--muted); font-size: 13px; }
+    .meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+    .evidence strong, .acceptance strong { color: var(--text); font-weight: 600; }
+    .empty { padding: 30px; text-align: center; color: var(--muted); }
+    .notes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .notes > div { padding: 15px 17px; border: 1px solid var(--line); border-radius: 10px; background: rgba(16, 21, 27, .5); }
+    ul { margin: 8px 0 0; padding-left: 20px; }
+    footer { color: var(--muted); margin-top: 25px; font-size: 12px; }
+    @media (max-width: 1060px) {
+      .controls { grid-template-columns: 1fr 1fr; }
+      .item { grid-template-columns: 30px minmax(200px, 1fr) minmax(200px, 1fr); }
+      .item .acceptance { grid-column: 2 / -1; }
+      .item .badges { grid-column: 3; grid-row: 1; }
+    }
+    @media (max-width: 720px) {
+      .wrap { padding: 20px 12px 42px; }
+      header { display: block; }
+      .stamp { text-align: left; margin-top: 12px; }
+      .summary { grid-template-columns: repeat(2, 1fr); }
+      .controls { grid-template-columns: 1fr; }
+      .item { grid-template-columns: 28px 1fr; gap: 8px 10px; }
+      .item .evidence, .item .acceptance, .item .badges { grid-column: 2; grid-row: auto; }
+      .notes { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <div>
+      <h1>그레이 던 · 스프라이트 & 이미지 에셋 체크리스트</h1>
+      <p class="lead">현재 GodotProject의 필드·실내·은신처·전투 코드를 기준으로, 이미 확보한 이미지와 장기적으로 필요한 에셋을 한 목록에 정리했다. 체크 상태는 이 브라우저에 자동 저장된다.</p>
+    </div>
+    <div class="stamp">분석 기준일<br><strong>2026-08-01</strong><br>가제: 그레이 던: 서울 생존묘</div>
+  </header>
+
+  <section class="grid summary" aria-label="진행 요약">
+    <div class="stat"><b id="doneCount">0</b><span>완료/보유 에셋</span></div>
+    <div class="stat"><b id="openCount">0</b><span>남은 제안 에셋</span></div>
+    <div class="stat"><b id="progressCount">0%</b><span>전체 체크 진행률</span></div>
+    <div class="stat"><b id="p0Count">0</b><span>P0 출시 전 필수</span></div>
+    <div class="stat"><b id="visibleCount">0</b><span>현재 표시 항목</span></div>
+  </section>
+
+  <section class="panel">
+    <div class="controls">
+      <input id="search" type="search" placeholder="에셋명, 기능, 경로 검색">
+      <select id="category"><option value="all">전체 카테고리</option></select>
+      <select id="priority"><option value="all">전체 우선순위</option><option value="P0">P0 · 출시 필수</option><option value="P1">P1 · 콘텐츠 확장</option><option value="P2">P2 · 장기 polish</option></select>
+      <select id="status"><option value="all">전체 상태</option><option value="owned">현재 보유</option><option value="partial">부분 보유</option><option value="proposal">신규 제안</option></select>
+      <button id="reset" type="button">체크 초기화</button>
+    </div>
+    <div class="legend">
+      <span class="badge owned">보유</span>
+      <span class="badge partial">부분 보유 / 보강 필요</span>
+      <span class="badge proposal">신규 제안</span>
+      <span class="badge p0">P0 출시 필수</span>
+      <span class="badge p1">P1 확장</span>
+      <span class="badge p2">P2 장기 polish</span>
+    </div>
+  </section>
+
+  <div id="sections"></div>
+
+  <section class="panel notes">
+    <div>
+      <h2>생성 순서 제안</h2>
+      <ol>
+        <li><strong>P0 캐릭터 전투:</strong> 플레이어 피격·사망·상호작용, 적 피격·사망·척탄병, 보스 발사·재장전.</li>
+        <li><strong>P0 판독성:</strong> 총구 섬광, 탄착·도탄, 수류탄·로켓, 추출 비콘, 적 경보와 미션 아이콘.</li>
+        <li><strong>P1 월드:</strong> 지역별 랜드마크와 건물 변형, 실내 문·계단·보안 게이트, 은신처 단계별 모듈.</li>
+        <li><strong>P1 수집·운영:</strong> 8종 탄약, 치료·식량·개조부품 아이콘, 주민 초상·동작, 지역 전리품 세트.</li>
+        <li><strong>P2 서사·분위기:</strong> 6개 단서 일러스트, 세력 엠블럼, 지역 카드, 날씨·화재·먼지·피격 데칼.</li>
+      </ol>
+    </div>
+    <div>
+      <h2>제작 공통 계약</h2>
+      <ul>
+        <li>캐릭터: 8방향, 상태별 4프레임 이상, 동일 기준선·피벗·실루엣.</li>
+        <li>걷기: 왼발 전진 → 양발 모음 → 오른발 전진 → 양발 모음.</li>
+        <li>배경·건물: 현재 등각 바닥/벽 소실점과 실제 충돌 footprint를 함께 검수.</li>
+        <li>투명 PNG와 매니페스트 프레임 수를 일치시키고 sprite-gen QA를 통과시킨다.</li>
+        <li>완료 체크는 이미지가 존재하는 것뿐 아니라 게임에서 올바른 방향·레이어·크기로 보일 때 한다.</li>
+      </ul>
+    </div>
+  </section>
+  <footer>근거 범위: scripts/main.gd, building_interior.gd, shelter_interior.gd, enemy.gd, rocket_boss.gd, weapon_visual_catalog.gd, building_catalog.gd, raid_region_catalog.gd, assets/ 현재 파일 목록 및 sprite-gen 파이프라인.</footer>
+</main>
+
+<script>
+  const items = [
+    {id:'player-locomotion', section:'플레이어·동료', title:'플레이어 8방향 idle / walk', type:'캐릭터 애니메이션', priority:'P0', status:'owned', done:true, evidence:'assets/characters/cat_8way · 8방향 × idle/walk 4프레임', acceptance:'모든 방향의 발 교대, 기준선, 루트 위치가 동일해야 함.'},
+    {id:'player-roll', section:'플레이어·동료', title:'플레이어 8방향 roll', type:'캐릭터 애니메이션', priority:'P0', status:'owned', done:true, evidence:'assets/characters/cat_roll · 32 PNG', acceptance:'구르기 시작·중간·착지 실루엣과 잔상 방향이 일치해야 함.'},
+    {id:'player-melee', section:'플레이어·동료', title:'플레이어 8방향 근접 공격', type:'캐릭터 애니메이션', priority:'P0', status:'owned', done:true, evidence:'assets/characters/cat_melee · 32 PNG', acceptance:'무기 손 위치와 실제 FAN 판정 방향이 일치해야 함.'},
+    {id:'player-hit-death', section:'플레이어·동료', title:'플레이어 피격·경직·사망', type:'캐릭터 애니메이션', priority:'P0', status:'proposal', done:false, evidence:'현재 코드에는 피해·사망 UI는 있으나 전용 8방향 프레임 세트가 없음.', acceptance:'피격 2~3프레임, 쓰러짐 4~6프레임, 방향 전환 없는 루트 기준.'},
+    {id:'player-use', section:'플레이어·동료', title:'플레이어 재장전·상호작용·치료', type:'캐릭터 애니메이션', priority:'P1', status:'proposal', done:false, evidence:'재장전, loot, rescue, medkit 입력이 존재하지만 전용 캐릭터 포즈는 부족함.', acceptance:'8방향 전체 또는 앞/뒤/옆 4방향으로 우선 제작하고 상호작용 중 이동 잠금.'},
+    {id:'player-weapon-hold', section:'플레이어·동료', title:'무기별 손잡이·장착 포즈 보정', type:'캐릭터 애니메이션', priority:'P1', status:'partial', done:false, evidence:'무기는 Sprite3D로 별도 표시되며 방향에 따라 flip/rotation을 적용함.', acceptance:'권총·SMG·소총·산탄총·근접 무기의 손 위치와 발사 방향이 겹치지 않아야 함.'},
+    {id:'female-companion', section:'플레이어·동료', title:'여자 고양이 동료 idle / walk / roll / hit', type:'캐릭터 애니메이션', priority:'P0', status:'partial', done:false, evidence:'assets/characters/female_cat_companion · 64 PNG, 동료 팔로우 기능 구현.', acceptance:'플레이어와 동일 스켈레톤 계약, 동료 피격·사망·부활 상태 포함.'},
+    {id:'resident-roster', section:'플레이어·동료', title:'구조 주민 6~10종 실루엣과 초상', type:'캐릭터 애니메이션', priority:'P1', status:'partial', done:false, evidence:'worker_cat, cowering_resident, merchant_cat 일부 보유.', acceptance:'주민마다 색·귀·꼬리·장비가 구분되고 초상과 필드 스프라이트가 같은 개체여야 함.'},
+    {id:'resident-work', section:'플레이어·동료', title:'주민 작업·대화·거래 동작', type:'캐릭터 애니메이션', priority:'P1', status:'partial', done:false, evidence:'은신처 작업대·상인·생산 시스템은 구현됐으나 동작 세트가 제한적.', acceptance:'고철 생산, 캣닢 생산, 훈련, 상인 대기/거래 각 2~4프레임 루프.'},
+    {id:'cat-loaf', section:'플레이어·동료', title:'침대·휴식·loaf 애니메이션', type:'캐릭터 애니메이션', priority:'P2', status:'partial', done:false, evidence:'assets/characters/loaf 일부 프레임 존재.', acceptance:'은신처 귀환·오프라인 생산과 연결되는 편안한 호흡 루프.'},
+
+    {id:'enemy-melee', section:'적·보스', title:'근접 적 8방향 idle / walk', type:'적 캐릭터', priority:'P0', status:'owned', done:true, evidence:'assets/enemies/character_5 · 64 PNG, enemy.gd에서 사용.', acceptance:'플레이어와 동일한 발 교대와 카메라 기준선.'},
+    {id:'enemy-pistol', section:'적·보스', title:'권총 적 8방향 idle / walk / aim', type:'적 캐릭터', priority:'P0', status:'partial', done:false, evidence:'legacy enemy_pistol 스트립과 character_5 세트가 혼재.', acceptance:'실제 enemy_kind와 사용하는 애니메이션 루트 하나로 정리.'},
+    {id:'enemy-grenadier', section:'적·보스', title:'척탄병 8방향 idle / walk / throw / reload', type:'적 캐릭터', priority:'P0', status:'proposal', done:false, evidence:'척탄병 AI와 수류탄 투척 로직은 있으나 전용 캐릭터 세트가 없음.', acceptance:'투척 선딜, 궤적 방향, 재장전 표시와 포즈가 맞아야 함.'},
+    {id:'enemy-hit-death', section:'적·보스', title:'공통 적 피격·사망·다운 프레임', type:'적 캐릭터', priority:'P0', status:'proposal', done:false, evidence:'적 체력바·피해 숫자는 있으나 상태별 이미지가 제한적.', acceptance:'근접/권총/척탄병 공용 반응 3종과 방향별 사망 실루엣.'},
+    {id:'enemy-elites', section:'적·보스', title:'유리발톱 의회 엘리트 3종', type:'적 캐릭터', priority:'P1', status:'proposal', done:false, evidence:'구역 티어와 적 배율은 있으나 시각적 적 변형이 적음.', acceptance:'방패·중장갑·정찰 장비 등 실루엣만으로 역할이 구분.'},
+    {id:'rocket-boss-base', section:'적·보스', title:'로켓 보스 8방향 idle / walk', type:'보스 캐릭터', priority:'P0', status:'owned', done:true, evidence:'assets/enemies/rocket_boss · 64 PNG.', acceptance:'up_right 등 대각 방향이 실제 조준 방향과 일치.'},
+    {id:'rocket-boss-action', section:'적·보스', title:'로켓 보스 발사·재장전·피격·사망', type:'보스 애니메이션', priority:'P0', status:'proposal', done:false, evidence:'rocket_boss.gd에 탄창·재장전·발사 로직이 구현됨.', acceptance:'4발 탄창, 재장전 창, 포격 경고가 프레임 타이밍과 일치.'},
+    {id:'faction-uniforms', section:'적·보스', title:'유리발톱 의회 / 골목연합 세력 복장 세트', type:'캐릭터 디자인', priority:'P1', status:'proposal', done:false, evidence:'세계관 세력은 존재하지만 세력별 시각 문법을 확장할 여지 있음.', acceptance:'색상·목걸이·완장·장비로 소속을 즉시 판독.'},
+
+    {id:'weapon-catalog', section:'무기·전투 VFX', title:'무기 픽업·인벤토리용 2D 아이콘', type:'무기 이미지', priority:'P0', status:'owned', done:true, evidence:'assets/weapons/catalog/generated · m1911, mp5, ak47, double_barrel, bat, rocket_launcher.', acceptance:'아이콘 방향과 장착 Sprite3D의 실루엣이 동일.'},
+    {id:'weapon-variants', section:'무기·전투 VFX', title:'무기 변형 8종 카탈로그', type:'무기 이미지', priority:'P1', status:'owned', done:true, evidence:'rifle_bullpup, rifle_ar_platform, smg_uzi 등 후보 이미지 존재.', acceptance:'드롭 테이블과 카탈로그 ID가 모두 연결되고 중복 이름이 없음.'},
+    {id:'muzzle-flash', section:'무기·전투 VFX', title:'총구 섬광·탄피·발사 연기', type:'전투 VFX', priority:'P0', status:'proposal', done:false, evidence:'현재 조준 레이저는 구현됐지만 발사 VFX는 주로 코드/파티클 기반.', acceptance:'권총·SMG·소총·산탄총별 색·크기·연사감이 구분.'},
+    {id:'impact-vfx', section:'무기·전투 VFX', title:'탄착·도탄·벽 파편·피격 플래시', type:'전투 VFX', priority:'P0', status:'proposal', done:false, evidence:'충돌·피해 판정은 구현됨.', acceptance:'바닥·벽·금속·적 피격에 서로 다른 1회성 이미지와 방향성.'},
+    {id:'grenade-rocket-vfx', section:'무기·전투 VFX', title:'수류탄·로켓·폭발·연기 스프라이트', type:'전투 VFX', priority:'P0', status:'partial', done:false, evidence:'boss_mine.gd에 코드 파티클은 있으나 공통 이미지 세트는 부족.', acceptance:'비행, 경고 링, 폭발 중심, 잔류 연기 4단계.'},
+    {id:'melee-vfx', section:'무기·전투 VFX', title:'근접 무기 궤적·FAN·타격 효과', type:'전투 VFX', priority:'P0', status:'partial', done:false, evidence:'baseball_bat 이미지와 FAN 표시가 존재.', acceptance:'표시 FAN, 실제 판정, 무기 휘두르기 아크가 같은 각도·사거리.'},
+    {id:'damage-decals', section:'무기·전투 VFX', title:'피·그을음·탄흔·파괴 데칼', type:'환경 VFX', priority:'P1', status:'proposal', done:false, evidence:'장기 전투에서 전장의 흔적을 남길 이미지가 없음.', acceptance:'짧은 수명, 낮은 우선순위, 바닥 원근에 맞는 투명 데칼.'},
+
+    {id:'ammo-icons', section:'아이템·루트·UI', title:'8종 탄약 아이콘', type:'아이템 이미지', priority:'P0', status:'partial', done:false, evidence:'assets/items/ammo_762.png만 런타임 대표 아이콘으로 사용.', acceptance:'FMJ/AP/slug와 탄종별 색·탄두 모양을 구분.'},
+    {id:'consumable-icons', section:'아이템·루트·UI', title:'통조림·츄르·구급약·캣닢 아이콘', type:'아이템 이미지', priority:'P0', status:'partial', done:false, evidence:'츄르·통화 아이콘은 있으나 치료·필드 픽업 표현은 보강 필요.', acceptance:'필드 픽업, 인벤토리, 상점, 보상 화면에서 같은 아이콘 사용.'},
+    {id:'mod-icons', section:'아이템·루트·UI', title:'11종 무기 모드 아이콘', type:'아이템 이미지', priority:'P1', status:'partial', done:false, evidence:'scope_lens, rubber_gasket, magazine_spring 3종 보유.', acceptance:'레이저·스코프·소음·패드·퀵매거진 등 기능이 실루엣으로 읽힘.'},
+    {id:'armor-icons', section:'아이템·루트·UI', title:'방어구·장비 6종 아이콘', type:'장비 이미지', priority:'P1', status:'owned', done:true, evidence:'scav_vest, riot_vest, helmet, shoes 세트가 GameState에 등록.', acceptance:'필드 모델과 UI 아이콘의 색상·등급이 일치.'},
+    {id:'loot-containers', section:'아이템·루트·UI', title:'루트 컨테이너 6종', type:'루트 이미지', priority:'P0', status:'owned', done:true, evidence:'street/ammo/toolbox/clothing/weapon/secure cache 보유.', acceptance:'컨테이너 종류와 loot_economy 결과의 보상 기대가 연결.'},
+    {id:'mission-icons', section:'아이템·루트·UI', title:'미션·조사·방어·잠입 아이콘', type:'UI 이미지', priority:'P0', status:'proposal', done:false, evidence:'현장 미션 5종이 있으나 시각 아이콘은 텍스트 의존.', acceptance:'미션 카드와 필드 목표 마커에서 같은 아이콘 세트 사용.'},
+    {id:'extraction-icons', section:'아이템·루트·UI', title:'3개 추출 비콘·추출 진행·추출 완료 아이콘', type:'UI/월드 이미지', priority:'P0', status:'partial', done:false, evidence:'sewer_entry_v2, sewer_exit 이미지와 추출 로직은 존재.', acceptance:'비콘 위치, 사용 가능, 위험, 완료 상태를 서로 다른 프레임으로 표시.'},
+    {id:'zone-cards', section:'아이템·루트·UI', title:'5개 지역 선택 카드·위협도 배지', type:'UI 이미지', priority:'P1', status:'partial', done:false, evidence:'작전 지도와 지역 카탈로그는 있으나 지역별 카드 일러스트가 부족.', acceptance:'종로·남대문·을지로·용산·남산이 썸네일만 봐도 구분.'},
+    {id:'status-icons', section:'아이템·루트·UI', title:'피로·은폐·의심·증원·보스 경보 아이콘 팩', type:'UI 이미지', priority:'P0', status:'partial', done:false, evidence:'threat_megaphone과 일부 HUD는 있으나 상태 체계가 혼합됨.', acceptance:'색상·형태·우선순위가 일관되고 색약 상황에서도 판독.'},
+
+    {id:'region-ground', section:'필드·건물·환경', title:'5개 지역 바닥·경계·전환 타일 세트', type:'환경 타일', priority:'P1', status:'partial', done:false, evidence:'지역별 ground_texture 4종과 asphalt가 존재.', acceptance:'타일 반복이 보이지 않고 도로·강·교량·공터와 seamless 연결.'},
+    {id:'building-catalog', section:'필드·건물·환경', title:'도시 건물 카탈로그 20종 이상', type:'환경 건물', priority:'P1', status:'owned', done:true, evidence:'building_catalog.gd에 주거·상업·공공·지역 건물 20종 이상 등록.', acceptance:'각 이미지의 footprint, 벽/바닥 소실점, 입구 충돌이 일치.'},
+    {id:'building-damage', section:'필드·건물·환경', title:'건물 손상 단계·실내 진입 변형', type:'환경 건물', priority:'P1', status:'partial', done:false, evidence:'일부 damaged/ruined/blocked 변형은 있으나 구역별 손상 세트 확장 필요.', acceptance:'정상·폐쇄·부분 붕괴·전소 등 3~4단계 변형.'},
+    {id:'district-landmarks', section:'필드·건물·환경', title:'서울 지역 랜드마크 확장 세트', type:'환경 랜드마크', priority:'P1', status:'partial', done:false, evidence:'지하철 입구, 아파트 게이트, 공원, 놀이터 일부 보유.', acceptance:'각 구역에 최소 3개씩 길찾기용 대형 랜드마크.'},
+    {id:'road-props', section:'필드·건물·환경', title:'도로 커버·펜스·시장·공사 소품 변형', type:'환경 소품', priority:'P1', status:'partial', done:false, evidence:'barricade, rubble, fence, cart, dumpster 등 기본 세트 보유.', acceptance:'축 A/B, 코너, 끝 캡, 파손 변형이 같은 원근과 그림자 기준.'},
+    {id:'vehicles', section:'필드·건물·환경', title:'차량 10종과 차량 파손 상태', type:'환경 소품', priority:'P1', status:'owned', done:true, evidence:'sedan, truck, bus, taxi, van, SUV 등 10종 보유.', acceptance:'충돌 footprint와 차량 하단 접지선이 지면에 맞음.'},
+    {id:'exterior-doors', section:'필드·건물·환경', title:'건물 출입문·셔터·계단·보안 게이트', type:'환경 모듈', priority:'P0', status:'proposal', done:false, evidence:'건물 포털은 있으나 시각적으로 반복 가능한 문 세트가 부족.', acceptance:'잠김·열림·경보·진입 가능 상태를 프레임/색으로 구분.'},
+    {id:'office-interior', section:'필드·건물·환경', title:'오피스 실내 타일·방 모듈', type:'실내 환경', priority:'P1', status:'owned', done:true, evidence:'corridor, carpet, wall, workstation, server, shelf, meeting, lounge, elevator 보유.', acceptance:'2~12층 절차 생성에서 타일 반복과 가림 깊이가 자연스러움.'},
+    {id:'office-variation', section:'필드·건물·환경', title:'실내 방 변형·파손·보안 소품', type:'실내 환경', priority:'P2', status:'proposal', done:false, evidence:'현재 room type은 있으나 시각 변형 폭이 좁음.', acceptance:'storage/server/executive 등 방 유형별 사건 흔적과 loot hotspot.'},
+    {id:'shelter-modules', section:'필드·건물·환경', title:'은신처 단계별 시설 외형 1~5단계', type:'은신처 환경', priority:'P1', status:'partial', done:false, evidence:'침대·저장고·작업대·스크래처·캣닢·훈련 모듈 v5 계열 보유.', acceptance:'업그레이드 단계가 벽면 실루엣과 발광 포인트로 즉시 구분.'},
+    {id:'shelter-residents', section:'필드·건물·환경', title:'은신처 생활 소품·벽 장식·생산 이펙트', type:'은신처 환경', priority:'P2', status:'proposal', done:false, evidence:'모듈 자체는 있으나 생활감과 생산 피드백은 확장 가능.', acceptance:'작업 중인 도구, 저장 상자, 캣닢 파티클, 주민 표지판.'},
+    {id:'weather-vfx', section:'필드·건물·환경', title:'비·안개·연기·불꽃·먼지 이미지 팩', type:'환경 VFX', priority:'P1', status:'partial', done:false, evidence:'rain/smoke는 Godot 파티클로 구현되어 있고 이미지 레이어가 적음.', acceptance:'낮/밤·지역·전투 이벤트별로 재사용 가능한 저비용 투명 스프라이트.'},
+
+    {id:'story-clues', section:'서사·시네마틱', title:'6개 세계관 단서 카드·현장 일러스트', type:'서사 이미지', priority:'P1', status:'partial', done:false, evidence:'forgotten_notice_board_v1 1종과 6개 clue 데이터가 있음.', acceptance:'단서별 썸네일·확대 이미지·텍스트가 같은 시각 언어.'},
+    {id:'faction-emblems', section:'서사·시네마틱', title:'유리발톱 의회·골목연합 엠블럼과 낙서', type:'서사 이미지', priority:'P1', status:'proposal', done:false, evidence:'세력명과 낙서 서사는 있으나 반복 사용 가능한 엠블럼 부족.', acceptance:'벽, UI, 문서, 미션 카드에 사용할 단색·컬러 두 버전.'},
+    {id:'opening-plates', section:'서사·시네마틱', title:'오프닝 서울 폐허 배경 플레이트', type:'시네마틱 배경', priority:'owned', status:'owned', done:true, evidence:'opening/ 폴더에 다리·한강·버스·택시·하수구 이미지 보유.', acceptance:'컷 간 원근·색보정·고양이 실루엣 크기가 이어짐.'},
+    {id:'district-vistas', section:'서사·시네마틱', title:'5개 지역 원경·하늘·스카이라인 변형', type:'시네마틱 배경', priority:'P2', status:'partial', done:false, evidence:'apocalypse_seoul_skyline와 outer_ground가 존재.', acceptance:'구역 선택·보스 등장·추출 결과에 사용할 16:9 배경 세트.'},
+    {id:'npc-portraits', section:'서사·시네마틱', title:'주민·상인·보스 대화 초상 세트', type:'초상 이미지', priority:'P1', status:'proposal', done:false, evidence:'현재 일부 주민 portrait는 프레임 재사용 중심.', acceptance:'대화 표정 3종과 이름표 색상으로 관계·상태를 판독.'},
+
+    {id:'sprite-contract', section:'제작 파이프라인·QA', title:'캐릭터 8방향·상태별 프레임 계약서', type:'제작 규격', priority:'P0', status:'partial', done:false, evidence:'sprite-gen과 walk QA가 존재하지만 캐릭터별 상태 계약을 계속 수동 확인함.', acceptance:'방향 목록, 프레임 수, ground line, pivot, safe margin을 JSON으로 고정.'},
+    {id:'sprite-manifest', section:'제작 파이프라인·QA', title:'아틀라스·manifest·프레임 수 검증', type:'제작 규격', priority:'P0', status:'partial', done:false, evidence:'sprite-gen extract/compose/manifest와 과거 frame mismatch 이슈가 있음.', acceptance:'누락 행·프레임 수 불일치·잘못된 방향을 런타임 전에 실패 처리.'},
+    {id:'pose-guides', section:'제작 파이프라인·QA', title:'공용 스켈레톤 포즈 가이드 라이브러리', type:'제작 규격', priority:'P0', status:'partial', done:false, evidence:'스켈레톤 저장·자동 생성 기능은 있으나 동작별 기준 가이드 관리가 중요.', acceptance:'idle/walk/roll/melee/throw/reload별 8방향 기준 포즈와 발 교대 규칙.'},
+    {id:'asset-import-spec', section:'제작 파이프라인·QA', title:'PNG 색공간·투명·픽셀 크기·import 규격', type:'제작 규격', priority:'P0', status:'proposal', done:false, evidence:'chroma key, safe margin, 256 셀 파이프라인이 사용됨.', acceptance:'magenta 제거, edge bleed 없음, 동일 pixel_size, import preset 자동화.'},
+    {id:'visual-regression', section:'제작 파이프라인·QA', title:'대표 맵·은신처·전투 렌더샷 회귀 세트', type:'QA 이미지', priority:'P1', status:'proposal', done:false, evidence:'visual capture smoke test가 있으나 장기 비교 기준을 정식화할 필요.', acceptance:'카메라 위치·시간대·seed 고정, 변경 전후 overlay 비교.'}
+  ];
+
+  const storageKey = 'gray-dawn-asset-checklist-v1';
+  const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
+  const sectionsEl = document.getElementById('sections');
+  const searchEl = document.getElementById('search');
+  const categoryEl = document.getElementById('category');
+  const priorityEl = document.getElementById('priority');
+  const statusEl = document.getElementById('status');
+
+  function esc(value) {
+    return String(value).replace(/[&<>"']/g, function(ch) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+    });
+  }
+  function isDone(item) {
+    return Object.prototype.hasOwnProperty.call(saved, item.id) ? saved[item.id] : item.done;
+  }
+  function save() {
+    localStorage.setItem(storageKey, JSON.stringify(saved));
+  }
+  function matches(item) {
+    const query = searchEl.value.trim().toLowerCase();
+    const haystack = [item.title, item.type, item.evidence, item.acceptance, item.section].join(' ').toLowerCase();
+    return (!query || haystack.indexOf(query) >= 0)
+      && (categoryEl.value === 'all' || item.section === categoryEl.value)
+      && (priorityEl.value === 'all' || item.priority === priorityEl.value)
+      && (statusEl.value === 'all' || item.status === statusEl.value);
+  }
+  function render() {
+    const sections = {};
+    items.forEach(function(item) { if (matches(item)) (sections[item.section] ||= []).push(item); });
+    sectionsEl.innerHTML = '';
+    Object.keys(sections).forEach(function(sectionName) {
+      const card = document.createElement('section');
+      card.className = 'section-card';
+      const sectionItems = sections[sectionName];
+      const completed = sectionItems.filter(isDone).length;
+      card.innerHTML = '<div class="section-head"><div><h3>' + esc(sectionName) + '</h3><p>' + esc(sectionDescription(sectionName)) + '</p></div><div class="section-count">' + completed + ' / ' + sectionItems.length + '</div></div><div class="items"></div>';
+      const itemsEl = card.querySelector('.items');
+      sectionItems.forEach(function(item) {
+        const row = document.createElement('article');
+        row.className = 'item';
+        row.dataset.id = item.id;
+        row.innerHTML = '<input class="check" type="checkbox" aria-label="' + esc(item.title) + '"' + (isDone(item) ? ' checked' : '') + '>'
+          + '<div><div class="title">' + esc(item.title) + '</div><div class="meta"><span class="badge ' + item.priority.toLowerCase() + '">' + item.priority + '</span><span class="badge ' + item.status + '">' + statusLabel(item.status) + '</span><span>' + esc(item.type) + '</span></div></div>'
+          + '<div class="evidence"><strong>현재 근거</strong><br>' + esc(item.evidence) + '</div>'
+          + '<div class="acceptance"><strong>완료 기준</strong><br>' + esc(item.acceptance) + '</div>';
+        row.querySelector('.check').addEventListener('change', function(event) {
+          saved[item.id] = event.target.checked;
+          save();
+          render();
+        });
+        itemsEl.appendChild(row);
+      });
+      sectionsEl.appendChild(card);
+    });
+    if (!Object.keys(sections).length) sectionsEl.innerHTML = '<div class="panel empty">조건에 맞는 에셋이 없습니다.</div>';
+    updateSummary();
+  }
+  function sectionDescription(name) {
+    return {
+      '플레이어·동료':'플레이어의 조작감과 은신처 공동체의 생명력을 만드는 캐릭터 세트.',
+      '적·보스':'시야·피격·재장전·보스 패턴을 시각적으로 읽게 하는 적 세트.',
+      '무기·전투 VFX':'총기와 근접 공격의 판정·위험·타격감을 전달하는 이미지.',
+      '아이템·루트·UI':'수집·보상·미션·추출 정보를 빠르게 식별하는 아이콘과 루트.',
+      '필드·건물·환경':'서울 폐허, 절차 도시, 실내·은신처의 지면과 깊이를 만드는 배경.',
+      '서사·시네마틱':'그레이 던 세계관과 세력·주민 관계를 기억하게 하는 이미지.',
+      '제작 파이프라인·QA':'이미지 자체보다 재생성·아틀라스·검증을 안정화하는 생산 자산.'
+    }[name] || '';
+  }
+  function statusLabel(status) {
+    return {owned:'보유', partial:'부분 보유', proposal:'신규 제안'}[status];
+  }
+  function updateSummary() {
+    const done = items.filter(isDone).length;
+    document.getElementById('doneCount').textContent = done;
+    document.getElementById('openCount').textContent = items.length - done;
+    document.getElementById('progressCount').textContent = Math.round(done / items.length * 100) + '%';
+    document.getElementById('p0Count').textContent = items.filter(function(item) { return item.priority === 'P0' && !isDone(item); }).length;
+    document.getElementById('visibleCount').textContent = items.filter(matches).length;
+  }
+  Array.from(new Set(items.map(function(item) { return item.section; }))).forEach(function(section) {
+    const option = document.createElement('option');
+    option.value = section; option.textContent = section; categoryEl.appendChild(option);
+  });
+  [searchEl, categoryEl, priorityEl, statusEl].forEach(function(el) { el.addEventListener('input', render); el.addEventListener('change', render); });
+  document.getElementById('reset').addEventListener('click', function() {
+    if (!confirm('체크 상태를 모두 초기 보유/제안 상태로 되돌릴까요?')) return;
+    Object.keys(saved).forEach(function(key) { delete saved[key]; });
+    save(); render();
+  });
+  render();
+</script>
+</body>
+</html>

@@ -4,12 +4,13 @@ extends Node3D
 signal focus_changed(active: bool)
 
 const CELL_SIZE := 2.5
-const MAX_TRAILS := 220
+const MAX_TRAILS := 320
 const BASE_DECAY_PER_SECOND := 2.2
-const FOCUS_REVEAL_RADIUS := 8.0
+const FOCUS_REVEAL_RADIUS := 18.0
 const SCENT_COLORS := {
 	"enemy": Color("#ff665f"),
 	"rescue": Color("#75e39b"),
+	"objective": Color("#f2c968"),
 	"player": Color("#c8d0cf"),
 }
 
@@ -18,6 +19,7 @@ var focus_active := false
 var night_factor := 0.0
 var tracked: Dictionary = {}
 var trails: Dictionary = {}
+var guidance_groups: Dictionary = {}
 var update_accumulator := 0.0
 var scent_texture: Texture2D
 
@@ -48,19 +50,51 @@ func add_trace(world_position: Vector3, kind: String, strength: float = 100.0) -
 		entry.strength = maxf(float(entry.strength), strength)
 		entry.position = world_position
 		return
+	_create_trail(key, world_position, kind, strength, false, "")
+
+
+func set_guidance_trail(
+	trail_id: String,
+	world_points: Array,
+	kind: String = "objective"
+) -> void:
+	clear_guidance_trail(trail_id)
+	var keys: Array[String] = []
+	for index in world_points.size():
+		var key := "guidance:%s:%d" % [trail_id, index]
+		_create_trail(key, world_points[index], kind, 100.0, true, trail_id)
+		keys.append(key)
+	guidance_groups[trail_id] = keys
+
+
+func clear_guidance_trail(trail_id: String) -> void:
+	var keys := guidance_groups.get(trail_id, []) as Array
+	for key_value in keys:
+		_remove_trail(str(key_value))
+	guidance_groups.erase(trail_id)
+
+
+func _create_trail(
+	key: String,
+	world_position: Vector3,
+	kind: String,
+	strength: float,
+	persistent: bool,
+	source_id: String
+) -> void:
 	if trails.size() >= MAX_TRAILS:
 		_remove_weakest_trail()
 	var marker := Sprite3D.new()
-	marker.name = "Scent_%s_%d_%d" % [kind, cell.x, cell.y]
+	marker.name = "Scent_%s_%d" % [kind, trails.size()]
 	marker.texture = scent_texture
-	marker.pixel_size = 0.017
+	marker.pixel_size = 0.021 if kind in ["objective", "rescue"] else 0.018
 	marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	marker.shaded = false
 	marker.transparent = true
 	marker.no_depth_test = true
 	marker.render_priority = 118
 	marker.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
-	marker.position = Vector3(world_position.x, 0.08, world_position.z)
+	marker.position = Vector3(world_position.x, 0.16, world_position.z)
 	marker.visible = false
 	add_child(marker)
 	trails[key] = {
@@ -68,6 +102,8 @@ func add_trace(world_position: Vector3, kind: String, strength: float = 100.0) -
 		"position": marker.position,
 		"strength": clampf(strength, 0.0, 100.0),
 		"marker": marker,
+		"persistent": persistent,
+		"source_id": source_id,
 	}
 
 
@@ -102,7 +138,8 @@ func _process(delta: float) -> void:
 	var now := Time.get_ticks_msec() * 0.001
 	for key in trails.keys():
 		var entry := trails[key] as Dictionary
-		entry.strength = maxf(0.0, float(entry.strength) - decay)
+		if not bool(entry.get("persistent", false)):
+			entry.strength = maxf(0.0, float(entry.strength) - decay)
 		var marker_value: Variant = entry.get("marker")
 		if float(entry.strength) <= 0.0 or not is_instance_valid(marker_value):
 			if is_instance_valid(marker_value):
@@ -116,19 +153,29 @@ func _process(delta: float) -> void:
 		var distance := INF if not is_instance_valid(player) else player.global_position.distance_to(entry.position)
 		marker.visible = focus_active and distance <= FOCUS_REVEAL_RADIUS
 		if marker.visible:
+			var kind := str(entry.kind)
 			var intensity := clampf(float(entry.strength) / 100.0, 0.08, 1.0)
-			var color := SCENT_COLORS.get(str(entry.kind), Color.WHITE) as Color
-			color.a = intensity * (0.22 if str(entry.kind) == "player" else 0.48)
+			var color := SCENT_COLORS.get(kind, Color.WHITE) as Color
+			var alpha := 0.2
+			match kind:
+				"objective":
+					alpha = 0.82
+				"rescue":
+					alpha = 0.7
+				"enemy":
+					alpha = 0.58
+			color.a = intensity * alpha
 			marker.modulate = color
-			var pulse := 0.88 + sin(now * 4.2 + marker.position.x * 0.11 + marker.position.z * 0.09) * 0.14
+			var pulse := 0.94 + sin(now * 3.6 + marker.position.x * 0.11 + marker.position.z * 0.09) * 0.12
 			marker.scale = Vector3.ONE * pulse
+			marker.position.y = 0.16 + sin(now * 2.2 + marker.position.x * 0.07) * 0.035
 
 
 func _update_movers(delta: float) -> void:
 	for id in tracked.keys():
 		var data := tracked[id] as Dictionary
 		var mover_ref := data.get("node_ref") as WeakRef
-		var mover_value: Variant =  mover_ref.get_ref() if mover_ref != null else null
+		var mover_value: Variant = mover_ref.get_ref() if mover_ref != null else null
 		if not is_instance_valid(mover_value):
 			tracked.erase(id)
 			continue
@@ -159,31 +206,41 @@ func _remove_weakest_trail() -> void:
 	var weakest_key := ""
 	var weakest_strength := INF
 	for key in trails:
+		if bool((trails[key] as Dictionary).get("persistent", false)):
+			continue
 		var strength := float((trails[key] as Dictionary).strength)
 		if strength < weakest_strength:
 			weakest_strength = strength
 			weakest_key = str(key)
 	if weakest_key.is_empty():
 		return
-	var marker_value: Variant = (trails[weakest_key] as Dictionary).get("marker")
+	_remove_trail(weakest_key)
+
+
+func _remove_trail(key: String) -> void:
+	if not trails.has(key):
+		return
+	var marker_value: Variant = (trails[key] as Dictionary).get("marker")
 	if is_instance_valid(marker_value):
 		(marker_value as Sprite3D).queue_free()
-	trails.erase(weakest_key)
+	trails.erase(key)
 
 
 func _build_scent_texture() -> Texture2D:
-	var image := Image.create(72, 72, false, Image.FORMAT_RGBA8)
+	var image := Image.create(96, 96, false, Image.FORMAT_RGBA8)
 	image.fill(Color.TRANSPARENT)
-	var center := Vector2(35.5, 35.5)
-	for y in 72:
-		for x in 72:
+	var center := Vector2(47.5, 47.5)
+	for y in 96:
+		for x in 96:
 			var offset := Vector2(x, y) - center
 			var radius := offset.length()
 			var angle := atan2(offset.y, offset.x)
-			var ring := absf(radius - 25.0) <= 2.0 or absf(radius - 15.0) <= 1.35
-			var broken := sin(angle * 11.0 + radius * 0.24) > -0.18
-			if ring and broken:
-				var alpha := 0.82 if radius > 20.0 else 0.46
+			var outer_wisp := absf(radius - 32.0) <= 2.2 and angle > -2.75 and angle < 0.55
+			var inner_wisp := absf(radius - 21.0) <= 1.7 and angle > -2.35 and angle < 0.88
+			var core_wisp := absf(radius - 10.5) <= 1.25 and angle > -1.9 and angle < 1.1
+			var broken := sin(angle * 8.0 + radius * 0.19) > -0.38
+			if (outer_wisp or inner_wisp or core_wisp) and broken:
+				var alpha := 0.9 if outer_wisp else (0.68 if inner_wisp else 0.46)
 				image.set_pixel(x, y, Color(1, 1, 1, alpha))
 	return ImageTexture.create_from_image(image)
 
@@ -197,7 +254,7 @@ func _build_mobile_focus_button() -> void:
 	var button := Button.new()
 	button.name = "ScentFocusButton"
 	button.text = "후각"
-	button.tooltip_text = "누르고 있는 동안 냄새 흔적을 확인합니다."
+	button.tooltip_text = "누르는 동안 주변의 냄새 흔적을 확인합니다."
 	button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	button.offset_left = -190
 	button.offset_top = -112

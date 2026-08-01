@@ -2,8 +2,11 @@ extends Node
 
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
+const RAID_REGION_CATALOG := preload("res://scripts/raid_region_catalog.gd")
 
 const RAID_BAG_CAPACITY := 15
+# Stack limits control discard batches only. Bag capacity uses one slot per
+# stackable type-and-ID pair and one slot per individual weapon or equipment item.
 const RAID_STACK_LIMITS := {
 	"ammo": 60,
 	"food": 4,
@@ -149,6 +152,18 @@ var shelter_facility_unlocks: Dictionary = {
 	"catnip_scraper": false,
 }
 var contract_agent_intro_seen: bool = false
+var saja_intro_seen: bool = false
+var saja_second_run_intro_seen: bool = false
+var saja_seen_resident_count: int = 0
+var saja_seen_boss_kills: int = 0
+var saja_seen_story_cargo_count: int = 0
+var saja_seen_subway_stage: int = 0
+var total_boss_kills: int = 0
+var juhong_seen_events: Array[String] = []
+var iron_mission_index: int = 0
+var iron_mission_status: String = "available"
+var iron_mission_progress: int = 0
+var completed_iron_mission_ids: Array[String] = []
 var opening_completed: bool = false
 var persistence_enabled: bool = true
 var persistence_path: String = SAVE_PATH
@@ -156,7 +171,7 @@ var persistence_path: String = SAVE_PATH
 const SAVE_PATH := "user://shelter_progress_v2.json"
 const MAX_WEAPON_ENHANCEMENT := 99
 const ARTISAN_PITY_LIMIT := 10
-const CONTRACT_AGENT_UNLOCK_RETURN := 3
+const CONTRACT_AGENT_UNLOCK_RETURN := 1
 const SHELTER_FACILITY_NAMES := {
 	"bed": "개인 침대",
 	"storage": "쉘터 창고",
@@ -284,6 +299,169 @@ const MISSION_CONTRACTS := [
 		"lore": "종로 지하선에는 연맹의 배급망을 거부한 작은 쉘터들이 남아 있다. 서로 얼굴은 몰라도 같은 주파수로 다음 안전로를 알린다고 한다.",
 	},
 ]
+const SHELTER_FACILITY_NAMES_V2 := {
+    "bed": "개인 침상",
+    "storage": "쉘터 창고",
+    "training": "생존 체력 훈련장",
+    "workbench": "무기 작업대",
+    "scratcher_bank": "꾹꾹이 고철 생산기",
+    "catnip_scraper": "스크래핑 캣닢 생산기",
+}
+const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
+    {
+        "id": "field_parts",
+        "title": "공생의 첫 톱니",
+        "brief": "도시에서 기초 부품 3개를 확보해 사자에게 전달하세요.",
+        "accept_dialogue": [
+            "이 쉘터는 벽만 남았지, 살아갈 힘은 아직 없어.",
+            "도시에서 쓸 만한 부품을 모아 와. 네가 길을 열면, 내가 생산 라인을 세우지.",
+        ],
+        "complete_dialogue": [
+            "좋아. 녹은 슬었어도 톱니는 아직 맞물리는군.",
+            "꾹꾹이 고철 생산기를 가동하겠다. 주민이 늘수록 이곳도 공장처럼 살아날 거야.",
+        ],
+        "objective": "기초 부품 확보",
+        "metric": "parts",
+        "target": 3,
+        "reward": {"xp": 80, "canned_food": 4},
+        "facility_unlock": "scratcher_bank",
+        "lore_title": "사자의 기록 01 · 공생",
+        "lore": "사자는 쉘터를 지키는 대신, 생존자들이 가져온 자원으로 공동 설비를 세우기로 했다.",
+    },
+    {
+        "id": "street_patrol",
+        "title": "초록 불씨",
+        "brief": "주변 위협 4명을 정리해 캣닢 재배 장비를 옮길 길을 확보하세요.",
+        "accept_dialogue": [
+            "캣닢은 사치품이 아니야. 지친 주민을 다시 움직이게 하는 연료지.",
+            "운반로를 막은 녀석들을 치워 줘. 초록 불씨를 이 안으로 들여오겠다.",
+        ],
+        "complete_dialogue": [
+            "길이 열렸군. 이제 캣닢을 직접 생산할 수 있어.",
+            "잘 기억해. 이 도시에서 고철은 뼈고, 캣닢은 피다.",
+        ],
+        "objective": "운반로 위협 제거",
+        "metric": "kills",
+        "target": 4,
+        "reward": {"xp": 110, "ammo": 30},
+        "facility_unlock": "catnip_scraper",
+        "lore_title": "사자의 기록 02 · 초록 연료",
+        "lore": "캣닢은 쉘터 노동을 증폭하는 귀중한 자원이며, 지배 세력이 유통로를 통제하고 있다.",
+    },
+    {
+        "id": "lost_notices",
+        "title": "다시 쏘는 법",
+        "brief": "현장 기록 2개를 조사해 폐쇄된 정비 구역의 위치를 찾으세요.",
+        "accept_dialogue": [
+            "총은 주워 올 수 있어도, 망가진 총을 살리는 법은 아무나 모르지.",
+            "옛 정비공들의 기록을 찾아와. 작업대를 세울 단서를 거기서 찾을 수 있을 거다.",
+        ],
+        "complete_dialogue": [
+            "좌표가 맞아. 필요한 공구도 아직 남아 있군.",
+            "무기 작업대를 열겠다. 이제 주운 총을 버리지 말고 네 방식으로 길들여.",
+        ],
+        "objective": "정비 기록 조사",
+        "metric": "lore",
+        "target": 2,
+        "reward": {"xp": 120, "canned_food": 3, "medkits": 1},
+        "facility_unlock": "workbench",
+        "lore_title": "사자의 기록 03 · 마지막 정비공",
+        "lore": "사라진 인간들의 정비 기록은 고양이 생존자들의 무기 제작 기술로 이어졌다.",
+    },
+    {
+        "id": "salvage_cipher",
+        "title": "도시의 해체법",
+        "brief": "버려진 차량이나 군용 설비 2개를 분해하세요.",
+        "accept_dialogue": [
+            "폐허는 쓰레기장이 아니야. 아직 읽는 법을 모르는 창고지.",
+            "설비를 분해해 봐. 무엇을 챙기고 무엇을 버려야 하는지 몸으로 익혀.",
+        ],
+        "complete_dialogue": [
+            "이제야 도시가 물건으로 보이기 시작했겠군.",
+            "그 눈을 잃지 마. 좋은 부품 하나가 총 한 자루보다 오래 살아남게 한다.",
+        ],
+        "objective": "현장 설비 분해",
+        "metric": "salvage",
+        "target": 2,
+        "reward": {"xp": 130, "canned_food": 4, "ammo": 45},
+        "lore_title": "사자의 기록 04 · 폐허의 가치",
+        "lore": "폐허의 가치는 크기가 아니라, 다음 출정을 가능하게 만드는 부품에 있다.",
+    },
+    {
+        "id": "rescue_route",
+        "title": "빈 침상의 주인",
+        "brief": "도시에서 주민 1명을 구출해 쉘터까지 호송하세요.",
+        "accept_dialogue": [
+            "설비만 늘어선 곳은 쉘터가 아니라 무덤이야.",
+            "밖에 남은 고양이를 데려와. 이곳을 지킬 손과, 함께 살아갈 이유가 필요하다.",
+        ],
+        "complete_dialogue": [
+            "잘 데려왔어. 오늘부터 저 고양이도 이곳의 몫을 나눠 가진다.",
+            "네가 구한 건 일꾼 한 명이 아니라, 쉘터가 내일도 돌아갈 가능성이야.",
+        ],
+        "objective": "주민 구출",
+        "metric": "rescue",
+        "target": 1,
+        "reward": {"xp": 150, "canned_food": 5, "churu": 1},
+        "lore_title": "사자의 기록 05 · 빈 침상",
+        "lore": "주민은 생산 수치가 아니라 쉘터의 구성원이며, 각자 다른 기억과 재능을 품고 있다.",
+    },
+    {
+        "id": "field_operation",
+        "title": "우리의 첫 작전",
+        "brief": "필드 작전 1개를 수락하고 완수한 뒤 생환하세요.",
+        "accept_dialogue": [
+            "이제 남이 남긴 길만 따라갈 때는 지났어.",
+            "현장 작전 하나를 끝내고 돌아와. 네 선택이 이 쉘터의 다음 방향이 된다.",
+        ],
+        "complete_dialogue": [
+            "좋아. 이제 이곳은 숨는 구멍이 아니라, 도시로 손을 뻗는 거점이다.",
+            "다음부터는 네가 무엇을 가져오느냐에 따라 쉘터의 모습도 달라질 거야.",
+        ],
+        "objective": "현장 작전 완료",
+        "metric": "field_mission",
+        "target": 1,
+        "reward": {"xp": 180, "ammo": 60, "medkits": 2},
+        "lore_title": "사자의 기록 06 · 살아 있는 거점",
+        "lore": "쉘터는 도시의 자원을 소비하는 장소가 아니라, 다음 탐사를 만드는 살아 있는 거점이 되었다.",
+    },
+]
+const IRON_SPECIAL_MISSIONS: Array[Dictionary] = [
+    {
+        "id": "iron_trial_vitality",
+        "title": "철근의 시험 · 맷집",
+        "brief": "한 출정에서 적 8명을 상대해 전투 리듬을 증명하세요.",
+        "metric": "kills",
+        "target": 8,
+        "training_id": "vitality",
+        "reward_text": "영구 최대 체력 +10",
+        "accept_dialogue": "총만 믿고 서 있으면 첫 탄창 뒤에 끝난다. 여덟을 상대하고도 숨이 붙어 있으면 인정하지.",
+        "complete_dialogue": "버텼군. 이제 네 몸이 총성보다 먼저 움츠러들지는 않을 거다.",
+    },
+    {
+        "id": "iron_trial_endurance",
+        "title": "철근의 시험 · 지구력",
+        "brief": "위험 지역에서 설비 5개를 분해해 지구력을 증명하세요.",
+        "metric": "salvage",
+        "target": 5,
+        "training_id": "endurance",
+        "reward_text": "영구 최대 스태미나 +12",
+        "accept_dialogue": "싸움은 방아쇠보다 오래 간다. 무거운 부품을 끝까지 챙겨 오는 힘부터 보여 줘.",
+        "complete_dialogue": "호흡이 무너지지 않았군. 이 정도면 도망칠 때도, 쫓을 때도 한 걸음 더 간다.",
+    },
+    {
+        "id": "iron_trial_fieldcraft",
+        "title": "철근의 시험 · 사냥꾼",
+        "brief": "도시의 보스 1명을 쓰러뜨리고 생환하세요.",
+        "metric": "boss",
+        "target": 1,
+        "training_id": "fieldcraft",
+        "reward_text": "영구 피로 저항 및 생존술 강화",
+        "accept_dialogue": "약한 놈 백 마리보다, 도시가 이름을 붙인 괴물 하나가 네 실력을 말해 준다.",
+        "complete_dialogue": "도시가 네 이름을 기억하겠군. 이제 너도 도시의 숨을 읽을 자격이 있다.",
+    },
+]
+
 const EQUIPMENT_DEFINITIONS := {
 	"scav_vest": {
 		"display_name": "누더기 방탄 조끼", "slot": "body", "damage_reduction": 0.12,
@@ -605,6 +783,63 @@ func clear_pending_corpse_recovery() -> void:
 	corpse_recovery_attempt_active = false
 
 
+func build_carried_raid_loot() -> Dictionary:
+	var carried_equipment := equipment_inventory.duplicate(true)
+	for equipped_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
+		if not equipped_id.is_empty():
+			carried_equipment[equipped_id] = int(carried_equipment.get(equipped_id, 0)) + 1
+	return {
+		"ammo_inventory": ammo_inventory.duplicate(true),
+		"medkits": maxi(0, medkits),
+		"canned_food": get_backpack_storage_count("food", "canned_food"),
+		"churu": maxi(0, churu),
+		"mod_component_inventory": mod_component_inventory.duplicate(true),
+		"progression_item_inventory": progression_item_inventory.duplicate(true),
+		"weapon_mod_inventory": weapon_mod_inventory.duplicate(true),
+		"weapon_inventory": weapon_inventory.duplicate(true),
+		"equipment_inventory": carried_equipment,
+		"equipped_weapon_id": equipped_weapon_id,
+		"equipped_weapon_mods": equipped_weapon_mods.duplicate(),
+		"weapon_mod_loadouts": weapon_mod_loadouts.duplicate(true),
+		"raid_special_cargo": raid_special_cargo.duplicate(true),
+	}
+
+
+func store_carried_raid_loot_for_recovery(world_position: Vector3) -> Dictionary:
+	var loot := build_carried_raid_loot()
+	set_pending_corpse_recovery({
+		"map_seed": map_seed,
+		"raid_zone": selected_raid_zone,
+		"position": [world_position.x, world_position.y, world_position.z],
+		"loot": loot,
+	})
+	return loot
+
+
+func clear_carried_raid_inventory_after_death() -> void:
+	for inventory in [ammo_inventory, mod_component_inventory, progression_item_inventory, weapon_mod_inventory, equipment_inventory]:
+		for key in inventory.keys():
+			inventory[key] = 0
+	weapon_inventory.clear()
+	weapon_mod_loadouts.clear()
+	medkits = 0
+	canned_food = get_stored_storage_count("food", "canned_food")
+	churu = 0
+	magazine_ammo = 0
+	reserve_ammo = 0
+	has_ak = false
+	equipped_weapon_id = ""
+	equipped_weapon_mods.clear()
+	equipped_magazine_id = ""
+	equipped_ammo_id = ""
+	equipped_body_armor_id = ""
+	equipped_head_armor_id = ""
+	equipped_footwear_id = ""
+	secure_dog_items.clear()
+	raid_special_cargo.clear()
+	save_persistent_state()
+
+
 func finish_corpse_recovery_attempt() -> void:
 	if corpse_recovery_attempt_active:
 		clear_pending_corpse_recovery()
@@ -617,12 +852,20 @@ func register_shelter_return() -> void:
 	save_persistent_state()
 
 
+func is_saja_available() -> bool:
+	return opening_completed
+
+
 func is_contract_agent_available() -> bool:
 	return shelter_return_serial >= CONTRACT_AGENT_UNLOCK_RETURN
 
 
+func is_iron_trainer_available() -> bool:
+	return is_contract_agent_available()
+
+
 func get_shelter_facility_name(facility_id: String) -> String:
-	return str(SHELTER_FACILITY_NAMES.get(facility_id, facility_id))
+	return str(SHELTER_FACILITY_NAMES_V2.get(facility_id, facility_id))
 
 
 func is_shelter_facility_unlocked(facility_id: String) -> bool:
@@ -649,7 +892,7 @@ func sync_shelter_progression_milestones() -> Array[String]:
 		for facility_id in ["storage", "training"]:
 			if unlock_shelter_facility(facility_id):
 				newly_unlocked.append(facility_id)
-	for contract_value in MISSION_CONTRACTS:
+	for contract_value in SAJA_FACILITY_CONTRACTS:
 		var contract := contract_value as Dictionary
 		if not completed_contract_ids.has(str(contract.get("id", ""))):
 			continue
@@ -659,9 +902,155 @@ func sync_shelter_progression_milestones() -> Array[String]:
 	return newly_unlocked
 
 
+func get_pending_shelter_story_event() -> Dictionary:
+	if not opening_completed:
+		return {}
+	if not saja_intro_seen:
+		return {
+			"id": "saja_intro",
+			"speaker": "사자",
+			"title": "빈 쉘터의 지킴이",
+			"lines": [
+				"멈춰. 이 아래로 내려온 이상, 네 발자국도 내 귀에 들어온다.",
+				"겁먹을 필요는 없어. 난 사자다. 인간들이 사라진 뒤부터 이 쉘터를 지켜 왔지.",
+				"혼자 지키는 데는 한계가 왔다. 너는 도시를 다녀오고, 나는 여기서 돌아올 자리를 지킨다.",
+				"서로의 몫을 지키면 공생이고, 욕심이 앞서면 폐허가 하나 더 늘어날 뿐이야.",
+				"우선 쉬어. 다음 출정부터 네가 가져오는 것들이 이 빈 공간의 모습을 바꿀 거다.",
+			],
+		}
+	if shelter_return_serial >= 1 and not saja_second_run_intro_seen:
+		return {
+			"id": "saja_second_run",
+			"speaker": "사자",
+			"title": "쉘터가 움직이기 시작했다",
+			"lines": [
+				"한 번 나갔다가 제 발로 돌아왔군. 그 정도면 이곳의 열쇠를 조금 더 맡겨도 되겠어.",
+				"창고와 체력 훈련장을 열어 뒀다. 전리품은 창고에 남기고, 통조림은 몸에 투자해.",
+				"저 근육 덩어리는 철근이다. 시설 공사는 내게 맡기고, 녀석에게는 특별 훈련을 받아.",
+				"오늘은 행상인도 파이프 근처를 기웃거릴 거다. 들일지 말지는 네가 결정해.",
+				"내 계약을 해결하면 고철, 캣닢, 무기 정비 설비를 하나씩 세워 주지.",
+			],
+		}
+	if rescued_workers > saja_seen_resident_count:
+		return {
+			"id": "saja_resident_%d" % rescued_workers,
+			"speaker": "사자",
+			"title": "새 식구",
+			"lines": [
+				"뒤에 데려온 고양이, 끝까지 놓치지 않았더군.",
+				"여기서는 구조된 주민도 자기 몫과 이름을 가진다. 당장 일부터 시키지는 마.",
+				"숨을 돌린 뒤 생산기에 배치하면, 그때부터 쉘터의 숫자가 아니라 구성원이 되는 거야.",
+			],
+		}
+	if total_boss_kills > saja_seen_boss_kills:
+		return {
+			"id": "saja_boss_%d" % total_boss_kills,
+			"speaker": "사자",
+			"title": "도시가 이름을 기억한다",
+			"lines": [
+				"밖이 시끄럽더니 네가 그 원인이었군. 도시가 이름 붙인 놈을 쓰러뜨렸다고 들었다.",
+				"보스 하나가 사라지면 빈자리를 노리는 세력이 반드시 움직여. 다음 출정은 같은 길이어도 다를 거다.",
+				"전리품만 보지 말고, 누가 그 빈자리를 차지하는지 살펴. 그게 다음 이야기의 시작이니까.",
+			],
+		}
+	if recovered_story_cargo_ids.size() > saja_seen_story_cargo_count:
+		return {
+			"id": "saja_cargo_%d" % recovered_story_cargo_ids.size(),
+			"speaker": "사자",
+			"title": "검게 지워진 화물표",
+			"lines": [
+				"이 표식은 오래전에 사라진 운송대의 것이야. 그런데 누군가 최근에 다시 덧칠했군.",
+				"주홍이라는 고양이가 이 표식을 쫓고 있다. 붉은 앞치마를 봐도 먼저 칼부터 보지는 마.",
+				"녀석이 나타난다면, 네가 가져온 물건이 단순한 전리품이 아니라는 뜻이다.",
+			],
+		}
+	if subway_story_stage > saja_seen_subway_stage:
+		return {
+			"id": "saja_subway_%d" % subway_story_stage,
+			"speaker": "사자",
+			"title": "지하에서 올라온 신호",
+			"lines": [
+				"지하철 쪽 신호가 다시 살아났어. 인간 설비가 저절로 깨어날 리는 없다.",
+				"주홍이 그 아래를 먼저 훑고 있을 거다. 만나면 말은 끝까지 들어.",
+				"우리가 모르는 세력이 서울의 오래된 맥박을 다시 뛰게 하고 있어.",
+			],
+		}
+	return {}
+
+
+func mark_shelter_story_event_seen(event_id: String) -> void:
+	if event_id == "saja_intro":
+		saja_intro_seen = true
+	elif event_id == "saja_second_run":
+		saja_second_run_intro_seen = true
+	elif event_id.begins_with("saja_resident_"):
+		saja_seen_resident_count = rescued_workers
+	elif event_id.begins_with("saja_boss_"):
+		saja_seen_boss_kills = total_boss_kills
+	elif event_id.begins_with("saja_cargo_"):
+		saja_seen_story_cargo_count = recovered_story_cargo_ids.size()
+	elif event_id.begins_with("saja_subway_"):
+		saja_seen_subway_stage = subway_story_stage
+	save_persistent_state()
+
+
+func get_pending_juhong_event() -> Dictionary:
+	if recovered_story_cargo_ids.size() > 0 and not juhong_seen_events.has("cargo_warning"):
+		return {
+			"id": "cargo_warning",
+			"speaker": "주홍",
+			"title": "붉은 앞치마의 방문자",
+			"lines": [
+				"그 화물표, 어디서 났지? 대답은 천천히 해도 돼. 거짓말만 아니면.",
+				"인간들이 사라진 날, 봉쇄선 안쪽으로 들어간 운송대가 있었어. 돌아온 기록은 없고.",
+				"네가 주운 건 그 운송대가 남긴 빵 부스러기야. 다음 조각도 찾게 되면 숨기지 마.",
+				"난 주홍. 오래 머물 생각은 없어. 신호가 움직이면 다시 나타나지.",
+			],
+		}
+	if subway_story_stage >= 1 and not juhong_seen_events.has("subway_signal"):
+		return {
+			"id": "subway_signal",
+			"speaker": "주홍",
+			"title": "지하의 목소리",
+			"lines": [
+				"지하 신호를 들었지? 구조 요청처럼 들리지만, 같은 문장이 정확히 반복되고 있어.",
+				"살아 있는 목소리가 아니야. 누군가 고양이들을 아래로 유인하고 있다.",
+				"그래도 내려가야 해. 누가, 왜 그 목소리를 틀었는지 알아야 하니까.",
+			],
+		}
+	if total_boss_kills >= 1 and not juhong_seen_events.has("boss_vacancy"):
+		return {
+			"id": "boss_vacancy",
+			"speaker": "주홍",
+			"title": "빈 왕좌",
+			"lines": [
+				"네가 보스를 쓰러뜨린 자리로 벌써 다른 무리가 향하고 있어.",
+				"우리가 강해진 게 아니라, 도시의 균형을 흔든 거야. 그 차이를 잊으면 오래 못 살아.",
+				"다음에는 싸우기 전에 누가 서로를 미워하는지부터 봐. 총알보다 오래 가는 무기니까.",
+			],
+		}
+	return {}
+
+
+func mark_juhong_event_seen(event_id: String) -> void:
+	if not event_id.is_empty() and not juhong_seen_events.has(event_id):
+		juhong_seen_events.append(event_id)
+	save_persistent_state()
+
+
+func register_boss_defeat() -> void:
+	total_boss_kills += 1
+	advance_iron_special_mission("boss", 1)
+	save_persistent_state()
+
+
 func get_raid_zone(zone_id: String = "") -> Dictionary:
 	var resolved_id := selected_raid_zone if zone_id.is_empty() else zone_id
-	return (RAID_ZONES.get(resolved_id, RAID_ZONES["jongno_outskirts"]) as Dictionary).duplicate(true)
+	var result := (
+		RAID_ZONES.get(resolved_id, RAID_ZONES["jongno_outskirts"]) as Dictionary
+	).duplicate(true)
+	result.merge(RAID_REGION_CATALOG.get_profile(resolved_id), true)
+	return result
 
 
 func get_raid_zone_ids() -> Array[String]:
@@ -796,33 +1185,16 @@ func get_raid_bag_capacity() -> int:
 	return RAID_BAG_CAPACITY
 
 
-func _get_raid_catalog_definition(item_type: String, item_id: String) -> Dictionary:
-	var catalog_id := item_id
-	if item_type == "ammo":
-		catalog_id = "ammo_%s" % item_id
-	elif item_type == "food":
-		catalog_id = "canned_food"
-	elif item_type == "medkit":
-		catalog_id = "medkit"
-	if LOOT_ECONOMY.ITEM_CATALOG.has(catalog_id):
-		return (LOOT_ECONOMY.ITEM_CATALOG[catalog_id] as Dictionary).duplicate(true)
-	return {}
-
-
 func get_raid_item_stack_limit(item_type: String) -> int:
 	return maxi(1, int(RAID_STACK_LIMITS.get(item_type, 1)))
 
 
-func get_raid_item_slot_cost(item_type: String, item_id: String, amount: int) -> int:
+func get_raid_item_slot_cost(item_type: String, _item_id: String, amount: int) -> int:
 	if amount <= 0:
 		return 0
-	if item_type == "special_cargo":
-		return maxi(1, int(raid_special_cargo.get("slot_size", 6)))
-	var definition := _get_raid_catalog_definition(item_type, item_id)
-	var unit_size := maxi(1, int(definition.get("slot_size", 1)))
 	if item_type in ["weapon", "equipment"]:
-		return unit_size * amount
-	return ceili(float(amount) / float(get_raid_item_stack_limit(item_type))) * unit_size
+		return amount
+	return 1
 
 
 func _get_raid_bag_count(item_type: String, item_id: String) -> int:
@@ -880,7 +1252,7 @@ func get_raid_bag_used_slots() -> int:
 			get_equipment_count(str(equipment_id))
 		)
 	if not raid_special_cargo.is_empty():
-		used += maxi(1, int(raid_special_cargo.get("slot_size", 6)))
+		used += 1
 	return used
 
 
@@ -891,11 +1263,40 @@ func get_raid_item_added_slot_delta(
 ) -> int:
 	var current := _get_raid_bag_count(item_type, item_id)
 	if item_type == "special_cargo":
-		return 0 if current > 0 else maxi(1, int(raid_special_cargo.get("slot_size", 6)))
+		return 0 if current > 0 else 1
 	return (
 		get_raid_item_slot_cost(item_type, item_id, current + maxi(0, amount))
 		- get_raid_item_slot_cost(item_type, item_id, current)
 	)
+
+
+func get_raid_items_added_slot_delta(items: Array[Dictionary]) -> int:
+	var added_slots: int = 0
+	var planned_stack_keys: Dictionary = {}
+	var cargo_planned: bool = not raid_special_cargo.is_empty()
+	for item in items:
+		var item_type: String = str(item.get("type", ""))
+		var item_id: String = str(item.get("id", ""))
+		var amount: int = maxi(0, int(item.get("amount", 0)))
+		if item_type.is_empty() or item_id.is_empty() or amount <= 0:
+			continue
+		if item_type in ["weapon", "equipment"]:
+			added_slots += amount
+			continue
+		if item_type == "special_cargo":
+			if not cargo_planned:
+				added_slots += 1
+				cargo_planned = true
+			continue
+		var stack_key: String = "%s:%s" % [item_type, item_id]
+		if _get_raid_bag_count(item_type, item_id) <= 0 and not planned_stack_keys.has(stack_key):
+			added_slots += 1
+			planned_stack_keys[stack_key] = true
+	return added_slots
+
+
+func can_add_raid_items(items: Array[Dictionary]) -> bool:
+	return get_raid_bag_used_slots() + get_raid_items_added_slot_delta(items) <= RAID_BAG_CAPACITY
 
 
 func can_add_raid_item(item_type: String, item_id: String, amount: int = 1) -> bool:
@@ -984,7 +1385,6 @@ func get_raid_bag_entries() -> Array[Dictionary]:
 				"type": item_type,
 				"id": item_id,
 				"count": count,
-				"slot_cost": get_raid_item_slot_cost(item_type, item_id, count),
 				"drop_amount": mini(count, get_raid_item_stack_limit(item_type)),
 			})
 	for scalar in [
@@ -1001,7 +1401,6 @@ func get_raid_bag_entries() -> Array[Dictionary]:
 			"type": scalar_type,
 			"id": scalar_id,
 			"count": scalar_count,
-			"slot_cost": get_raid_item_slot_cost(scalar_type, scalar_id, scalar_count),
 			"drop_amount": mini(scalar_count, get_raid_item_stack_limit(scalar_type)),
 		})
 	if not raid_special_cargo.is_empty():
@@ -1009,7 +1408,6 @@ func get_raid_bag_entries() -> Array[Dictionary]:
 			"type": "special_cargo",
 			"id": str(raid_special_cargo.get("id", "sealed_subway_cargo")),
 			"count": 1,
-			"slot_cost": int(raid_special_cargo.get("slot_size", 6)),
 			"drop_amount": 1,
 		})
 	return entries
@@ -1019,8 +1417,7 @@ func try_take_story_cargo(cargo: Dictionary) -> bool:
 	if not raid_special_cargo.is_empty():
 		return false
 	var next_cargo := cargo.duplicate(true)
-	next_cargo["slot_size"] = maxi(1, int(next_cargo.get("slot_size", 6)))
-	var required := int(next_cargo["slot_size"])
+	var required := 1
 	if get_raid_bag_used_slots() + required > RAID_BAG_CAPACITY:
 		return false
 	raid_special_cargo = next_cargo
@@ -1096,10 +1493,7 @@ func withdraw_storage_item(slot_index: int, amount: int = 1) -> Dictionary:
 	if not can_add_raid_item(item_type, item_id, moved):
 		return {
 			"ok": false,
-			"reason": "가방 공간이 부족합니다. 현재 %d/%d칸을 사용 중입니다." % [
-				get_raid_bag_used_slots(),
-				get_raid_bag_capacity(),
-			],
+			"reason": "가방이 꽉 찼습니다.",
 		}
 	_add_backpack_storage_item(item_type, item_id, moved)
 	entry["count"] = int(entry.get("count", 0)) - moved
@@ -1107,6 +1501,39 @@ func withdraw_storage_item(slot_index: int, amount: int = 1) -> Dictionary:
 		storage_inventory.remove_at(slot_index)
 	save_persistent_state()
 	return {"ok": true, "moved": moved, "type": item_type, "id": item_id}
+
+
+func withdraw_storage_item_by_type(item_type: String, item_id: String, amount: int) -> Dictionary:
+	_normalize_storage_inventory()
+	var requested := maxi(0, amount)
+	var moved_total := 0
+	var last_reason := "창고에 해당 물품이 없습니다."
+	for slot_index in range(storage_inventory.size() - 1, -1, -1):
+		if moved_total >= requested:
+			break
+		var entry := storage_inventory[slot_index]
+		if (
+			str(entry.get("type", "")) != item_type
+			or str(entry.get("id", "")) != item_id
+		):
+			continue
+		var move_amount := mini(
+			requested - moved_total,
+			maxi(0, int(entry.get("count", 0)))
+		)
+		var result := withdraw_storage_item(slot_index, move_amount)
+		if not bool(result.get("ok", false)):
+			last_reason = str(result.get("reason", last_reason))
+			break
+		moved_total += int(result.get("moved", 0))
+	if moved_total <= 0:
+		return {"ok": false, "moved": 0, "reason": last_reason}
+	return {
+		"ok": true,
+		"moved": moved_total,
+		"partial": moved_total < requested,
+		"reason": last_reason if moved_total < requested else "",
+	}
 
 
 func _get_storage_stack_limit(item_type: String) -> int:
@@ -2094,9 +2521,9 @@ func try_upgrade_training(node_id: String) -> Dictionary:
 
 
 func get_current_contract_definition() -> Dictionary:
-	if contract_chain_index < 0 or contract_chain_index >= MISSION_CONTRACTS.size():
+	if contract_chain_index < 0 or contract_chain_index >= SAJA_FACILITY_CONTRACTS.size():
 		return {}
-	return (MISSION_CONTRACTS[contract_chain_index] as Dictionary).duplicate(true)
+	return (SAJA_FACILITY_CONTRACTS[contract_chain_index] as Dictionary).duplicate(true)
 
 
 func get_contract_state() -> Dictionary:
@@ -2108,7 +2535,7 @@ func get_contract_state() -> Dictionary:
 			"target": 0,
 			"definition": {},
 			"completed_count": completed_contract_ids.size(),
-			"total_count": MISSION_CONTRACTS.size(),
+			"total_count": SAJA_FACILITY_CONTRACTS.size(),
 		}
 	return {
 		"status": contract_status,
@@ -2116,7 +2543,7 @@ func get_contract_state() -> Dictionary:
 		"target": maxi(1, int(definition.get("target", 1))),
 		"definition": definition,
 		"completed_count": completed_contract_ids.size(),
-		"total_count": MISSION_CONTRACTS.size(),
+		"total_count": SAJA_FACILITY_CONTRACTS.size(),
 	}
 
 
@@ -2138,6 +2565,7 @@ func accept_current_contract() -> Dictionary:
 
 
 func advance_contract(metric: String, amount: int = 1) -> Dictionary:
+	advance_iron_special_mission(metric, amount)
 	var definition := get_current_contract_definition()
 	if (
 		definition.is_empty()
@@ -2184,14 +2612,14 @@ func claim_current_contract_reward() -> Dictionary:
 	if not facility_id.is_empty():
 		facility_unlocked = unlock_shelter_facility(facility_id)
 	var lore_entry := "%s\n%s" % [
-		str(definition.get("lore_title", "철근의 기록")),
+		str(definition.get("lore_title", "사자의 기록")),
 		str(definition.get("lore", "")),
 	]
 	if not unlocked_contract_lore.has(lore_entry):
 		unlocked_contract_lore.append(lore_entry)
 	contract_chain_index += 1
 	contract_progress = 0
-	contract_status = "available" if contract_chain_index < MISSION_CONTRACTS.size() else "finished"
+	contract_status = "available" if contract_chain_index < SAJA_FACILITY_CONTRACTS.size() else "finished"
 	save_persistent_state()
 	return {
 		"ok": true,
@@ -2214,8 +2642,8 @@ func get_latest_contract_lore() -> String:
 
 
 func _normalize_contract_state() -> void:
-	contract_chain_index = clampi(contract_chain_index, 0, MISSION_CONTRACTS.size())
-	if contract_chain_index >= MISSION_CONTRACTS.size():
+	contract_chain_index = clampi(contract_chain_index, 0, SAJA_FACILITY_CONTRACTS.size())
+	if contract_chain_index >= SAJA_FACILITY_CONTRACTS.size():
 		contract_status = "finished"
 		contract_progress = 0
 		return
@@ -2231,15 +2659,122 @@ func _normalize_contract_state() -> void:
 		contract_progress = maxi(1, int(definition.get("target", 1)))
 
 
+func get_current_iron_mission_definition() -> Dictionary:
+	if iron_mission_index < 0 or iron_mission_index >= IRON_SPECIAL_MISSIONS.size():
+		return {}
+	return (IRON_SPECIAL_MISSIONS[iron_mission_index] as Dictionary).duplicate(true)
+
+
+func get_iron_mission_state() -> Dictionary:
+	var definition := get_current_iron_mission_definition()
+	if definition.is_empty():
+		return {
+			"status": "finished",
+			"progress": 0,
+			"target": 0,
+			"definition": {},
+			"completed_count": completed_iron_mission_ids.size(),
+			"total_count": IRON_SPECIAL_MISSIONS.size(),
+		}
+	return {
+		"status": iron_mission_status,
+		"progress": clampi(iron_mission_progress, 0, int(definition.get("target", 1))),
+		"target": maxi(1, int(definition.get("target", 1))),
+		"definition": definition,
+		"completed_count": completed_iron_mission_ids.size(),
+		"total_count": IRON_SPECIAL_MISSIONS.size(),
+	}
+
+
+func accept_current_iron_mission() -> Dictionary:
+	var definition := get_current_iron_mission_definition()
+	if definition.is_empty():
+		return {"ok": false, "reason": "finished"}
+	if iron_mission_status != "available":
+		return {"ok": false, "reason": iron_mission_status}
+	iron_mission_status = "active"
+	iron_mission_progress = 0
+	save_persistent_state()
+	return {"ok": true, "definition": definition}
+
+
+func advance_iron_special_mission(metric: String, amount: int = 1) -> Dictionary:
+	var definition := get_current_iron_mission_definition()
+	if (
+		definition.is_empty()
+		or iron_mission_status != "active"
+		or str(definition.get("metric", "")) != metric
+		or amount <= 0
+	):
+		return {"changed": false}
+	var target := maxi(1, int(definition.get("target", 1)))
+	var previous := iron_mission_progress
+	iron_mission_progress = mini(target, iron_mission_progress + amount)
+	if iron_mission_progress >= target:
+		iron_mission_status = "complete"
+	if iron_mission_progress != previous:
+		save_persistent_state()
+	return {
+		"changed": iron_mission_progress != previous,
+		"completed": iron_mission_status == "complete",
+		"progress": iron_mission_progress,
+		"target": target,
+		"definition": definition,
+	}
+
+
+func claim_current_iron_mission_reward() -> Dictionary:
+	var definition := get_current_iron_mission_definition()
+	if definition.is_empty() or iron_mission_status != "complete":
+		return {"ok": false, "reason": iron_mission_status}
+	var training_id := str(definition.get("training_id", ""))
+	var previous_rank := get_training_rank(training_id)
+	var training_definition := get_training_definition(training_id)
+	var maximum_rank := maxi(previous_rank + 1, int(training_definition.get("max_rank", previous_rank + 1)))
+	training_levels[training_id] = mini(maximum_rank, previous_rank + 1)
+	if training_id == "vitality":
+		player_health = mini(get_max_health(), player_health + 10)
+	var mission_id := str(definition.get("id", ""))
+	if not completed_iron_mission_ids.has(mission_id):
+		completed_iron_mission_ids.append(mission_id)
+	iron_mission_index += 1
+	iron_mission_progress = 0
+	iron_mission_status = "available" if iron_mission_index < IRON_SPECIAL_MISSIONS.size() else "finished"
+	save_persistent_state()
+	return {
+		"ok": true,
+		"definition": definition,
+		"training_id": training_id,
+		"rank": int(training_levels.get(training_id, previous_rank)),
+		"finished": iron_mission_status == "finished",
+	}
+
+
+func _normalize_iron_mission_state() -> void:
+	iron_mission_index = clampi(iron_mission_index, 0, IRON_SPECIAL_MISSIONS.size())
+	if iron_mission_index >= IRON_SPECIAL_MISSIONS.size():
+		iron_mission_status = "finished"
+		iron_mission_progress = 0
+		return
+	if iron_mission_status not in ["available", "active", "complete"]:
+		iron_mission_status = "available"
+	var definition := get_current_iron_mission_definition()
+	var target := maxi(1, int(definition.get("target", 1)))
+	iron_mission_progress = clampi(iron_mission_progress, 0, target)
+	if iron_mission_status == "complete":
+		iron_mission_progress = target
+
+
 func save_persistent_state() -> bool:
 	if not persistence_enabled:
 		return false
 	_normalize_storage_inventory()
 	_trim_stored_canned_food_to_total()
 	_normalize_contract_state()
+	_normalize_iron_mission_state()
 	save_equipped_weapon_loadout()
 	var data := {
-		"version": 9,
+		"version": 10,
 		"map_seed": map_seed,
 		"raid_serial": raid_serial,
 		"player_health": player_health,
@@ -2313,6 +2848,18 @@ func save_persistent_state() -> bool:
 		"unlocked_contract_lore": unlocked_contract_lore,
 		"shelter_facility_unlocks": shelter_facility_unlocks,
 		"contract_agent_intro_seen": contract_agent_intro_seen,
+		"saja_intro_seen": saja_intro_seen,
+		"saja_second_run_intro_seen": saja_second_run_intro_seen,
+		"saja_seen_resident_count": saja_seen_resident_count,
+		"saja_seen_boss_kills": saja_seen_boss_kills,
+		"saja_seen_story_cargo_count": saja_seen_story_cargo_count,
+		"saja_seen_subway_stage": saja_seen_subway_stage,
+		"total_boss_kills": total_boss_kills,
+		"juhong_seen_events": juhong_seen_events,
+		"iron_mission_index": iron_mission_index,
+		"iron_mission_status": iron_mission_status,
+		"iron_mission_progress": iron_mission_progress,
+		"completed_iron_mission_ids": completed_iron_mission_ids,
 		"opening_completed": opening_completed,
 	}
 	var file := FileAccess.open(persistence_path, FileAccess.WRITE)
@@ -2442,9 +2989,22 @@ func load_persistent_state() -> bool:
 		# Preserve facilities in saves made before the staged shelter progression existed.
 		unlock_all_shelter_facilities()
 	contract_agent_intro_seen = bool(data.get("contract_agent_intro_seen", shelter_return_serial >= CONTRACT_AGENT_UNLOCK_RETURN))
+	saja_intro_seen = bool(data.get("saja_intro_seen", false))
+	saja_second_run_intro_seen = bool(data.get("saja_second_run_intro_seen", false))
+	saja_seen_resident_count = maxi(0, int(data.get("saja_seen_resident_count", 0)))
+	saja_seen_boss_kills = maxi(0, int(data.get("saja_seen_boss_kills", 0)))
+	saja_seen_story_cargo_count = maxi(0, int(data.get("saja_seen_story_cargo_count", 0)))
+	saja_seen_subway_stage = maxi(0, int(data.get("saja_seen_subway_stage", 0)))
+	total_boss_kills = maxi(0, int(data.get("total_boss_kills", 0)))
+	juhong_seen_events = _to_string_array(data.get("juhong_seen_events", []))
+	iron_mission_index = maxi(0, int(data.get("iron_mission_index", 0)))
+	iron_mission_status = str(data.get("iron_mission_status", "available"))
+	iron_mission_progress = maxi(0, int(data.get("iron_mission_progress", 0)))
+	completed_iron_mission_ids = _to_string_array(data.get("completed_iron_mission_ids", []))
 	# Saves made before the opening existed should continue from the shelter.
 	opening_completed = bool(data.get("opening_completed", true))
 	_normalize_contract_state()
+	_normalize_iron_mission_state()
 	sync_shelter_progression_milestones()
 	if not RAID_ZONES.has(selected_raid_zone) or not is_raid_zone_unlocked(selected_raid_zone):
 		selected_raid_zone = "jongno_outskirts"
@@ -2607,6 +3167,18 @@ func reset_run() -> void:
 		"catnip_scraper": false,
 	}
 	contract_agent_intro_seen = false
+	saja_intro_seen = false
+	saja_second_run_intro_seen = false
+	saja_seen_resident_count = 0
+	saja_seen_boss_kills = 0
+	saja_seen_story_cargo_count = 0
+	saja_seen_subway_stage = 0
+	total_boss_kills = 0
+	juhong_seen_events.clear()
+	iron_mission_index = 0
+	iron_mission_status = "available"
+	iron_mission_progress = 0
+	completed_iron_mission_ids.clear()
 
 
 func reset_all_progress_for_opening() -> bool:

@@ -3,9 +3,10 @@ extends Node3D
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+const SHELTER_UI := preload("res://scripts/shelter_ui_components.gd")
 const RESIDENT_PORTRAITS := preload("res://scripts/resident_portrait_catalog.gd")
 
-@export var interaction_radius := 3.15
+@export var interaction_radius := 4.0
 
 @onready var sprite: Sprite3D = $BankSprite
 
@@ -61,11 +62,16 @@ func _open_ui() -> void:
 	var safe_margin := MarginContainer.new()
 	safe_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var viewport_size := get_viewport().get_visible_rect().size
+	var safe := UISafeArea.get_margins(viewport_size)
+	var available_size := Vector2(
+		viewport_size.x - safe.x - safe.z,
+		viewport_size.y - safe.y - safe.w
+	)
 	var outer_margin := 10 if viewport_size.y < 640.0 else 22
-	safe_margin.add_theme_constant_override("margin_left", outer_margin)
-	safe_margin.add_theme_constant_override("margin_top", outer_margin)
-	safe_margin.add_theme_constant_override("margin_right", outer_margin)
-	safe_margin.add_theme_constant_override("margin_bottom", outer_margin)
+	safe_margin.add_theme_constant_override("margin_left", roundi(outer_margin + safe.x))
+	safe_margin.add_theme_constant_override("margin_top", roundi(outer_margin + safe.y))
+	safe_margin.add_theme_constant_override("margin_right", roundi(outer_margin + safe.z))
+	safe_margin.add_theme_constant_override("margin_bottom", roundi(outer_margin + safe.w))
 	modal.add_child(safe_margin)
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -73,8 +79,8 @@ func _open_ui() -> void:
 	var panel := PanelContainer.new()
 	panel.name = "ScratcherBankPanel"
 	panel.custom_minimum_size = Vector2(
-		minf(960.0, viewport_size.x - outer_margin * 2.0),
-		minf(620.0, viewport_size.y - outer_margin * 2.0)
+		minf(960.0, available_size.x - outer_margin * 2.0),
+		minf(620.0, available_size.y - outer_margin * 2.0)
 	)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -107,33 +113,53 @@ func _rebuild_ui() -> void:
 	GameState._ensure_resident_records()
 	for child in content.get_children():
 		child.queue_free()
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 12)
-	content.add_child(header)
-	var title_box := VBoxContainer.new()
-	title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(title_box)
-	title_box.add_child(_label("꾹꾹이 고철 생산기", 26, Color("#f4ddb2")))
-	title_box.add_child(_label("주민 배치 · 자동 생산 · 캣닢 부스터", 13, Color("#9eaa9f")))
-	var close := _close_button()
-	close.pressed.connect(func(): ui_layer.queue_free())
-	header.add_child(close)
-	var workers: int = GameState.get_active_scratcher_workers()
-	var slots: int = GameState.get_scratcher_worker_slots()
 	var viewport_size := get_viewport().get_visible_rect().size
 	var narrow := viewport_size.x < 760.0
 	var compact := viewport_size.x < 1040.0 or viewport_size.y < 680.0
+	var header := VBoxContainer.new()
+	header.name = "ScratcherBankHeader"
+	header.add_theme_constant_override("separation", 8)
+	content.add_child(header)
+	var top_row := HBoxContainer.new()
+	top_row.add_theme_constant_override("separation", 12)
+	header.add_child(top_row)
+	var title_box := VBoxContainer.new()
+	title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top_row.add_child(title_box)
+	title_box.add_child(_label("꾹꾹이 고철 생산기  Lv.%d" % GameState.scratcher_bank_level, 26, Color("#f4ddb2")))
+	title_box.add_child(_label("주민을 배치하면 고철이 자동 생산됩니다.", 13, Color("#9eaa9f")))
+	var close := _close_button()
+	close.pressed.connect(func(): ui_layer.queue_free())
+	top_row.add_child(close)
+	var wallet := HFlowContainer.new()
+	wallet.name = "ScratcherBankWallet"
+	wallet.add_theme_constant_override("h_separation", 8)
+	wallet.add_theme_constant_override("v_separation", 6)
+	header.add_child(wallet)
+	wallet.add_child(SHELTER_UI.make_currency_chip(
+		"scrap",
+		GameState.format_compact_number(GameState.scrap),
+		compact,
+		not narrow
+	))
+	wallet.add_child(SHELTER_UI.make_currency_chip(
+		"catnip",
+		GameState.format_compact_number(GameState.catnip),
+		compact,
+		not narrow
+	))
+	var workers: int = GameState.get_active_scratcher_workers()
+	var slots: int = GameState.get_scratcher_worker_slots()
 	var summary := GridContainer.new()
 	summary.name = "ScratcherBankSummary"
-	summary.columns = 1 if narrow else (2 if compact else 4)
+	summary.columns = 1 if narrow else 3
 	summary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	summary.add_theme_constant_override("h_separation", 8)
 	summary.add_theme_constant_override("v_separation", 8)
 	content.add_child(summary)
-	summary.add_child(_summary_card("시설", "Lv.%d · Tier %d" % [GameState.scratcher_bank_level, GameState.shelter_tier], compact))
-	summary.add_child(_summary_card("배치", "%d / %d명" % [workers, slots], compact))
-	summary.add_child(_summary_card("시간당 생산", "고철 %s" % GameState.format_compact_number(GameState.get_scrap_per_hour()), compact))
-	summary.add_child(_summary_card("부스터", "x%.0f" % GameState.get_production_multiplier(), compact))
+	summary.add_child(_summary_card("시간당", GameState.format_compact_number(GameState.get_scrap_per_hour()), "scrap", compact))
+	summary.add_child(_summary_card("작업자", "%d / %d명" % [workers, slots], "resident", compact))
+	summary.add_child(_summary_card("생산 배율", "x%.0f" % GameState.get_production_multiplier(), "catnip", compact))
 
 	var body: BoxContainer = VBoxContainer.new() if narrow else HBoxContainer.new()
 	body.name = "ScratcherBankBody"
@@ -190,13 +216,12 @@ func _rebuild_ui() -> void:
 	var actions := VBoxContainer.new()
 	actions.add_theme_constant_override("separation", 10)
 	operations_margin.add_child(actions)
-	actions.add_child(_label("시설 운용", 16, Color("#ead7ad")))
-	actions.add_child(_label("주민 카드를 눌러 작업자를 배치하거나 해제합니다.", 12, Color("#9fb0a7")))
+	actions.add_child(_label("생산 설정", 16, Color("#ead7ad")))
 	var boost_remaining: int = GameState.get_catnip_boost_remaining()
 	var boost := _button(
-		"부스터 %02d:%02d" % [boost_remaining / 60, boost_remaining % 60]
+		"가동 중  %02d:%02d" % [boost_remaining / 60, boost_remaining % 60]
 		if boost_remaining > 0
-		else "캣닢 25 · 10분 x10",
+		else "x25  ·  10분 동안 x10",
 		"catnip"
 	)
 	boost.disabled = boost_remaining > 0 or GameState.catnip < GameState.CATNIP_BOOST_COST
@@ -206,27 +231,19 @@ func _rebuild_ui() -> void:
 	var upgrade_cost := int(GameState.SCRATCHER_UPGRADE_COSTS.get(GameState.scratcher_bank_level + 1, 0))
 	var upgrade := _button(
 		"최고 레벨"
-		if upgrade_cost == 0
-		else "Lv.%d 업그레이드  고철 %s" % [
-			GameState.scratcher_bank_level + 1,
+		if upgrade_cost == 0 else "x%s  ·  Lv.%d 확장" % [
 			GameState.format_compact_number(upgrade_cost),
+			GameState.scratcher_bank_level + 1,
 		],
-		"upgrade"
+		"upgrade" if upgrade_cost == 0 else "scrap"
 	)
 	upgrade.disabled = upgrade_cost == 0 or GameState.scrap < upgrade_cost
 	upgrade.custom_minimum_size = Vector2(0, 38)
 	upgrade.pressed.connect(_upgrade)
 	actions.add_child(upgrade)
-	var spacer := Control.new()
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	actions.add_child(spacer)
-	actions.add_child(_label("보유 자원", 13, Color("#8fa096")))
-	actions.add_child(_label("고철 %s   캣닢 %s\n통조림 %s   츄르 %s" % [
-		GameState.format_compact_number(GameState.scrap),
-		GameState.format_compact_number(GameState.catnip),
-		GameState.format_compact_number(GameState.canned_food),
-		GameState.format_compact_number(GameState.churu),
-	], 15, Color("#d9dfd9")))
+	var action_hint := _label("주민 카드를 눌러 배치하거나 해제", 11, Color("#788a80"))
+	action_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	actions.add_child(action_hint)
 
 
 func _worker_slot(index: int, active_workers: int, slots: int) -> PanelContainer:
@@ -374,7 +391,7 @@ func _empty_resident_state(title: String, description: String, compact: bool) ->
 	return panel
 
 
-func _summary_card(title: String, value: String, compact: bool) -> Control:
+func _summary_card(title: String, value: String, icon_name: String, compact: bool) -> Control:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(0, 52 if compact else 58)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -391,7 +408,7 @@ func _summary_card(title: String, value: String, compact: bool) -> Control:
 	var icon := TextureRect.new()
 	var icon_size := 28 if compact else 32
 	icon.custom_minimum_size = Vector2(icon_size, icon_size)
-	icon.texture = UI_ICONS.get_icon(_summary_icon_name(title), 36, Color("#d1b96f"))
+	icon.texture = UI_ICONS.get_icon(icon_name, 36, Color("#d1b96f"))
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	row.add_child(icon)
@@ -408,16 +425,6 @@ func _summary_card(title: String, value: String, compact: bool) -> Control:
 	box.add_child(title_label)
 	box.add_child(value_label)
 	return panel
-
-
-func _summary_icon_name(title: String) -> String:
-	if title.contains("주민") or title.contains("배치"):
-		return "resident"
-	if title.contains("시간") or title.contains("초당"):
-		return "time"
-	if title.contains("생산"):
-		return "scrap"
-	return "workbench"
 
 
 func _label(text: String, size: int, color: Color) -> Label:

@@ -1,5 +1,7 @@
 extends SceneTree
 
+const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
+
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -67,11 +69,17 @@ func _run() -> void:
 		"gangnam_luxury_showroom_6x6_v1",
 		"seoul_laundromat_repair_8x4_v1",
 		"seoul_redbrick_corner_villa_6x6_v1",
+		"namdaemun_covered_market_8x4_v1",
+		"euljiro_metalworks_8x4_v1",
+		"yongsan_checkpoint_depot_8x4_v1",
+		"namsan_decon_station_8x4_v1",
 	]:
 		var definition: Dictionary = building_catalog.get_definition(building_id)
 		assert(building_catalog.is_valid_definition(definition))
 		assert(ResourceLoader.exists(str(definition["texture_path"])))
 		_assert_isometric_footprint(definition)
+		if building_id.ends_with("_8x4_v1"):
+			assert(definition["footprint_modules"] == Vector2i(8, 4))
 	assert(building_catalog.get_definition("seoul_market_row_8x4_v1")["districts"].has("market_lane"))
 	assert(building_catalog.get_definition("seoul_multifamily_villa_6x6_v1")["districts"].has("multi_family"))
 	assert(building_catalog.get_definition("gangnam_luxury_showroom_6x6_v1")["districts"].has("luxury_core"))
@@ -116,7 +124,10 @@ func _run() -> void:
 		assert(road_covers.size() >= 4)
 		for cover in road_covers:
 			assert(cover is StaticBody3D)
-			assert((cover as StaticBody3D).collision_layer == 1)
+			assert(
+				(cover as StaticBody3D).collision_layer
+				== COLLISION_PROFILES.WORLD_MOVEMENT_LAYER
+			)
 			var cover_cell: Vector2i = cover.get_meta("road_cell")
 			assert(city.call("_is_road_cell", cover_cell))
 			assert(not city.call("_is_subway_vehicle_clearance_cell", cover_cell))
@@ -134,16 +145,18 @@ func _run() -> void:
 			var debug_mesh := cover.get_node("CoverCollisionDebug") as MeshInstance3D
 			var debug_plane := debug_mesh.mesh as PlaneMesh
 			assert(debug_plane.size == Vector2(cover_shape.size.x, cover_shape.size.z))
+			assert(debug_mesh.visible)
 			var projectile_cross_axis := (
 				Vector3(0.0, 0.0, 1.0)
 				if cover_shape.size.x >= cover_shape.size.z
 				else Vector3(1.0, 0.0, 0.0)
 			)
 			var projectile_cross_distance := minf(cover_shape.size.x, cover_shape.size.z) * 0.5 + 0.7
+			var cover_center := cover_collision.global_position
 			var projectile_query := PhysicsRayQueryParameters3D.create(
-				(cover as Node3D).global_position - projectile_cross_axis * projectile_cross_distance + Vector3(0.0, 0.45, 0.0),
-				(cover as Node3D).global_position + projectile_cross_axis * projectile_cross_distance + Vector3(0.0, 0.45, 0.0),
-				1
+				cover_center - projectile_cross_axis * projectile_cross_distance,
+				cover_center + projectile_cross_axis * projectile_cross_distance,
+				COLLISION_PROFILES.WORLD_MOVEMENT_LAYER
 			)
 			var projectile_hit := city.get_world_3d().direct_space_state.intersect_ray(projectile_query)
 			assert(not projectile_hit.is_empty())
@@ -153,7 +166,7 @@ func _run() -> void:
 		for prop_node in street_props:
 			var prop := prop_node as StaticBody3D
 			assert(prop != null)
-			assert(prop.collision_layer == 1)
+			assert(prop.collision_layer == COLLISION_PROFILES.WORLD_MOVEMENT_LAYER)
 			assert(prop.get_node_or_null("StreetPropSprite") is Sprite3D)
 			var prop_collision := prop.get_node("StreetPropCollision") as CollisionShape3D
 			var prop_shape := prop_collision.shape as BoxShape3D

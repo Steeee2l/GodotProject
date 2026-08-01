@@ -1,0 +1,9 @@
+{
+  "character_id": "saja",
+  "display_name": "사자",
+  "directions": ["down", "down_right", "right", "up_right", "up", "up_left", "left", "down_left"],
+  "animations": {
+    "idle": 4,
+    "walk": 4
+  }
+}

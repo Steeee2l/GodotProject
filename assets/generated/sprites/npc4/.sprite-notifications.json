@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "notifications": [
+    {
+      "id": "ac760b6b3caa4381add356a738bf0db2",
+      "kind": "base_generated",
+      "state": "__base__",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "generated": false
+      },
+      "createdAt": "2026-08-01T21:17:03+0900",
+      "read": false
+    },
+    {
+      "id": "3efb835b7d9544539f88afedb44c1579",
+      "kind": "auto_completed",
+      "state": "down_idle",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "name": "8방향 이동",
+        "total": 16
+      },
+      "createdAt": "2026-08-01T21:36:47+0900",
+      "read": false
+    }
+  ]
+}

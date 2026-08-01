@@ -3,6 +3,7 @@ extends Node3D
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+const SHELTER_UI := preload("res://scripts/shelter_ui_components.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const AMMO_TEXTURE := preload("res://assets/items/ammo_762.png")
 const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
@@ -195,12 +196,11 @@ const CATEGORY_ICONS := {
 	"enhance": "upgrade",
 }
 
-@export var interaction_radius := 2.9
+@export var interaction_radius := 3.9
 
-const WALL_ALIGNED_TEXTURE := preload(
-	"res://assets/interiors/modules/shelter_workbench_wall_front_v5.png"
+const FACTORY_CELL_TEXTURE := preload(
+	"res://assets/interiors/factory/factory_gunsmith_cell_v1.png"
 )
-const WALL_TEXTURE_REGION := Rect2(122.0, 155.0, 1359.0, 669.0)
 
 @onready var sprite: Sprite3D = $WorkbenchSprite
 
@@ -210,19 +210,20 @@ var selected_category := "parts"
 var selected_recipe_id := "scope_lens"
 var recipe_list: VBoxContainer
 var detail_box: VBoxContainer
-var resource_label: Label
+var resource_value_labels: Dictionary = {}
 
 
 func _ready() -> void:
 	add_to_group("shelter_module")
 	add_to_group("shelter_workbench")
 	set_meta("module_kind", "workbench")
-	sprite.texture = WALL_ALIGNED_TEXTURE
-	sprite.position = Vector3(0.0, 1.452, 0.055)
-	sprite.pixel_size = 0.00434
-	sprite.billboard = BaseMaterial3D.BILLBOARD_DISABLED
-	sprite.region_enabled = true
-	sprite.region_rect = WALL_TEXTURE_REGION
+	sprite.texture = FACTORY_CELL_TEXTURE
+	sprite.position = Vector3(0.0, 2.0, 0.02)
+	sprite.pixel_size = 0.00385
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.region_enabled = false
+	sprite.no_depth_test = false
+	sprite.render_priority = 12
 
 
 func get_interaction_prompt() -> String:
@@ -271,20 +272,26 @@ func _rebuild_ui() -> void:
 	ui_layer.add_child(dim)
 
 	var viewport_size := get_viewport().get_visible_rect().size
+	var safe := UISafeArea.get_margins(viewport_size)
+	var available_size := Vector2(
+		viewport_size.x - safe.x - safe.z,
+		viewport_size.y - safe.y - safe.w
+	)
+	var safe_center_offset := Vector2((safe.x - safe.z) * 0.5, (safe.y - safe.w) * 0.5)
 	var compact := viewport_size.x < 900.0 or viewport_size.y < 650.0
 	var stacked := viewport_size.x < 760.0
-	var panel_width := minf(1240.0, maxf(300.0, viewport_size.x - (20.0 if compact else 40.0)))
-	var panel_height := minf(780.0, maxf(360.0, viewport_size.y - (16.0 if compact else 40.0)))
+	var panel_width := minf(1240.0, maxf(300.0, available_size.x - (20.0 if compact else 40.0)))
+	var panel_height := minf(780.0, maxf(340.0, available_size.y - (16.0 if compact else 40.0)))
 	var root := PanelContainer.new()
 	root.name = "WorkbenchPanel"
 	root.anchor_left = 0.5
 	root.anchor_top = 0.5
 	root.anchor_right = 0.5
 	root.anchor_bottom = 0.5
-	root.offset_left = -panel_width * 0.5
-	root.offset_top = -panel_height * 0.5
-	root.offset_right = panel_width * 0.5
-	root.offset_bottom = panel_height * 0.5
+	root.offset_left = -panel_width * 0.5 + safe_center_offset.x
+	root.offset_top = -panel_height * 0.5 + safe_center_offset.y
+	root.offset_right = panel_width * 0.5 + safe_center_offset.x
+	root.offset_bottom = panel_height * 0.5 + safe_center_offset.y
 	root.add_theme_stylebox_override("panel", _panel_style(Color(0.018, 0.023, 0.027, 0.95), Color("#8ac2a7"), 2, 10))
 	ui_layer.add_child(root)
 
@@ -315,31 +322,57 @@ func _rebuild_ui() -> void:
 
 
 func _build_header() -> Control:
-	var header := HBoxContainer.new()
+	resource_value_labels.clear()
+	var header := VBoxContainer.new()
 	header.name = "WorkbenchHeader"
-	header.add_theme_constant_override("separation", 12)
+	header.add_theme_constant_override("separation", 8)
+	var top_row := HBoxContainer.new()
+	top_row.add_theme_constant_override("separation", 12)
+	header.add_child(top_row)
 	var title_box := VBoxContainer.new()
 	title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_box.clip_contents = true
-	header.add_child(title_box)
+	top_row.add_child(title_box)
 	var title := _label("제작 작업대  Lv.%d" % GameState.shelter_workbench_level, 30, Color("#f0e6c8"))
 	title.name = "WorkbenchTitle"
 	title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title_box.add_child(title)
-	resource_label = _label(_resource_text(), 15, Color("#b7cfc3"))
-	resource_label.name = "WorkbenchResourceLabel"
-	resource_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	resource_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	title_box.add_child(resource_label)
+	title_box.add_child(_label("설계도를 선택하고 필요한 재료를 조립합니다.", 13, Color("#91a69d")))
 
 	var close := _close_button()
 	close.pressed.connect(func() -> void:
 		if is_instance_valid(ui_layer):
 			ui_layer.queue_free()
 	)
-	header.add_child(close)
+	top_row.add_child(close)
+	header.add_child(_build_resource_strip())
 	return header
+
+
+func _build_resource_strip() -> Control:
+	var strip := HFlowContainer.new()
+	strip.name = "WorkbenchResourceStrip"
+	strip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	strip.add_theme_constant_override("h_separation", 7)
+	strip.add_theme_constant_override("v_separation", 6)
+	var compact := get_viewport().get_visible_rect().size.x < 1040.0
+	for key in ["scrap", "canned_food", "scope_lens", "rubber_gasket", "magazine_spring"]:
+		var resource_key := str(key)
+		var chip := SHELTER_UI.make_resource_chip(
+			resource_key,
+			_resource_name(resource_key),
+			GameState.format_compact_number(_owned_resource(resource_key)),
+			_resource_icon(resource_key),
+			_resource_accent(resource_key),
+			compact,
+			true
+		)
+		var value_label := chip.find_child("ResourceValue_%s" % resource_key, true, false) as Label
+		if value_label != null:
+			resource_value_labels[resource_key] = value_label
+		strip.add_child(chip)
+	return strip
 
 
 func _build_tabs() -> Control:
@@ -504,11 +537,6 @@ func _refresh_detail_panel() -> void:
 	)
 	detail_box.add_child(craft)
 
-	var footer := _label("총기 부착물 장착은 가방에서 총을 선택해 진행합니다.", 15, Color("#88b9a5"))
-	footer.name = "WorkbenchFooter"
-	detail_box.add_child(footer)
-
-
 func _selected_recipe() -> Dictionary:
 	for recipe_raw in _recipes_for_category(selected_category):
 		var recipe: Dictionary = recipe_raw
@@ -625,10 +653,17 @@ func _effective_cost(recipe: Dictionary) -> Dictionary:
 
 
 func _refresh_after_change() -> void:
-	if resource_label:
-		resource_label.text = _resource_text()
+	_refresh_header_resources()
 	_refresh_recipe_list()
 	_refresh_detail_panel()
+
+
+func _refresh_header_resources() -> void:
+	for key_value in resource_value_labels.keys():
+		var key := str(key_value)
+		var value_label := resource_value_labels.get(key) as Label
+		if is_instance_valid(value_label):
+			value_label.text = "x%s" % GameState.format_compact_number(_owned_resource(key))
 
 
 func _owned_resource(key: String) -> int:
@@ -652,16 +687,6 @@ func _consume_resource(key: String, amount: int) -> void:
 			GameState.canned_food = maxi(0, GameState.canned_food - amount)
 
 
-func _resource_text() -> String:
-	return "고철 %s · 렌즈 %d · 고무 %d · 스프링 %d · 통조림 %s" % [
-		GameState.format_compact_number(GameState.scrap),
-		GameState.get_mod_component_count("scope_lens"),
-		GameState.get_mod_component_count("rubber_gasket"),
-		GameState.get_mod_component_count("magazine_spring"),
-		GameState.format_compact_number(GameState.canned_food),
-	]
-
-
 func _cost_short_text(recipe: Dictionary) -> String:
 	var parts: Array[String] = []
 	for key in _effective_cost(recipe).keys():
@@ -678,16 +703,21 @@ func _recipe_list_subtitle(recipe: Dictionary) -> String:
 		not required_blueprint.is_empty()
 		and GameState.get_progression_item_count(required_blueprint) <= 0
 	):
-		return "청사진 필요 · %s" % _blueprint_name(required_blueprint)
-	var cost_text := _cost_short_text(recipe)
-	if not cost_text.is_empty():
-		return cost_text
+		return "청사진 필요"
+	var required_tier := int(recipe.get("required_tier", 1))
+	if GameState.shelter_tier < required_tier:
+		return "쉘터 Tier %d 필요" % required_tier
+	var required_workbench := int(recipe.get("required_workbench", 1))
+	if GameState.shelter_workbench_level < required_workbench:
+		return "작업대 Lv.%d 필요" % required_workbench
 	var result := recipe.get("result", {}) as Dictionary
 	if bool(result.get("auto_repair", false)):
-		return "수리 진행 중" if GameState.workbench_repair_active else "비용 없음 · 자동 진행"
+		if GameState.workbench_repair_active:
+			return "수리 진행 중"
+		return "수리 가능" if GameState.weapon_durability < 100.0 else "수리 불필요"
 	if bool(result.get("workbench_upgrade", false)):
-		return "최고 레벨"
-	return _result_text(recipe)
+		return "최고 레벨" if GameState.shelter_workbench_level >= 5 else ("확장 가능" if _can_craft(recipe) else "재료 부족")
+	return "제작 가능" if _can_craft(recipe) else "재료 부족"
 
 
 func _blueprint_name(item_id: String) -> String:
@@ -796,6 +826,16 @@ func _resource_icon(key: String) -> Texture2D:
 		"canned_food": return UI_ICONS.get_icon("food", 48, Color("#e6b65c"))
 		"churu": return UI_ICONS.get_icon("churu", 48, Color("#e9a66e"))
 	return UI_ICONS.get_icon("resource", 48, Color("#9ab4aa"))
+
+
+func _resource_accent(key: String) -> Color:
+	match key:
+		"scrap": return Color("#b9c4c2")
+		"canned_food": return Color("#efbd66")
+		"scope_lens": return Color("#73c5db")
+		"rubber_gasket": return Color("#c59b72")
+		"magazine_spring": return Color("#d0b16b")
+	return Color("#9ab4aa")
 
 
 func _resource_row(key: String, owned: int, needed: int, color: Color) -> Control:

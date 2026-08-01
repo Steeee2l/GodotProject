@@ -1,0 +1,20 @@
+Create a production-ready 2D game sprite strip from the supplied base character.
+
+Identity lock: preserve the exact character design, proportions, face, clothing, backpack, tail, palette, outline weight, and pixel-art rendering from the base reference. Do not redesign or beautify the character.
+Direction: up_left — three-quarter back view, moving toward the upper-left corner of the image (screen-left / viewer's left); the face, chest, hips, and feet point toward the left edge, never the right edge. The head, torso, hips, legs, and feet must all face and move in this same direction.
+Screen-axis lock: LEFT means the left-hand edge of the output image from the viewer's perspective, not the character's anatomical left. Never mirror the pose to face screen-right.
+Action: four-phase diagonal walk away from the viewer toward camera-left.
+Motion contract, left to right, exactly 4 panels:
+1. frame 1: left leg forward, right leg back
+2. frame 2: both feet gathered in the passing pose
+3. frame 3: right leg forward, left leg back
+4. frame 4: both feet gathered in the passing pose
+The left/right leg alternation is mandatory. Frames 1 and 3 must use opposite leading legs. Frames 2 and 4 are gathered passing poses, not copies of a leading-leg pose.
+
+Pose skeleton lock: the first attached image is the ONLY identity, species, outfit, palette, and rendering reference. The second attached image is an accepted sprite of this same character in the target direction. It is authoritative for screen-left/screen-right facing, head/torso/hip angle, and the side on which asymmetric equipment appears; do not copy its idle motion. The third attached image is the complete four-frame pose strip.
+Use the pose guide only for geometry and timing. Match its panel order, facing, head/torso/hip angle, limb placement, leading foot, left/right foot crossing, ground contact, silhouette, scale, and root position as closely as possible. Do not copy any character identity, clothing, colors, facial features, or accessories from the grayscale pose guide. When identity and pose references differ, take appearance exclusively from the first image and pose exclusively from the guide.
+
+
+
+Output contract: one horizontal strip containing exactly 4 isolated full-body sprites, in the specified order, evenly spaced, equal scale and ground line. Use a perfectly flat solid #FF00FF background. No text, labels, arrows, borders, grid, scenery, cast shadow, extra character, or extra panel. Keep generous magenta separation between panels. Do not add motion trails, slash arcs, glow, particles, or speed lines unless the user explicitly requested them. Outside colors already locked by the identity reference, never use pink, purple, fuchsia, magenta, or any color close to #FF00FF on the character, weapon, outline, highlight, shadow, or effect; those colors are reserved exclusively for the removable background.
+Style contract: match the supplied base character exactly: preserve its proportions, face, clothing, accessories, palette, outline weight, and rendering style; do not redesign it

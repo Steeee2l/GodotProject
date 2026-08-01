@@ -3,8 +3,9 @@ extends Node3D
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+const SHELTER_UI := preload("res://scripts/shelter_ui_components.gd")
 
-@export var interaction_radius := 3.5
+@export var interaction_radius := 4.1
 
 @onready var sprite: Sprite3D = $TrainingSprite
 
@@ -58,16 +59,25 @@ func _open_ui() -> void:
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	modal.add_child(dim)
 	var viewport_size := get_viewport().get_visible_rect().size
+	var safe := UISafeArea.get_margins(viewport_size)
+	var available_size := Vector2(
+		viewport_size.x - safe.x - safe.z,
+		viewport_size.y - safe.y - safe.w
+	)
 	compact_layout = viewport_size.x < 1040.0 or viewport_size.y < 680.0
 	narrow_layout = viewport_size.x < 760.0
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.offset_left = safe.x
+	center.offset_top = safe.y
+	center.offset_right = -safe.z
+	center.offset_bottom = -safe.w
 	modal.add_child(center)
 	var panel := PanelContainer.new()
 	panel.name = "TrainingPanel"
 	panel.custom_minimum_size = Vector2(
-		minf(1120.0, viewport_size.x - 32.0),
-		minf(780.0, viewport_size.y - 32.0)
+		minf(1120.0, available_size.x - 32.0),
+		minf(780.0, available_size.y - 32.0)
 	)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -115,30 +125,17 @@ func _rebuild_ui() -> void:
 	title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	top_row.add_child(title)
-	var resource_panel := PanelContainer.new()
-	resource_panel.custom_minimum_size = Vector2(134 if compact_layout else 168, 40)
-	resource_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	resource_panel.add_theme_stylebox_override(
-		"panel",
-		_panel_style(Color("#101716"), Color(0.66, 0.56, 0.28, 0.72), 6)
+	var resource_panel := SHELTER_UI.make_currency_chip(
+		"food",
+		GameState.format_compact_number(GameState.canned_food),
+		compact_layout,
+		not narrow_layout
 	)
-	var resource_box := HBoxContainer.new()
-	resource_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	resource_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	resource_box.add_theme_constant_override("separation", 8)
-	resource_panel.add_child(resource_box)
-	var resource_icon := TextureRect.new()
-	resource_icon.custom_minimum_size = Vector2(28, 28)
-	resource_icon.texture = UI_ICONS.get_icon("food", 38, Color("#efbd66"))
-	resource_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	resource_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	resource_box.add_child(resource_icon)
-	var resource_value := _label("통조림  %d" % GameState.canned_food, 16 if compact_layout else 18, Color("#efbd66"))
-	resource_value.name = "TrainingResourceLabel"
-	resource_value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	resource_value.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	resource_value.autowrap_mode = TextServer.AUTOWRAP_OFF
-	resource_box.add_child(resource_value)
+	resource_panel.custom_minimum_size.x = 104 if compact_layout else 148
+	resource_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var resource_value := resource_panel.find_child("ResourceValue_food", true, false) as Label
+	if resource_value != null:
+		resource_value.name = "TrainingResourceLabel"
 	top_row.add_child(resource_panel)
 	var close := _close_button()
 	close.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -199,7 +196,9 @@ func _rebuild_ui() -> void:
 	_add_training_card(tree, "endurance")
 	_add_training_card(tree, "agility")
 	_add_training_card(tree, "fieldcraft")
-	status_label = _label("통조림은 가방과 창고 보관분을 합산해 사용합니다.", 13, Color("#9db0a6"))
+	status_label = _label("", 13, Color("#9db0a6"))
+	status_label.name = "TrainingStatus"
+	status_label.custom_minimum_size.y = 18
 	content.add_child(status_label)
 
 
@@ -341,7 +340,7 @@ func _add_training_card(parent: GridContainer, node_id: String) -> void:
 		action_label.add_theme_color_override("font_color", Color("#7f8b85"))
 	else:
 		action_icon.texture = UI_ICONS.get_icon("food", 24, Color("#efbd66"))
-		action_label.text = "통조림 %d로 강화" % cost
+		action_label.text = "x%d 필요" % cost
 	_set_mouse_passthrough(card_body)
 
 
@@ -369,7 +368,7 @@ func _set_mouse_passthrough(control: Control) -> void:
 func _upgrade_training(node_id: String) -> void:
 	var result := GameState.try_upgrade_training(node_id)
 	if bool(result.get("ok", false)):
-		_rebuild_ui()
+		call_deferred("_rebuild_ui")
 		return
 	var reason := str(result.get("reason", ""))
 	status_label.text = (

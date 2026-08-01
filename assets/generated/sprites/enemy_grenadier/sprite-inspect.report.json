@@ -1,0 +1,536 @@
+{
+  "ok": true,
+  "engine": "component-row",
+  "kind": "sprite-gen-inspect-report",
+  "run_dir": "C:\\Users\\rain2\\Documents\\GitHub\\GodotProject\\assets\\generated\\sprites\\enemy_grenadier",
+  "states": [
+    "down_idle",
+    "down_right_idle",
+    "right_idle",
+    "up_right_idle",
+    "up_idle",
+    "up_left_idle",
+    "left_idle",
+    "down_left_idle",
+    "down_walk",
+    "down_right_walk",
+    "right_walk",
+    "up_right_walk",
+    "up_walk",
+    "up_left_walk",
+    "left_walk",
+    "down_left_walk"
+  ],
+  "thresholds": {
+    "histogram_min": 0.0,
+    "dhash_min": 0.55,
+    "motion_min": 0.01
+  },
+  "rows": [
+    {
+      "state": "down_idle",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/down/idle/frame-0.png",
+        "frames/down/idle/frame-1.png",
+        "frames/down/idle/frame-2.png",
+        "frames/down/idle/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9836270258662102,
+          "mean": 0.9879323667587796
+        },
+        "dhash_similarity": {
+          "min": 0.984375,
+          "mean": 0.9921875
+        },
+        "motion_presence": 0.0066207586550245095,
+        "centroid_sigma": {
+          "x": 0.19500204755798436,
+          "y": 0.05766205531445608
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "down_idle: motion presence is too low (0.0066 < 0.0100)"
+      ]
+    },
+    {
+      "state": "down_right_idle",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/down_right/idle/frame-0.png",
+        "frames/down_right/idle/frame-1.png",
+        "frames/down_right/idle/frame-2.png",
+        "frames/down_right/idle/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.955004814439151,
+          "mean": 0.9744747531780622
+        },
+        "dhash_similarity": {
+          "min": 0.96875,
+          "mean": 0.9765625
+        },
+        "motion_presence": 0.010540970945669935,
+        "centroid_sigma": {
+          "x": 0.4651073854724351,
+          "y": 0.22334889518782944
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "right_idle",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/right/idle/frame-0.png",
+        "frames/right/idle/frame-1.png",
+        "frames/right/idle/frame-2.png",
+        "frames/right/idle/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9866438149965869,
+          "mean": 0.9900495040638145
+        },
+        "dhash_similarity": {
+          "min": 1.0,
+          "mean": 1.0
+        },
+        "motion_presence": 0.010196461397058824,
+        "centroid_sigma": {
+          "x": 0.5370208078592287,
+          "y": 0.27241770203868404
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "up_right_idle",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/up_right/idle/frame-0.png",
+        "frames/up_right/idle/frame-1.png",
+        "frames/up_right/idle/frame-2.png",
+        "frames/up_right/idle/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9827897208244407,
+          "mean": 0.9864979294304259
+        },
+        "dhash_similarity": {
+          "min": 0.96875,
+          "mean": 0.9817708333333334
+        },
+        "motion_presence": 0.015018478094362745,
+        "centroid_sigma": {
+          "x": 0.4928688930401956,
+          "y": 0.22463123399131976
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "up_idle",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/up/idle/frame-0.png",
+        "frames/up/idle/frame-1.png",
+        "frames/up/idle/frame-2.png",
+        "frames/up/idle/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9839353517609536,
+          "mean": 0.9889368747850465
+        },
+        "dhash_similarity": {
+          "min": 0.96875,
+          "mean": 0.9817708333333334
+        },
+        "motion_presence": 0.0050955180249183,
+        "centroid_sigma": {
+          "x": 0.1316933915599475,
+          "y": 0.028438383198526693
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "up_idle: motion presence is too low (0.0051 < 0.0100)"
+      ]
+    },
+    {
+      "state": "up_left_idle",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/up_left/idle/frame-0.png",
+        "frames/up_left/idle/frame-1.png",
+        "frames/up_left/idle/frame-2.png",
+        "frames/up_left/idle/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9579645979345317,
+          "mean": 0.97225791854549
+        },
+        "dhash_similarity": {
+          "min": 0.96875,
+          "mean": 0.9817708333333334
+        },
+        "motion_presence": 0.01432052313112745,
+        "centroid_sigma": {
+          "x": 0.8953855874509975,
+          "y": 0.4098356386656545
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "left_idle",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/left/idle/frame-0.png",
+        "frames/left/idle/frame-1.png",
+        "frames/left/idle/frame-2.png",
+        "frames/left/idle/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9868417994218651,
+          "mean": 0.9884189789475838
+        },
+        "dhash_similarity": {
+          "min": 0.96875,
+          "mean": 0.9817708333333334
+        },
+        "motion_presence": 0.010208269505718954,
+        "centroid_sigma": {
+          "x": 0.5997861480541626,
+          "y": 0.11831502079407669
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "down_left_idle",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/down_left/idle/frame-0.png",
+        "frames/down_left/idle/frame-1.png",
+        "frames/down_left/idle/frame-2.png",
+        "frames/down_left/idle/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9478702685590267,
+          "mean": 0.9653142040637801
+        },
+        "dhash_similarity": {
+          "min": 0.90625,
+          "mean": 0.9401041666666666
+        },
+        "motion_presence": 0.02395083358864379,
+        "centroid_sigma": {
+          "x": 1.4675244302399482,
+          "y": 0.5341595909761129
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "down_walk",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/down/walk/frame-0.png",
+        "frames/down/walk/frame-1.png",
+        "frames/down/walk/frame-2.png",
+        "frames/down/walk/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9787047590831228,
+          "mean": 0.9832658072311372
+        },
+        "dhash_similarity": {
+          "min": 0.71875,
+          "mean": 0.8177083333333334
+        },
+        "motion_presence": 0.08006264680351308,
+        "centroid_sigma": {
+          "x": 7.498889480040699,
+          "y": 0.8970282793508844
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "down_right_walk",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/down_right/walk/frame-0.png",
+        "frames/down_right/walk/frame-1.png",
+        "frames/down_right/walk/frame-2.png",
+        "frames/down_right/walk/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9715004788505385,
+          "mean": 0.9781392229949049
+        },
+        "dhash_similarity": {
+          "min": 0.890625,
+          "mean": 0.9375
+        },
+        "motion_presence": 0.0631344464869281,
+        "centroid_sigma": {
+          "x": 2.992661880802305,
+          "y": 2.3148507417193698
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "right_walk",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/right/walk/frame-0.png",
+        "frames/right/walk/frame-1.png",
+        "frames/right/walk/frame-2.png",
+        "frames/right/walk/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.978592691144972,
+          "mean": 0.9835611059147018
+        },
+        "dhash_similarity": {
+          "min": 0.859375,
+          "mean": 0.9140625
+        },
+        "motion_presence": 0.04799294066584967,
+        "centroid_sigma": {
+          "x": 1.8106491269630536,
+          "y": 1.9004614568495366
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "up_right_walk",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/up_right/walk/frame-0.png",
+        "frames/up_right/walk/frame-1.png",
+        "frames/up_right/walk/frame-2.png",
+        "frames/up_right/walk/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9735114644970414,
+          "mean": 0.9830960305719921
+        },
+        "dhash_similarity": {
+          "min": 1.0,
+          "mean": 1.0
+        },
+        "motion_presence": 0.025964275684232027,
+        "centroid_sigma": {
+          "x": 0.0,
+          "y": 0.0
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "up_walk",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/up/walk/frame-0.png",
+        "frames/up/walk/frame-1.png",
+        "frames/up/walk/frame-2.png",
+        "frames/up/walk/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9840514053254438,
+          "mean": 0.9891441691321499
+        },
+        "dhash_similarity": {
+          "min": 0.96875,
+          "mean": 0.984375
+        },
+        "motion_presence": 0.028866357741013073,
+        "centroid_sigma": {
+          "x": 0.0,
+          "y": 0.0
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "up_left_walk",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/up_left/walk/frame-0.png",
+        "frames/up_left/walk/frame-1.png",
+        "frames/up_left/walk/frame-2.png",
+        "frames/up_left/walk/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.96739008431154,
+          "mean": 0.9755252267468837
+        },
+        "dhash_similarity": {
+          "min": 0.890625,
+          "mean": 0.9375
+        },
+        "motion_presence": 0.037072275199142156,
+        "centroid_sigma": {
+          "x": 0.4730830175556294,
+          "y": 1.5905622053294182
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "left_walk",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/left/walk/frame-0.png",
+        "frames/left/walk/frame-1.png",
+        "frames/left/walk/frame-2.png",
+        "frames/left/walk/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9153331761013611,
+          "mean": 0.9474174818435057
+        },
+        "dhash_similarity": {
+          "min": 0.796875,
+          "mean": 0.8802083333333334
+        },
+        "motion_presence": 0.08248155381944444,
+        "centroid_sigma": {
+          "x": 5.109540416206228,
+          "y": 2.0531700063950815
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "down_left_walk",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/down_left/walk/frame-0.png",
+        "frames/down_left/walk/frame-1.png",
+        "frames/down_left/walk/frame-2.png",
+        "frames/down_left/walk/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9633494247692909,
+          "mean": 0.9747461362246931
+        },
+        "dhash_similarity": {
+          "min": 0.875,
+          "mean": 0.9166666666666666
+        },
+        "motion_presence": 0.05651265063316993,
+        "centroid_sigma": {
+          "x": 2.8501456488409587,
+          "y": 0.9655344879278863
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    }
+  ],
+  "errors": [],
+  "warnings": [
+    "down_idle: motion presence is too low (0.0066 < 0.0100)",
+    "up_idle: motion presence is too low (0.0051 < 0.0100)"
+  ]
+}

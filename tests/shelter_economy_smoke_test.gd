@@ -196,6 +196,11 @@ func _run() -> void:
 		or workbench_detail_scroll == null
 	):
 		_fail("workbench responsive panel structure is missing")
+	var workbench_resource_strip := workbench_layer.find_child("WorkbenchResourceStrip", true, false) as HFlowContainer
+	if workbench_resource_strip == null:
+		_fail("workbench icon resource strip is missing")
+	for resource_id in ["scrap", "canned_food", "scope_lens", "rubber_gasket", "magazine_spring"]:
+		_assert_resource_icon(workbench_resource_strip, str(resource_id), "workbench")
 	var workbench_viewport_size := workbench.get_viewport().get_visible_rect().size
 	if (
 		workbench_panel.size.x > workbench_viewport_size.x
@@ -264,6 +269,7 @@ func _run() -> void:
 	var training_scroll := root.find_child("TrainingTreeScroll", true, false) as ScrollContainer
 	if training_panel == null or training_resource == null or training_scroll == null:
 		_fail("training facility responsive panel structure is missing")
+	_assert_resource_icon(training_panel, "food", "training facility")
 	_assert_compact_close_button(training_panel, "training facility")
 	if training_resource.autowrap_mode != TextServer.AUTOWRAP_OFF:
 		_fail("training facility resource count can collapse into vertical text")
@@ -285,6 +291,13 @@ func _run() -> void:
 	var bank_body := root.find_child("ScratcherBankBody", true, false) as BoxContainer
 	if bank_panel == null or bank_body == null:
 		_fail("scratcher bank responsive panel structure is missing")
+	_assert_resource_icon(bank_panel, "scrap", "scratcher bank")
+	_assert_resource_icon(bank_panel, "catnip", "scratcher bank")
+	var bank_summary := bank_panel.find_child("ScratcherBankSummary", true, false) as GridContainer
+	if bank_summary == null or bank_summary.get_child_count() != 3:
+		_fail("scratcher bank summary must contain only three decision-critical values")
+	if _find_label_with_text(bank_panel, "보유 자원") != null:
+		_fail("scratcher bank still duplicates its wallet as a text block")
 	_assert_compact_close_button(bank_panel, "scratcher bank")
 	if _find_button_with_text(bank_panel, "진행 정산") != null:
 		_fail("scratcher bank still exposes the redundant settlement action")
@@ -320,6 +333,11 @@ func _run() -> void:
 	var catnip_body := root.find_child("CatnipScraperBody", true, false) as BoxContainer
 	if catnip_panel == null or catnip_body == null:
 		_fail("catnip scraper responsive panel structure is missing")
+	_assert_resource_icon(catnip_panel, "catnip", "catnip scraper")
+	_assert_resource_icon(catnip_panel, "scrap", "catnip scraper")
+	var catnip_summary := catnip_panel.find_child("CatnipScraperSummary", true, false) as GridContainer
+	if catnip_summary == null or catnip_summary.get_child_count() != 2:
+		_fail("catnip scraper summary must contain only production and worker values")
 	_assert_compact_close_button(catnip_panel, "catnip scraper")
 	if _find_button_with_text(catnip_panel, "진행 정산") != null:
 		_fail("catnip scraper still exposes the redundant settlement action")
@@ -417,6 +435,20 @@ func _find_button_with_text(scope: Node, text: String) -> Button:
 		if button != null and button.text == text:
 			return button
 	return null
+
+
+func _find_label_with_text(scope: Node, text: String) -> Label:
+	for node in scope.find_children("*", "Label", true, false):
+		var label := node as Label
+		if label != null and label.text == text:
+			return label
+	return null
+
+
+func _assert_resource_icon(scope: Node, resource_id: String, context: String) -> void:
+	var icon := scope.find_child("ResourceIcon_%s" % resource_id, true, false) as TextureRect
+	if icon == null or icon.texture == null:
+		_fail("%s does not show the %s resource icon" % [context, resource_id])
 
 
 func _assert_resident_card(card: Button, resident_id: String, display_name: String) -> void:

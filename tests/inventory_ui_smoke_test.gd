@@ -45,8 +45,8 @@ func _run() -> void:
 	assert(ui.inventory_panel.custom_minimum_size.x <= 560.0, "The default inventory panel must remain compact.")
 	assert(not ui.weapon_panel.visible, "Weapon detail must stay hidden until the weapon is selected.")
 	assert(ui.equipped_grid.get_child_count() == 4, "Primary, body, head, and footwear equipment slots should be visible.")
-	assert(int(state.call("get_raid_bag_used_slots")) == 11, "The MP5, rifle ammunition, and medkits must consume eleven logical slots.")
-	assert(ui.bag_slot_usage_label.text.ends_with("/ 15칸"), "The bag header must expose used slots against total capacity.")
+	assert(int(state.call("get_raid_bag_used_slots")) == 3, "The spare MP5 and two stackable item types must use three slots.")
+	assert(ui.bag_slot_usage_label.text == "남은 슬롯 12 / 15", "The bag header must expose remaining slots.")
 	for equipment in ui.equipped_grid.get_children():
 		assert(((equipment as Control).size_flags_horizontal & Control.SIZE_EXPAND) != 0, "Equipment slots must share the full panel width.")
 		assert(not (equipment as Button).text.contains("하수구"), "Extraction objectives do not belong in equipment.")
@@ -94,6 +94,7 @@ func _run() -> void:
 	var scope_card := ui.bag_grid.get_node("BagItem_scope_2x") as Button
 	assert(scope_card != null, "Owned attachments must be represented in the bag grid.")
 	scope_card.pressed.emit()
+	await get_tree().process_frame
 	assert(ui.item_detail_title.text.contains("스코프"), "Selecting a bag item must reveal its details outside the slot.")
 	assert((state.get("equipped_weapon_mods") as Array).has("scope_2x"), "One click on an owned attachment must equip it while weapon details are open.")
 	assert(int(state.call("get_weapon_mod_count", "scope_2x")) == 0, "Equipping must remove the finished attachment from the bag.")
@@ -104,19 +105,32 @@ func _run() -> void:
 	assert(int(state.call("get_weapon_mod_count", "scope_2x")) == 1, "Unequipping must return the finished attachment to the bag.")
 	ui._unequip_mod("scope_2x")
 	assert(int(state.call("get_weapon_mod_count", "scope_2x")) == 1, "Repeated unequip events must not duplicate attachments.")
+	finished_mods["scope_2x"] = 0
+	ui._refresh_contents()
+	var raw_scope_card := ui.bag_grid.get_node("BagItem_scope_lens") as Button
+	assert(raw_scope_card != null, "Raw scope lenses must remain visible in the bag.")
+	assert(raw_scope_card.get_node_or_null("CraftingMaterialBadge") != null, "Raw components need a visible crafting-material badge.")
+	raw_scope_card.pressed.emit()
+	assert(not ui.item_action_button.visible, "Raw crafting materials must never expose an attachment action.")
+	assert(ui.item_detail_title.text.contains("제작 재료"), "Raw component details must identify the item as crafting material.")
+	assert(ui.item_detail_description.text.contains("직접 장착할 수 없습니다"), "Raw component details must explain that direct installation is unavailable.")
+	assert(not (state.get("equipped_weapon_mods") as Array).has("scope_2x"), "Selecting a raw component must not install a weapon attachment.")
+	assert(int(state.call("get_mod_component_count", "scope_lens")) == 1, "Inspecting a raw component must not consume it.")
 
 	state.call("add_equipment", "scav_vest", 1)
 	ui._refresh_contents()
 	var armor_card := ui.bag_grid.get_node("BagItem_scav_vest") as Button
 	assert(armor_card != null, "Looted armor must appear in the bag as an equippable item.")
 	armor_card.pressed.emit()
-	assert(ui.item_detail_description.text.contains("피해 감소 12%"), "Armor details must show the applied damage reduction stat.")
+	assert(ui.item_detail_description.text.contains("[몸 방어구]"), "Armor details must identify the equipped slot.")
+	assert(ui.item_detail_description.text.contains("받는 피해 -12%"), "Armor details must show the applied damage reduction stat.")
 	ui.item_action_button.pressed.emit()
 	assert(str(state.get("equipped_body_armor_id")) == "scav_vest", "The armor action must equip the selected body armor.")
 	assert(int(state.call("get_equipment_count", "scav_vest")) == 0, "Equipped armor must leave the bag inventory.")
 	armor_card = ui.bag_grid.get_node("BagItem_scav_vest") as Button
 	assert(armor_card.get_node_or_null("EquippedBadge") is Label, "Equipped armor must remain visible with an E badge.")
 	ui._select_equipped_equipment("body")
+	assert(ui.item_detail_description.text.contains("현재 장착 중"), "Equipped armor must retain its stat detail and status.")
 	ui.item_action_button.pressed.emit()
 	assert(str(state.get("equipped_body_armor_id")).is_empty(), "The equipped armor slot must support unequip.")
 	assert(int(state.call("get_equipment_count", "scav_vest")) == 1, "Unequipped armor must return to the bag.")
@@ -127,13 +141,23 @@ func _run() -> void:
 	assert(footwear_card != null, "Looted footwear must appear in the bag.")
 	footwear_card.pressed.emit()
 	assert(ui.item_detail_description.text.contains("이동 속도 +6%"), "Footwear details must show movement speed.")
-	assert(ui.item_detail_description.text.contains("대시 스태미나 소모 -8%"), "Footwear details must show stamina cost reduction.")
+	assert(ui.item_detail_description.text.contains("[신발]"), "Footwear details must identify the equipped slot.")
+	assert(ui.item_detail_description.text.contains("대시 스태미나 -8%"), "Footwear details must show stamina cost reduction.")
 	ui.item_action_button.pressed.emit()
 	assert(str(state.get("equipped_footwear_id")) == "patched_sneakers", "Footwear must equip into the feet slot.")
 	assert(is_equal_approx(float(state.call("get_move_speed_multiplier")), 1.06), "Equipped lightweight footwear must increase movement speed.")
 	assert(is_equal_approx(float(state.call("get_stamina_cost_multiplier")), 0.92), "Equipped lightweight footwear must reduce dash stamina cost.")
 	footwear_card = ui.bag_grid.get_node("BagItem_patched_sneakers") as Button
 	assert(footwear_card.get_node_or_null("EquippedBadge") is Label, "Equipped footwear must keep its bag slot marker.")
+
+	state.call("add_equipment", "patched_helmet", 1)
+	ui._refresh_contents()
+	var helmet_card := ui.bag_grid.get_node("BagItem_patched_helmet") as Button
+	assert(helmet_card != null, "Looted helmets must appear in the bag.")
+	helmet_card.pressed.emit()
+	assert(ui.item_detail_description.text.contains("[머리 방어구]"), "Helmet details must identify the equipped slot.")
+	assert(ui.item_detail_description.text.contains("받는 피해 -8%"), "Helmet details must show damage reduction.")
+	assert(ui.item_detail_description.max_lines_visible >= 6, "Equipment descriptions must have enough visible lines for all stats.")
 
 	var medkit_card := ui.bag_grid.get_node("BagItem_medkit") as Button
 	assert(medkit_card != null, "General consumables must appear as selectable bag items.")

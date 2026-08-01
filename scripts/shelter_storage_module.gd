@@ -3,6 +3,7 @@ extends Node3D
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+const SHELTER_UI := preload("res://scripts/shelter_ui_components.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 
 const ITEM_NAMES := {
@@ -43,12 +44,11 @@ const COMPONENT_TEXTURES := {
 	"magazine_spring": "res://assets/items/mod_components/magazine_spring.png",
 }
 
-@export var interaction_radius := 3.8
+@export var interaction_radius := 4.0
 
-const WALL_ALIGNED_TEXTURE := preload(
-	"res://assets/interiors/modules/shelter_storage_wall_front_v5.png"
+const FACTORY_CELL_TEXTURE := preload(
+	"res://assets/interiors/factory/factory_logistics_cell_v1.png"
 )
-const WALL_TEXTURE_REGION := Rect2(49.0, 145.0, 1515.0, 650.0)
 
 @onready var sprite: Sprite3D = $StorageSprite
 
@@ -61,12 +61,13 @@ func _ready() -> void:
 	add_to_group("shelter_module")
 	add_to_group("shelter_storage")
 	set_meta("module_kind", "storage")
-	sprite.texture = WALL_ALIGNED_TEXTURE
-	sprite.position = Vector3(0.0, 1.245, 0.055)
-	sprite.pixel_size = 0.00383
-	sprite.billboard = BaseMaterial3D.BILLBOARD_DISABLED
-	sprite.region_enabled = true
-	sprite.region_rect = WALL_TEXTURE_REGION
+	sprite.texture = FACTORY_CELL_TEXTURE
+	sprite.position = Vector3(0.0, 2.02, 0.02)
+	sprite.pixel_size = 0.0038
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.region_enabled = false
+	sprite.no_depth_test = false
+	sprite.render_priority = 12
 
 
 func get_interaction_prompt() -> String:
@@ -109,13 +110,18 @@ func _open_ui() -> void:
 	modal.add_child(dim)
 
 	var viewport_size := get_viewport().get_visible_rect().size
+	var safe := UISafeArea.get_margins(viewport_size)
+	var available_size := Vector2(
+		viewport_size.x - safe.x - safe.z,
+		viewport_size.y - safe.y - safe.w
+	)
 	var outer_margin := 8 if viewport_size.y < 640.0 else 20
 	var safe_margin := MarginContainer.new()
 	safe_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	safe_margin.add_theme_constant_override("margin_left", outer_margin)
-	safe_margin.add_theme_constant_override("margin_top", outer_margin)
-	safe_margin.add_theme_constant_override("margin_right", outer_margin)
-	safe_margin.add_theme_constant_override("margin_bottom", outer_margin)
+	safe_margin.add_theme_constant_override("margin_left", roundi(outer_margin + safe.x))
+	safe_margin.add_theme_constant_override("margin_top", roundi(outer_margin + safe.y))
+	safe_margin.add_theme_constant_override("margin_right", roundi(outer_margin + safe.z))
+	safe_margin.add_theme_constant_override("margin_bottom", roundi(outer_margin + safe.w))
 	modal.add_child(safe_margin)
 
 	var center := CenterContainer.new()
@@ -125,8 +131,8 @@ func _open_ui() -> void:
 	var panel := PanelContainer.new()
 	panel.name = "ShelterStoragePanel"
 	panel.custom_minimum_size = Vector2(
-		minf(1120.0, viewport_size.x - outer_margin * 2.0),
-		minf(720.0, viewport_size.y - outer_margin * 2.0)
+		minf(1120.0, available_size.x - outer_margin * 2.0),
+		minf(720.0, available_size.y - outer_margin * 2.0)
 	)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -163,33 +169,47 @@ func _rebuild_ui() -> void:
 	var viewport_size := get_viewport().get_visible_rect().size
 	var narrow := viewport_size.x < 1040.0
 	var compact := viewport_size.y < 680.0
-	var grid_size := GameState.get_storage_grid_size()
-
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 12)
+	var header := VBoxContainer.new()
+	header.name = "StorageHeader"
+	header.add_theme_constant_override("separation", 8)
 	content.add_child(header)
+	var top_row := HBoxContainer.new()
+	top_row.add_theme_constant_override("separation", 12)
+	header.add_child(top_row)
 	var title_box := VBoxContainer.new()
 	title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_box.add_theme_constant_override("separation", 2)
-	header.add_child(title_box)
-	title_box.add_child(_label("쉘터 창고", 26 if not compact else 22, Color("#e7ddbd")))
-	title_box.add_child(_label(
-		"장비 보관  ·  Lv.%d  ·  %d×%d 슬롯" % [GameState.storage_level, grid_size.y, grid_size.x],
-		12,
-		Color("#91a7a2")
-	))
+	top_row.add_child(title_box)
+	title_box.add_child(_label("쉘터 창고  Lv.%d" % GameState.storage_level, 26 if not compact else 22, Color("#e7ddbd")))
+	title_box.add_child(_label("가방과 보관함 사이에서 장비를 이동합니다.", 12, Color("#91a7a2")))
 	var close := _icon_button("close", "닫기", Color("#dce7e4"))
 	close.name = "CloseButton"
 	close.pressed.connect(_close_ui)
-	header.add_child(close)
+	top_row.add_child(close)
+	var wallet := HFlowContainer.new()
+	wallet.name = "StorageWallet"
+	wallet.add_theme_constant_override("h_separation", 8)
+	wallet.add_theme_constant_override("v_separation", 6)
+	header.add_child(wallet)
+	wallet.add_child(SHELTER_UI.make_currency_chip(
+		"scrap",
+		GameState.format_compact_number(GameState.scrap),
+		compact,
+		not narrow
+	))
+	wallet.add_child(SHELTER_UI.make_currency_chip(
+		"churu",
+		GameState.format_compact_number(GameState.churu),
+		compact,
+		not narrow
+	))
 
 	var summary := GridContainer.new()
 	summary.name = "StorageSummary"
-	summary.columns = 1 if viewport_size.x < 700.0 else 3
+	summary.columns = 1 if viewport_size.x < 700.0 else 2
 	summary.add_theme_constant_override("h_separation", 8)
 	summary.add_theme_constant_override("v_separation", 8)
 	content.add_child(summary)
-	summary.add_child(_summary_card("창고 등급", "Lv.%d" % GameState.storage_level, "secure"))
 	summary.add_child(_summary_card(
 		"사용 슬롯",
 		"%d / %d" % [GameState.get_storage_used_slots(), GameState.get_storage_capacity()],
@@ -384,14 +404,23 @@ func _upgrade_card() -> Control:
 		return _summary_card("확장", "최대 등급", "upgrade")
 	var scrap_cost := int(cost.get("scrap", 0))
 	var churu_cost := int(cost.get("churu", 0))
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(0, 58)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override(
+		"panel",
+		_panel_style(Color(0.043, 0.039, 0.025, 0.96), Color("#806b38"))
+	)
+	var margin := _margin(8, 6)
+	panel.add_child(margin)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 7)
+	margin.add_child(row)
 	var button := Button.new()
 	button.name = "StorageUpgradeButton"
-	button.custom_minimum_size = Vector2(0, 58)
-	button.text = "Lv.%d 확장\n고철 %s%s" % [
-		GameState.storage_level + 1,
-		GameState.format_compact_number(scrap_cost),
-		"  ·  츄르 %d" % churu_cost if churu_cost > 0 else "",
-	]
+	button.custom_minimum_size = Vector2(116, 42)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.text = "Lv.%d 확장" % (GameState.storage_level + 1)
 	button.icon = UI_ICONS.get_icon("upgrade", 30, Color("#e0c16d"))
 	button.expand_icon = true
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -407,7 +436,16 @@ func _upgrade_card() -> Control:
 		_panel_style(Color(0.075, 0.063, 0.035, 0.98), Color("#d2b45d"), 2)
 	)
 	button.pressed.connect(_upgrade_storage)
-	return button
+	row.add_child(button)
+	row.add_child(SHELTER_UI.make_currency_chip(
+		"scrap",
+		GameState.format_compact_number(scrap_cost),
+		true,
+		false
+	))
+	if churu_cost > 0:
+		row.add_child(SHELTER_UI.make_currency_chip("churu", str(churu_cost), true, false))
+	return panel
 
 
 func _summary_card(title: String, value: String, icon_name: String) -> Control:
@@ -471,8 +509,11 @@ func _deposit_item(item_type: String, item_id: String) -> void:
 	var amount := _transfer_amount(item_type, available)
 	var result := GameState.deposit_storage_item(item_type, item_id, amount) as Dictionary
 	if bool(result.get("ok", false)):
-		_rebuild_ui()
-		_set_feedback("%s %d개를 보관했습니다." % [_item_name(item_id), int(result.get("moved", 0))], true)
+		call_deferred(
+			"_rebuild_after_transfer",
+			"%s %d개를 보관했습니다." % [_item_name(item_id), int(result.get("moved", 0))],
+			true
+		)
 	else:
 		_set_feedback(str(result.get("reason", "보관하지 못했습니다.")), false)
 
@@ -486,18 +527,31 @@ func _withdraw_slot(slot_index: int) -> void:
 	var amount := _transfer_amount(item_type, int(entry.get("count", 0)))
 	var result := GameState.withdraw_storage_item(slot_index, amount) as Dictionary
 	if bool(result.get("ok", false)):
-		_rebuild_ui()
-		_set_feedback("%s %d개를 꺼냈습니다." % [_item_name(item_id), int(result.get("moved", 0))], true)
+		call_deferred(
+			"_rebuild_after_transfer",
+			"%s %d개를 꺼냈습니다." % [_item_name(item_id), int(result.get("moved", 0))],
+			true
+		)
 	else:
 		_set_feedback(str(result.get("reason", "꺼내지 못했습니다.")), false)
 
 
 func _upgrade_storage() -> void:
 	if GameState.try_upgrade_storage():
-		_rebuild_ui()
-		_set_feedback("창고가 Lv.%d로 확장되었습니다." % GameState.storage_level, true)
+		call_deferred(
+			"_rebuild_after_transfer",
+			"창고가 Lv.%d로 확장되었습니다." % GameState.storage_level,
+			true
+		)
 	else:
 		_set_feedback("창고 확장 재료가 부족합니다.", false)
+
+
+func _rebuild_after_transfer(message: String, success: bool) -> void:
+	if not is_inside_tree() or not is_instance_valid(content):
+		return
+	_rebuild_ui()
+	_set_feedback(message, success)
 
 
 func _transfer_amount(item_type: String, available: int) -> int:

@@ -19,6 +19,8 @@ config/features=PackedStringArray("4.5")
 GameState="*res://scripts/game_state.gd"
 ShelterDebugShortcut="*res://scripts/shelter_debug_shortcut.gd"
 BuildingRunState="*res://scripts/building_run_state.gd"
+AccessibilitySettings="*res://scripts/accessibility_settings.gd"
+SceneTransition="*res://scripts/scene_transition_guard.gd"
 
 [display]
 

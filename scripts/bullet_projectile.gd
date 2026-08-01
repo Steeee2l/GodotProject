@@ -1,5 +1,6 @@
 extends Area3D
 
+const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
 const SPEED := 46.0
 const MAX_LIFETIME := 1.15
 const PROJECTILE_COLLISION_RADIUS := 0.26
@@ -26,8 +27,12 @@ var last_motion_origin := Vector3.INF
 
 func _ready() -> void:
 	add_to_group("projectile")
-	collision_layer = 4 if not hostile else 8
-	collision_mask = 3
+	collision_layer = (
+		COLLISION_PROFILES.PLAYER_PROJECTILE_LAYER
+		if not hostile
+		else COLLISION_PROFILES.ENEMY_PROJECTILE_LAYER
+	)
+	collision_mask = COLLISION_PROFILES.PROJECTILE_MASK
 	monitoring = true
 	body_entered.connect(_on_body_entered)
 	_build_neon_projectile()
