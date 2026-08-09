@@ -343,6 +343,10 @@ var boss_alert_panel: PanelContainer
 var boss_alert_title: Label
 var boss_alert_subtitle: Label
 var boss_alert_tween: Tween
+# 배너 스택이 자리를 양보시킬 수 있으므로, "떠 있어야 하는가"를 패널의
+# visible과 분리해서 들고 있어야 한다. visible을 입력이자 출력으로 쓰면
+# 한 번 접힌 배너가 다시 뜨지 못한다.
+var boss_alert_active := false
 var boss_defeat_overlay: Control
 var boss_defeat_flash: ColorRect
 var boss_defeat_panel: PanelContainer
@@ -637,8 +641,8 @@ func _physics_process(delta: float) -> void:
 	hit_stop_damage_accumulator = 0
 	if raid_pressure_reveal_time > 0.0:
 		raid_pressure_reveal_time = maxf(0.0, raid_pressure_reveal_time - delta)
-		if raid_pressure_reveal_time <= 0.0 and is_instance_valid(hud.raid_pressure_panel):
-			hud.raid_pressure_panel.visible = false
+		if raid_pressure_reveal_time <= 0.0:
+			_layout_center_top_banners()
 	_update_melee_attack(delta)
 	aim_hold_time = maxf(0.0, aim_hold_time - delta)
 	player_hit_stun_time = maxf(0.0, player_hit_stun_time - delta)
@@ -1890,7 +1894,8 @@ func _show_boss_alert(display_name: String) -> void:
 		if GameState.subway_story_stage >= 1
 		else "피로가 쌓인 생존자의 흔적을 추적해 접근합니다."
 	)
-	boss_alert_panel.visible = true
+	boss_alert_active = true
+	_layout_center_top_banners()
 	boss_alert_panel.modulate.a = 0.0
 	boss_alert_panel.scale = Vector2(0.96, 0.96)
 	boss_alert_panel.pivot_offset = boss_alert_panel.size * 0.5
@@ -1902,8 +1907,8 @@ func _show_boss_alert(display_name: String) -> void:
 	boss_alert_tween.tween_interval(3.2)
 	boss_alert_tween.tween_property(boss_alert_panel, "modulate:a", 0.0, 0.42)
 	boss_alert_tween.tween_callback(func() -> void:
-		if boss_alert_panel:
-			boss_alert_panel.visible = false
+		boss_alert_active = false
+		_layout_center_top_banners()
 	)
 
 
@@ -2346,6 +2351,77 @@ func _get_loot_glow_texture() -> ImageTexture:
 	return loot_glow_texture
 
 
+func _layout_center_top_banners() -> void:
+	# 보스 경고·긴장도 변화·잭팟·돌발사건이 각자 자기 offset을 고집하고 있어서
+	# 둘 이상 동시에 뜨면 반드시 겹쳤다. 보스 경고는 반응형 배치조차 없었다.
+	# 하나의 세로 스택으로 묶고, 우선순위가 높은 것부터 위에서 채운다.
+	#
+	# 배너가 뜨고 지는 순간마다 다시 불려야 하므로 전체 레이아웃과 분리해 둔다.
+	var viewport_size := get_viewport().get_visible_rect().size
+	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
+		return
+	var ui_scale := clampf(
+		minf(viewport_size.x / 1360.0, viewport_size.y / 780.0)
+		* float(AccessibilitySettings.ui_scale),
+		0.62,
+		1.5
+	)
+	var top_margin := maxf(
+		UI_SAFE_AREA.get_margins(viewport_size).y,
+		clampf(viewport_size.y * 0.018, 8.0, 26.0)
+	)
+	var hud_blocked := _is_inventory_open() or _is_tactical_map_open() or lore_reader.is_open()
+	# 폰 세로 390px 화면에서 배너 셋이면 화면의 절반이 사라진다. 동시에 보이는
+	# 수를 제한하고, 넘치면 우선순위가 낮은 쪽을 접는다.
+	var banner_limit := 2 if viewport_size.y < 520.0 else 3
+	var banner_gap := clampf(8.0 * ui_scale, 6.0, 12.0)
+	var banner_cursor := top_margin
+	var banner_shown := 0
+	for entry in [
+		[
+			boss_alert_panel,
+			boss_alert_active and not hud_blocked,
+			clampf(viewport_size.x * 0.5, 340.0, 560.0),
+			clampf(96.0 * ui_scale, 84.0, 104.0),
+		],
+		[
+			hud.raid_pressure_panel,
+			raid_pressure_reveal_time > 0.0 and not hud_blocked,
+			clampf(viewport_size.x * 0.42, 300.0, 460.0),
+			clampf(74.0 * ui_scale, 64.0, 84.0),
+		],
+		[
+			hud.jackpot_hud,
+			hud.jackpot_hud != null and not hud_blocked,
+			clampf(viewport_size.x * 0.38, 310.0, 430.0),
+			clampf(62.0 * ui_scale, 58.0, 68.0),
+		],
+		[
+			hud.dynamic_incident_hud,
+			dynamic_incident_state == "active" and not hud_blocked,
+			clampf(viewport_size.x * 0.46, 330.0, 500.0),
+			clampf(76.0 * ui_scale, 68.0, 84.0),
+		],
+	]:
+		var banner := entry[0] as Control
+		if banner == null:
+			continue
+		var wants_visible := bool(entry[1]) and banner_shown < banner_limit
+		banner.visible = wants_visible
+		if not wants_visible:
+			continue
+		var banner_w := float(entry[2])
+		var banner_h := float(entry[3])
+		banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
+		banner.offset_left = -banner_w * 0.5
+		banner.offset_right = banner_w * 0.5
+		banner.offset_top = banner_cursor
+		banner.offset_bottom = banner_cursor + banner_h
+		banner.pivot_offset = Vector2(banner_w * 0.5, banner_h * 0.5)
+		banner_cursor += banner_h + banner_gap
+		banner_shown += 1
+
+
 func _apply_hud_layout() -> void:
 	var viewport_size := get_viewport().get_visible_rect().size
 	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
@@ -2499,38 +2575,7 @@ func _apply_hud_layout() -> void:
 		hud.fatigue_panel.offset_bottom = right_column_top + fatigue_h
 		right_column_top = hud.fatigue_panel.offset_bottom
 
-	if hud.raid_pressure_panel:
-		# 상시 표시가 아니라 "방금 바뀌었다"는 알림이다. 화면 중앙 위쪽, 시선이
-		# 자연스럽게 지나가는 자리에 잠깐만 띄운다.
-		var pressure_w := clampf(viewport_size.x * 0.42, 300.0, 460.0)
-		var pressure_h := clampf(74.0 * ui_scale, 64.0, 84.0)
-		hud.raid_pressure_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-		hud.raid_pressure_panel.offset_left = -pressure_w * 0.5
-		hud.raid_pressure_panel.offset_right = pressure_w * 0.5
-		hud.raid_pressure_panel.offset_top = top_margin + 10.0
-		hud.raid_pressure_panel.offset_bottom = top_margin + 10.0 + pressure_h
-		hud.raid_pressure_panel.pivot_offset = Vector2(pressure_w * 0.5, pressure_h * 0.5)
-		hud.raid_pressure_panel.visible = raid_pressure_reveal_time > 0.0 and not hud_blocked
-	if hud.jackpot_hud:
-		var objective_width := clampf(viewport_size.x * 0.38, 310.0, 430.0)
-		var jackpot_objective_height := clampf(62.0 * ui_scale, 58.0, 68.0)
-		hud.jackpot_hud.set_anchors_preset(Control.PRESET_CENTER_TOP)
-		hud.jackpot_hud.offset_left = -objective_width * 0.5
-		hud.jackpot_hud.offset_top = top_margin
-		hud.jackpot_hud.offset_right = objective_width * 0.5
-		hud.jackpot_hud.offset_bottom = top_margin + jackpot_objective_height
-		hud.jackpot_hud.visible = not hud_blocked
-	if hud.dynamic_incident_hud:
-		var incident_width := clampf(viewport_size.x * 0.46, 330.0, 500.0)
-		hud.dynamic_incident_hud.set_anchors_preset(Control.PRESET_CENTER_TOP)
-		hud.dynamic_incident_hud.offset_left = -incident_width * 0.5
-		hud.dynamic_incident_hud.offset_top = top_margin + 72.0
-		hud.dynamic_incident_hud.offset_right = incident_width * 0.5
-		hud.dynamic_incident_hud.offset_bottom = top_margin + 148.0
-		hud.dynamic_incident_hud.visible = (
-			dynamic_incident_state == "active"
-			and not hud_blocked
-		)
+	_layout_center_top_banners()
 
 	# 하한 96px은 짧은 화면에서 버튼 하나가 높이의 25%를 차지했다. 비율을 따르되
 	# 손가락이 닿는 최소치(68px)까지만 내려간다.
@@ -4478,7 +4523,11 @@ func _show_pressure_change_notice(previous: float, current: float) -> void:
 	# 다음 판에도 조금 더 버틸 이유가 생긴다.
 	if not is_instance_valid(hud.raid_pressure_panel):
 		return
-	hud.raid_pressure_panel.visible = true
+	# 배너가 하나 늘었으니 스택을 다시 잡는다. 보스 경고와 동시에 뜰 수 있다.
+	_layout_center_top_banners()
+	if not hud.raid_pressure_panel.visible:
+		# 이미 자리가 꽉 찼다면 조용히 접힌다. 알림이 서로를 덮지는 않는다.
+		return
 	if is_instance_valid(hud.raid_pressure_detail):
 		hud.raid_pressure_detail.text = "전리품 ×%.2f  →  ×%.2f" % [previous, current]
 	hud.raid_pressure_panel.modulate = Color(1.0, 1.0, 1.0, 0.0)
@@ -4538,8 +4587,7 @@ func _complete_raid_opportunity(point: Node3D) -> void:
 		spawned_count = incidents._spawn_dynamic_incident_rewards(point.global_position)
 		dynamic_incident_state = "claimed"
 		dynamic_incident_site = null
-		if is_instance_valid(hud.dynamic_incident_hud):
-			hud.dynamic_incident_hud.visible = false
+		_layout_center_top_banners()
 		if is_instance_valid(tactical_map) and tactical_map.has_method("remove_raid_marker"):
 			tactical_map.call("remove_raid_marker", "dynamic_convoy")
 		_show_field_notice("추락 수송품 확보 · 전리품 %d개" % spawned_count)

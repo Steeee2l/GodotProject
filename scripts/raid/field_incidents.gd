@@ -238,8 +238,7 @@ func _update_dynamic_incident(delta: float) -> void:
 
 func _expire_dynamic_incident() -> void:
 	host.dynamic_incident_state = "expired"
-	if is_instance_valid(host.hud.dynamic_incident_hud):
-		host.hud.dynamic_incident_hud.visible = false
+	host._layout_center_top_banners()
 	if is_instance_valid(host.tactical_map) and host.tactical_map.has_method("remove_raid_marker"):
 		host.tactical_map.call("remove_raid_marker", "dynamic_convoy")
 	if is_instance_valid(host.dynamic_incident_site):
@@ -365,7 +364,9 @@ func _spawn_dynamic_convoy_incident(world: ProceduralCityMap) -> void:
 			enemy.call("set_combat_target", first_squad[0])
 	host.dynamic_incident_state = "active"
 	host.dynamic_incident_timer = DYNAMIC_INCIDENT_DURATION
-	host.hud.dynamic_incident_hud.visible = true
+	# 표시 여부와 위치는 중앙 상단 배너 스택이 정한다. 직접 visible을 켜면
+	# 보스 경고나 긴장도 알림과 같은 자리에 겹쳐 뜬다.
+	host._layout_center_top_banners()
 	host.hud.dynamic_incident_progress.value = DYNAMIC_INCIDENT_DURATION
 	if is_instance_valid(host.tactical_map) and host.tactical_map.has_method("register_raid_marker"):
 		host.tactical_map.call(
