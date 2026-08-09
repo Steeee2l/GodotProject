@@ -16,6 +16,9 @@ var status_label: Label
 func _ready() -> void:
 	layer = 245
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# 웹 모바일: 브라우저 주소창을 접고 화면을 꽉 쓰려면 사용자 제스처가
+	# 필요하다. 첫 탭에서 한 번만 전체화면을 요청한다.
+	set_process_unhandled_input(OS.has_feature("web"))
 	fade = ColorRect.new()
 	fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	fade.color = Color(0, 0, 0, 0)
@@ -113,3 +116,21 @@ func _release_held_inputs() -> void:
 	Input.action_release("ui_right")
 	Input.action_release("ui_up")
 	Input.action_release("ui_down")
+
+
+var _fullscreen_requested := false
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if _fullscreen_requested:
+		return
+	var is_press := (
+		(event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed)
+		or (event is InputEventMouseButton and (event as InputEventMouseButton).pressed)
+	)
+	if not is_press:
+		return
+	_fullscreen_requested = true
+	set_process_unhandled_input(false)
+	# 브라우저가 거부해도 무해하다(데스크톱 미리보기 포함).
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
