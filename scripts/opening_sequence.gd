@@ -31,13 +31,15 @@ const GAMEPLAY_PHASES := [
 	"tutorial_extract",
 ]
 const DIALOGUE_LINES := [
-	"사람이 사라진 지 삼백 일째.",
-	"도시는 아직 서 있는데, 도시를 쓰던 것들만 없어졌다.",
-	"신호는 사흘 전부터 같은 자리에서 반복됐다. 한강 북쪽, 짧게 세 번.",
-	"살아 있는 누군가가 보내는 거다. 아니면… 살아 있었던 누군가거나.",
-	"가방엔 통조림 두 개. 탄창은 하나. 돌아갈 곳은 아직 없다.",
-	"다리 위에 먼저 온 것들이 있다. 저들을 지나야 북쪽이다.",
-	"…좋아. 숨 고르고.",
+	# 화자는 고양이 '나비'. 사람이 사라진 서울에서 홀로 살아남았다. 1인칭,
+	# 건조하지만 체온이 남은 목소리. 강 건너 신호가 유일한 이유.
+	"사람이 사라지고 삼백 밤. 밥을 주던 손도, 문을 열어 주던 소리도 없다.",
+	"고양이는 원래 혼자 살아남는 법을 안다. 나 나비는, 아직 여기 있다.",
+	"사흘 전부터 강 건너에서 같은 빛이 깜빡인다. 세 번, 쉬고, 다시 세 번.",
+	"저건 짐승의 눈이 아니야. 아직 신호를 보낼 줄 아는 무언가가 남았다는 뜻.",
+	"가방엔 통조림 두 개, 탄창은 하나. 돌아가 몸 누일 온기는 아직 없다.",
+	"다리 위엔 먼저 자리 잡은 것들이 있다. 저들을 지나야 북쪽이다.",
+	"…꼬리 세우고. 숨 고르고. 건너자.",
 ]
 
 const PLAYER_SPEED := 5.2
@@ -77,6 +79,7 @@ var current_aim_direction := Vector3(0, 0, -1)
 var camera_tracks_player := true
 var roll_active := false
 var roll_elapsed := 0.0
+var roll_iframe_until_msec := 0
 var roll_direction := Vector3.ZERO
 var movement_distance := 0.0
 var aim_hold_duration := 0.0
@@ -105,6 +108,8 @@ var mobile_move_vector := Vector2.ZERO
 var mobile_joystick_touch := -1
 var mobile_aim_active := false
 var sewer_exit: Node3D
+var signal_beacon: Node3D
+var signal_beacon_light: OmniLight3D
 var sewer_arrow: Label3D
 var objective_panel: PanelContainer
 var objective_title: Label
@@ -125,6 +130,7 @@ var opening_medkit_button: Button
 var interaction_panel: PanelContainer
 var interaction_label: Label
 var fade_rect: ColorRect
+var title_card: VBoxContainer
 var letterbox_top: ColorRect
 var letterbox_bottom: ColorRect
 var aim_reticle: Control
@@ -384,6 +390,59 @@ func _build_environment() -> void:
 	_add_fire(Vector3(-3.2, 0.35, 26.7), 0.72)
 	_add_fire(Vector3(2.9, 0.4, 1.8), 0.82)
 	_add_fire(Vector3(-5.5, 0.3, -27.0), 0.62)
+	_build_signal_beacon()
+
+
+func _build_signal_beacon() -> void:
+	# 대사가 말하는 "강 건너 신호". 다리 북쪽 끝 너머에서 세 번 깜빡이고 쉰다.
+	# 서사가 말하는 것을 눈으로 보게 만든다 — 플레이어가 나아갈 이유의 시각화.
+	signal_beacon = Node3D.new()
+	signal_beacon.name = "NorthSignalBeacon"
+	signal_beacon.position = Vector3(0.0, 6.4, -74.0)
+	add_child(signal_beacon)
+
+	var glow_material := StandardMaterial3D.new()
+	glow_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	glow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glow_material.emission_enabled = true
+	glow_material.emission = Color("#ffd27a")
+	glow_material.emission_energy_multiplier = 6.0
+	glow_material.albedo_color = Color(1.0, 0.86, 0.55, 0.92)
+	glow_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	glow_material.no_depth_test = true
+	var glow_mesh := SphereMesh.new()
+	glow_mesh.radius = 0.7
+	glow_mesh.height = 1.4
+	glow_mesh.material = glow_material
+	var glow := MeshInstance3D.new()
+	glow.name = "BeaconGlow"
+	glow.mesh = glow_mesh
+	glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	signal_beacon.add_child(glow)
+
+	signal_beacon_light = OmniLight3D.new()
+	signal_beacon_light.light_color = Color("#ffcf82")
+	signal_beacon_light.light_energy = 0.0
+	signal_beacon_light.omni_range = 46.0
+	signal_beacon.add_child(signal_beacon_light)
+
+	_pulse_signal_beacon()
+
+
+func _pulse_signal_beacon() -> void:
+	# 세 번, 쉬고, 다시 — 대사의 "세 번, 쉬고, 다시 세 번"과 리듬을 맞춘다.
+	if not is_instance_valid(signal_beacon):
+		return
+	var glow := signal_beacon.get_node_or_null("BeaconGlow") as MeshInstance3D
+	if glow == null:
+		return
+	var tween := create_tween().set_loops()
+	for _blink in 3:
+		tween.tween_property(glow, "scale", Vector3.ONE * 1.35, 0.16).set_trans(Tween.TRANS_SINE)
+		tween.parallel().tween_property(signal_beacon_light, "light_energy", 2.4, 0.16)
+		tween.tween_property(glow, "scale", Vector3.ONE * 0.7, 0.30).set_trans(Tween.TRANS_SINE)
+		tween.parallel().tween_property(signal_beacon_light, "light_energy", 0.0, 0.30)
+	tween.tween_interval(1.6)
 
 
 func _add_textured_ground(
@@ -861,6 +920,7 @@ func _build_hud() -> void:
 	letterbox_bottom.offset_top = -58
 	letterbox_bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(letterbox_bottom)
+	_build_title_card(hud)
 	_build_dialogue_ui(hud)
 	_build_objective_ui(hud)
 	_build_status_ui(hud)
@@ -874,6 +934,51 @@ func _build_hud() -> void:
 	fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	fade_rect.z_index = 200
 	hud.add_child(fade_rect)
+
+
+func _build_title_card(hud: CanvasLayer) -> void:
+	title_card = VBoxContainer.new()
+	title_card.name = "TitleCard"
+	title_card.set_anchors_preset(Control.PRESET_CENTER)
+	title_card.alignment = BoxContainer.ALIGNMENT_CENTER
+	title_card.add_theme_constant_override("separation", 4)
+	title_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_card.modulate.a = 0.0
+	# 앵커 프리셋만으로는 자식 크기만큼만 중앙에 놓이므로, 폭을 화면에 맞춰
+	# 텍스트를 가운데 정렬한다.
+	title_card.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	title_card.offset_top = 96
+	title_card.offset_left = -400
+	title_card.offset_right = 400
+	hud.add_child(title_card)
+
+	var title_label := Label.new()
+	title_label.text = "그레이 던"
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_label.add_theme_font_override("font", FONT)
+	title_label.add_theme_font_size_override("font_size", 64)
+	title_label.add_theme_color_override("font_color", Color("#f3e6c4"))
+	title_label.add_theme_constant_override("shadow_offset_x", 0)
+	title_label.add_theme_constant_override("shadow_offset_y", 3)
+	title_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	title_card.add_child(title_label)
+
+	var subtitle_label := Label.new()
+	subtitle_label.text = "GREY DAWN · 서울 생존묘"
+	subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle_label.add_theme_font_override("font", FONT)
+	subtitle_label.add_theme_font_size_override("font_size", 18)
+	subtitle_label.add_theme_color_override("font_color", Color("#9db4c4"))
+	title_card.add_child(subtitle_label)
+
+
+func _reveal_title_card() -> void:
+	if not is_instance_valid(title_card):
+		return
+	var tween := create_tween()
+	tween.tween_property(title_card, "modulate:a", 1.0, 0.9).set_trans(Tween.TRANS_SINE)
+	tween.tween_interval(1.9)
+	tween.tween_property(title_card, "modulate:a", 0.0, 0.9).set_trans(Tween.TRANS_SINE)
 
 
 func _build_dialogue_ui(hud: CanvasLayer) -> void:
@@ -1389,6 +1494,7 @@ func _start_camera_reveal() -> void:
 	camera_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 	camera_tween.tween_property(camera_rig, "position", Vector3(0, 0, -7.0), 1.75)
 	camera_tween.parallel().tween_property(camera, "size", REVEAL_CAMERA_SIZE, 1.75)
+	_reveal_title_card()
 	await camera_tween.finished
 	await get_tree().create_timer(0.45).timeout
 	phase = "reveal_dialogue"
@@ -1445,6 +1551,7 @@ func _update_player_gameplay(delta: float) -> void:
 		if roll_elapsed >= ROLL_DURATION:
 			roll_active = false
 			roll_elapsed = 0.0
+			roll_iframe_until_msec = Time.get_ticks_msec() + 120
 	elif player_hit_lock > 0.0:
 		player.velocity = player.velocity.move_toward(Vector3.ZERO, 12.0 * delta)
 	elif world_direction.length_squared() > 0.01:
@@ -1535,7 +1642,11 @@ func _start_tutorial_dash() -> void:
 	tutorial_transitioning = false
 	_show_objective(
 		"몸을 던져라",
-		"대시 버튼으로 굴러 피합니다." if touch_enabled else "SPACE로 굴러 피합니다.",
+		(
+			"대시로 굴러라. 구르는 동안은 총알이 몸을 스치지 못한다."
+			if touch_enabled
+			else "SPACE로 굴러라. 구르는 동안은 총알이 몸을 스치지 못한다."
+		),
 		"입력 대기"
 	)
 
@@ -1726,6 +1837,11 @@ func _try_enter_shelter() -> void:
 
 func take_damage(amount: int) -> void:
 	if restarting or amount <= 0 or player_health <= 0:
+		return
+	# 구르는 동안 + 착지 직후 짧은 유예까지 무적. 회피 굴림이 아무것도 회피하지
+	# 못하면 손맛이 죽는다. 대시 튜토리얼에서 특히, 굴러서 총알을 흘려보내는
+	# 감각이 핵심이다. 굴림이 끝나는 프레임에 맞는 억울함도 유예로 막는다.
+	if roll_active or Time.get_ticks_msec() < roll_iframe_until_msec:
 		return
 	if phase == "tutorial_combat" and tutorial_transitioning:
 		return
