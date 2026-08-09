@@ -59,15 +59,10 @@ const LOAF_MIN_STAMINA := 1.0
 const LOAF_VISIBILITY_MULTIPLIER := 0.48
 const WEAPON_FRAME_SIZE := Vector2(192, 192)
 const WEAPON_VISUAL_PIXEL_SIZE := 0.0018
-const WEAPON_FLOAT_DISTANCE := 0.72
-const WEAPON_MUZZLE_FORWARD_DISTANCE := 0.64
 const AK_DIRECTIONAL_TEXTURE := preload("res://assets/weapons/ak47_directional.png")
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
-const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
 const PERCEPTION_SYSTEM_SCRIPT := preload("res://scripts/perception_system.gd")
-const SCENT_TRAIL_MANAGER_SCRIPT := preload("res://scripts/scent_trail_manager.gd")
-const OBJECTIVE_SCENT_GUIDANCE_SCRIPT := preload("res://scripts/objective_scent_guidance.gd")
 const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
 const LOOT_CONTAINER_VISUALS := preload("res://scripts/loot_container_visual_catalog.gd")
 const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
@@ -83,6 +78,8 @@ const FieldIncidents := preload("res://scripts/raid/field_incidents.gd")
 const ExtractionFlow := preload("res://scripts/raid/extraction_flow.gd")
 const EnemyDirector := preload("res://scripts/raid/enemy_director.gd")
 const LootPickupSystem := preload("res://scripts/raid/loot_pickup_system.gd")
+const StealthSystem := preload("res://scripts/raid/stealth_system.gd")
+const WeaponCombat := preload("res://scripts/raid/weapon_combat.gd")
 const RAID_LOSS_MANAGER := preload("res://scripts/raid_loss_manager.gd")
 const WEAPON_HUD_PRESENTER := preload("res://scripts/weapon_hud_presenter.gd")
 const FIELD_MISSION_CATALOG := preload("res://scripts/field_mission_catalog.gd")
@@ -117,23 +114,10 @@ const RESCUE_POINT_COUNT := 5
 const MELEE_ATTACK_COOLDOWN := 0.72
 const MELEE_ATTACK_RANGE := 2.2
 const MELEE_ATTACK_DAMAGE := 38
-const STEALTH_TAKEDOWN_RANGE := 2.0
-const STEALTH_TAKEDOWN_PROMPT_SIZE := Vector2(196.0, 54.0)
-const STEALTH_TAKEDOWN_TIME_SCALE := 0.24
-const STEALTH_TAKEDOWN_SLOWMO_SECONDS := 0.14
-const STEALTH_TAKEDOWN_CAMERA_SHAKE_SECONDS := 0.24
-const STEALTH_TAKEDOWN_CAMERA_SHAKE_STRENGTH := 0.34
 const BOSS_DEFEAT_TIME_SCALE := 0.20
 const BOSS_DEFEAT_SLOWMO_SECONDS := 1.05
 const BOSS_DEFEAT_FOCUS_SECONDS := 1.65
 const BOSS_DEFEAT_CAMERA_SIZE := 19.5
-const MOBILE_AIM_ASSIST_MAX_DISTANCE := 34.0
-const MOBILE_AIM_ASSIST_HALF_ANGLE_DEG := 42.0
-const MOBILE_AIM_ASSIST_ANGLE_WEIGHT := 24.0
-const MOBILE_AIM_ASSIST_DISTANCE_WEIGHT := 0.32
-const ENEMY_VISIBILITY_HOLD_SECONDS := 0.32
-const ENEMY_VISIBILITY_FADE_IN_SPEED := 10.0
-const ENEMY_VISIBILITY_FADE_OUT_SPEED := 3.2
 const FIELD_INTERACTION_DISTANCE := 2.8
 const FIELD_INTERACTION_FACING_WEIGHT := 1.35
 const FIELD_INTERACTION_SIGHT_HEIGHT := 0.48
@@ -143,9 +127,7 @@ const FATIGUE_MAX := 100.0
 const FATIGUE_MOVING_RATE := 0.055
 const FATIGUE_IDLE_RATE := 0.0
 const FATIGUE_AIM_HOLD_RATE := 0.09
-const FATIGUE_SHOT_GAIN := 0.28
 const FATIGUE_MELEE_GAIN := 1.1
-const FATIGUE_RELOAD_GAIN := 0.8
 const FATIGUE_LOOT_GAIN := 0.85
 const FATIGUE_SALVAGE_GAIN := 3.5
 const FATIGUE_RESCUE_GAIN := 2.2
@@ -154,7 +136,6 @@ const FATIGUE_DAMAGE_PER_POINT := 0.045
 const FATIGUE_SPEED_MIN := 0.58
 const ESCORT_SPEED_PENALTY := 0.07
 const FIELD_MISSION_TRIGGER_RADIUS := 4.6
-const FIELD_MISSION_STEALTH_HOLD_RADIUS := 14.0
 const LORE_CLUE_COUNT := 6
 const RAID_PRESSURE_THRESHOLDS := [120.0, 300.0, 540.0]
 const RAID_PRESSURE_REWARD_MULTIPLIERS := [1.0, 1.15, 1.35, 1.65]
@@ -216,7 +197,6 @@ var has_ak := false
 var magazine_ammo := 30
 var reserve_ammo := 90
 var gunshot_players: Array[AudioStreamPlayer3D] = []
-var gunshot_index := 0
 var roll_audio_player: AudioStreamPlayer3D
 var bgm_player: AudioStreamPlayer
 var building_canvas: CanvasLayer
@@ -235,7 +215,6 @@ var last_field_notice := ""
 var repeated_field_notice_count := 0
 var auto_paused_for_background := false
 var nearby_ammo_pickup: Node3D
-var visibility_material: ShaderMaterial
 var perception_system: CanvasLayer
 var aim_hold_time := 0.0
 var locked_aim_direction := Vector3.ZERO
@@ -263,11 +242,6 @@ var melee_fan_indicator: MeshInstance3D
 var melee_fan_fill_material: StandardMaterial3D
 var melee_fan_rim_material: StandardMaterial3D
 var melee_fan_tween: Tween
-var stealth_takedown_prompt: PanelContainer
-var stealth_takedown_key_label: Label
-var stealth_takedown_input_icon: TextureRect
-var stealth_takedown_action_label: Label
-var nearby_stealth_takedown_target: CharacterBody3D
 var equipped_weapon_id := "ak47"
 var equipped_weapon_mods: Array[String] = []
 var weapon_stats: Dictionary = {}
@@ -339,6 +313,8 @@ var incidents := FieldIncidents.new()
 var extraction := ExtractionFlow.new()
 var enemy_director := EnemyDirector.new()
 var loot_system := LootPickupSystem.new()
+var stealth := StealthSystem.new()
+var weapon_combat := WeaponCombat.new()
 var raid_zone_data: Dictionary = {}
 var active_field_mission: Node3D
 var active_mission_collectibles: Array[Node3D] = []
@@ -374,7 +350,6 @@ var boss_defeat_sequence_serial := 0
 var scent_system: Node3D
 var objective_scent_guidance: Node
 var scent_focus_active := false
-var scent_awareness_tick := 0.0
 var raid_hotspots: Array[Node3D] = []
 var raid_elapsed_seconds := 0.0
 var raid_pressure_level := 0
@@ -468,6 +443,8 @@ func _ready() -> void:
 	extraction.attach(self)
 	enemy_director.attach(self)
 	loot_system.attach(self)
+	stealth.attach(self)
+	weapon_combat.attach(self)
 	hud.setup_aim_feedback()
 	hud.setup_player_combat_feedback()
 	game_over_screen.build(self)
@@ -496,17 +473,17 @@ func _ready() -> void:
 	if not AccessibilitySettings.settings_changed.is_connected(_apply_runtime_accessibility_settings):
 		AccessibilitySettings.settings_changed.connect(_apply_runtime_accessibility_settings)
 	_apply_runtime_accessibility_settings()
-	_build_gunshot_audio()
+	weapon_combat._build_gunshot_audio()
 	_build_roll_audio()
 	_build_bgm_audio()
-	_install_scent_system()
+	stealth._install_scent_system()
 	_spawn_enemies()
 	_setup_building_overlays()
 	_build_day_night_tint()
-	_build_visibility_fog()
+	stealth._build_visibility_fog()
 	_install_perception_system()
 	_update_day_night(0.0)
-	_update_enemy_visibility()
+	stealth._update_enemy_visibility()
 	_set_facing("s")
 	extraction._setup_extraction_site(world)
 	if launched_from_shelter:
@@ -637,13 +614,13 @@ func _deactivate_companion() -> void:
 func _physics_process(delta: float) -> void:
 	if player_death_sequence_active:
 		_update_building_overlays()
-		_update_visibility_fog()
-		_update_enemy_visibility(delta)
+		stealth._update_visibility_fog()
+		stealth._update_enemy_visibility(delta)
 		return
 	_update_day_night(delta)
 	_update_lightning(delta)
 	_update_enemy_pressure(delta)
-	_update_scent_system(delta)
+	stealth._update_scent_system(delta)
 	incidents._update_faction_conflicts(delta)
 	_update_raid_opportunities(delta)
 	jackpot._update_jackpot_event(delta)
@@ -671,8 +648,8 @@ func _physics_process(delta: float) -> void:
 			GameState.get_max_stamina(),
 			roll_stamina + ROLL_STAMINA_RECOVERY_PER_SECOND * GameState.get_stamina_recovery_multiplier() * delta
 		)
-	if (laser_aim_held or mouse_fire_held) and _uses_mouse_aim():
-		_lock_aim_direction(_get_mouse_world_direction())
+	if (laser_aim_held or mouse_fire_held) and weapon_combat._uses_mouse_aim():
+		_lock_aim_direction(weapon_combat._get_mouse_world_direction())
 	_update_scope_camera(delta)
 	if hud.melee_button:
 		hud.melee_button.disabled = melee_attack_cooldown > 0.0 or loafing
@@ -683,7 +660,7 @@ func _physics_process(delta: float) -> void:
 	_update_field_interactions(delta)
 	extraction._update_extraction_discovery()
 	_update_combat_overlay_visibility()
-	_update_stealth_takedown_prompt()
+	stealth._update_stealth_takedown_prompt()
 	if (
 		_is_inventory_open()
 		or _is_tactical_map_open()
@@ -696,8 +673,8 @@ func _physics_process(delta: float) -> void:
 		if boss_defeat_sequence_active:
 			_update_camera_follow(delta)
 		_update_building_overlays()
-		_update_visibility_fog()
-		_update_enemy_visibility(delta)
+		stealth._update_visibility_fog()
+		stealth._update_enemy_visibility(delta)
 		return
 	field_missions._update_field_missions(delta)
 	var input_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
@@ -711,13 +688,13 @@ func _physics_process(delta: float) -> void:
 	if player_hit_stun_time > 0.0:
 		input_vector = Vector2.ZERO
 	_update_fatigue(delta, input_vector.length_squared() > 0.01)
-	_update_weapon_ballistics(delta, input_vector.length_squared() > 0.01)
+	weapon_combat._update_weapon_ballistics(delta, input_vector.length_squared() > 0.01)
 
 	var world_direction := Vector3(input_vector.x + input_vector.y, 0, -input_vector.x + input_vector.y)
-	if not _uses_mouse_aim() and (laser_aim_held or fire_button_held):
+	if not weapon_combat._uses_mouse_aim() and (laser_aim_held or fire_button_held):
 		# 예전에는 has_ak 조건이 붙어 있어서, 무기를 잃으면 조준 중에
 		# 방향이 아예 갱신되지 않고 얼어붙었다.
-		_update_mobile_aim_direction(world_direction)
+		weapon_combat._update_mobile_aim_direction(world_direction)
 	var aim_is_locked := (
 		melee_attack_active
 		or laser_aim_held
@@ -739,7 +716,7 @@ func _physics_process(delta: float) -> void:
 		# 모바일에서 조준을 켜면 방향이 잠겨 회전이 안 됐다. 조준 보조는
 		# 발사 순간(_get_current_fire_direction)에만 걸면 충분하다.
 		# 움직이는 동안에는 언제나 가는 쪽을 본다.
-		if not aim_is_locked or not _uses_mouse_aim():
+		if not aim_is_locked or not weapon_combat._uses_mouse_aim():
 			_update_facing(input_vector)
 		_set_motion_state("walk")
 		state_label.text = "식빵 자세 이동" if loafing else "이동 중"
@@ -748,7 +725,7 @@ func _physics_process(delta: float) -> void:
 		_set_motion_state("idle")
 		state_label.text = "식빵 자세 대기" if loafing else "경계 중"
 
-	var mobile_steering := not _uses_mouse_aim() and input_vector.length_squared() > 0.01
+	var mobile_steering := not weapon_combat._uses_mouse_aim() and input_vector.length_squared() > 0.01
 	if (
 		not roll_active
 		and aim_is_locked
@@ -756,7 +733,7 @@ func _physics_process(delta: float) -> void:
 		and locked_aim_direction.length_squared() > 0.01
 	):
 		_set_facing_from_world_direction(locked_aim_direction)
-	_update_weapon_pose()
+	weapon_combat._update_weapon_pose()
 	player.set_meta("tactical_heading", _get_current_facing_world_direction())
 
 	player.move_and_slide()
@@ -767,15 +744,15 @@ func _physics_process(delta: float) -> void:
 	_update_pickup(delta)
 	loot_system._update_ammo_pickups(delta)
 	_refresh_mobile_context_button()
-	_update_firing(delta)
+	weapon_combat._update_firing(delta)
 	_update_aim_feedback(delta)
 	_update_camera_occluders(delta)
 	_update_player_combat_feedback(delta)
 	_update_camera_follow(delta)
 	_update_building_overlays()
-	_update_visibility_fog()
-	_update_enemy_visibility(delta)
-	_update_stealth_takedown_prompt()
+	stealth._update_visibility_fog()
+	stealth._update_enemy_visibility(delta)
+	stealth._update_stealth_takedown_prompt()
 	if perception_system:
 		perception_system.call("set_aim_direction", _get_perception_aim_direction())
 		if perception_system.has_method("set_aim_expanded"):
@@ -808,10 +785,6 @@ func _set_facing_from_world_direction(world_direction: Vector3) -> void:
 		world_direction.x + world_direction.z
 	).normalized()
 	_update_facing(screen_direction)
-
-
-func _uses_mouse_aim() -> bool:
-	return not DisplayServer.is_touchscreen_available()
 
 
 func _lock_aim_direction(world_direction: Vector3) -> void:
@@ -932,7 +905,7 @@ func _set_loafing(enabled: bool) -> void:
 	else:
 		state_label.text = "경계 중"
 	_play_directional_animation()
-	_update_weapon_pose()
+	weapon_combat._update_weapon_pose()
 
 
 func _get_roll_stamina_cost() -> float:
@@ -1039,7 +1012,7 @@ func _play_directional_animation() -> void:
 		_play_weapon_directional_animation(weapon_state)
 		if weapon_state == "fire":
 			weapon_sprite.frame = mini(previous_frame, weapon_sprite.sprite_frames.get_frame_count(weapon_sprite.animation) - 1)
-	_update_weapon_pose()
+	weapon_combat._update_weapon_pose()
 
 
 func _get_weapon_source_facing() -> String:
@@ -1310,7 +1283,7 @@ func _try_melee_attack() -> void:
 		return
 	melee_attack_cooldown = MELEE_ATTACK_COOLDOWN
 	_add_fatigue(FATIGUE_MELEE_GAIN)
-	var attack_direction := _get_mouse_world_direction() if _uses_mouse_aim() else _get_current_facing_world_direction()
+	var attack_direction := weapon_combat._get_mouse_world_direction() if weapon_combat._uses_mouse_aim() else _get_current_facing_world_direction()
 	_lock_aim_direction(attack_direction)
 	_set_facing_from_world_direction(attack_direction)
 	melee_attack_active = true
@@ -1322,140 +1295,6 @@ func _try_melee_attack() -> void:
 	_show_melee_fan(melee_attack_direction)
 	_play_bat_swing(attack_direction)
 	state_label.text = "근접 공격"
-
-
-func _try_stealth_takedown() -> bool:
-	if (
-		melee_attack_cooldown > 0.0
-		or melee_attack_active
-		or roll_active
-		or loafing
-		or player_health <= 0
-	):
-		return false
-	var takedown_target := _find_stealth_takedown_target()
-	if not is_instance_valid(takedown_target):
-		return false
-	var attack_direction := takedown_target.global_position - player.global_position
-	attack_direction.y = 0.0
-	if attack_direction.length_squared() <= 0.01:
-		return false
-	attack_direction = attack_direction.normalized()
-	if not bool(takedown_target.call(
-		"receive_stealth_takedown",
-		player.global_position,
-		attack_direction
-	)):
-		return false
-	_play_stealth_takedown_impact()
-	melee_attack_cooldown = MELEE_ATTACK_COOLDOWN
-	_add_fatigue(FATIGUE_MELEE_GAIN * 0.65)
-	_lock_aim_direction(attack_direction)
-	_set_facing_from_world_direction(attack_direction)
-	melee_attack_active = true
-	melee_attack_elapsed = 0.0
-	melee_attack_direction = attack_direction
-	melee_hit_resolved = true
-	motion_state = "melee"
-	_play_directional_animation()
-	_play_bat_swing(attack_direction)
-	_spawn_player_melee_arc(attack_direction)
-	nearby_stealth_takedown_target = null
-	if stealth_takedown_prompt:
-		stealth_takedown_prompt.visible = false
-	state_label.text = "기습 암살"
-	return true
-
-
-func _play_stealth_takedown_impact() -> void:
-	camera_shake_time = maxf(camera_shake_time, STEALTH_TAKEDOWN_CAMERA_SHAKE_SECONDS)
-	camera_shake_strength = maxf(camera_shake_strength, STEALTH_TAKEDOWN_CAMERA_SHAKE_STRENGTH)
-	hit_stop_serial += 1
-	var serial := hit_stop_serial
-	Engine.time_scale = STEALTH_TAKEDOWN_TIME_SCALE
-	get_tree().create_timer(
-		STEALTH_TAKEDOWN_SLOWMO_SECONDS,
-		true,
-		false,
-		true
-	).timeout.connect(func() -> void:
-		if serial == hit_stop_serial and not player_death_sequence_active:
-			Engine.time_scale = 1.0
-	)
-
-
-func _find_stealth_takedown_target() -> CharacterBody3D:
-	var nearest: CharacterBody3D
-	var nearest_distance := STEALTH_TAKEDOWN_RANGE
-	for enemy in enemies:
-		if (
-			not is_instance_valid(enemy)
-			or not enemy.has_method("can_receive_stealth_takedown")
-			or not bool(enemy.call(
-				"can_receive_stealth_takedown",
-				player.global_position,
-				STEALTH_TAKEDOWN_RANGE
-			))
-		):
-			continue
-		var offset := enemy.global_position - player.global_position
-		offset.y = 0.0
-		var distance := offset.length()
-		if distance > nearest_distance:
-			continue
-		var query := PhysicsRayQueryParameters3D.create(
-			player.global_position + Vector3(0.0, 0.42, 0.0),
-			enemy.global_position + Vector3(0.0, 0.42, 0.0),
-			COLLISION_PROFILES.WORLD_ONLY_SIGHT_MASK
-		)
-		query.exclude = [player.get_rid(), enemy.get_rid()]
-		var hit := player.get_world_3d().direct_space_state.intersect_ray(query)
-		if not hit.is_empty():
-			continue
-		nearest = enemy
-		nearest_distance = distance
-	return nearest
-
-
-func _update_stealth_takedown_prompt() -> void:
-	if stealth_takedown_prompt == null:
-		return
-	var blocked := (
-		player_death_sequence_active
-		or melee_attack_active
-		or roll_active
-		or loafing
-		or _is_inventory_open()
-		or _is_tactical_map_open()
-		or lore_reader.is_open()
-		or extraction_transition_active
-	)
-	nearby_stealth_takedown_target = null if blocked else _find_stealth_takedown_target()
-	stealth_takedown_prompt.visible = is_instance_valid(nearby_stealth_takedown_target)
-	if hud.melee_button and DisplayServer.is_touchscreen_available():
-		hud.melee_button.text = "암살" if stealth_takedown_prompt.visible else "근접"
-	if not stealth_takedown_prompt.visible:
-		return
-	var target_screen := camera.unproject_position(
-		nearby_stealth_takedown_target.global_position + Vector3(0.0, 2.15, 0.0)
-	)
-	var viewport_size := get_viewport().get_visible_rect().size
-	var prompt_position := target_screen + Vector2(
-		-STEALTH_TAKEDOWN_PROMPT_SIZE.x * 0.5,
-		-78.0
-	)
-	prompt_position.x = clampf(
-		prompt_position.x,
-		12.0,
-		maxf(12.0, viewport_size.x - STEALTH_TAKEDOWN_PROMPT_SIZE.x - 12.0)
-	)
-	prompt_position.y = clampf(
-		prompt_position.y,
-		12.0,
-		maxf(12.0, viewport_size.y - STEALTH_TAKEDOWN_PROMPT_SIZE.y - 12.0)
-	)
-	stealth_takedown_prompt.position = prompt_position
-	stealth_takedown_prompt.size = STEALTH_TAKEDOWN_PROMPT_SIZE
 
 
 func _update_melee_attack(delta: float) -> void:
@@ -1481,7 +1320,7 @@ func _finish_melee_attack() -> void:
 	_hide_melee_fan()
 	motion_state = ""
 	_set_motion_state("walk" if player.velocity.length_squared() > 0.1 else "idle")
-	_update_weapon_pose()
+	weapon_combat._update_weapon_pose()
 
 
 func _play_bat_swing(direction: Vector3) -> void:
@@ -1642,7 +1481,7 @@ func _update_scope_camera(delta: float) -> void:
 	if boss_defeat_sequence_active:
 		target_camera_size = BOSS_DEFEAT_CAMERA_SIZE
 	elif scope_active:
-		var fallback_direction := _get_mouse_world_direction() if _uses_mouse_aim() else _get_current_facing_world_direction()
+		var fallback_direction := weapon_combat._get_mouse_world_direction() if weapon_combat._uses_mouse_aim() else _get_current_facing_world_direction()
 		var aim_direction := locked_aim_direction if locked_aim_direction.length_squared() > 0.01 else fallback_direction
 		target_offset = aim_direction.normalized() * float(weapon_stats.get("scope_shift", 0.0))
 		target_camera_size = BASE_CAMERA_SIZE - minf(4.5, (scope_zoom - 1.0) * 1.5)
@@ -1700,52 +1539,16 @@ func _create_aim_ring_arrow_mesh() -> ImmediateMesh:
 	return mesh
 
 
-func _update_weapon_ballistics(delta: float, is_moving: bool) -> void:
-	if weapon_stats.is_empty():
-		return
-	recoil_velocity = recoil_velocity.move_toward(Vector3.ZERO, 8.5 * delta)
-	var target_spread := float(weapon_stats.get("base_spread_deg", 2.4))
-	if is_moving:
-		target_spread *= float(weapon_stats.get("moving_spread_multiplier", 1.0))
-	if player_health <= 45:
-		target_spread *= float(weapon_stats.get("injured_spread_multiplier", 1.0))
-	if loafing:
-		target_spread *= float(weapon_stats.get("loaf_spread_multiplier", 1.0))
-	var durability_penalty := 1.0 + clampf((50.0 - weapon_durability) / 50.0, 0.0, 1.0) * 0.7
-	target_spread *= durability_penalty
-	var recovery := float(weapon_stats.get("spread_recovery_deg", 5.0))
-	weapon_spread_deg = move_toward(weapon_spread_deg, target_spread, recovery * delta)
-	weapon_spread_deg = clampf(weapon_spread_deg, 0.2, float(weapon_stats.get("max_spread_deg", 14.0)))
-	if weapon_reloading:
-		reload_timer = maxf(0.0, reload_timer - delta)
-		if hud.equipment_reload_bar:
-			var reload_duration := maxf(0.01, float(weapon_stats.get("reload_time", 2.15)))
-			hud.equipment_reload_bar.value = 1.0 - clampf(reload_timer / reload_duration, 0.0, 1.0)
-		if hud.equipment_condition_label:
-			var reload_ammo_name := str(
-				WEAPON_SYSTEM.get_ammo(GameState.equipped_ammo_id).get(
-					"display_name",
-					GameState.equipped_ammo_id
-				)
-			)
-			hud.equipment_condition_label.text = "재장전 %.1f초 · 사용 탄환  %s" % [
-				reload_timer,
-				reload_ammo_name,
-			]
-		if reload_timer <= 0.0:
-			_finish_reload()
-
-
 func _update_aim_feedback(delta: float) -> void:
 	if hud.aim_direction_indicator == null:
 		return
-	var aim_direction := _get_mouse_world_direction() if _uses_mouse_aim() else _get_current_facing_world_direction()
+	var aim_direction := weapon_combat._get_mouse_world_direction() if weapon_combat._uses_mouse_aim() else _get_current_facing_world_direction()
 	hud.aim_direction_indicator.look_at(hud.aim_direction_indicator.global_position + aim_direction, Vector3.UP)
 	recoil_reticle_offset = recoil_reticle_offset.lerp(Vector2.ZERO, 1.0 - exp(-10.0 * delta))
 	_update_laser_beam(aim_direction)
 	if hud.aim_reticle:
 		hud.aim_reticle.visible = (
-			_uses_mouse_aim()
+			weapon_combat._uses_mouse_aim()
 			and not _is_inventory_open()
 			and not lore_reader.is_open()
 		)
@@ -1760,7 +1563,7 @@ func _update_aim_feedback(delta: float) -> void:
 	if hud.reload_reticle_indicator:
 		var show_reload := (
 			weapon_reloading
-			and _uses_mouse_aim()
+			and weapon_combat._uses_mouse_aim()
 			and not _is_inventory_open()
 			and not lore_reader.is_open()
 		)
@@ -1775,14 +1578,14 @@ func _update_aim_feedback(delta: float) -> void:
 func _update_laser_beam(aim_direction: Vector3) -> void:
 	if hud.laser_beam == null:
 		return
-	var should_show := laser_aim_held and has_ak and _uses_mouse_aim()
+	var should_show := laser_aim_held and has_ak and weapon_combat._uses_mouse_aim()
 	for layer in laser_glow_layers:
 		layer.visible = should_show
 	if hud.laser_endpoint:
 		hud.laser_endpoint.visible = should_show
 	if not should_show:
 		return
-	var start := _get_weapon_muzzle_position(aim_direction)
+	var start := weapon_combat._get_weapon_muzzle_position(aim_direction)
 	var end := start + aim_direction * 48.0
 	var query := PhysicsRayQueryParameters3D.create(
 		start,
@@ -2794,67 +2597,6 @@ func _apply_hud_layout() -> void:
 		hud.extraction_result_panel.offset_bottom = panel_h * 0.5
 
 
-func _setup_stealth_takedown_prompt(font: Font) -> void:
-	stealth_takedown_prompt = PanelContainer.new()
-	stealth_takedown_prompt.name = "StealthTakedownPrompt"
-	stealth_takedown_prompt.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	stealth_takedown_prompt.custom_minimum_size = STEALTH_TAKEDOWN_PROMPT_SIZE
-	stealth_takedown_prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	stealth_takedown_prompt.z_index = 220
-	stealth_takedown_prompt.add_theme_stylebox_override(
-		"panel",
-		_make_panel_style(Color(0.025, 0.032, 0.029, 0.96), Color("#e0ba66"), 6)
-	)
-	stealth_takedown_prompt.visible = false
-	$HUD.add_child(stealth_takedown_prompt)
-
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 10)
-	margin.add_theme_constant_override("margin_top", 8)
-	margin.add_theme_constant_override("margin_right", 12)
-	margin.add_theme_constant_override("margin_bottom", 8)
-	stealth_takedown_prompt.add_child(margin)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	margin.add_child(row)
-
-	var key_chip := PanelContainer.new()
-	key_chip.custom_minimum_size = Vector2(58, 34)
-	key_chip.add_theme_stylebox_override(
-		"panel",
-		_make_panel_style(Color("#d5aa55"), Color("#ffe09a"), 5)
-	)
-	row.add_child(key_chip)
-	var input_center := CenterContainer.new()
-	key_chip.add_child(input_center)
-	stealth_takedown_input_icon = TextureRect.new()
-	stealth_takedown_input_icon.name = "MouseLeftIcon"
-	stealth_takedown_input_icon.custom_minimum_size = Vector2(28, 28)
-	stealth_takedown_input_icon.texture = UI_ICONS.get_icon("mouse_left", 32, Color("#191711"))
-	stealth_takedown_input_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	stealth_takedown_input_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	stealth_takedown_input_icon.visible = not DisplayServer.is_touchscreen_available()
-	input_center.add_child(stealth_takedown_input_icon)
-	stealth_takedown_key_label = Label.new()
-	stealth_takedown_key_label.text = "탭"
-	stealth_takedown_key_label.visible = DisplayServer.is_touchscreen_available()
-	stealth_takedown_key_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	stealth_takedown_key_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	stealth_takedown_key_label.add_theme_font_override("font", font)
-	stealth_takedown_key_label.add_theme_font_size_override("font_size", 14)
-	stealth_takedown_key_label.add_theme_color_override("font_color", Color("#191711"))
-	input_center.add_child(stealth_takedown_key_label)
-
-	stealth_takedown_action_label = Label.new()
-	stealth_takedown_action_label.text = "암살"
-	stealth_takedown_action_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	stealth_takedown_action_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	stealth_takedown_action_label.add_theme_font_override("font", font)
-	stealth_takedown_action_label.add_theme_font_size_override("font_size", 18)
-	stealth_takedown_action_label.add_theme_color_override("font_color", Color("#f5e6c7"))
-	row.add_child(stealth_takedown_action_label)
-
-
 func _build_mobile_utility_buttons(font: Font) -> void:
 	var touch_enabled := DisplayServer.is_touchscreen_available()
 	mobile_context_button = _make_mobile_utility_button("ContextButton", "줍기", "loot", font, -108.0)
@@ -2865,7 +2607,7 @@ func _build_mobile_utility_buttons(font: Font) -> void:
 
 	mobile_reload_button = _make_mobile_utility_button("ReloadButton", "장전", "reload", font, -198.0)
 	if not touch_enabled:
-		mobile_reload_button.pressed.connect(_reload_ak47)
+		mobile_reload_button.pressed.connect(weapon_combat._reload_ak47)
 	mobile_reload_button.visible = touch_enabled
 
 	mobile_flashlight_button = _make_mobile_utility_button("FlashlightButton", "Flash", "flashlight", font, -288.0)
@@ -2994,7 +2736,7 @@ func _on_mobile_flashlight_toggled(enabled: bool) -> void:
 	laser_aim_held = enabled
 	if laser_aim_held:
 		var facing_direction := _get_current_facing_world_direction()
-		_lock_aim_direction(_get_mobile_aim_assist_direction(facing_direction))
+		_lock_aim_direction(weapon_combat._get_mobile_aim_assist_direction(facing_direction))
 	if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
 		Input.vibrate_handheld(12)
 
@@ -3040,54 +2782,6 @@ func _refresh_mobile_context_button() -> void:
 		return
 	mobile_context_button.text = label
 	mobile_context_button.icon = UI_ICONS.get_icon(icon_name, 32, Color("#e8d890"))
-
-
-func _on_inventory_weapon_mods_changed() -> void:
-	equipped_weapon_mods.assign(GameState.equipped_weapon_mods)
-	_refresh_weapon_stats()
-	_update_equipment_ui()
-	GameState.save_persistent_state()
-
-
-func _on_inventory_weapon_equipped(weapon_id: String) -> void:
-	if (weapon_id == equipped_weapon_id and has_ak) or GameState.get_weapon_count(weapon_id) <= 0:
-		return
-	var reequipping_same_weapon := not has_ak and weapon_id == equipped_weapon_id
-	var previous_ammo_id := GameState.equipped_ammo_id
-	if not reequipping_same_weapon and magazine_ammo > 0 and not previous_ammo_id.is_empty():
-		GameState.set_ammo_count(previous_ammo_id, GameState.get_ammo_count(previous_ammo_id) + magazine_ammo)
-	if not GameState.equip_weapon(weapon_id):
-		return
-	equipped_weapon_id = GameState.equipped_weapon_id
-	equipped_weapon_mods.assign(GameState.equipped_weapon_mods)
-	if not reequipping_same_weapon:
-		magazine_ammo = 0
-	reserve_ammo = GameState.get_ammo_count(GameState.equipped_ammo_id)
-	GameState.reserve_ammo = reserve_ammo
-	has_ak = true
-	GameState.has_ak = true
-	_refresh_weapon_stats()
-	GameState.magazine_ammo = magazine_ammo
-	_rebuild_player_weapon_frames()
-	_update_weapon_pose()
-	_update_equipment_ui()
-	GameState.save_persistent_state()
-
-
-func _on_inventory_weapon_unequipped() -> void:
-	if not has_ak:
-		return
-	reserve_ammo = GameState.get_ammo_count(GameState.equipped_ammo_id)
-	GameState.magazine_ammo = magazine_ammo
-	GameState.reserve_ammo = reserve_ammo
-	GameState.unequip_weapon()
-	has_ak = false
-	weapon_reloading = false
-	laser_aim_held = false
-	if weapon_sprite:
-		weapon_sprite.visible = false
-	_update_equipment_ui()
-	GameState.save_persistent_state()
 
 
 func _on_inventory_equipment_changed() -> void:
@@ -3274,7 +2968,7 @@ func _equip_ak47() -> void:
 	weapon_sprite.visible = true
 	survivor.sprite_frames = unarmed_sprite_frames
 	_play_directional_animation()
-	_update_weapon_pose()
+	weapon_combat._update_weapon_pose()
 	hud.equipment_panel.visible = true
 	hud.fire_button.visible = true
 	hud.fire_button.tooltip_text = "%s 발사" % str(weapon_stats.get("display_name", "AK-47"))
@@ -3300,22 +2994,13 @@ func _initialize_equipped_weapon() -> void:
 	_rebuild_player_weapon_frames()
 	if weapon_sprite:
 		weapon_sprite.visible = true
-	_update_weapon_pose()
+	weapon_combat._update_weapon_pose()
 	_update_equipment_ui()
-
-
-func _update_firing(delta: float) -> void:
-	fire_cooldown = maxf(0.0, fire_cooldown - delta)
-	if roll_active or melee_attack_active or loafing:
-		return
-	var firing_held := fire_button_held or mouse_fire_held
-	if firing_held and has_ak and bool(weapon_stats.get("automatic", true)) and fire_cooldown <= 0.0:
-		_fire_ak47()
 
 
 func _on_fire_button_down() -> void:
 	fire_button_held = true
-	_try_fire_ak47()
+	weapon_combat._try_fire_ak47()
 	if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
 		Input.vibrate_handheld(18)
 
@@ -3325,7 +3010,7 @@ func _on_fire_button_up() -> void:
 
 
 func _on_melee_button_pressed() -> void:
-	if not _try_stealth_takedown():
+	if not stealth._try_stealth_takedown():
 		_try_melee_attack()
 	if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
 		Input.vibrate_handheld(35)
@@ -3338,88 +3023,6 @@ func _on_dash_button_pressed() -> void:
 	_try_start_roll()
 	if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
 		Input.vibrate_handheld(24)
-
-
-func _try_fire_ak47() -> void:
-	if has_ak and not roll_active and not loafing and not melee_attack_active and not weapon_reloading and fire_cooldown <= 0.0:
-		_fire_ak47()
-
-
-func _fire_ak47() -> void:
-	if weapon_reloading or melee_attack_active or loafing:
-		return
-	if magazine_ammo <= 0:
-		if reserve_ammo > 0 and bool(AccessibilitySettings.auto_reload):
-			_reload_ak47()
-		else:
-			_show_no_ammo_notice()
-		return
-	if _weapon_jammed():
-		return
-	magazine_ammo -= 1
-	GameState.magazine_ammo = magazine_ammo
-	if field_missions._active_field_mission_requires_silence():
-		field_mission_noise_breached = true
-	fire_cooldown = float(weapon_stats.get("fire_interval", 0.12))
-	var aim_direction := _get_current_fire_direction()
-	_lock_aim_direction(aim_direction)
-	_set_facing_from_world_direction(aim_direction)
-	_update_weapon_pose()
-	if weapon_sprite:
-		_play_weapon_directional_animation("fire")
-	var pellet_count := int(weapon_stats.get("pellet_count", 1))
-	for pellet_index in pellet_count:
-		var spread_angle := weapon_random.randf_range(-weapon_spread_deg, weapon_spread_deg)
-		var shot_direction := aim_direction.rotated(Vector3.UP, deg_to_rad(spread_angle)).normalized()
-		_spawn_weapon_projectile(shot_direction, pellet_index)
-	weapon_durability = maxf(0.0, weapon_durability - float(weapon_stats.get("durability_loss", 0.06)))
-	GameState.weapon_durability = weapon_durability
-	weapon_spread_deg = minf(
-		weapon_spread_deg + float(weapon_stats.get("spread_per_shot_deg", 1.0)),
-		float(weapon_stats.get("max_spread_deg", 14.0))
-	)
-	_add_fatigue(FATIGUE_SHOT_GAIN)
-	_apply_weapon_recoil(aim_direction)
-	# 총성은 도시가 듣는다. 소음기를 달면 그만큼 덜 들린다.
-	var sound_scale := clampf(float(weapon_stats.get("sound_radius", 1.0)), 0.15, 2.0)
-	_add_raid_pressure(
-		lerpf(
-			RAID_EVENT_DIRECTOR.PRESSURE_PER_SUPPRESSED_GUNSHOT,
-			RAID_EVENT_DIRECTOR.PRESSURE_PER_GUNSHOT,
-			clampf(sound_scale, 0.0, 1.0)
-		)
-	)
-	_play_gunshot()
-	_spawn_muzzle_light(aim_direction)
-	_spawn_launch_fx(aim_direction)
-	_update_equipment_ui()
-
-
-func _spawn_weapon_projectile(direction: Vector3, pellet_index: int) -> void:
-	var ammo_definition: Dictionary = WEAPON_SYSTEM.get_ammo(GameState.equipped_ammo_id)
-	var damage_multiplier := float(ammo_definition.get("damage_multiplier", 1.0))
-	var projectile_damage := roundi(
-		float(weapon_stats.get("damage", 24)) * damage_multiplier
-	)
-	var penetration := maxi(
-		int(weapon_stats.get("penetration_count", 0)),
-		int(ammo_definition.get("penetration", 0))
-	)
-	var projectile := Area3D.new()
-	projectile.name = "%sBullet_%d" % [equipped_weapon_id, pellet_index]
-	projectile.set_script(BULLET_PROJECTILE)
-	projectile.set("direction", direction)
-	projectile.set("source_body", player)
-	projectile.set("damage", projectile_damage)
-	projectile.set("critical_chance", _get_weapon_critical_chance())
-	projectile.set("critical_multiplier", 1.65)
-	projectile.set("penetrations_remaining", penetration)
-	var range_profile := _get_weapon_range_profile(equipped_weapon_id)
-	projectile.set("effective_range", range_profile.x)
-	projectile.set("maximum_range", range_profile.y)
-	projectile.set("minimum_damage_multiplier", range_profile.z)
-	projectile.position = _get_weapon_muzzle_position(direction)
-	add_child(projectile)
 
 
 func _get_weapon_range_profile(weapon_id: String) -> Vector3:
@@ -3439,15 +3042,6 @@ func _get_weapon_critical_chance() -> float:
 		_: return 0.12
 
 
-func _apply_weapon_recoil(aim_direction: Vector3) -> void:
-	var recoil_kick := float(weapon_stats.get("recoil_kick", 0.7)) * GameState.get_recoil_control_multiplier()
-	if loafing:
-		recoil_kick *= float(weapon_stats.get("loaf_recoil_multiplier", 1.0))
-	var knockback := float(weapon_stats.get("player_knockback", 0.15)) * recoil_kick
-	recoil_velocity -= aim_direction * knockback
-	recoil_reticle_offset += Vector2(weapon_random.randf_range(-5.0, 5.0), -11.0) * recoil_kick
-
-
 func _weapon_jammed() -> bool:
 	if weapon_durability >= 35.0:
 		return false
@@ -3460,105 +3054,6 @@ func _weapon_jammed() -> bool:
 		hud.ammo_notice.visible = true
 		ammo_notice_time = 1.2
 	return true
-
-
-func _get_current_fire_direction() -> Vector3:
-	if _uses_mouse_aim():
-		return _get_mouse_world_direction()
-	var screen_direction: Vector2 = DIRECTION_VECTORS[facing]
-	var facing_direction := Vector3(
-		screen_direction.x + screen_direction.y,
-		0,
-		-screen_direction.x + screen_direction.y
-	).normalized()
-	return _get_mobile_aim_assist_direction(facing_direction)
-
-
-func _get_mobile_aim_assist_direction(facing_direction: Vector3) -> Vector3:
-	facing_direction.y = 0.0
-	if facing_direction.length_squared() <= 0.01:
-		facing_direction = _get_current_facing_world_direction()
-	facing_direction = facing_direction.normalized()
-	var best_enemy: CharacterBody3D
-	var best_score := INF
-	var assist_strength := clampf(float(AccessibilitySettings.aim_assist_strength), 0.0, 1.0)
-	if assist_strength <= 0.01:
-		return facing_direction
-	var assist_half_angle := lerpf(12.0, MOBILE_AIM_ASSIST_HALF_ANGLE_DEG, assist_strength)
-	var minimum_dot := cos(deg_to_rad(assist_half_angle))
-	for enemy in enemies:
-		if not is_instance_valid(enemy) or bool(enemy.get("dying")):
-			continue
-		if float(enemy.get("player_visibility_factor")) < 0.2:
-			continue
-		var offset := enemy.global_position - player.global_position
-		offset.y = 0.0
-		var distance := offset.length()
-		if distance <= 0.05 or distance > MOBILE_AIM_ASSIST_MAX_DISTANCE:
-			continue
-		var enemy_direction := offset / distance
-		var direction_dot := facing_direction.dot(enemy_direction)
-		if direction_dot < minimum_dot:
-			continue
-		var query := PhysicsRayQueryParameters3D.create(
-			player.global_position + Vector3(0, 0.45, 0),
-			enemy.global_position + Vector3(0, 0.45, 0),
-			COLLISION_PROFILES.WORLD_ONLY_SIGHT_MASK
-		)
-		query.exclude = [player.get_rid(), enemy.get_rid()]
-		if not player.get_world_3d().direct_space_state.intersect_ray(query).is_empty():
-			continue
-		var angle_error := acos(clampf(direction_dot, -1.0, 1.0))
-		var score := (
-			angle_error * MOBILE_AIM_ASSIST_ANGLE_WEIGHT
-			+ distance * MOBILE_AIM_ASSIST_DISTANCE_WEIGHT
-		)
-		if score < best_score:
-			best_score = score
-			best_enemy = enemy
-	if best_enemy == null:
-		return facing_direction
-	var assisted_direction := best_enemy.global_position - player.global_position
-	assisted_direction.y = 0.0
-	return facing_direction.slerp(assisted_direction.normalized(), lerpf(0.25, 1.0, assist_strength)).normalized()
-
-
-func _update_mobile_aim_direction(movement_world_direction: Vector3) -> void:
-	var base_direction := movement_world_direction
-	base_direction.y = 0.0
-	if base_direction.length_squared() <= 0.01:
-		base_direction = (
-			locked_aim_direction
-			if locked_aim_direction.length_squared() > 0.01
-			else _get_current_facing_world_direction()
-		)
-	_lock_aim_direction(_get_mobile_aim_assist_direction(base_direction.normalized()))
-
-
-func _update_weapon_pose() -> void:
-	if weapon_sprite == null:
-		return
-	weapon_sprite.visible = has_ak and not melee_attack_active and not loafing and building_canvas == null
-	if not has_ak or melee_attack_active or loafing:
-		return
-	if WEAPON_VISUAL_CATALOG.has_weapon_texture(equipped_weapon_id):
-		var screen_direction: Vector2 = DIRECTION_VECTORS[facing]
-		weapon_sprite.flip_h = screen_direction.x < -0.01
-		var source_angle := PI if weapon_sprite.flip_h else 0.0
-		weapon_sprite.rotation = Vector3(
-			0,
-			0,
-			wrapf(screen_direction.angle() - source_angle, -PI, PI)
-		)
-	else:
-		weapon_sprite.flip_h = facing in ["w", "sw", "nw"]
-		weapon_sprite.rotation = Vector3.ZERO
-	weapon_sprite.render_priority = 0 if _weapon_renders_behind_player() else 2
-	var direction := _get_current_facing_world_direction()
-	weapon_sprite.position = direction * WEAPON_FLOAT_DISTANCE + Vector3(0, 0.36, 0)
-	weapon_sprite.offset = _get_weapon_screen_offset()
-	if not weapon_sprite.animation.begins_with("fire_"):
-		_play_weapon_directional_animation("idle")
 
 
 func _weapon_renders_behind_player() -> bool:
@@ -3578,29 +3073,6 @@ func _get_weapon_screen_offset() -> Vector2:
 	return Vector2(0, -18)
 
 
-func _get_weapon_muzzle_position(world_direction: Vector3) -> Vector3:
-	var weapon_origin := weapon_sprite.global_position if weapon_sprite and has_ak else player.global_position
-	return weapon_origin + world_direction * WEAPON_MUZZLE_FORWARD_DISTANCE + Vector3(0, 0.02, 0)
-
-
-func _get_mouse_world_direction() -> Vector3:
-	# The same recoil offset drives both the drawn reticle and the actual ray,
-	# so sustained fire cannot visually lie about the bullet center.
-	var mouse_position := get_viewport().get_mouse_position() + recoil_reticle_offset
-	var ray_origin := camera.project_ray_origin(mouse_position)
-	var ray_direction := camera.project_ray_normal(mouse_position)
-	var target_y := player.global_position.y
-	if absf(ray_direction.y) < 0.001:
-		return _get_current_facing_world_direction()
-	var distance_to_plane := (target_y - ray_origin.y) / ray_direction.y
-	var hit_position := ray_origin + ray_direction * distance_to_plane
-	var direction := hit_position - player.global_position
-	direction.y = 0.0
-	if direction.length_squared() <= 0.01:
-		return _get_current_facing_world_direction()
-	return direction.normalized()
-
-
 func _get_current_facing_world_direction() -> Vector3:
 	var screen_direction: Vector2 = DIRECTION_VECTORS[facing]
 	return Vector3(
@@ -3608,50 +3080,6 @@ func _get_current_facing_world_direction() -> Vector3:
 		0,
 		-screen_direction.x + screen_direction.y
 	).normalized()
-
-
-func _reload_ak47() -> void:
-	var magazine_size := int(weapon_stats.get("magazine_size", 30))
-	if weapon_reloading or loafing:
-		return
-	if reserve_ammo <= 0 or magazine_ammo >= magazine_size:
-		fire_cooldown = 0.35
-		if reserve_ammo <= 0:
-			_show_no_ammo_notice()
-		return
-	weapon_reloading = true
-	reload_timer = float(weapon_stats.get("reload_time", 2.15))
-	fire_cooldown = reload_timer
-	_add_fatigue(FATIGUE_RELOAD_GAIN)
-	hud.ammo_notice.text = "%s 재장전 중 · %.1f초\n장전 중 이동·사격 제한" % [
-		str(weapon_stats.get("display_name", "무기")),
-		reload_timer,
-	]
-	hud.ammo_notice.visible = true
-	ammo_notice_time = reload_timer
-	_update_equipment_ui()
-
-
-func _finish_reload() -> void:
-	weapon_reloading = false
-	var magazine_size := int(weapon_stats.get("magazine_size", 30))
-	var needed := magazine_size - magazine_ammo
-	var loaded := mini(needed, reserve_ammo)
-	magazine_ammo += loaded
-	reserve_ammo -= loaded
-	GameState.magazine_ammo = magazine_ammo
-	GameState.set_ammo_count(GameState.equipped_ammo_id, reserve_ammo)
-	hud.ammo_notice.text = "%s 재장전 완료  +%d\n탄창 %d / %d   예비 %d   총 %d" % [
-		str(weapon_stats.get("display_name", "무기")),
-		loaded,
-		magazine_ammo,
-		magazine_size,
-		reserve_ammo,
-		magazine_ammo + reserve_ammo,
-	]
-	hud.ammo_notice.visible = true
-	ammo_notice_time = 1.4
-	_update_equipment_ui()
 
 
 func _show_no_ammo_notice() -> void:
@@ -3836,25 +3264,6 @@ func _refresh_pointer_mode() -> void:
 	)
 
 
-func _spawn_muzzle_light(direction: Vector3) -> void:
-	var flash := OmniLight3D.new()
-	flash.light_color = Color("#ffb347")
-	flash.light_energy = 3.0
-	flash.omni_range = 2.2
-	flash.position = player.position + direction * 0.8 + Vector3(0, 0.2, 0)
-	add_child(flash)
-	get_tree().create_timer(0.045).timeout.connect(flash.queue_free)
-
-
-func _spawn_launch_fx(direction: Vector3) -> void:
-	var origin := player.position + direction * 0.86 + Vector3(0, 0.18, 0)
-	_spawn_particle_burst(origin, direction, Color("#ffd98a"), 6, 0.09, 2.0, 4.2, 0.04, 0.12)
-	_spawn_smoke_cloud(origin, direction)
-	get_tree().create_timer(0.055).timeout.connect(func() -> void:
-		_spawn_smoke_cloud(origin + direction * 0.08, direction)
-	)
-
-
 func _spawn_smoke_cloud(origin: Vector3, direction: Vector3) -> void:
 	if smoke_particle_texture == null:
 		smoke_particle_texture = _create_smoke_texture()
@@ -3962,42 +3371,6 @@ func _spawn_particle_burst(
 	particles.emitting = true
 
 
-func _build_gunshot_audio() -> void:
-	var stream := _create_gunshot_stream()
-	for index in 4:
-		var audio := AudioStreamPlayer3D.new()
-		audio.name = "Gunshot%d" % index
-		audio.stream = stream
-		audio.unit_size = 9.0
-		audio.max_distance = 72.0
-		audio.volume_db = -1.0
-		player.add_child(audio)
-		gunshot_players.append(audio)
-
-
-func _create_gunshot_stream() -> AudioStreamWAV:
-	var mix_rate := 44100
-	var sample_count := int(mix_rate * 0.34)
-	var data := PackedByteArray()
-	data.resize(sample_count * 2)
-	var random := RandomNumberGenerator.new()
-	random.seed = 47047
-	for index in sample_count:
-		var time := float(index) / mix_rate
-		var muzzle_blast := random.randf_range(-1.0, 1.0) * exp(-time * 35.0)
-		var metallic_crack := sin(TAU * 720.0 * time + random.randf_range(-0.18, 0.18)) * exp(-time * 23.0)
-		var low_thump := sin(TAU * 86.0 * time) * exp(-time * 11.0)
-		var tail_noise := random.randf_range(-1.0, 1.0) * exp(-maxf(0.0, time - 0.045) * 9.0) * 0.34
-		var slapback := 0.0
-		if time > 0.055:
-			slapback += random.randf_range(-1.0, 1.0) * exp(-(time - 0.055) * 19.0) * 0.18
-		if time > 0.115:
-			slapback += random.randf_range(-1.0, 1.0) * exp(-(time - 0.115) * 14.0) * 0.11
-		var sample := muzzle_blast * 0.82 + metallic_crack * 0.26 + low_thump * 0.58 + tail_noise + slapback
-		_write_wav_sample(data, index, tanh(sample * 1.35) * 0.92)
-	return _make_wav_stream(data, mix_rate)
-
-
 func _build_roll_audio() -> void:
 	roll_audio_player = AudioStreamPlayer3D.new()
 	roll_audio_player.name = "RollWhoosh"
@@ -4090,14 +3463,6 @@ func _write_wav_sample(data: PackedByteArray, index: int, sample: float) -> void
 	var encoded := int(clampf(sample, -1.0, 1.0) * 32767.0)
 	data[index * 2] = encoded & 0xff
 	data[index * 2 + 1] = (encoded >> 8) & 0xff
-
-
-func _play_gunshot() -> void:
-	if gunshot_players.is_empty():
-		return
-	var audio := gunshot_players[gunshot_index]
-	gunshot_index = (gunshot_index + 1) % gunshot_players.size()
-	audio.play()
 
 
 func _is_first_stage_zone() -> bool:
@@ -4323,222 +3688,10 @@ func _update_time_hud() -> void:
 	time_label.add_theme_color_override("font_color", phase_color)
 
 
-func _build_visibility_fog() -> void:
-	$HUD.layer = 3
-	var fog_layer := CanvasLayer.new()
-	fog_layer.name = "VisibilityFog"
-	fog_layer.layer = 2
-	add_child(fog_layer)
-	var darkness := ColorRect.new()
-	darkness.name = "Darkness"
-	darkness.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	darkness.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	fog_layer.add_child(darkness)
-	var shader := Shader.new()
-	shader.code = """
-shader_type canvas_item;
-uniform vec2 viewport_size = vec2(1280.0, 720.0);
-uniform vec2 player_screen = vec2(640.0, 360.0);
-uniform vec2 facing_screen_direction = vec2(0.0, -1.0);
-uniform float inner_radius = 245.0;
-uniform float outer_radius = 430.0;
-uniform float near_radius = 96.0;
-uniform float fan_cos = 0.34;
-uniform float darkness = 0.86;
-uniform float aim_expanded = 0.0;
-uniform float circle_radius = 245.0;
-
-void fragment() {
-	vec2 pixel_position = UV * viewport_size;
-	vec2 to_pixel = pixel_position - player_screen;
-	float distance_from_player = length(to_pixel);
-	vec2 pixel_direction = distance_from_player > 0.001 ? normalize(to_pixel) : facing_screen_direction;
-	float alignment = dot(pixel_direction, normalize(facing_screen_direction));
-	float near_visibility = 1.0 - smoothstep(near_radius * 0.72, near_radius, distance_from_player);
-	float circle_visibility = 1.0 - smoothstep(circle_radius * 0.78, circle_radius, distance_from_player);
-	float fan_visibility = smoothstep(fan_cos - 0.11, fan_cos + 0.08, alignment);
-	float range_visibility = 1.0 - smoothstep(inner_radius, outer_radius, distance_from_player);
-	float relaxed_visibility = max(near_visibility, circle_visibility);
-	float aimed_visibility = max(relaxed_visibility, fan_visibility * range_visibility);
-	float visibility = mix(relaxed_visibility, aimed_visibility, aim_expanded);
-	float fog_alpha = mix(darkness, 0.035, visibility);
-	COLOR = vec4(0.008, 0.012, 0.015, fog_alpha);
-}
-"""
-	visibility_material = ShaderMaterial.new()
-	visibility_material.shader = shader
-	darkness.material = visibility_material
-	_update_visibility_fog()
-
-
-func _update_visibility_fog() -> void:
-	if visibility_material == null:
-		return
-	var viewport_size := get_viewport().get_visible_rect().size
-	var circle_radius := lerpf(178.0, 104.0, night_intensity)
-	var inner_radius := lerpf(430.0, 185.0, night_intensity)
-	var outer_radius := lerpf(560.0, 285.0, night_intensity)
-	var brightness_floor := clampf(float(AccessibilitySettings.minimum_brightness), 0.0, 0.5)
-	var edge_darkness := minf(
-		lerpf(0.82, 0.97, night_intensity),
-		0.99 - brightness_floor * 0.55
-	)
-	var player_screen := camera.unproject_position(player.global_position)
-	var facing_screen := camera.unproject_position(player.global_position + _get_perception_aim_direction() * 5.0)
-	var facing_screen_direction := (facing_screen - player_screen).normalized()
-	if facing_screen_direction.length_squared() <= 0.001:
-		facing_screen_direction = Vector2(0.0, -1.0)
-	visibility_material.set_shader_parameter("viewport_size", viewport_size)
-	visibility_material.set_shader_parameter("player_screen", player_screen)
-	visibility_material.set_shader_parameter("facing_screen_direction", facing_screen_direction)
-	visibility_material.set_shader_parameter("inner_radius", inner_radius)
-	visibility_material.set_shader_parameter("outer_radius", outer_radius)
-	visibility_material.set_shader_parameter("near_radius", lerpf(112.0, 64.0, night_intensity))
-	visibility_material.set_shader_parameter("fan_cos", lerpf(0.06, 0.34, night_intensity))
-	visibility_material.set_shader_parameter("darkness", edge_darkness)
-	visibility_material.set_shader_parameter("aim_expanded", 1.0 if laser_aim_held else 0.0)
-	visibility_material.set_shader_parameter("circle_radius", circle_radius)
-
-
-func _update_enemy_visibility(delta: float = 1.0 / 60.0) -> void:
-	if not is_instance_valid(player) or not is_instance_valid(camera):
-		return
-	var fully_visible_radius := lerpf(178.0, 104.0, night_intensity)
-	var reveal_radius := fully_visible_radius + lerpf(46.0, 30.0, night_intensity)
-	if laser_aim_held:
-		fully_visible_radius = lerpf(430.0, 185.0, night_intensity)
-		reveal_radius = lerpf(560.0, 285.0, night_intensity)
-	for enemy in enemies:
-		if not is_instance_valid(enemy):
-			continue
-		var raw_visibility := _enemy_player_visibility_factor(
-			enemy,
-			fully_visible_radius,
-			reveal_radius
-		)
-		var previous_visibility := float(enemy.get_meta("smoothed_player_visibility", raw_visibility))
-		var visibility_hold := maxf(
-			0.0,
-			float(enemy.get_meta("player_visibility_hold", 0.0)) - delta
-		)
-		if raw_visibility > 0.01:
-			visibility_hold = ENEMY_VISIBILITY_HOLD_SECONDS
-		elif visibility_hold > 0.0:
-			raw_visibility = previous_visibility
-		var blend_speed := (
-			ENEMY_VISIBILITY_FADE_IN_SPEED
-			if raw_visibility > previous_visibility
-			else ENEMY_VISIBILITY_FADE_OUT_SPEED
-		)
-		var visibility_factor := lerpf(
-			previous_visibility,
-			raw_visibility,
-			1.0 - exp(-blend_speed * maxf(delta, 0.0001))
-		)
-		if raw_visibility <= 0.0 and visibility_factor < 0.012:
-			visibility_factor = 0.0
-		enemy.set_meta("smoothed_player_visibility", visibility_factor)
-		enemy.set_meta("player_visibility_hold", visibility_hold)
-		enemy.visible = visibility_factor > 0.001
-		if enemy.has_method("set_player_visibility_factor"):
-			enemy.call("set_player_visibility_factor", visibility_factor)
-
-
-func _enemy_player_visibility_factor(
-	enemy: Node3D,
-	fully_visible_radius: float,
-	reveal_radius: float
-) -> float:
-	if not is_instance_valid(enemy) or camera.is_position_behind(enemy.global_position):
-		return 0.0
-	var viewport_rect := get_viewport().get_visible_rect()
-	var enemy_screen := camera.unproject_position(enemy.global_position + Vector3(0, 0.45, 0))
-	if not viewport_rect.grow(24.0).has_point(enemy_screen):
-		return 0.0
-	var player_screen := camera.unproject_position(player.global_position + Vector3(0, 0.22, 0))
-	var screen_distance := player_screen.distance_to(enemy_screen)
-	if screen_distance > reveal_radius:
-		return 0.0
-	var facing_screen := camera.unproject_position(player.global_position + _get_perception_aim_direction() * 5.0)
-	var facing_screen_direction := (facing_screen - player_screen).normalized()
-	var enemy_screen_direction := (enemy_screen - player_screen).normalized()
-	var near_radius := lerpf(112.0, 64.0, night_intensity)
-	var fan_cos := lerpf(0.06, 0.34, night_intensity)
-	if laser_aim_held and screen_distance > near_radius and enemy_screen_direction.dot(facing_screen_direction) < fan_cos:
-		return 0.0
-	if screen_distance <= fully_visible_radius:
-		return 1.0
-	return 1.0 - smoothstep(fully_visible_radius, reveal_radius, screen_distance)
-
-
-func _enemy_is_in_player_vision(enemy: Node3D, visible_radius: float) -> bool:
-	if not is_instance_valid(enemy) or camera.is_position_behind(enemy.global_position):
-		return false
-	var viewport_rect := get_viewport().get_visible_rect()
-	var enemy_screen := camera.unproject_position(enemy.global_position + Vector3(0, 0.45, 0))
-	if not viewport_rect.grow(24.0).has_point(enemy_screen):
-		return false
-	var player_screen := camera.unproject_position(player.global_position + Vector3(0, 0.22, 0))
-	if player_screen.distance_to(enemy_screen) > visible_radius:
-		return false
-	var facing_screen := camera.unproject_position(player.global_position + _get_perception_aim_direction() * 5.0)
-	var facing_screen_direction := (facing_screen - player_screen).normalized()
-	var enemy_screen_direction := (enemy_screen - player_screen).normalized()
-	var near_radius := lerpf(112.0, 64.0, night_intensity)
-	var fan_cos := lerpf(0.06, 0.34, night_intensity)
-	if laser_aim_held and player_screen.distance_to(enemy_screen) > near_radius and enemy_screen_direction.dot(facing_screen_direction) < fan_cos:
-		return false
-	var query := PhysicsRayQueryParameters3D.create(
-		player.global_position + Vector3(0, 0.42, 0),
-		enemy.global_position + Vector3(0, 0.42, 0),
-		COLLISION_PROFILES.WORLD_ONLY_SIGHT_MASK
-	)
-	query.exclude = [player.get_rid(), enemy.get_rid()]
-	return player.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
-
-
 func _install_perception_system() -> void:
 	perception_system = PERCEPTION_SYSTEM_SCRIPT.new() as CanvasLayer
 	perception_system.call("setup", player, camera)
 	add_child(perception_system)
-
-
-func _install_scent_system() -> void:
-	scent_system = SCENT_TRAIL_MANAGER_SCRIPT.new() as Node3D
-	scent_system.name = "ScentTrailManager"
-	add_child(scent_system)
-	scent_system.call("setup", player)
-	objective_scent_guidance = OBJECTIVE_SCENT_GUIDANCE_SCRIPT.new() as Node
-	objective_scent_guidance.name = "ObjectiveScentGuidance"
-	add_child(objective_scent_guidance)
-	objective_scent_guidance.call("setup", scent_system, player, $World)
-	scent_system.connect("focus_changed", func(active: bool) -> void:
-		scent_focus_active = active
-		if hud.ammo_notice:
-			hud.ammo_notice.text = "후각 집중 · 금빛은 임무, 초록빛은 구조 흔적" if active else ""
-			hud.ammo_notice.visible = active
-			ammo_notice_time = 0.35
-	)
-
-
-func _update_scent_system(delta: float) -> void:
-	if not is_instance_valid(scent_system):
-		return
-	scent_system.call("set_night_factor", night_intensity)
-	if is_instance_valid(objective_scent_guidance):
-		objective_scent_guidance.call("update_guidance", delta)
-	if loafing:
-		return
-	scent_awareness_tick += delta
-	if scent_awareness_tick < 0.3:
-		return
-	scent_awareness_tick = 0.0
-	for enemy in enemies:
-		if not is_instance_valid(enemy) or not enemy.has_method("add_scent_suspicion"):
-			continue
-		var strength: float = float(scent_system.call("get_strength_near", enemy.global_position, "player", 5.0))
-		if strength >= 60.0:
-			enemy.call("add_scent_suspicion", player.global_position, strength * 0.0018)
 
 
 func take_damage(amount: int) -> void:
@@ -4875,7 +4028,7 @@ func _get_aimed_camera_occluder() -> Node3D:
 	var aim_direction := (
 		locked_aim_direction
 		if laser_aim_held and locked_aim_direction.length_squared() > 0.01
-		else _get_mouse_world_direction() if _uses_mouse_aim() else _get_current_facing_world_direction()
+		else weapon_combat._get_mouse_world_direction() if weapon_combat._uses_mouse_aim() else _get_current_facing_world_direction()
 	)
 	aim_direction.y = 0.0
 	if aim_direction.length_squared() <= 0.01:
@@ -6073,41 +5226,6 @@ func _update_collect_mission() -> void:
 		field_missions._complete_field_mission()
 
 
-func _update_stealth_mission(delta: float, distance_to_site: float) -> void:
-	if field_mission_noise_breached:
-		field_missions._fail_field_mission("총성이 울려 잠복 위치가 노출됐습니다.")
-		return
-	var detected := field_missions._update_field_mission_detection(delta)
-	var detection_grace := float(active_field_mission.get_meta("detection_grace", 1.25))
-	if field_mission_detection_time >= detection_grace:
-		field_missions._fail_field_mission("수색대에게 위치를 들켰습니다.")
-		return
-	var hold_radius := FIELD_MISSION_STEALTH_HOLD_RADIUS
-	var inside_hide_area := distance_to_site <= hold_radius
-	if inside_hide_area and not detected:
-		field_mission_elapsed += delta
-	var duration := float(active_field_mission.get_meta("duration", 15.0))
-	var remaining := maxf(0.0, duration - field_mission_elapsed)
-	var detail := "엄폐 상태 유지  %.1f초" % remaining
-	var color := Color("#8fd0c1")
-	if detected:
-		detail = "발각 위험 · 시야를 끊으십시오  %.1f / %.1f초" % [
-			field_mission_detection_time,
-			detection_grace,
-		]
-		color = Color("#ff9b77")
-	elif not inside_hide_area:
-		detail = "은신 지점으로 복귀하십시오 · 거리 %.0fm" % distance_to_site
-		color = Color("#d7bd72")
-	field_missions._set_field_mission_objective(
-		str(active_field_mission.get_meta("title", "은밀 잠복")),
-		detail,
-		color
-	)
-	if field_mission_elapsed >= duration:
-		field_missions._complete_field_mission()
-
-
 func _update_investigation_mission(delta: float) -> void:
 	var silence_required := bool(active_field_mission.get_meta("silence_required", false))
 	if silence_required and field_mission_noise_breached:
@@ -6165,37 +5283,6 @@ func _update_investigation_mission(delta: float) -> void:
 		color
 	)
 	if field_mission_collected >= target_count:
-		field_missions._complete_field_mission()
-
-
-func _update_stealth_reach_mission(delta: float) -> void:
-	if field_mission_noise_breached:
-		field_missions._fail_field_mission("총성이 울려 우회 경로가 차단됐습니다.")
-		return
-	var detected := field_missions._update_field_mission_detection(delta)
-	var detection_grace := float(active_field_mission.get_meta("detection_grace", 1.0))
-	if field_mission_detection_time >= detection_grace:
-		field_missions._fail_field_mission("순찰대에게 우회 이동을 들켰습니다.")
-		return
-	var target := active_mission_collectibles[0] if not active_mission_collectibles.is_empty() else null
-	if not is_instance_valid(target):
-		field_missions._fail_field_mission("안전 지점 신호를 찾을 수 없습니다.")
-		return
-	var target_distance := player.global_position.distance_to((target as Node3D).global_position)
-	var detail := "안전 지점까지 %.1fm · 시야에 들지 마십시오." % target_distance
-	var color := Color("#8fd0c1")
-	if detected:
-		detail = "발각 위험 · 엄폐물 뒤로 이동하십시오  %.1f / %.1f초" % [
-			field_mission_detection_time,
-			detection_grace,
-		]
-		color = Color("#ff9b77")
-	field_missions._set_field_mission_objective(
-		str(active_field_mission.get_meta("title", "감시망 우회")),
-		detail,
-		color
-	)
-	if target_distance <= 1.55:
 		field_missions._complete_field_mission()
 
 
@@ -6994,7 +6081,7 @@ func _recover_previous_corpse() -> void:
 		and GameState.get_weapon_count(recovered_weapon_id) > 0
 		and not has_ak
 	):
-		_on_inventory_weapon_equipped(recovered_weapon_id)
+		weapon_combat._on_inventory_weapon_equipped(recovered_weapon_id)
 	reserve_ammo = GameState.get_ammo_count(GameState.equipped_ammo_id)
 	GameState.reserve_ammo = reserve_ammo
 	GameState.clear_pending_corpse_recovery()
@@ -7246,7 +6333,7 @@ func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
 		_on_mobile_context_button_down()
 		return true
 	if _mobile_button_contains(mobile_reload_button, touch.position):
-		_reload_ak47()
+		weapon_combat._reload_ak47()
 		return true
 	if _mobile_button_contains(mobile_flashlight_button, touch.position):
 		var enabled := not mobile_flashlight_button.button_pressed
@@ -7365,7 +6452,7 @@ func _input(event: InputEvent) -> void:
 				field_interaction_keyboard_held = false
 				pickup_keyboard_held = key_event.pressed
 		elif key == KEY_R and key_event.pressed and has_ak:
-			_reload_ak47()
+			weapon_combat._reload_ak47()
 		elif key == KEY_N and key_event.pressed:
 			_save_run_state()
 			GameState.randomize_map()
@@ -7458,11 +6545,11 @@ func _input(event: InputEvent) -> void:
 func _handle_combat_mouse_button(mouse_event: InputEventMouseButton) -> void:
 	if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 		if mouse_event.pressed:
-			if _try_stealth_takedown():
+			if stealth._try_stealth_takedown():
 				mouse_fire_held = false
 			elif laser_aim_held and has_ak and (magazine_ammo > 0 or reserve_ammo > 0):
 				mouse_fire_held = true
-				_try_fire_ak47()
+				weapon_combat._try_fire_ak47()
 			else:
 				mouse_fire_held = false
 				_try_melee_attack()
@@ -7473,7 +6560,7 @@ func _handle_combat_mouse_button(mouse_event: InputEventMouseButton) -> void:
 		if not mouse_event.pressed:
 			mouse_fire_held = false
 		if mouse_event.pressed:
-			_lock_aim_direction(_get_mouse_world_direction())
+			_lock_aim_direction(weapon_combat._get_mouse_world_direction())
 
 
 func _unhandled_input(_event: InputEvent) -> void:
@@ -7502,7 +6589,7 @@ func _apply_runtime_accessibility_settings() -> void:
 	if rain:
 		rain.amount_ratio = 0.36 if bool(AccessibilitySettings.battery_saver) else 1.0
 	_update_day_night_visuals()
-	_update_visibility_fog()
+	stealth._update_visibility_fog()
 
 
 func _exit_tree() -> void:
@@ -7613,3 +6700,58 @@ func _create_loot_pickup(loot_type: String, world_position: Vector3, data: Dicti
 
 func _show_bag_full_notice() -> void:
 	loot_system._show_bag_full_notice()
+
+# 잠입/무기 전투는 scripts/raid/{stealth_system,weapon_combat}.gd 로 옮겨졌다.
+
+func _setup_stealth_takedown_prompt(font: Font) -> void:
+	stealth._setup_stealth_takedown_prompt(font)
+
+func _update_stealth_mission(delta: float, distance_to_site: float) -> void:
+	stealth._update_stealth_mission(delta, distance_to_site)
+
+func _update_stealth_reach_mission(delta: float) -> void:
+	stealth._update_stealth_reach_mission(delta)
+
+func _enemy_player_visibility_factor(enemy: Node3D,
+	fully_visible_radius: float,
+	reveal_radius: float) -> float:
+	return stealth._enemy_player_visibility_factor(enemy, fully_visible_radius, reveal_radius)
+
+func _update_enemy_visibility(delta: float = 1.0 / 60.0) -> void:
+	stealth._update_enemy_visibility(delta)
+
+func _update_visibility_fog() -> void:
+	stealth._update_visibility_fog()
+
+func _update_stealth_takedown_prompt() -> void:
+	stealth._update_stealth_takedown_prompt()
+
+func _on_inventory_weapon_equipped(weapon_id: String) -> void:
+	weapon_combat._on_inventory_weapon_equipped(weapon_id)
+
+func _on_inventory_weapon_mods_changed() -> void:
+	weapon_combat._on_inventory_weapon_mods_changed()
+
+func _on_inventory_weapon_unequipped() -> void:
+	weapon_combat._on_inventory_weapon_unequipped()
+
+func _get_mobile_aim_assist_direction(facing_direction: Vector3) -> Vector3:
+	return weapon_combat._get_mobile_aim_assist_direction(facing_direction)
+
+func _update_mobile_aim_direction(movement_world_direction: Vector3) -> void:
+	weapon_combat._update_mobile_aim_direction(movement_world_direction)
+
+func _apply_weapon_recoil(aim_direction: Vector3) -> void:
+	weapon_combat._apply_weapon_recoil(aim_direction)
+
+func _fire_ak47() -> void:
+	weapon_combat._fire_ak47()
+
+func _reload_ak47() -> void:
+	weapon_combat._reload_ak47()
+
+func _update_weapon_ballistics(delta: float, is_moving: bool) -> void:
+	weapon_combat._update_weapon_ballistics(delta, is_moving)
+
+func _update_weapon_pose() -> void:
+	weapon_combat._update_weapon_pose()
