@@ -52,7 +52,8 @@ static func build_state(
 		"ammo_combined_text": combined_text,
 		"reserve_text": "예비 %d발" % safe_reserve_ammo if has_weapon else "예비 없음",
 		"status_text": status_text,
-		"condition_text": "%s · 사용 탄환  %s" % [status_text, ammo_name] if has_weapon else "가방을 열어 보유 무기를 선택하고 장착하세요.",
+		# 폰에서는 이 줄이 한 줄을 넘으면 패널이 부풀어 화면을 먹는다. 짧게 쓴다.
+		"condition_text": "%s · %s" % [status_text, ammo_name] if has_weapon else "무기 없음 · 가방에서 장착",
 		"condition_notable": notable,
 		"ammo_color": ammo_color,
 		"reserve_color": EMPTY_COLOR if has_weapon and safe_reserve_ammo <= 0 else RESERVE_COLOR,

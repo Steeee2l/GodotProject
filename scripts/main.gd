@@ -189,6 +189,9 @@ var pickup_touch_held := false
 var pickup_keyboard_held := false
 var pickup_hold_time := 0.0
 var mobile_context_button: Button
+# 컨텍스트 버튼이 "떠 있어야 하는가". 실제 visible과 위치는 유틸리티 줄
+# 레이아웃이 결정한다. 둘을 섞으면 생성 시점 좌표에 유령 버튼이 남는다.
+var mobile_context_wants_visible := false
 var mobile_medkit_button: Button
 var mobile_reload_button: Button
 var mobile_flashlight_button: Button
@@ -2351,6 +2354,68 @@ func _get_loot_glow_texture() -> ImageTexture:
 	return loot_glow_texture
 
 
+func _layout_mobile_utility_row() -> float:
+	# 우하단 액션 버튼 바로 위에 오른쪽부터 채운다. 반환값은 줄 높이(없으면 0).
+	#
+	# 이 함수가 표시 여부와 위치를 함께 정하는 유일한 곳이어야 한다. 예전에는
+	# _refresh_mobile_context_button()이 매 프레임 visible만 직접 켰고, 위치는
+	# 생성 시점 offset(-108)에 머물러 있었다. 그래서 줍기 버튼이 발사 버튼
+	# 아래 화면 밖에 잘린 채 떠 있었고 눌러도 아무 일이 없었다.
+	if not DisplayServer.is_touchscreen_available():
+		return 0.0
+	var viewport_size := get_viewport().get_visible_rect().size
+	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
+		return 0.0
+	var ui_scale := clampf(
+		minf(viewport_size.x / 1360.0, viewport_size.y / 780.0)
+		* float(AccessibilitySettings.ui_scale),
+		0.62,
+		1.5
+	)
+	var safe_margins := UI_SAFE_AREA.get_margins(viewport_size)
+	var side_margin := maxf(
+		maxf(safe_margins.x, safe_margins.z),
+		clampf(viewport_size.x * 0.02, 10.0, 26.0)
+	)
+	var bottom_margin := maxf(safe_margins.w, clampf(viewport_size.y * 0.018, 8.0, 26.0))
+	var action_button_size := clampf(viewport_size.y * 0.155, 68.0, 128.0)
+	var utility_size := clampf(action_button_size * 0.72, 52.0, 96.0)
+	var utility_gap := clampf(10.0 * ui_scale, 6.0, 12.0)
+	var utility_base_bottom := (
+		-bottom_margin - action_button_size - clampf(13.0 * ui_scale, 8.0, 16.0)
+	)
+	var hud_blocked := _is_inventory_open() or _is_tactical_map_open() or lore_reader.is_open()
+	# 자동 재장전이 켜져 있으면 장전 버튼은 아무 일도 하지 않는다.
+	var manual_reload := not bool(AccessibilitySettings.auto_reload)
+	var placed := 0
+	var utility_cursor := -side_margin
+	for entry in [
+		[mobile_context_button, mobile_context_wants_visible and not hud_blocked],
+		[mobile_medkit_button, not hud_blocked],
+		[mobile_reload_button, manual_reload and not hud_blocked],
+		[mobile_flashlight_button, not hud_blocked],
+		[
+			mobile_map_button,
+			not hud_blocked and not extraction_transition_active,
+		],
+	]:
+		var button := entry[0] as Button
+		if button == null:
+			continue
+		button.visible = bool(entry[1])
+		if not button.visible:
+			continue
+		button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		button.offset_right = utility_cursor
+		button.offset_left = utility_cursor - utility_size
+		button.offset_bottom = utility_base_bottom
+		button.offset_top = utility_base_bottom - utility_size
+		button.custom_minimum_size = Vector2(utility_size, utility_size)
+		utility_cursor -= utility_size + utility_gap
+		placed += 1
+	return utility_size if placed > 0 else 0.0
+
+
 func _layout_center_top_banners() -> void:
 	# 보스 경고·긴장도 변화·잭팟·돌발사건이 각자 자기 offset을 고집하고 있어서
 	# 둘 이상 동시에 뜨면 반드시 겹쳤다. 보스 경고는 반응형 배치조차 없었다.
@@ -2469,17 +2534,36 @@ func _apply_hud_layout() -> void:
 	var left_column_limit := viewport_size.y - bottom_margin - 10.0
 	if touch_available:
 		left_column_limit -= touch_stick_size
-	objective_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	objective_panel.offset_left = side_margin
-	objective_panel.offset_top = (
+	# 좌측 열 순서: 체력 → 피로 → 목표. 커서로 쌓아 서로 밀어낸다.
+	var left_column_cursor := (
 		top_left_status_panel.offset_bottom + 6.0
 		if top_left_status_panel.visible
 		else top_margin
 	)
+
+	if hud.fatigue_panel:
+		# 우상단으로 옮겼더니 이번엔 가방 버튼(top-right +68~106px)과 겹쳤다.
+		# 애초에 체력과 피로는 둘 다 "내 상태"라 떨어져 있을 이유가 없다.
+		# 좌상단 체력 바로 아래, 얇은 띠로 붙인다.
+		var fatigue_w := minf(300.0, maxf(190.0, safe_left_width))
+		var fatigue_compact := viewport_size.y < 430.0
+		var fatigue_h := 40.0 if fatigue_compact else 56.0
+		if fatigue < 35.0:
+			fatigue_h = 28.0 if fatigue_compact else 38.0
+		hud.fatigue_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		hud.fatigue_panel.offset_left = side_margin
+		hud.fatigue_panel.offset_right = side_margin + fatigue_w
+		hud.fatigue_panel.offset_top = left_column_cursor
+		hud.fatigue_panel.offset_bottom = left_column_cursor + fatigue_h
+		left_column_cursor = hud.fatigue_panel.offset_bottom + 6.0
+
+	objective_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	objective_panel.offset_left = side_margin
+	objective_panel.offset_top = left_column_cursor
 	objective_panel.offset_right = side_margin + safe_left_width
 	objective_panel.offset_bottom = objective_panel.offset_top + minf(
 		objective_height,
-		maxf(48.0, left_column_limit - objective_panel.offset_top)
+		maxf(44.0, left_column_limit - objective_panel.offset_top)
 	)
 
 	var right_column_top := top_margin
@@ -2558,23 +2642,6 @@ func _apply_hud_layout() -> void:
 		if hud.field_interaction_progress != null:
 			hud.field_interaction_progress.custom_minimum_size = Vector2(0.0, 6.0)
 
-	if hud.fatigue_panel:
-		# 피로는 좌측 열 세 번째 칸이었는데, 폰 가로 모드에서 그 열이 조이스틱까지
-		# 내려와 겹쳤다. 좌측은 "나는 누구인가/무엇을 하는가", 우측은 "얼마나 더
-		# 버틸 수 있는가"로 나눈다.
-		var fatigue_w := minf(300.0, maxf(200.0, viewport_size.x * 0.22))
-		# 세로가 짧은 폰에서는 압축형으로. 경고 문구는 임계치를 넘을 때만 자리를 쓴다.
-		var fatigue_compact := viewport_size.y < 430.0
-		var fatigue_h := 44.0 if fatigue_compact else 72.0
-		if fatigue < 35.0:
-			fatigue_h = 32.0 if fatigue_compact else 50.0
-		hud.fatigue_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-		hud.fatigue_panel.offset_right = -side_margin
-		hud.fatigue_panel.offset_left = -side_margin - fatigue_w
-		hud.fatigue_panel.offset_top = right_column_top
-		hud.fatigue_panel.offset_bottom = right_column_top + fatigue_h
-		right_column_top = hud.fatigue_panel.offset_bottom
-
 	_layout_center_top_banners()
 
 	# 하한 96px은 짧은 화면에서 버튼 하나가 높이의 25%를 차지했다. 비율을 따르되
@@ -2611,41 +2678,7 @@ func _apply_hud_layout() -> void:
 	# 유틸리티 줄은 우하단 액션 버튼 바로 위에 오른쪽부터 채운다. 버튼을 추가하거나
 	# 빼도 위치가 자동으로 다시 잡히도록 배열을 돌린다. 예전에는 각 버튼이 앞 버튼의
 	# offset_left를 직접 참조해서, 하나만 숨겨도 줄 전체가 어긋났다.
-	var utility_size := clampf(action_button_size * 0.72, 52.0, 96.0)
-	var utility_base_bottom := -bottom_margin - action_button_size - clampf(13.0 * ui_scale, 8.0, 16.0)
-	var utility_gap := clampf(10.0 * ui_scale, 6.0, 12.0)
-	var map_visible := (
-		touch_available
-		and not _is_inventory_open()
-		and not lore_reader.is_open()
-		and not extraction_transition_active
-	)
-	# 자동 재장전이 켜져 있으면 장전 버튼은 아무 일도 하지 않는다. 설정을 끈
-	# 플레이어에게만 자리를 내준다.
-	var manual_reload := not bool(AccessibilitySettings.auto_reload)
-	var utility_row: Array[Button] = []
-	for entry in [
-		[mobile_context_button, touch_available and not hud_blocked],
-		[mobile_medkit_button, not hud_blocked],
-		[mobile_reload_button, touch_available and manual_reload and not hud_blocked],
-		[mobile_flashlight_button, touch_available and not hud_blocked],
-		[mobile_map_button, map_visible],
-	]:
-		var button := entry[0] as Button
-		if button == null:
-			continue
-		button.visible = bool(entry[1])
-		if button.visible:
-			utility_row.append(button)
-	var utility_cursor := -side_margin
-	for button in utility_row:
-		button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-		button.offset_right = utility_cursor
-		button.offset_left = utility_cursor - utility_size
-		button.offset_bottom = utility_base_bottom
-		button.offset_top = utility_base_bottom - utility_size
-		button.custom_minimum_size = Vector2(utility_size, utility_size)
-		utility_cursor -= utility_size + utility_gap
+	var utility_size := _layout_mobile_utility_row()
 
 	# 장비 패널은 우하단 스택 "실제로 보이는 높이" 위에 얹는다. 예전에는 터치
 	# 여부만 보고 고정값을 빼서, 버튼이 숨겨진 상황에서도 빈 자리를 남기거나
@@ -2654,19 +2687,29 @@ func _apply_hud_layout() -> void:
 		var right_stack := 0.0
 		if hud.fire_button != null and hud.fire_button.visible:
 			right_stack += action_button_size + action_gap
-		if not utility_row.is_empty():
+		if utility_size > 0.0:
 			right_stack += utility_size + clampf(13.0 * ui_scale, 8.0, 16.0)
-		var eq_width := minf(360.0, maxf(250.0, viewport_size.x * 0.28))
-		var eq_height := clampf(viewport_size.y * 0.21, 108.0, 190.0)
+		# 폰에서는 무기 정보가 화면을 크게 먹을 이유가 없다. 탄약 한 줄과
+		# 무기 그림이면 충분하고, 상태줄은 할 말이 있을 때만 나온다.
+		var compact := viewport_size.y < 520.0
+		var eq_width := (
+			clampf(viewport_size.x * 0.22, 186.0, 260.0)
+			if compact
+			else minf(360.0, maxf(250.0, viewport_size.x * 0.28))
+		)
+		var eq_height := (
+			clampf(viewport_size.y * 0.17, 62.0, 88.0)
+			if compact
+			else clampf(viewport_size.y * 0.21, 108.0, 190.0)
+		)
 		hud.equipment_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 		hud.equipment_panel.offset_right = -side_margin
 		hud.equipment_panel.offset_left = -side_margin - eq_width
 		hud.equipment_panel.offset_bottom = -bottom_margin - right_stack
-		# 같은 우측 열의 피로 패널 아래로만 자란다. 짧은 화면에서 둘이 겹쳤다.
 		var right_column_room := (
 			viewport_size.y - bottom_margin - right_stack - right_column_top - 8.0
 		)
-		eq_height = minf(eq_height, maxf(72.0, right_column_room))
+		eq_height = minf(eq_height, maxf(58.0, right_column_room))
 		hud.equipment_panel.offset_top = hud.equipment_panel.offset_bottom - eq_height
 		hud.equipment_panel.visible = not hud_blocked
 
@@ -2865,13 +2908,13 @@ func _refresh_mobile_context_button() -> void:
 		if distance <= PICKUP_DISTANCE:
 			label = "무기 획득"
 			icon_name = "weapon"
-	mobile_context_button.visible = (
-		not label.is_empty()
-		and not _is_inventory_open()
-		and not _is_tactical_map_open()
-		and not lore_reader.is_open()
-	)
-	if not mobile_context_button.visible:
+	# 표시 의도만 기록하고, 실제 visible과 위치는 _layout_mobile_utility_row()가
+	# 정한다. 여기서 visible을 직접 켜면 생성 시점 좌표에 그대로 나타난다.
+	var wants_visible := not label.is_empty()
+	if wants_visible != mobile_context_wants_visible:
+		mobile_context_wants_visible = wants_visible
+		_layout_mobile_utility_row()
+	if not wants_visible:
 		mobile_context_button.disabled = false
 		return
 	mobile_context_button.text = label
