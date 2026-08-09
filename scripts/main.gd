@@ -78,6 +78,7 @@ const LOOT_CONTAINER_VISUALS := preload("res://scripts/loot_container_visual_cat
 const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
 const INTERACTION_TARGETING := preload("res://scripts/interaction_targeting.gd")
 const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
+const RAID_EVENT_DIRECTOR := preload("res://scripts/raid_event_director.gd")
 const RAID_LOSS_MANAGER := preload("res://scripts/raid_loss_manager.gd")
 const RAID_EXTRACTION_POLICY := preload("res://scripts/raid_extraction_policy.gd")
 const WEAPON_HUD_PRESENTER := preload("res://scripts/weapon_hud_presenter.gd")
@@ -549,6 +550,14 @@ var faction_conflict_tick := 0.0
 var raid_hotspots: Array[Node3D] = []
 var raid_elapsed_seconds := 0.0
 var raid_pressure_level := 0
+# 긴장도의 실제 입력. 시간·전투·소음·전리품이 여기에 누적된다.
+var raid_pressure_points := 0.0
+var raid_seconds_since_noise := 0.0
+var raid_event_last_fired: Dictionary = {}
+var raid_event_cooldown := 0.0
+var raid_curfew_active := false
+var raid_event_random := RandomNumberGenerator.new()
+var raid_sealed_extraction_index := -1
 var raid_reward_multiplier := 1.0
 var raid_pressure_panel: PanelContainer
 var raid_pressure_icon: TextureRect
@@ -1721,7 +1730,10 @@ func _resolve_melee_hit(direction: Vector3) -> void:
 		if hit.is_empty() or hit.get("collider") != enemy:
 			continue
 		var backstab := bool(enemy.call("is_backstab_from", player.global_position))
-		enemy.call("take_melee_hit", MELEE_ATTACK_DAMAGE, direction, backstab)
+		var melee_damage := MELEE_ATTACK_DAMAGE
+		if GameState.is_churu_buff_active("sharp_claws"):
+			melee_damage = roundi(float(melee_damage) * 1.4)
+		enemy.call("take_melee_hit", melee_damage, direction, backstab)
 
 
 func _spawn_player_melee_arc(direction: Vector3) -> void:
@@ -2770,11 +2782,13 @@ func _setup_boss_defeat_ui() -> void:
 		boss_defeat_overlay.add_child(bar)
 	boss_defeat_panel = PanelContainer.new()
 	boss_defeat_panel.name = "BossDefeatTitlePanel"
-	boss_defeat_panel.set_anchors_preset(Control.PRESET_CENTER)
+	# 연출 중 카메라는 보스를 화면 중앙에 잡는다. 패널을 가운데 두면 정작
+	# 보여주려는 보스를 가린다. 하단 레터박스 바로 위로 내린다.
+	boss_defeat_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	boss_defeat_panel.offset_left = -360
-	boss_defeat_panel.offset_top = -84
+	boss_defeat_panel.offset_top = -252
 	boss_defeat_panel.offset_right = 360
-	boss_defeat_panel.offset_bottom = 84
+	boss_defeat_panel.offset_bottom = -104
 	boss_defeat_panel.add_theme_stylebox_override(
 		"panel",
 		_make_panel_style(Color(0.012, 0.016, 0.015, 0.96), Color("#d9a441"), 8)
@@ -2854,8 +2868,13 @@ func _play_boss_defeat_sequence(enemy: CharacterBody3D) -> void:
 		mobile_flashlight_button.set_pressed_no_signal(false)
 	_update_combat_overlay_visibility()
 	var display_name := str(enemy.get_meta("display_name", "위험 개체"))
-	boss_defeat_title.text = "%s 처치!" % display_name
-	boss_defeat_subtitle.text = "위험 개체 제거 · 전리품을 확보하고 탈출하십시오."
+	boss_defeat_title.text = "%s, 침묵" % display_name
+	# 처치는 끝이 아니라 시작이다. 총성은 도시 전체가 들었다.
+	boss_defeat_subtitle.text = (
+		"소리가 멎었다. 그리고 도시가 이쪽을 본다.\n챙길 것을 챙기고, 나가라."
+		if raid_pressure_level >= RAID_EVENT_DIRECTOR.LEVEL_HUNT
+		else "소리가 멎었다. 남은 것을 챙기고 빠져나가라."
+	)
 	boss_defeat_overlay.visible = true
 	boss_defeat_overlay.modulate.a = 1.0
 	boss_defeat_panel.modulate.a = 0.0
@@ -3393,6 +3412,18 @@ func _create_loot_pickup(loot_type: String, world_position: Vector3, data: Dicti
 			sprite.texture = CHURU_TEXTURE
 			sprite.pixel_size = 0.0011
 			highlight_color = Color("#f2bd55")
+		"raw_scrap":
+			sprite.texture = UI_ICONS.get_icon("scrap", 96, Color("#b9a68c"))
+			sprite.pixel_size = 0.0062
+			highlight_color = Color("#b9a68c")
+		"raw_catnip":
+			sprite.texture = UI_ICONS.get_icon("catnip", 96, Color("#8fd07a"))
+			sprite.pixel_size = 0.0062
+			highlight_color = Color("#8fd07a")
+		"valuable":
+			sprite.texture = UI_ICONS.get_icon("loot", 96, Color("#e6c979"))
+			sprite.pixel_size = 0.0062
+			highlight_color = Color("#e6c979")
 		"medkit":
 			sprite.texture = UI_ICONS.get_icon("medkit", 96, Color("#f4eee2"))
 			sprite.pixel_size = 0.0062
@@ -3643,6 +3674,17 @@ func _show_bag_full_notice() -> void:
 		ammo_notice.add_theme_color_override("font_color", Color("#ffad8f"))
 		ammo_notice.visible = true
 		ammo_notice_time = 2.0
+	# 처음 가방이 찬 순간이 이 게임의 핵심을 가르칠 유일한 자리다.
+	# 조작이 아니라 "무엇을 버릴 것인가"를 가르쳐야 한다.
+	if not GameState.bag_pressure_lesson_seen:
+		GameState.bag_pressure_lesson_seen = true
+		GameState.save_persistent_state()
+		_show_field_notice(
+			"가방은 여기까지다.\n"
+			+ "이제부터는 줍는 게 아니라 고르는 일이다. "
+			+ "칸당 가치가 낮은 물건을 버리고 비싼 것을 실어라.\n"
+			+ "살아서 나가야 내 것이 된다."
+		)
 	_update_equipment_ui()
 
 
@@ -3658,6 +3700,15 @@ func _build_pickup_candidate(pickup: Node3D) -> Dictionary:
 		"churu":
 			item_type = "churu"
 			item_id = "churu"
+		"raw_scrap":
+			item_type = "raw_scrap"
+			item_id = "raw_scrap"
+		"raw_catnip":
+			item_type = "raw_catnip"
+			item_id = "raw_catnip"
+		"valuable":
+			item_type = "valuable"
+			item_id = str(pickup.get_meta("item_id", "subway_token"))
 		"medkit":
 			item_type = "medkit"
 			item_id = "medkit"
@@ -3727,6 +3778,13 @@ func _spawn_discarded_raid_item(item_type: String, item_id: String, amount: int)
 			loot_type = "canned_food"
 		"churu":
 			loot_type = "churu"
+		"raw_scrap":
+			loot_type = "raw_scrap"
+		"raw_catnip":
+			loot_type = "raw_catnip"
+		"valuable":
+			loot_type = "valuable"
+			data["item_id"] = item_id
 		"mod":
 			loot_type = "weapon_mod"
 			data["weapon_mod_id"] = item_id
@@ -3742,6 +3800,11 @@ func _raid_item_display_name(item_type: String, item_id: String) -> String:
 		return str(GameState.get_equipment_definition(item_id).get("display_name", item_id))
 	if item_type == "mod":
 		return str(WEAPON_SYSTEM.get_mod(item_id).get("display_name", item_id))
+	if item_type == "valuable":
+		# 귀중품은 종류가 많다. 이름은 카탈로그가 단일 진실 원천이다.
+		return str(
+			(LOOT_ECONOMY.ITEM_CATALOG.get(item_id, {}) as Dictionary).get("display_name", item_id)
+		)
 	var names := {
 		"9mm_fmj": "9mm FMJ 탄환",
 		"45_fmj": ".45 ACP FMJ 탄환",
@@ -3757,6 +3820,8 @@ func _raid_item_display_name(item_type: String, item_id: String) -> String:
 		"canned_food": "통조림",
 		"medkit": "구급약",
 		"churu": "희귀 츄르",
+		"raw_scrap": "고철 조각",
+		"raw_catnip": "캣닢 잎",
 		"rifle_blueprint": "소총 제작 청사진",
 		"shotgun_blueprint": "산탄총 제작 청사진",
 		"sealed_zone_keycard": "봉인구역 키카드",
@@ -3777,9 +3842,15 @@ func _raid_item_description(item_type: String, item_id: String) -> String:
 		"progression":
 			return "상위 제작과 봉인구역 진입에 필요한 희귀 물품입니다."
 		"food":
-			return "쉘터 노동과 거래에 사용하는 기본 재화입니다."
+			return "주민이 일하려면 먹어야 합니다. 떨어지면 쉘터 생산이 멈춥니다."
 		"churu":
 			return "쉘터 확장에 쓰이는 희귀 재화입니다."
+		"raw_scrap":
+			return "꾹꾹이 라인의 원료입니다. 부피가 커서 10개마다 가방 한 칸을 차지합니다."
+		"raw_catnip":
+			return "캣닢 정제기의 원료입니다. 부피가 커서 10개마다 가방 한 칸을 차지합니다."
+		"valuable":
+			return "쓸 데는 없지만 값이 나갑니다. 쉘터에서 고철로 바꿉니다."
 		"medkit":
 			return "필드에서 체력을 회복하는 응급 치료품입니다."
 	return "레이드에서 확보한 휴대품입니다."
@@ -3801,6 +3872,12 @@ func _raid_item_texture(item_type: String, item_id: String) -> Texture2D:
 			return CHURU_TEXTURE
 		"medkit":
 			return UI_ICONS.get_icon("medkit", 96, Color("#f4eee2"))
+		"raw_scrap":
+			return UI_ICONS.get_icon("scrap", 96, Color("#b9a68c"))
+		"raw_catnip":
+			return UI_ICONS.get_icon("catnip", 96, Color("#8fd07a"))
+		"valuable":
+			return UI_ICONS.get_icon("loot", 96, Color("#e6c979"))
 		"progression":
 			return UI_ICONS.get_icon("secure", 96, Color("#e7c96f"))
 		"mod":
@@ -5236,6 +5313,15 @@ func _fire_ak47() -> void:
 	)
 	_add_fatigue(FATIGUE_SHOT_GAIN)
 	_apply_weapon_recoil(aim_direction)
+	# 총성은 도시가 듣는다. 소음기를 달면 그만큼 덜 들린다.
+	var sound_scale := clampf(float(weapon_stats.get("sound_radius", 1.0)), 0.15, 2.0)
+	_add_raid_pressure(
+		lerpf(
+			RAID_EVENT_DIRECTOR.PRESSURE_PER_SUPPRESSED_GUNSHOT,
+			RAID_EVENT_DIRECTOR.PRESSURE_PER_GUNSHOT,
+			clampf(sound_scale, 0.0, 1.0)
+		)
+	)
 	_play_gunshot()
 	_spawn_muzzle_light(aim_direction)
 	_spawn_launch_fx(aim_direction)
@@ -6351,6 +6437,8 @@ func _spawn_enemy(
 func _on_enemy_died(enemy: CharacterBody3D) -> void:
 	run_kills += 1
 	GameState.raid_kills += 1
+	# 죽인 만큼 도시가 반응한다. 조용히 지나갈수록 판이 길어진다.
+	_add_raid_pressure(RAID_EVENT_DIRECTOR.PRESSURE_PER_KILL)
 	_advance_contract_progress("kills")
 	if (
 		is_instance_valid(active_field_mission)
@@ -6361,6 +6449,8 @@ func _on_enemy_died(enemy: CharacterBody3D) -> void:
 	if bool(enemy.get_meta("raid_boss", false)):
 		run_boss_kills += 1
 		GameState.register_boss_defeat()
+		# 보스전은 도시 전체가 듣는다. 처치 직후가 가장 위험해야 한다.
+		_add_raid_pressure(RAID_EVENT_DIRECTOR.PRESSURE_PER_ALARM)
 		_play_boss_defeat_sequence(enemy)
 		if GameState.subway_story_stage == 1:
 			_advance_basic_mission("subway_boss")
@@ -7506,14 +7596,24 @@ func _scale_map_position(position: Vector3) -> Vector3:
 func _setup_raid_opportunities(world: ProceduralCityMap) -> void:
 	raid_elapsed_seconds = 0.0
 	raid_pressure_level = 0
+	raid_pressure_points = 0.0
+	raid_seconds_since_noise = 99.0
+	raid_event_last_fired.clear()
+	raid_event_cooldown = 40.0
+	raid_curfew_active = false
+	raid_sealed_extraction_index = -1
+	raid_event_random.seed = GameState.map_seed + GameState.raid_serial * 7919
+	if GameState.corpse_recovery_attempt_active:
+		# 회수 판은 시작부터 도시가 깨어 있다. 내 물건이 있는 자리를
+		# 다른 것들도 알고 있다.
+		raid_pressure_points = float(RAID_EVENT_DIRECTOR.LEVEL_THRESHOLDS[1]) * 0.75
 	raid_reward_multiplier = RAID_PRESSURE_REWARD_MULTIPLIERS[0]
-	dynamic_incident_state = "scheduled"
+	dynamic_incident_state = "idle"
 	dynamic_incident_winning_faction = ""
-	dynamic_incident_timer = spawn_random.randf_range(
-		DYNAMIC_INCIDENT_DELAY_MIN,
-		DYNAMIC_INCIDENT_DELAY_MAX
-	)
+	dynamic_incident_timer = 0.0
 	_build_raid_opportunity_hud()
+	if not GameState.bag_pressure_lesson_seen:
+		_spawn_onboarding_loot_cluster(world)
 	_spawn_high_value_hotspots(world)
 	_setup_jackpot_event(world)
 	_refresh_raid_pressure_hud()
@@ -8119,15 +8219,238 @@ func _update_raid_opportunities(delta: float) -> void:
 	):
 		return
 	raid_elapsed_seconds += delta
-	var next_pressure_level := 0
-	for threshold in RAID_PRESSURE_THRESHOLDS:
-		if raid_elapsed_seconds >= float(threshold):
-			next_pressure_level += 1
+	raid_seconds_since_noise += delta
+	# 시간은 가장 약한 입력이다. 소란을 피우면 훨씬 빨리 오른다.
+	raid_pressure_points += RAID_EVENT_DIRECTOR.PRESSURE_PER_SECOND * delta
+	if not raid_curfew_active and RAID_EVENT_DIRECTOR.is_stealth_decay_allowed(raid_seconds_since_noise):
+		raid_pressure_points = maxf(
+			0.0,
+			raid_pressure_points - RAID_EVENT_DIRECTOR.PRESSURE_DECAY_PER_SECOND * delta
+		)
+	var next_pressure_level: int = RAID_EVENT_DIRECTOR.resolve_level(raid_pressure_points)
 	if next_pressure_level != raid_pressure_level:
 		_apply_raid_pressure_level(next_pressure_level)
+	_tick_raid_event_director(delta)
 	_refresh_raid_pressure_hud()
 	_update_hotspot_discovery()
 	_update_dynamic_incident(delta)
+
+
+func _spawn_onboarding_loot_cluster(world: ProceduralCityMap) -> void:
+	# 첫 판에서 가방 갈등을 반드시 한 번 겪게 한다. 부피가 큰 원자재와
+	# 값비싼 소형 물품을 같이 깔아, 무엇을 실을지 고르게 만든다.
+	var origin := player.global_position
+	var plan := [
+		{"type": "raw_scrap", "amount": 9, "data": {}},
+		{"type": "raw_scrap", "amount": 8, "data": {}},
+		{"type": "raw_catnip", "amount": 7, "data": {}},
+		{"type": "canned_food", "amount": 3, "data": {}},
+		{"type": "medkit", "amount": 1, "data": {}},
+		{"type": "mod_component", "amount": 1, "data": {"component_id": "scope_lens"}},
+	]
+	for index in plan.size():
+		var entry := plan[index] as Dictionary
+		var angle := TAU * float(index) / float(plan.size())
+		var radius := spawn_random.randf_range(5.5, 9.0)
+		var drop := origin + Vector3(cos(angle), 0.0, sin(angle)) * radius
+		var data := (entry["data"] as Dictionary).duplicate()
+		data["amount"] = int(entry["amount"])
+		_create_loot_pickup(
+			str(entry["type"]),
+			world.find_nearest_open_position(drop),
+			data
+		)
+
+
+func _tick_raid_event_director(delta: float) -> void:
+	# 사건 발동의 단일 창구. 예전에는 시스템마다 자기 타이머를 들고 있어서
+	# 새 사건을 넣으려면 스케줄러를 또 써야 했다. 이제 여기 하나만 돈다.
+	raid_event_cooldown -= delta
+	if raid_event_cooldown > 0.0:
+		return
+	var event_id: String = RAID_EVENT_DIRECTOR.pick_event(
+		raid_pressure_level,
+		raid_elapsed_seconds,
+		raid_event_last_fired,
+		raid_event_random
+	)
+	raid_event_cooldown = RAID_EVENT_DIRECTOR.get_event_interval(raid_pressure_level)
+	if event_id.is_empty():
+		return
+	raid_event_last_fired[event_id] = raid_elapsed_seconds
+	var definition: Dictionary = RAID_EVENT_DIRECTOR.get_event(event_id)
+	_show_field_notice(
+		"%s\n%s" % [definition.get("title", event_id), definition.get("body", "")]
+	)
+	# 핸들러는 이름으로 부른다. 새 사건 = 표에 한 줄 + 함수 하나.
+	var handler := str(definition.get("handler", ""))
+	if not handler.is_empty() and has_method(handler):
+		call(handler)
+
+
+func _event_spawn_hostile_squad() -> void:
+	_spawn_raid_event_squad(raid_pressure_level)
+
+
+func _event_seal_extraction() -> void:
+	_seal_one_extraction_route()
+
+
+func _event_blackout() -> void:
+	_apply_raid_blackout()
+
+
+func _event_supply_drop() -> void:
+	_spawn_raid_supply_drop()
+
+
+func _event_convoy_wreck() -> void:
+	# 예전 _update_dynamic_incident의 자체 타이머를 디렉터가 대신한다.
+	if dynamic_incident_state == "active":
+		return
+	dynamic_incident_state = "scheduled"
+	_spawn_dynamic_convoy_incident($World as ProceduralCityMap)
+
+
+func _event_spawn_overwatch() -> void:
+	# 트인 길을 위험하게 만든다. 원거리 사수 둘이 자리를 잡는다.
+	var world := $World as ProceduralCityMap
+	if world == null:
+		return
+	var post := _find_event_position_near_player(world, 22.0, 34.0)
+	_spawn_enemy_squad(
+		world,
+		post,
+		["pistol", "pistol"],
+		1.0,
+		player.global_position,
+		{"overwatch": true}
+	)
+
+
+func _event_curfew() -> void:
+	# 통금: 남은 시간 동안 압박이 식지 않는다. 나가야 한다.
+	raid_curfew_active = true
+	_add_raid_pressure(RAID_EVENT_DIRECTOR.PRESSURE_PER_ALARM * 0.5)
+
+
+func _event_downpour() -> void:
+	# 폭우: 발소리가 묻히고(압박 감소) 대신 시야가 줄어든다.
+	raid_pressure_points = maxf(0.0, raid_pressure_points * 0.82)
+	var tween := create_tween()
+	tween.tween_method(_set_blackout_strength, 0.0, 0.55, 1.8)
+
+
+func _event_scavenger_cache() -> void:
+	var world := $World as ProceduralCityMap
+	if world == null:
+		return
+	var cache_position := _find_event_position_near_player(world, 14.0, 26.0)
+	for index in 3:
+		var angle := TAU * float(index) / 3.0
+		var drop := cache_position + Vector3(cos(angle), 0.0, sin(angle)) * 1.4
+		_create_loot_pickup(
+			"mod_component" if index < 2 else "medkit",
+			world.find_nearest_open_position(drop),
+			{"component_id": "scope_lens", "amount": 1}
+		)
+	if is_instance_valid(tactical_map) and tactical_map.has_method("register_raid_marker"):
+		tactical_map.call(
+			"register_raid_marker", "scavenger_cache", cache_position, "loot", "은닉처", true
+		)
+
+
+func _spawn_raid_event_squad(level: int) -> void:
+	var world := $World as ProceduralCityMap
+	if world == null:
+		return
+	var spawn_position := _find_event_position_near_player(world, 26.0, 38.0)
+	var kinds: Array[String] = ["pistol", "melee"] if level < 2 else ["pistol", "pistol", "grenadier"]
+	_spawn_enemy_squad(
+		world,
+		spawn_position,
+		kinds,
+		clampf(0.4 + level * 0.2, 0.0, 1.0),
+		player.global_position,
+		{"raid_pressure_response": level}
+	)
+
+
+func _seal_one_extraction_route() -> void:
+	# 탈출로 하나를 실제로 잠근다. 계획이 무너지는 순간을 만드는 장치다.
+	var sites := get_tree().get_nodes_in_group("field_extraction")
+	var candidates: Array[Node3D] = []
+	for site in sites:
+		if not is_instance_valid(site):
+			continue
+		var node := site as Node3D
+		if int(node.get_meta("extraction_index", 0)) == 0:
+			continue  # 기본 귀환로는 남겨 둔다. 완전히 갇히면 좌절만 남는다.
+		if bool(node.get_meta("extraction_sealed", false)):
+			continue
+		candidates.append(node)
+	if candidates.is_empty():
+		return
+	var target := candidates[raid_event_random.randi_range(0, candidates.size() - 1)]
+	target.set_meta("extraction_sealed", true)
+	raid_sealed_extraction_index = int(target.get_meta("extraction_index", -1))
+	target.remove_from_group("field_extraction")
+	for child in target.get_children():
+		if child is Sprite3D:
+			(child as Sprite3D).modulate = Color(0.42, 0.36, 0.36, 0.85)
+		elif child is MeshInstance3D:
+			(child as MeshInstance3D).visible = false
+	if is_instance_valid(tactical_map) and tactical_map.has_method("seal_extraction"):
+		tactical_map.call("seal_extraction", raid_sealed_extraction_index)
+
+
+func _apply_raid_blackout() -> void:
+	# 시야는 좁아지지만 적의 경계도 함께 떨어진다. 손해만 있는 사건은 재미없다.
+	var tween := create_tween()
+	tween.tween_method(_set_blackout_strength, 0.0, 1.0, 1.2)
+	for enemy in get_tree().get_nodes_in_group("enemy"):
+		if is_instance_valid(enemy) and enemy.has_method("apply_blackout"):
+			enemy.call("apply_blackout")
+
+
+func _set_blackout_strength(strength: float) -> void:
+	if not is_instance_valid(world_environment) or world_environment.environment == null:
+		return
+	var environment := world_environment.environment
+	# adjustment_enabled를 켜지 않으면 brightness 값이 무시된다.
+	environment.adjustment_enabled = true
+	environment.adjustment_brightness = lerpf(1.0, 0.62, strength)
+
+
+func _spawn_raid_supply_drop() -> void:
+	var world := $World as ProceduralCityMap
+	if world == null:
+		return
+	var drop_position := _find_event_position_near_player(world, 18.0, 32.0)
+	_create_loot_pickup(
+		"progression_item",
+		drop_position,
+		{"progression_item_id": "rifle_blueprint", "amount": 1, "display_name": "낙하 보급 · 청사진"}
+	)
+	if is_instance_valid(tactical_map) and tactical_map.has_method("register_raid_marker"):
+		tactical_map.call(
+			"register_raid_marker",
+			"supply_drop",
+			drop_position,
+			"loot",
+			"낙하 보급",
+			true
+		)
+
+
+func _add_raid_pressure(amount: float) -> void:
+	# 소란을 피우면 도시가 반응한다. 조용해지면 _update_raid_opportunities가
+	# 다시 식혀 준다.
+	if extraction_transition_active or player_death_sequence_active:
+		return
+	raid_pressure_points = maxf(0.0, raid_pressure_points + amount)
+	if amount > 0.0:
+		raid_seconds_since_noise = 0.0
 
 
 func _apply_raid_pressure_level(new_level: int) -> void:
@@ -8160,10 +8483,8 @@ func _apply_raid_pressure_level(new_level: int) -> void:
 		player.global_position,
 		{"raid_pressure_response": raid_pressure_level}
 	)
-	_show_field_notice(
-		"도시 긴장도 %d단계 · 대응대가 흔적을 추적합니다. 보상 ×%.2f"
-		% [raid_pressure_level, raid_reward_multiplier]
-	)
+	# 단계가 오르면 즉시 한 건 터뜨린다. 나머지는 디렉터가 주기적으로 판단한다.
+	raid_event_cooldown = 0.0
 
 
 func _refresh_raid_pressure_hud() -> void:
@@ -8182,13 +8503,10 @@ func _refresh_raid_pressure_hud() -> void:
 		jackpot_pressure_label.add_theme_color_override("font_color", color)
 	raid_pressure_title.text = "도시 긴장도 · %s" % level_names[raid_pressure_level]
 	if raid_pressure_level < RAID_PRESSURE_THRESHOLDS.size():
-		var remaining := maxi(
-			0,
-			ceili(float(RAID_PRESSURE_THRESHOLDS[raid_pressure_level]) - raid_elapsed_seconds)
-		)
-		raid_pressure_detail.text = "다음 대응 %02d:%02d · 전리품 ×%.2f" % [
-			remaining / 60,
-			remaining % 60,
+		# 시계가 아니라 게이지를 보여준다. 플레이어가 속도를 통제할 수 있어야 한다.
+		var progress: float = RAID_EVENT_DIRECTOR.get_level_progress(raid_pressure_points)
+		raid_pressure_detail.text = "다음 대응 %d%% · 전리품 ×%.2f" % [
+			roundi(progress * 100.0),
 			raid_reward_multiplier,
 		]
 	else:
@@ -8224,11 +8542,8 @@ func _update_hotspot_discovery() -> void:
 
 
 func _update_dynamic_incident(delta: float) -> void:
-	if dynamic_incident_state == "scheduled":
-		dynamic_incident_timer -= delta
-		if dynamic_incident_timer <= 0.0:
-			_spawn_dynamic_convoy_incident($World as ProceduralCityMap)
-		return
+	# 발동 시점은 이제 raid_event_director가 정한다. 여기서는 진행 중인
+	# 사건의 남은 시간과 HUD만 돌본다.
 	if dynamic_incident_state != "active":
 		return
 	dynamic_incident_timer = maxf(0.0, dynamic_incident_timer - delta)
@@ -8513,7 +8828,7 @@ func _spawn_opportunity_definition(
 	var adjusted := definition.duplicate(true)
 	var data := (adjusted.get("data", {}) as Dictionary).duplicate(true)
 	var loot_type := str(adjusted.get("type", ""))
-	if loot_type in ["ammo", "canned_food", "mod_component", "medkit"]:
+	if loot_type in ["ammo", "canned_food", "mod_component", "medkit", "raw_scrap", "raw_catnip", "valuable"]:
 		var amount := maxi(1, int(data.get("amount", 1)))
 		data["amount"] = maxi(1, ceili(float(amount) * raid_reward_multiplier))
 		data["total_value"] = int(data.get("base_value", 0)) * int(data["amount"])
@@ -10506,6 +10821,38 @@ func _setup_corpse_recovery(world: ProceduralCityMap) -> void:
 	corpse_recovery_point.set_meta("interaction_distance", 3.1)
 	_build_corpse_recovery_prop(corpse_recovery_point)
 	_add_interaction_marker(corpse_recovery_point, Color("#e4b65b"), 1.15, false)
+	_guard_corpse_recovery_site(world, recovery_position)
+
+
+func _guard_corpse_recovery_site(world: ProceduralCityMap, recovery_position: Vector3) -> void:
+	# 내 물건이 떨어진 자리는 남들도 안다. 그냥 주우러 가는 게 아니라
+	# 되찾으러 가는 일이 되어야 한다.
+	var elapsed := GameState.get_corpse_returns_elapsed()
+	var guard_count := clampi(2 + elapsed, 2, 5)
+	var kinds: Array[String] = []
+	for index in guard_count:
+		kinds.append("pistol" if index % 2 == 0 else "melee")
+	if elapsed >= 2:
+		kinds.append("grenadier")
+	var guard_origin := recovery_position + Vector3(
+		spawn_random.randf_range(-3.2, 3.2),
+		0.0,
+		spawn_random.randf_range(-3.2, 3.2)
+	)
+	_spawn_enemy_squad(
+		world,
+		world.find_nearest_open_position(guard_origin),
+		kinds,
+		0.0,  # 아직 플레이어를 못 봤다. 잠입으로 빼돌릴 여지를 남긴다.
+		recovery_position,
+		{"corpse_guard": true}
+	)
+	var remaining := GameState.get_corpse_returns_remaining()
+	var intact := GameState.get_corpse_intact_ratio()
+	_show_field_notice(
+		"장비가 남아 있는 자리에 약탈자가 붙었다.\n잔존 %d%% · 앞으로 %d회 안에 회수하지 않으면 사라진다."
+		% [roundi(intact * 100.0), remaining]
+	)
 
 
 func _build_corpse_recovery_prop(point: Node3D) -> void:
@@ -11240,6 +11587,8 @@ func _recover_previous_corpse() -> void:
 	GameState.medkits += maxi(0, int(loot.get("medkits", 0)))
 	GameState.canned_food += maxi(0, int(loot.get("canned_food", 0)))
 	GameState.churu += maxi(0, int(loot.get("churu", 0)))
+	GameState.raw_scrap += maxi(0, int(loot.get("raw_scrap", 0)))
+	GameState.raw_catnip += maxi(0, int(loot.get("raw_catnip", 0)))
 	_add_dictionary_loot(
 		GameState.mod_component_inventory,
 		loot.get("mod_component_inventory", {}) as Dictionary

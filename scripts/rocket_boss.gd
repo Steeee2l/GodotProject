@@ -23,8 +23,8 @@ const MINE_PATTERN_RETREAT_DISTANCE := 10.2
 const MINE_PATTERN_APPROACH_DURATION := 0.42
 const MINE_PATTERN_RETREAT_DURATION := 0.5
 const MINE_DEPLOY_INTERVAL := 0.14
-const MINE_DAMAGE := 24
-const MINE_BLAST_RADIUS := 2.35
+const MINE_DAMAGE := 38
+const MINE_BLAST_RADIUS := 3.1
 
 var boss_action := "combat"
 var boss_action_elapsed := 0.0
@@ -366,9 +366,13 @@ func _deploy_boss_mine(index: int) -> void:
 	var fraction := 0.5
 	if mine_deploy_count > 1:
 		fraction = float(index) / float(mine_deploy_count - 1)
-	var fan_angle := lerpf(-0.95, 0.95, fraction) + boss_rng.randf_range(-0.12, 0.12)
-	var spread_direction := forward.rotated(Vector3.UP, fan_angle)
-	var spread_distance := boss_rng.randf_range(1.35, 3.15)
+	# 예전엔 플레이어 주변에 무작위로 흩뿌려서 그냥 걸어 나가면 그만이었다.
+	# 이제는 플레이어 뒤쪽 반원에 깔아 후퇴로를 끊는다. 앞으로 나오거나
+	# 지뢰 사이 틈을 노려 굴러 빠져나가야 한다.
+	var away_from_boss := forward  # 보스 -> 플레이어 방향 = 플레이어의 후퇴 방향
+	var arc_angle := lerpf(-1.15, 1.15, fraction) + boss_rng.randf_range(-0.1, 0.1)
+	var spread_direction := away_from_boss.rotated(Vector3.UP, arc_angle)
+	var spread_distance := boss_rng.randf_range(2.6, 4.4)
 	var landing_position := mine_target_snapshot + spread_direction * spread_distance
 	landing_position.y = 0.1
 	var mine := Node3D.new()

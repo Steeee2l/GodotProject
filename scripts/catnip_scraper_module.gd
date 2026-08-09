@@ -266,11 +266,12 @@ func _resident_button(resident_id: String) -> Button:
 	button.expand_icon = true
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.disabled = not available
-	button.text = "%s · %s\n%s  ·  캣닢 x%.2f" % [
+	button.text = "%s · %s\n%s  ·  캣닢 x%.2f  식비 x%.2f" % [
 		trait_data.get("display_name", "이름 없는 주민"),
 		trait_data.get("name", "평범한 주민"),
 		"스크래핑 중" if active else "대기",
 		trait_data.get("catnip", 1.0),
+		trait_data.get("appetite", 1.0),
 	]
 	button.pressed.connect(func(): _toggle_worker(resident_id))
 	return button

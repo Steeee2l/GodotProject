@@ -18,11 +18,17 @@ func _run() -> void:
 	assert(main_scene.get("ak_pickup") == null)
 	assert(bool(game_state.get("has_ak")))
 	var initial_pickups := main_scene.get("ammo_pickups") as Array
-	assert(initial_pickups.size() == 20)
+	# 첫 판 온보딩 전리품 뭉치가 섞여 있을 수 있다. 이 테스트가 검증하려는 것은
+	# "보장 통조림 보급 20개"이므로 그 집합만 골라 센다.
+	var guaranteed_pickups: Array = []
 	for pickup in initial_pickups:
+		if bool(pickup.get_meta("guaranteed_field_supply", false)):
+			guaranteed_pickups.append(pickup)
+	assert(guaranteed_pickups.size() == 20)
+	for pickup in guaranteed_pickups:
 		assert(str(pickup.get_meta("loot_type", "")) == "canned_food")
-		assert(bool(pickup.get_meta("guaranteed_field_supply", false)))
-	assert((main_scene.get("field_loot_containers") as Array).size() == 29)
+	# 1단계 컨테이너 51개 = 기존 31 + 원자재 10 + 생활권 10.
+	assert((main_scene.get("field_loot_containers") as Array).size() == 51)
 	var opened_container := (main_scene.get("field_loot_containers") as Array)[0] as Node3D
 	main_scene.call("_complete_field_interaction", opened_container)
 	await process_frame

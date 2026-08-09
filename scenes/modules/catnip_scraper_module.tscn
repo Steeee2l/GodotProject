@@ -1,10 +1,10 @@
 [gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/catnip_scraper_module.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/interiors/factory/factory_catnip_refinery_v1.png" id="2_texture"]
+[ext_resource type="Texture2D" path="res://assets/interiors/modules/catnip_scraper_wall_aligned_v1.png" id="2_texture"]
 
 [sub_resource type="BoxShape3D" id="BoxShape_scraper"]
-size = Vector3(5.2, 1.25, 2.8)
+size = Vector3(5.8, 1.2, 2.0)
 
 [sub_resource type="Shader" id="Shader_shadow"]
 code = "shader_type spatial;\nrender_mode unshaded, cull_disabled, depth_draw_never;\n\nvoid fragment() {\n\tvec2 centered = (UV - vec2(0.5)) * vec2(2.0, 2.0);\n\tfloat ellipse = dot(centered * vec2(0.72, 1.0), centered * vec2(0.72, 1.0));\n\tfloat alpha = (1.0 - smoothstep(0.16, 1.0, ellipse)) * 0.28;\n\tALBEDO = vec3(0.0);\n\tALPHA = alpha;\n}\n"
@@ -15,7 +15,7 @@ shader = SubResource("Shader_shadow")
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_shadow"]
 material = SubResource("ShaderMaterial_shadow")
-size = Vector2(4.05, 1.75)
+size = Vector2(5.6, 1.7)
 
 [node name="CatnipScraperModule" type="Node3D"]
 script = ExtResource("1_script")
@@ -25,13 +25,13 @@ collision_layer = 1
 collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="ScraperBody"]
-position = Vector3(0, 0.5, 0.15)
+position = Vector3(0, 0.5, 0.3)
 shape = SubResource("BoxShape_scraper")
 
 [node name="ScraperSprite" type="Sprite3D" parent="."]
-position = Vector3(0, 2.05, 0.02)
+position = Vector3(0, 1.89, 0.02)
 texture = ExtResource("2_texture")
-pixel_size = 0.0038
+pixel_size = 0.00384
 billboard = 1
 shaded = false
 transparent = true
@@ -40,6 +40,5 @@ render_priority = 12
 
 [node name="GroundShadow" type="MeshInstance3D" parent="."]
 position = Vector3(0, 0.045, 0.83)
-visible = false
 mesh = SubResource("PlaneMesh_shadow")
 cast_shadow = 0

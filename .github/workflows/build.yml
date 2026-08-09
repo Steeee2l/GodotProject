@@ -11,8 +11,13 @@ permissions:
   pages: write
   id-token: write
 
+# A new push supersedes the one still running - do not keep a stale web build alive.
+concurrency:
+  group: build-and-deploy
+  cancel-in-progress: true
+
 jobs:
-  build:
+  build-web:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -25,23 +30,23 @@ jobs:
           use-dotnet: false
           include-templates: true
 
+      - name: Restore import cache
+        uses: actions/cache@v4
+        with:
+          path: .godot
+          key: godot-import-web-${{ hashFiles('project.godot', 'assets/**/*.import') }}
+          restore-keys: |
+            godot-import-web-
+            godot-import-
+
       - name: Validate project
         run: godot --headless --path . --editor --quit
 
       - name: Prepare export directories
-        run: mkdir -p build/windows build/web
-
-      - name: Export Windows build
-        run: godot --headless --path . --export-release "Windows Desktop"
+        run: mkdir -p build/web
 
       - name: Export Web build
         run: godot --headless --path . --export-release "Web"
-
-      - name: Upload Windows build
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-build
-          path: build/windows
 
       - name: Upload Web build
         uses: actions/upload-artifact@v4
@@ -49,8 +54,45 @@ jobs:
           name: web-build
           path: build/web
 
+  build-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Godot
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.5.1
+          use-dotnet: false
+          include-templates: true
+
+      - name: Restore import cache
+        uses: actions/cache@v4
+        with:
+          path: .godot
+          key: godot-import-windows-${{ hashFiles('project.godot', 'assets/**/*.import') }}
+          restore-keys: |
+            godot-import-windows-
+            godot-import-
+
+      - name: Validate project
+        run: godot --headless --path . --editor --quit
+
+      - name: Prepare export directories
+        run: mkdir -p build/windows
+
+      - name: Export Windows build
+        run: godot --headless --path . --export-release "Windows Desktop"
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: build/windows
+
   deploy-web:
-    needs: build
+    needs: build-web
     runs-on: ubuntu-latest
     environment:
       name: github-pages

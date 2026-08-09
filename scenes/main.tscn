@@ -186,7 +186,7 @@ theme_override_constants/separation = 5
 layout_mode = 2
 theme_override_fonts/font = ExtResource("4_font")
 theme_override_font_sizes/font_size = 18
-text = "윤서  ·  Lv. 01"
+text = "나비  ·  Lv. 01"
 
 [node name="Health" type="ProgressBar" parent="HUD/TopLeft/Margin/VBox"]
 custom_minimum_size = Vector2(290, 10)

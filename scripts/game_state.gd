@@ -47,6 +47,12 @@ var medkits: int = 0
 var canned_food: int = 0
 var catnip: int = 0
 var churu: int = 0
+# 원자재는 출정에서만 들어온다. 쉘터는 이것을 소비해 정제 자원을 만든다.
+var raw_scrap: int = 0
+var raw_catnip: int = 0
+# 귀중품: 용도가 없고 오직 값어치만 있는 물건. 추출 슈터의 핵심 판단축인
+# "칸당 가치"를 순수하게 만드는 아이템 계열이다. 쉘터에서 고철로 환전한다.
+var valuable_inventory: Dictionary = {}
 var fatigue: float = 0.0
 var rescued_workers: int = 0
 var resident_cat_ids: Array[String] = []
@@ -130,6 +136,16 @@ var workbench_starter_parts_claimed: bool = false
 var shelter_scrap_fraction: float = 0.0
 var shelter_catnip_fraction: float = 0.0
 var shelter_food_fraction: float = 0.0
+var shelter_raw_scrap_fraction: float = 0.0
+var shelter_raw_catnip_fraction: float = 0.0
+# 이번 출정에만 적용되는 츄르 버프. 출정 종료/사망 시 소멸한다.
+var active_churu_buffs: Array[String] = []
+var last_corpse_decay_notice: Dictionary = {}
+# 첫 판에서 "가방이 꽉 찼을 때의 갈등"을 한 번은 반드시 겪게 한다.
+var bag_pressure_lesson_seen: bool = false
+var unlocked_milestones: Array[String] = []
+var pending_milestone_unlocks: Array[Dictionary] = []
+var resident_reroll_counts: Dictionary = {}
 var shelter_return_serial: int = 0
 var merchant_last_roll_serial: int = -1
 var merchant_status: String = "away"
@@ -180,286 +196,167 @@ const SHELTER_FACILITY_NAMES := {
 	"scratcher_bank": "꾹꾹이 고철 생산기",
 	"catnip_scraper": "스크래핑 캣닢 생산기",
 }
-const MISSION_CONTRACTS := [
+const SHELTER_FACILITY_NAMES_V2 := {
+	"bed": "개인 침상",
+	"storage": "쉘터 창고",
+	"training": "생존 체력 훈련장",
+	"workbench": "무기 작업대",
+	"scratcher_bank": "꾹꾹이 고철 생산기",
+	"catnip_scraper": "스크래핑 캣닢 생산기",
+}
+const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 	{
 		"id": "field_parts",
-		"title": "흩어진 개조 부품",
-		"brief": "도시 바닥에 굴러다니는 개조 부품 세 개만 챙겨 와. 쓸 만한 건 내가 골라내지.",
+		"title": "공생의 첫 톱니",
+		"brief": "도시에서 기초 부품 3개를 확보해 사자에게 전달하세요.",
 		"accept_dialogue": [
-			"첫 계약이다. 총부터 쏘려고 들지 말고, 살아서 돌아올 물건부터 눈에 익혀.",
-			"인간 공구에는 아직 쓸모가 남아 있다. 개조 부품 세 개, 부서뜨리지 말고 가져와.",
+			"이 쉘터는 벽만 남았지, 살아갈 힘은 아직 없어.",
+			"도시에서 쓸 만한 부품을 모아 와. 네가 길을 열면, 내가 생산 라인을 세우지.",
 		],
 		"complete_dialogue": [
-			"좋아. 녹만 슨 고물과 진짜 부품을 구분할 눈은 있군.",
-			"이 각인을 봐. 유리발톱 놈들이 인간 창고를 봉인할 때 쓰던 표식이다.",
+			"좋아. 녹은 슬었어도 톱니는 아직 맞물리는군.",
+			"꾹꾹이 고철 생산기를 가동하겠다. 주민이 늘수록 이곳도 공장처럼 살아날 거야.",
 		],
-		"objective": "총기 개조 부품 획득",
+		"objective": "기초 부품 확보",
 		"metric": "parts",
 		"target": 3,
 		"reward": {"xp": 80, "canned_food": 4},
 		"facility_unlock": "scratcher_bank",
-		"lore_title": "철근의 기록 01 · 남겨진 공구",
-		"lore": "인간이 사라진 뒤 가장 먼저 창고를 장악한 것은 유리발톱 연맹이었다. 지금 쓰는 총기 개조법 대부분은 그들이 봉인한 인간 공구함에서 시작됐다.",
+		"lore_title": "사자의 기록 01 · 공생",
+		"lore": "사자는 쉘터를 지키는 대신, 생존자들이 가져온 자원으로 공동 설비를 세우기로 했다.",
 	},
 	{
 		"id": "street_patrol",
-		"title": "순찰대의 빈틈",
-		"brief": "외곽 순찰대 넷을 끊어 놔. 길을 열려면 먼저 놈들의 발을 묶어야 한다.",
+		"title": "초록 불씨",
+		"brief": "주변 위협 4명을 정리해 캣닢 재배 장비를 옮길 길을 확보하세요.",
 		"accept_dialogue": [
-			"이번엔 발톱을 쓸 차례다. 외곽 순찰대 넷, 한꺼번에 덤비지 말고 잘라 먹어.",
-			"놈들이 지키는 건 길이 아니라 배급표다. 그 종이 한 장 때문에 굶는 고양이가 수백이야.",
+			"캣닢은 사치품이 아니야. 지친 주민을 다시 움직이게 하는 연료지.",
+			"운반로를 막은 녀석들을 치워 줘. 초록 불씨를 이 안으로 들여오겠다.",
 		],
 		"complete_dialogue": [
-			"총성이 여기까지 들리더군. 그래도 네 발로 돌아왔으니 합격이다.",
-			"유리발톱은 통로와 식량을 함께 쥔다. 길 하나를 뚫는 게 주민 열을 먹이는 일이지.",
+			"길이 열렸군. 이제 캣닢을 직접 생산할 수 있어.",
+			"잘 기억해. 이 도시에서 고철은 뼈고, 캣닢은 피다.",
 		],
-		"objective": "적대 세력 처치",
+		"objective": "운반로 위협 제거",
 		"metric": "kills",
 		"target": 4,
 		"reward": {"xp": 110, "ammo": 30},
 		"facility_unlock": "catnip_scraper",
-		"lore_title": "철근의 기록 02 · 유리발톱",
-		"lore": "유리발톱 연맹은 서울의 식량 창고와 지상 통로를 통제한다. 연맹 깃발 아래 들지 않은 고양이는 통조림 배급표조차 받을 수 없다.",
+		"lore_title": "사자의 기록 02 · 초록 연료",
+		"lore": "캣닢은 쉘터 노동을 증폭하는 귀중한 자원이며, 지배 세력이 유통로를 통제하고 있다.",
 	},
 	{
 		"id": "lost_notices",
-		"title": "벽보가 기억하는 밤",
-		"brief": "벽보와 방송 기록 두 개를 찾아. 인간이 사라진 밤은 총알보다 오래 남아 있다.",
+		"title": "다시 쏘는 법",
+		"brief": "현장 기록 2개를 조사해 폐쇄된 정비 구역의 위치를 찾으세요.",
 		"accept_dialogue": [
-			"싸우는 것만 배워서는 오래 못 산다. 벽에 붙은 종이도 지도를 읽듯 읽어.",
-			"붉은비가 내린 날의 기록 두 개를 찾아 와. 누가 문을 열었는지 알아야 한다.",
+			"총은 주워 올 수 있어도, 망가진 총을 살리는 법은 아무나 모르지.",
+			"옛 정비공들의 기록을 찾아와. 작업대를 세울 단서를 거기서 찾을 수 있을 거다.",
 		],
 		"complete_dialogue": [
-			"역시 같은 문구군. 지하철 봉쇄, 그리고 보호소 전면 개방.",
-			"누군가 인간의 마지막 명령을 어기고 우리를 풀어 줬다. 이름은 아직 지워져 있지만.",
+			"좌표가 맞아. 필요한 공구도 아직 남아 있군.",
+			"무기 작업대를 열겠다. 이제 주운 총을 버리지 말고 네 방식으로 길들여.",
 		],
-		"objective": "세계 기록 조사",
+		"objective": "정비 기록 조사",
 		"metric": "lore",
 		"target": 2,
 		"reward": {"xp": 120, "canned_food": 3, "medkits": 1},
 		"facility_unlock": "workbench",
-		"lore_title": "철근의 기록 03 · 붉은비 격리령",
-		"lore": "마지막 인간 방송은 붉은비가 내린 날 지하철을 봉쇄하라고 반복했다. 그러나 누군가는 봉쇄 직전 고양이 보호소의 문을 모두 열어 두었다.",
+		"lore_title": "사자의 기록 03 · 마지막 정비공",
+		"lore": "사라진 인간들의 정비 기록은 고양이 생존자들의 무기 제작 기술로 이어졌다.",
 	},
 	{
 		"id": "salvage_cipher",
-		"title": "고철 속 암호",
-		"brief": "망가진 차량이나 군용 설비 둘을 뜯어. 고철 속 숫자는 거짓말을 안 한다.",
+		"title": "도시의 해체법",
+		"brief": "버려진 차량이나 군용 설비 2개를 분해하세요.",
 		"accept_dialogue": [
-			"이번엔 힘보다 손끝이다. 차량이든 센트리든 두 개만 제대로 분해해.",
-			"부품 안쪽의 배급 각인을 찾아라. 지금 서울의 값어치가 어디서 시작됐는지 보일 거다.",
+			"폐허는 쓰레기장이 아니야. 아직 읽는 법을 모르는 창고지.",
+			"설비를 분해해 봐. 무엇을 챙기고 무엇을 버려야 하는지 몸으로 익혀.",
 		],
 		"complete_dialogue": [
-			"고철, 통조림, 캣닢, 츄르. 인간 돈은 죽었고 이 네 놈이 왕좌를 나눠 가졌지.",
-			"기억해 둬. 고철은 힘이고, 통조림은 노동이고, 캣닢은 속도, 츄르는 권한이다.",
+			"이제야 도시가 물건으로 보이기 시작했겠군.",
+			"그 눈을 잃지 마. 좋은 부품 하나가 총 한 자루보다 오래 살아남게 한다.",
 		],
 		"objective": "현장 설비 분해",
 		"metric": "salvage",
 		"target": 2,
 		"reward": {"xp": 130, "canned_food": 4, "ammo": 45},
-		"lore_title": "철근의 기록 04 · 네 개의 재화",
-		"lore": "고철은 힘, 통조림은 노동, 캣닢은 속도, 츄르는 권한이다. 지금 서울의 모든 거래는 이 네 가지를 누가 쥐고 있느냐로 결정된다.",
+		"lore_title": "사자의 기록 04 · 폐허의 가치",
+		"lore": "폐허의 가치는 크기가 아니라, 다음 출정을 가능하게 만드는 부품에 있다.",
 	},
 	{
 		"id": "rescue_route",
-		"title": "돌아오지 못한 주민",
-		"brief": "고립된 주민 하나를 데리고 돌아와. 네 목숨만큼 그 녀석 목숨도 챙겨.",
+		"title": "빈 침상의 주인",
+		"brief": "도시에서 주민 1명을 구출해 쉘터까지 호송하세요.",
 		"accept_dialogue": [
-			"이번 짐은 물건이 아니라 목숨이다. 발견하면 네 뒤에서 떨어지지 않게 해.",
-			"주민을 데리고 뛰면 느려진다. 총을 더 쏠지, 길을 돌아갈지 네가 판단해.",
+			"설비만 늘어선 곳은 쉘터가 아니라 무덤이야.",
+			"밖에 남은 고양이를 데려와. 이곳을 지킬 손과, 함께 살아갈 이유가 필요하다.",
 		],
 		"complete_dialogue": [
-			"잘했다. 혼자 돌아오는 건 생존이지만, 둘이 돌아오는 건 쉘터를 만드는 일이다.",
-			"유리발톱은 캣닢 공장을 보호한다며 주민을 묶어 둔다. 네가 데려온 한 명이 그 사슬의 균열이야.",
+			"잘 데려왔어. 오늘부터 저 고양이도 이곳의 몫을 나눠 가진다.",
+			"네가 구한 건 일꾼 한 명이 아니라, 쉘터가 내일도 돌아갈 가능성이야.",
 		],
-		"objective": "주민 구조",
+		"objective": "주민 구출",
 		"metric": "rescue",
 		"target": 1,
 		"reward": {"xp": 150, "canned_food": 5, "churu": 1},
-		"lore_title": "철근의 기록 05 · 캣닢 배급선",
-		"lore": "연맹은 캣닢 생산지를 보호한다는 명목으로 주민을 공장에 묶어 둔다. 구조된 주민이 쉘터의 생산기를 돌리는 일은 그 통제에서 벗어났다는 증거다.",
+		"lore_title": "사자의 기록 05 · 빈 침상",
+		"lore": "주민은 생산 수치가 아니라 쉘터의 구성원이며, 각자 다른 기억과 재능을 품고 있다.",
 	},
 	{
 		"id": "field_operation",
-		"title": "종로 현장 작전",
-		"brief": "도시의 현장 작전 하나를 골라 끝까지 버텨. 시작한 싸움은 네 발로 끝내는 거다.",
+		"title": "우리의 첫 작전",
+		"brief": "필드 작전 1개를 수락하고 완수한 뒤 생환하세요.",
 		"accept_dialogue": [
-			"이제 내가 찍어 주는 표적 말고, 네가 현장에서 판단할 차례다.",
-			"작전 하나를 골라 완수하고 돌아와. 종로 지하의 다른 쉘터들이 네 신호를 듣게 해.",
+			"이제 남이 남긴 길만 따라갈 때는 지났어.",
+			"현장 작전 하나를 끝내고 돌아와. 네 선택이 이 쉘터의 다음 방향이 된다.",
 		],
 		"complete_dialogue": [
-			"신호가 잡혔다. 네 작전 결과를 지하선 너머에서도 확인했어.",
-			"우린 혼자가 아니다. 얼굴도 모르는 쉘터들이 같은 주파수로 다음 길을 열고 있다.",
+			"좋아. 이제 이곳은 숨는 구멍이 아니라, 도시로 손을 뻗는 거점이다.",
+			"다음부터는 네가 무엇을 가져오느냐에 따라 쉘터의 모습도 달라질 거야.",
 		],
 		"objective": "현장 작전 완료",
 		"metric": "field_mission",
 		"target": 1,
 		"reward": {"xp": 180, "ammo": 60, "medkits": 2},
-		"lore_title": "철근의 기록 06 · 지하의 목소리",
-		"lore": "종로 지하선에는 연맹의 배급망을 거부한 작은 쉘터들이 남아 있다. 서로 얼굴은 몰라도 같은 주파수로 다음 안전로를 알린다고 한다.",
+		"lore_title": "사자의 기록 06 · 살아 있는 거점",
+		"lore": "쉘터는 도시의 자원을 소비하는 장소가 아니라, 다음 탐사를 만드는 살아 있는 거점이 되었다.",
 	},
 ]
-const SHELTER_FACILITY_NAMES_V2 := {
-    "bed": "개인 침상",
-    "storage": "쉘터 창고",
-    "training": "생존 체력 훈련장",
-    "workbench": "무기 작업대",
-    "scratcher_bank": "꾹꾹이 고철 생산기",
-    "catnip_scraper": "스크래핑 캣닢 생산기",
-}
-const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
-    {
-        "id": "field_parts",
-        "title": "공생의 첫 톱니",
-        "brief": "도시에서 기초 부품 3개를 확보해 사자에게 전달하세요.",
-        "accept_dialogue": [
-            "이 쉘터는 벽만 남았지, 살아갈 힘은 아직 없어.",
-            "도시에서 쓸 만한 부품을 모아 와. 네가 길을 열면, 내가 생산 라인을 세우지.",
-        ],
-        "complete_dialogue": [
-            "좋아. 녹은 슬었어도 톱니는 아직 맞물리는군.",
-            "꾹꾹이 고철 생산기를 가동하겠다. 주민이 늘수록 이곳도 공장처럼 살아날 거야.",
-        ],
-        "objective": "기초 부품 확보",
-        "metric": "parts",
-        "target": 3,
-        "reward": {"xp": 80, "canned_food": 4},
-        "facility_unlock": "scratcher_bank",
-        "lore_title": "사자의 기록 01 · 공생",
-        "lore": "사자는 쉘터를 지키는 대신, 생존자들이 가져온 자원으로 공동 설비를 세우기로 했다.",
-    },
-    {
-        "id": "street_patrol",
-        "title": "초록 불씨",
-        "brief": "주변 위협 4명을 정리해 캣닢 재배 장비를 옮길 길을 확보하세요.",
-        "accept_dialogue": [
-            "캣닢은 사치품이 아니야. 지친 주민을 다시 움직이게 하는 연료지.",
-            "운반로를 막은 녀석들을 치워 줘. 초록 불씨를 이 안으로 들여오겠다.",
-        ],
-        "complete_dialogue": [
-            "길이 열렸군. 이제 캣닢을 직접 생산할 수 있어.",
-            "잘 기억해. 이 도시에서 고철은 뼈고, 캣닢은 피다.",
-        ],
-        "objective": "운반로 위협 제거",
-        "metric": "kills",
-        "target": 4,
-        "reward": {"xp": 110, "ammo": 30},
-        "facility_unlock": "catnip_scraper",
-        "lore_title": "사자의 기록 02 · 초록 연료",
-        "lore": "캣닢은 쉘터 노동을 증폭하는 귀중한 자원이며, 지배 세력이 유통로를 통제하고 있다.",
-    },
-    {
-        "id": "lost_notices",
-        "title": "다시 쏘는 법",
-        "brief": "현장 기록 2개를 조사해 폐쇄된 정비 구역의 위치를 찾으세요.",
-        "accept_dialogue": [
-            "총은 주워 올 수 있어도, 망가진 총을 살리는 법은 아무나 모르지.",
-            "옛 정비공들의 기록을 찾아와. 작업대를 세울 단서를 거기서 찾을 수 있을 거다.",
-        ],
-        "complete_dialogue": [
-            "좌표가 맞아. 필요한 공구도 아직 남아 있군.",
-            "무기 작업대를 열겠다. 이제 주운 총을 버리지 말고 네 방식으로 길들여.",
-        ],
-        "objective": "정비 기록 조사",
-        "metric": "lore",
-        "target": 2,
-        "reward": {"xp": 120, "canned_food": 3, "medkits": 1},
-        "facility_unlock": "workbench",
-        "lore_title": "사자의 기록 03 · 마지막 정비공",
-        "lore": "사라진 인간들의 정비 기록은 고양이 생존자들의 무기 제작 기술로 이어졌다.",
-    },
-    {
-        "id": "salvage_cipher",
-        "title": "도시의 해체법",
-        "brief": "버려진 차량이나 군용 설비 2개를 분해하세요.",
-        "accept_dialogue": [
-            "폐허는 쓰레기장이 아니야. 아직 읽는 법을 모르는 창고지.",
-            "설비를 분해해 봐. 무엇을 챙기고 무엇을 버려야 하는지 몸으로 익혀.",
-        ],
-        "complete_dialogue": [
-            "이제야 도시가 물건으로 보이기 시작했겠군.",
-            "그 눈을 잃지 마. 좋은 부품 하나가 총 한 자루보다 오래 살아남게 한다.",
-        ],
-        "objective": "현장 설비 분해",
-        "metric": "salvage",
-        "target": 2,
-        "reward": {"xp": 130, "canned_food": 4, "ammo": 45},
-        "lore_title": "사자의 기록 04 · 폐허의 가치",
-        "lore": "폐허의 가치는 크기가 아니라, 다음 출정을 가능하게 만드는 부품에 있다.",
-    },
-    {
-        "id": "rescue_route",
-        "title": "빈 침상의 주인",
-        "brief": "도시에서 주민 1명을 구출해 쉘터까지 호송하세요.",
-        "accept_dialogue": [
-            "설비만 늘어선 곳은 쉘터가 아니라 무덤이야.",
-            "밖에 남은 고양이를 데려와. 이곳을 지킬 손과, 함께 살아갈 이유가 필요하다.",
-        ],
-        "complete_dialogue": [
-            "잘 데려왔어. 오늘부터 저 고양이도 이곳의 몫을 나눠 가진다.",
-            "네가 구한 건 일꾼 한 명이 아니라, 쉘터가 내일도 돌아갈 가능성이야.",
-        ],
-        "objective": "주민 구출",
-        "metric": "rescue",
-        "target": 1,
-        "reward": {"xp": 150, "canned_food": 5, "churu": 1},
-        "lore_title": "사자의 기록 05 · 빈 침상",
-        "lore": "주민은 생산 수치가 아니라 쉘터의 구성원이며, 각자 다른 기억과 재능을 품고 있다.",
-    },
-    {
-        "id": "field_operation",
-        "title": "우리의 첫 작전",
-        "brief": "필드 작전 1개를 수락하고 완수한 뒤 생환하세요.",
-        "accept_dialogue": [
-            "이제 남이 남긴 길만 따라갈 때는 지났어.",
-            "현장 작전 하나를 끝내고 돌아와. 네 선택이 이 쉘터의 다음 방향이 된다.",
-        ],
-        "complete_dialogue": [
-            "좋아. 이제 이곳은 숨는 구멍이 아니라, 도시로 손을 뻗는 거점이다.",
-            "다음부터는 네가 무엇을 가져오느냐에 따라 쉘터의 모습도 달라질 거야.",
-        ],
-        "objective": "현장 작전 완료",
-        "metric": "field_mission",
-        "target": 1,
-        "reward": {"xp": 180, "ammo": 60, "medkits": 2},
-        "lore_title": "사자의 기록 06 · 살아 있는 거점",
-        "lore": "쉘터는 도시의 자원을 소비하는 장소가 아니라, 다음 탐사를 만드는 살아 있는 거점이 되었다.",
-    },
-]
 const IRON_SPECIAL_MISSIONS: Array[Dictionary] = [
-    {
-        "id": "iron_trial_vitality",
-        "title": "철근의 시험 · 맷집",
-        "brief": "한 출정에서 적 8명을 상대해 전투 리듬을 증명하세요.",
-        "metric": "kills",
-        "target": 8,
-        "training_id": "vitality",
-        "reward_text": "영구 최대 체력 +10",
-        "accept_dialogue": "총만 믿고 서 있으면 첫 탄창 뒤에 끝난다. 여덟을 상대하고도 숨이 붙어 있으면 인정하지.",
-        "complete_dialogue": "버텼군. 이제 네 몸이 총성보다 먼저 움츠러들지는 않을 거다.",
-    },
-    {
-        "id": "iron_trial_endurance",
-        "title": "철근의 시험 · 지구력",
-        "brief": "위험 지역에서 설비 5개를 분해해 지구력을 증명하세요.",
-        "metric": "salvage",
-        "target": 5,
-        "training_id": "endurance",
-        "reward_text": "영구 최대 스태미나 +12",
-        "accept_dialogue": "싸움은 방아쇠보다 오래 간다. 무거운 부품을 끝까지 챙겨 오는 힘부터 보여 줘.",
-        "complete_dialogue": "호흡이 무너지지 않았군. 이 정도면 도망칠 때도, 쫓을 때도 한 걸음 더 간다.",
-    },
-    {
-        "id": "iron_trial_fieldcraft",
-        "title": "철근의 시험 · 사냥꾼",
-        "brief": "도시의 보스 1명을 쓰러뜨리고 생환하세요.",
-        "metric": "boss",
-        "target": 1,
-        "training_id": "fieldcraft",
-        "reward_text": "영구 피로 저항 및 생존술 강화",
-        "accept_dialogue": "약한 놈 백 마리보다, 도시가 이름을 붙인 괴물 하나가 네 실력을 말해 준다.",
-        "complete_dialogue": "도시가 네 이름을 기억하겠군. 이제 너도 도시의 숨을 읽을 자격이 있다.",
-    },
+	{
+		"id": "iron_trial_vitality",
+		"title": "철근의 시험 · 맷집",
+		"brief": "한 출정에서 적 8명을 상대해 전투 리듬을 증명하세요.",
+		"metric": "kills",
+		"target": 8,
+		"training_id": "vitality",
+		"reward_text": "영구 최대 체력 +10",
+		"accept_dialogue": "총만 믿고 서 있으면 첫 탄창 뒤에 끝난다. 여덟을 상대하고도 숨이 붙어 있으면 인정하지.",
+		"complete_dialogue": "버텼군. 이제 네 몸이 총성보다 먼저 움츠러들지는 않을 거다.",
+	},
+	{
+		"id": "iron_trial_endurance",
+		"title": "철근의 시험 · 지구력",
+		"brief": "위험 지역에서 설비 5개를 분해해 지구력을 증명하세요.",
+		"metric": "salvage",
+		"target": 5,
+		"training_id": "endurance",
+		"reward_text": "영구 최대 스태미나 +12",
+		"accept_dialogue": "싸움은 방아쇠보다 오래 간다. 무거운 부품을 끝까지 챙겨 오는 힘부터 보여 줘.",
+		"complete_dialogue": "호흡이 무너지지 않았군. 이 정도면 도망칠 때도, 쫓을 때도 한 걸음 더 간다.",
+	},
+	{
+		"id": "iron_trial_fieldcraft",
+		"title": "철근의 시험 · 사냥꾼",
+		"brief": "도시의 보스 1명을 쓰러뜨리고 생환하세요.",
+		"metric": "boss",
+		"target": 1,
+		"training_id": "fieldcraft",
+		"reward_text": "영구 피로 저항 및 생존술 강화",
+		"accept_dialogue": "약한 놈 백 마리보다, 도시가 이름을 붙인 괴물 하나가 네 실력을 말해 준다.",
+		"complete_dialogue": "도시가 네 이름을 기억하겠군. 이제 너도 도시의 숨을 읽을 자격이 있다.",
+	},
 ]
 
 const EQUIPMENT_DEFINITIONS := {
@@ -610,18 +507,104 @@ const SHELTER_UPGRADE_COSTS := {
 	4: {"scrap": 5000000, "churu": 8},
 	5: {"scrap": 60000000, "churu": 20},
 }
+# ── 캣닢 경제 ──────────────────────────────────────────────────
+# 캣닢은 시설 하나를 통째로 쓰면서 소비처가 부스트 하나뿐이었다.
+# 츄르가 "출정 전 한 방"이라면 캣닢은 "쉘터 운영의 상시 비용"이다.
+#
+# 재굴림: 주민 특성은 이제 트레이드오프라 나쁜 조합이 나올 수 있다.
+# 캣닢을 태워 다시 뽑는다. 뽑을수록 비싸져서 무한 리롤은 막는다.
+const RESIDENT_REROLL_BASE_COST := 1200
+const RESIDENT_REROLL_STEP := 900
+const RESIDENT_REROLL_MAX_COST := 12000
+
 const CATNIP_BOOST_COST := 900
 const CATNIP_BOOST_DURATION_SECONDS := 600
 const CATNIP_BOOST_MULTIPLIER := 10.0
 const BASE_SCRAP_PER_WORKER_HOUR := 72.0
 const BASE_CATNIP_PER_WORKER_SECOND := 1.0
 const WORKER_HOURS_PER_CANNED_FOOD := 6.0
+
+# ── 문턱 해금 ──────────────────────────────────────────────────
+#
+# 수치가 5% 오르는 것으로는 강해졌다는 느낌이 안 난다. 인크리멘탈의
+# 쾌감은 "어제 못 하던 것을 오늘 할 수 있다"에서 온다.
+# 청사진과 키카드는 그동안 수집만 되고 아무 문도 열지 않았다.
+# 여기서 실제 관문으로 만든다.
+const MILESTONE_UNLOCKS := {
+	"craft_rifle": {
+		"title": "소총 제작 해금",
+		"body": "청사진을 읽었다. 작업대에서 캣라시니코프를 직접 만들 수 있다.",
+		"requires_progression": "rifle_blueprint",
+	},
+	"craft_shotgun": {
+		"title": "산탄총 제작 해금",
+		"body": "청사진을 읽었다. 작업대에서 참치 헌터를 직접 만들 수 있다.",
+		"requires_progression": "shotgun_blueprint",
+	},
+	"sealed_access": {
+		"title": "봉인구역 개방",
+		"body": "키카드를 확보했다. 잠겨 있던 구역의 문이 열린다.",
+		"requires_progression": "sealed_zone_keycard",
+	},
+	"shelter_line": {
+		"title": "생산 라인 가동",
+		"body": "주민 세 명이 모였다. 쉘터가 스스로 돌아가기 시작한다.",
+		"requires_residents": 3,
+	},
+	"veteran": {
+		"title": "베테랑 정찰묘",
+		"body": "보스를 세 번 넘겼다. 이제 이 도시에서 이름이 알려진다.",
+		"requires_boss_kills": 3,
+	},
+}
+
+
+# ── 츄르 출정 버프 ─────────────────────────────────────────────
+# 츄르는 아껴두면 의미가 없다. 한 판을 확실히 바꾸는 소비처를 준다.
+const CHURU_BUFFS := {
+	"full_belly": {
+		"title": "든든한 배",
+		"short_title": "체력",
+		"description": "이번 출정 동안 최대 체력 +25, 시작 체력 전부 회복",
+		"cost": 1,
+		"icon": "health",
+	},
+	"sharp_claws": {
+		"title": "날 선 발톱",
+		"short_title": "공격",
+		"description": "이번 출정 동안 근접 피해 +40%, 스태미나 회복 +25%",
+		"cost": 1,
+		"icon": "stamina",
+	},
+	"big_pockets": {
+		"title": "넉넉한 주머니",
+		"short_title": "가방",
+		"description": "이번 출정 동안 가방 슬롯 +4",
+		"cost": 2,
+		"icon": "loot",
+	},
+}
+
+# ── 원자재 게이트 ──────────────────────────────────────────────
+# 쉘터는 원자재를 만들지 못한다. 출정에서 가져온 만큼만 가공할 수 있다.
+# 원자재 1개가 주민 1명을 몇 초 동안 돌리는지.
+const WORKER_SECONDS_PER_RAW_SCRAP := 60.0
+const WORKER_SECONDS_PER_RAW_CATNIP := 90.0
+# 정제 산출: 원자재 1개당 나오는 정제 자원의 기대량 (배율 적용 전).
+const REFINED_SCRAP_PER_RAW := 600
+const REFINED_CATNIP_PER_RAW := 240
+# 특성은 서열이 아니라 선택이어야 한다. 예전엔 전부 1.0 이상이라
+# "누가 더 좋은가"만 있었고 어디에 넣을지 고민할 이유가 없었다.
+# 이제 각자 잘하는 쪽과 못하는 쪽이 갈리고, 잘하는 만큼 더 먹는다.
+# appetite = 통조림 소비 배율. 고성능 주민은 유지비가 비싸다.
 const RESIDENT_TRAIT_PRESETS := [
-	{"name": "말랑 앞발", "kneading": 1.15, "catnip": 1.00},
-	{"name": "초록 코", "kneading": 1.00, "catnip": 1.20},
-	{"name": "야무진 발톱", "kneading": 1.08, "catnip": 1.08},
-	{"name": "밤샘 체질", "kneading": 1.05, "catnip": 1.10},
-	{"name": "평범한 주민", "kneading": 1.00, "catnip": 1.00},
+	{"name": "말랑 앞발", "kneading": 1.55, "catnip": 0.70, "appetite": 1.25},
+	{"name": "초록 코", "kneading": 0.68, "catnip": 1.60, "appetite": 1.25},
+	{"name": "야무진 발톱", "kneading": 1.20, "catnip": 1.15, "appetite": 1.45},
+	{"name": "밤샘 체질", "kneading": 1.10, "catnip": 1.10, "appetite": 1.00},
+	{"name": "평범한 주민", "kneading": 1.00, "catnip": 1.00, "appetite": 0.85},
+	{"name": "대식가", "kneading": 1.75, "catnip": 1.70, "appetite": 2.30},
+	{"name": "소식가", "kneading": 0.82, "catnip": 0.82, "appetite": 0.45},
 ]
 const RESIDENT_NAME_POOL: Array[String] = [
 	"보리", "두부", "호두", "감자", "밤이", "구름", "탄이", "콩이",
@@ -773,9 +756,70 @@ func set_subway_story_stage(stage: int) -> void:
 	save_persistent_state()
 
 
+# ── 시체 회수 압박 ─────────────────────────────────────────────
+# 시체가 영원히 기다리면 회수 판은 그냥 한 판 더일 뿐이다. 다른 것들이
+# 먼저 도착하기 시작하면, 회수는 "지금 가야 하는 일"이 된다.
+const CORPSE_GRACE_RETURNS := 1        # 이 횟수까지는 온전히 남아 있다
+const CORPSE_DECAY_PER_RETURN := 0.28  # 이후 복귀마다 이만큼씩 약탈당한다
+const CORPSE_LOST_AFTER_RETURNS := 4   # 이만큼 지나면 아무것도 남지 않는다
+
+
 func set_pending_corpse_recovery(data: Dictionary) -> void:
 	pending_corpse_recovery = data.duplicate(true)
+	pending_corpse_recovery["return_serial"] = shelter_return_serial
 	corpse_recovery_attempt_active = false
+
+
+func get_corpse_returns_elapsed() -> int:
+	if pending_corpse_recovery.is_empty():
+		return 0
+	return maxi(
+		0,
+		shelter_return_serial - int(pending_corpse_recovery.get("return_serial", shelter_return_serial))
+	)
+
+
+func get_corpse_intact_ratio() -> float:
+	# 1.0 = 온전함, 0.0 = 전부 사라짐.
+	var elapsed := get_corpse_returns_elapsed()
+	if elapsed <= CORPSE_GRACE_RETURNS:
+		return 1.0
+	var decayed := float(elapsed - CORPSE_GRACE_RETURNS) * CORPSE_DECAY_PER_RETURN
+	return clampf(1.0 - decayed, 0.0, 1.0)
+
+
+func get_corpse_returns_remaining() -> int:
+	return maxi(0, CORPSE_LOST_AFTER_RETURNS - get_corpse_returns_elapsed())
+
+
+func apply_corpse_decay() -> Dictionary:
+	# 복귀할 때마다 호출한다. 남의 손을 탄 만큼 시체에서 물건이 사라진다.
+	if pending_corpse_recovery.is_empty():
+		return {}
+	var elapsed := get_corpse_returns_elapsed()
+	if elapsed >= CORPSE_LOST_AFTER_RETURNS:
+		var lost := pending_corpse_recovery.duplicate(true)
+		clear_pending_corpse_recovery()
+		return {"status": "lost", "loot": lost}
+	var ratio := get_corpse_intact_ratio()
+	if ratio >= 1.0:
+		return {"status": "intact"}
+	var loot := pending_corpse_recovery.get("loot", {}) as Dictionary
+	for scalar_key in ["medkits", "canned_food", "churu", "raw_scrap", "raw_catnip"]:
+		loot[scalar_key] = int(floor(float(int(loot.get(scalar_key, 0))) * ratio))
+	for inventory_key in [
+		"ammo_inventory",
+		"mod_component_inventory",
+		"weapon_mod_inventory",
+		"equipment_inventory",
+	]:
+		var inventory := loot.get(inventory_key, {}) as Dictionary
+		for item_id in inventory.keys():
+			inventory[item_id] = int(floor(float(int(inventory[item_id])) * ratio))
+	# 청사진·키카드와 무기는 약탈자가 가장 먼저 노린다. 하지만 진행에
+	# 필요한 물건이라 완전히 잃기 전까지는 남겨 둔다.
+	pending_corpse_recovery["loot"] = loot
+	return {"status": "decayed", "ratio": ratio}
 
 
 func clear_pending_corpse_recovery() -> void:
@@ -825,6 +869,11 @@ func clear_carried_raid_inventory_after_death() -> void:
 	medkits = 0
 	canned_food = get_stored_storage_count("food", "canned_food")
 	churu = 0
+	# 가지고 있던 원자재는 시체와 함께 현장에 남는다. 창고에 넣어둔 분량만 살아남는다.
+	raw_scrap = 0
+	raw_catnip = 0
+	valuable_inventory.clear()
+	clear_churu_buffs()
 	magazine_ammo = 0
 	reserve_ammo = 0
 	has_ak = false
@@ -848,8 +897,25 @@ func finish_corpse_recovery_attempt() -> void:
 func register_shelter_return() -> void:
 	shelter_return_serial += 1
 	clear_confirmed_raid_manifest()
+	# 츄르 버프는 한 판짜리다. 복귀와 동시에 사라진다.
+	clear_churu_buffs()
+	# 남겨 둔 시체는 그동안 남의 손을 탄다.
+	last_corpse_decay_notice = apply_corpse_decay()
+	pending_milestone_unlocks = check_milestone_unlocks()
 	sync_shelter_progression_milestones()
 	save_persistent_state()
+
+
+func consume_milestone_unlocks() -> Array[Dictionary]:
+	var unlocks := pending_milestone_unlocks.duplicate(true)
+	pending_milestone_unlocks.clear()
+	return unlocks
+
+
+func consume_corpse_decay_notice() -> Dictionary:
+	var notice := last_corpse_decay_notice.duplicate(true)
+	last_corpse_decay_notice.clear()
+	return notice
 
 
 func is_saja_available() -> bool:
@@ -1182,11 +1248,16 @@ func get_backpack_storage_count(item_type: String, item_id: String) -> int:
 
 
 func get_raid_bag_capacity() -> int:
-	return RAID_BAG_CAPACITY
+	return RAID_BAG_CAPACITY + get_churu_bag_bonus_slots()
 
 
 func get_raid_item_stack_limit(item_type: String) -> int:
 	return maxi(1, int(RAID_STACK_LIMITS.get(item_type, 1)))
+
+
+# 원자재는 부피가 크다. 한 슬롯에 이만큼만 들어가고, 넘치면 슬롯을 더 먹는다.
+const RAW_MATERIAL_PER_SLOT := 10
+const RAW_MATERIAL_TYPES := ["raw_scrap", "raw_catnip"]
 
 
 func get_raid_item_slot_cost(item_type: String, _item_id: String, amount: int) -> int:
@@ -1194,6 +1265,8 @@ func get_raid_item_slot_cost(item_type: String, _item_id: String, amount: int) -
 		return 0
 	if item_type in ["weapon", "equipment"]:
 		return amount
+	if item_type in RAW_MATERIAL_TYPES:
+		return ceili(float(amount) / float(RAW_MATERIAL_PER_SLOT))
 	return 1
 
 
@@ -1205,6 +1278,12 @@ func _get_raid_bag_count(item_type: String, item_id: String) -> int:
 			return get_progression_item_count(item_id)
 		"churu":
 			return maxi(0, churu)
+		"raw_scrap":
+			return maxi(0, raw_scrap)
+		"raw_catnip":
+			return maxi(0, raw_catnip)
+		"valuable":
+			return maxi(0, int(valuable_inventory.get(item_id, 0)))
 		"special_cargo":
 			return 0 if raid_special_cargo.is_empty() else 1
 	return 0
@@ -1221,6 +1300,12 @@ func get_raid_bag_used_slots() -> int:
 		get_backpack_storage_count("food", "canned_food")
 	)
 	used += get_raid_item_slot_cost("churu", "churu", churu)
+	used += get_raid_item_slot_cost("raw_scrap", "raw_scrap", raw_scrap)
+	used += get_raid_item_slot_cost("raw_catnip", "raw_catnip", raw_catnip)
+	for valuable_id in valuable_inventory.keys():
+		used += get_raid_item_slot_cost(
+			"valuable", str(valuable_id), int(valuable_inventory[valuable_id])
+		)
 	for component_id in mod_component_inventory.keys():
 		used += get_raid_item_slot_cost(
 			"component",
@@ -1273,6 +1358,7 @@ func get_raid_item_added_slot_delta(
 func get_raid_items_added_slot_delta(items: Array[Dictionary]) -> int:
 	var added_slots: int = 0
 	var planned_stack_keys: Dictionary = {}
+	var planned_raw_amounts: Dictionary = {}
 	var cargo_planned: bool = not raid_special_cargo.is_empty()
 	for item in items:
 		var item_type: String = str(item.get("type", ""))
@@ -1288,15 +1374,26 @@ func get_raid_items_added_slot_delta(items: Array[Dictionary]) -> int:
 				added_slots += 1
 				cargo_planned = true
 			continue
+		if item_type in RAW_MATERIAL_TYPES:
+			# 원자재는 누적량에 따라 슬롯이 늘어나므로 배치 전체를 합산해서 계산한다.
+			planned_raw_amounts[item_type] = int(planned_raw_amounts.get(item_type, 0)) + amount
+			continue
 		var stack_key: String = "%s:%s" % [item_type, item_id]
 		if _get_raid_bag_count(item_type, item_id) <= 0 and not planned_stack_keys.has(stack_key):
 			added_slots += 1
 			planned_stack_keys[stack_key] = true
+	for raw_type in planned_raw_amounts.keys():
+		var raw_id := str(raw_type)
+		var current_raw := _get_raid_bag_count(raw_id, raw_id)
+		added_slots += (
+			get_raid_item_slot_cost(raw_id, raw_id, current_raw + int(planned_raw_amounts[raw_type]))
+			- get_raid_item_slot_cost(raw_id, raw_id, current_raw)
+		)
 	return added_slots
 
 
 func can_add_raid_items(items: Array[Dictionary]) -> bool:
-	return get_raid_bag_used_slots() + get_raid_items_added_slot_delta(items) <= RAID_BAG_CAPACITY
+	return get_raid_bag_used_slots() + get_raid_items_added_slot_delta(items) <= get_raid_bag_capacity()
 
 
 func can_add_raid_item(item_type: String, item_id: String, amount: int = 1) -> bool:
@@ -1305,7 +1402,7 @@ func can_add_raid_item(item_type: String, item_id: String, amount: int = 1) -> b
 	if item_type == "special_cargo" and not raid_special_cargo.is_empty():
 		return false
 	var delta := get_raid_item_added_slot_delta(item_type, item_id, amount)
-	return delta <= 0 or get_raid_bag_used_slots() + delta <= RAID_BAG_CAPACITY
+	return delta <= 0 or get_raid_bag_used_slots() + delta <= get_raid_bag_capacity()
 
 
 func try_add_raid_item(item_type: String, item_id: String, amount: int = 1) -> bool:
@@ -1330,6 +1427,12 @@ func try_add_raid_item(item_type: String, item_id: String, amount: int = 1) -> b
 			canned_food += amount
 		"churu":
 			churu += amount
+		"raw_scrap":
+			raw_scrap += amount
+		"raw_catnip":
+			raw_catnip += amount
+		"valuable":
+			valuable_inventory[item_id] = int(valuable_inventory.get(item_id, 0)) + amount
 		_:
 			return false
 	return true
@@ -1358,6 +1461,12 @@ func remove_raid_bag_item(item_type: String, item_id: String, amount: int) -> in
 			canned_food = maxi(0, canned_food - removable)
 		"churu":
 			churu = maxi(0, churu - removable)
+		"raw_scrap":
+			raw_scrap = maxi(0, raw_scrap - removable)
+		"raw_catnip":
+			raw_catnip = maxi(0, raw_catnip - removable)
+		"valuable":
+			valuable_inventory[item_id] = maxi(0, int(valuable_inventory.get(item_id, 0)) - removable)
 		"special_cargo":
 			raid_special_cargo.clear()
 	return removable
@@ -1418,7 +1527,7 @@ func try_take_story_cargo(cargo: Dictionary) -> bool:
 		return false
 	var next_cargo := cargo.duplicate(true)
 	var required := 1
-	if get_raid_bag_used_slots() + required > RAID_BAG_CAPACITY:
+	if get_raid_bag_used_slots() + required > get_raid_bag_capacity():
 		return false
 	raid_special_cargo = next_cargo
 	return true
@@ -1970,8 +2079,15 @@ func tick_shelter_live(delta: float) -> int:
 	var scrap_rate := get_scrap_per_second()
 	var catnip_rate := get_catnip_per_second()
 	var work_delta := _consume_worker_food_for_duration(safe_delta)
-	var gain := scrap_rate * work_delta
-	var catnip_gain := catnip_rate * work_delta
+	# 라인별로 원자재를 따로 태운다. 한쪽이 멈춰도 다른 쪽은 계속 돈다.
+	var scrap_seconds := _consume_raw_material_for_duration(
+		"scrap", get_active_scratcher_workers(), work_delta
+	)
+	var catnip_seconds := _consume_raw_material_for_duration(
+		"catnip", get_active_catnip_workers(), work_delta
+	)
+	var gain := scrap_rate * scrap_seconds
+	var catnip_gain := catnip_rate * catnip_seconds
 	shelter_scrap_fraction += gain
 	shelter_catnip_fraction += catnip_gain
 	var whole_catnip := int(floor(shelter_catnip_fraction))
@@ -2127,13 +2243,19 @@ func process_shelter_progress() -> Dictionary:
 	var base_scrap_rate := get_base_scrap_per_hour()
 	var catnip_rate := get_catnip_per_hour()
 	var work_seconds := _consume_worker_food_for_duration(float(elapsed))
-	var base_scrap_gain := base_scrap_rate * work_seconds / 3600.0
-	var boosted_seconds := mini(roundi(work_seconds), maxi(0, mini(now, catnip_boost_end_time) - progress_start))
+	var scrap_seconds := _consume_raw_material_for_duration(
+		"scrap", get_active_scratcher_workers(), work_seconds
+	)
+	var catnip_seconds := _consume_raw_material_for_duration(
+		"catnip", get_active_catnip_workers(), work_seconds
+	)
+	var base_scrap_gain := base_scrap_rate * scrap_seconds / 3600.0
+	var boosted_seconds := mini(roundi(scrap_seconds), maxi(0, mini(now, catnip_boost_end_time) - progress_start))
 	var boosted_extra := base_scrap_rate * float(boosted_seconds) / 3600.0 * (CATNIP_BOOST_MULTIPLIER - 1.0)
 	shelter_scrap_fraction += base_scrap_gain + boosted_extra
 	var scrap_gain := int(floor(shelter_scrap_fraction))
 	shelter_scrap_fraction -= float(scrap_gain)
-	shelter_catnip_fraction += catnip_rate * work_seconds / 3600.0
+	shelter_catnip_fraction += catnip_rate * catnip_seconds / 3600.0
 	var catnip_gain := int(floor(shelter_catnip_fraction))
 	shelter_catnip_fraction -= float(catnip_gain)
 	catnip += catnip_gain
@@ -2154,18 +2276,237 @@ func process_shelter_progress() -> Dictionary:
 
 
 func _consume_worker_food_for_duration(requested_seconds: float) -> float:
+	# 통조림은 주민의 노동 시간 그 자체를 산다. 떨어지면 라인 전체가 멈춘다.
 	var worker_count := get_active_scratcher_workers() + get_active_catnip_workers()
 	if worker_count <= 0 or requested_seconds <= 0.0:
 		return maxf(requested_seconds, 0.0)
 	if canned_food <= 0:
-		return requested_seconds
-	var food_per_second := float(worker_count) / (WORKER_HOURS_PER_CANNED_FOOD * 3600.0)
-	shelter_food_fraction += requested_seconds * food_per_second
+		return 0.0
+	# 잘 일하는 주민일수록 많이 먹는다. 배치는 산출만이 아니라 식비의 문제다.
+	var appetite_total := get_total_worker_appetite()
+	var food_per_second := appetite_total / (WORKER_HOURS_PER_CANNED_FOOD * 3600.0)
+	var affordable_seconds := float(canned_food) / maxf(food_per_second, 0.000001)
+	var work_seconds := minf(requested_seconds, affordable_seconds)
+	shelter_food_fraction += work_seconds * food_per_second
 	var consumed := mini(canned_food, int(floor(shelter_food_fraction)))
 	if consumed > 0:
 		canned_food -= consumed
 		shelter_food_fraction -= float(consumed)
-	return requested_seconds
+	return work_seconds
+
+
+func _consume_raw_material_for_duration(
+	kind: String, worker_count: int, requested_seconds: float
+) -> float:
+	# 원자재가 있는 만큼만 가공한다. 이것이 출정과 쉘터를 묶는 지점이다.
+	if worker_count <= 0 or requested_seconds <= 0.0:
+		return 0.0
+	var is_catnip := kind == "catnip"
+	var stock: int = raw_catnip if is_catnip else raw_scrap
+	if stock <= 0:
+		return 0.0
+	var seconds_per_unit: float = (
+		WORKER_SECONDS_PER_RAW_CATNIP if is_catnip else WORKER_SECONDS_PER_RAW_SCRAP
+	)
+	var units_per_second := float(worker_count) / maxf(seconds_per_unit, 0.000001)
+	var affordable_seconds := float(stock) / maxf(units_per_second, 0.000001)
+	var work_seconds := minf(requested_seconds, affordable_seconds)
+	var fraction_key := work_seconds * units_per_second
+	if is_catnip:
+		shelter_raw_catnip_fraction += fraction_key
+		var used_catnip := mini(raw_catnip, int(floor(shelter_raw_catnip_fraction)))
+		if used_catnip > 0:
+			raw_catnip -= used_catnip
+			shelter_raw_catnip_fraction -= float(used_catnip)
+	else:
+		shelter_raw_scrap_fraction += fraction_key
+		var used_scrap := mini(raw_scrap, int(floor(shelter_raw_scrap_fraction)))
+		if used_scrap > 0:
+			raw_scrap -= used_scrap
+			shelter_raw_scrap_fraction -= float(used_scrap)
+	return work_seconds
+
+
+func get_valuable_total_value() -> int:
+	var total := 0
+	for valuable_id in valuable_inventory.keys():
+		var amount := maxi(0, int(valuable_inventory[valuable_id]))
+		if amount <= 0:
+			continue
+		total += amount * int(
+			(LOOT_ECONOMY.ITEM_CATALOG.get(str(valuable_id), {}) as Dictionary).get("base_value", 0)
+		)
+	return total
+
+
+func sell_all_valuables() -> Dictionary:
+	# 귀중품은 용도가 없다. 쉘터에 돌아와 고철로 바꾸는 것이 유일한 출구다.
+	var total := get_valuable_total_value()
+	var count := 0
+	for amount in valuable_inventory.values():
+		count += maxi(0, int(amount))
+	if total <= 0:
+		return {"scrap": 0, "count": 0}
+	valuable_inventory.clear()
+	scrap += total
+	save_persistent_state()
+	return {"scrap": total, "count": count}
+
+
+func get_resident_reroll_cost(resident_id: String) -> int:
+	var times := int(resident_reroll_counts.get(resident_id, 0))
+	return mini(
+		RESIDENT_REROLL_MAX_COST,
+		RESIDENT_REROLL_BASE_COST + RESIDENT_REROLL_STEP * times
+	)
+
+
+func try_reroll_resident_trait(resident_id: String) -> Dictionary:
+	# 특성이 트레이드오프가 된 이상, 마음에 안 드는 조합을 바꿀 길이 있어야 한다.
+	if not resident_cat_ids.has(resident_id):
+		return {"ok": false, "reason": "unknown"}
+	var cost := get_resident_reroll_cost(resident_id)
+	if catnip < cost:
+		return {"ok": false, "reason": "catnip", "cost": cost}
+	var current := get_resident_trait(resident_id)
+	var current_name := str(current.get("name", ""))
+	# 같은 특성이 다시 나오면 돈만 버린 셈이 된다. 후보에서 뺀다.
+	var candidates: Array[Dictionary] = []
+	for preset in RESIDENT_TRAIT_PRESETS:
+		if str((preset as Dictionary).get("name", "")) != current_name:
+			candidates.append(preset as Dictionary)
+	if candidates.is_empty():
+		return {"ok": false, "reason": "no_candidates"}
+	catnip -= cost
+	resident_reroll_counts[resident_id] = int(resident_reroll_counts.get(resident_id, 0)) + 1
+	var picked := candidates[randi() % candidates.size()].duplicate(true)
+	# 이름·초상화 같은 정체성은 유지하고 능력치만 바꾼다.
+	var record := (resident_traits.get(resident_id, {}) as Dictionary).duplicate(true)
+	for key in ["name", "kneading", "catnip", "appetite"]:
+		record[key] = picked.get(key, record.get(key))
+	resident_traits[resident_id] = record
+	save_persistent_state()
+	return {"ok": true, "cost": cost, "trait": record}
+
+
+func is_milestone_unlocked(milestone_id: String) -> bool:
+	return unlocked_milestones.has(milestone_id)
+
+
+func _milestone_condition_met(definition: Dictionary) -> bool:
+	var progression_id := str(definition.get("requires_progression", ""))
+	if not progression_id.is_empty() and get_progression_item_count(progression_id) <= 0:
+		return false
+	var required_residents := int(definition.get("requires_residents", 0))
+	if required_residents > 0 and rescued_workers < required_residents:
+		return false
+	var required_bosses := int(definition.get("requires_boss_kills", 0))
+	if required_bosses > 0 and total_boss_kills < required_bosses:
+		return false
+	return true
+
+
+func check_milestone_unlocks() -> Array[Dictionary]:
+	# 새로 넘긴 문턱만 돌려준다. 호출한 쪽이 연출을 담당한다.
+	var newly_unlocked: Array[Dictionary] = []
+	for milestone_id in MILESTONE_UNLOCKS.keys():
+		var key := str(milestone_id)
+		if unlocked_milestones.has(key):
+			continue
+		var definition := MILESTONE_UNLOCKS[key] as Dictionary
+		if not _milestone_condition_met(definition):
+			continue
+		unlocked_milestones.append(key)
+		var entry := definition.duplicate(true)
+		entry["id"] = key
+		newly_unlocked.append(entry)
+	if not newly_unlocked.is_empty():
+		save_persistent_state()
+	return newly_unlocked
+
+
+func get_total_worker_appetite() -> float:
+	# 배치된 주민들의 식욕 합계. 인원수가 아니라 이 값이 통조림 소비를 정한다.
+	var total := 0.0
+	for worker_id in assigned_worker_ids:
+		total += float(get_resident_trait(str(worker_id)).get("appetite", 1.0))
+	for worker_id in assigned_catnip_worker_ids:
+		total += float(get_resident_trait(str(worker_id)).get("appetite", 1.0))
+	return maxf(0.0, total)
+
+
+func get_shelter_runtime_seconds() -> float:
+	# HUD의 "쉘터 잔여 가동" — 연료와 식량 중 먼저 바닥나는 쪽이 한계다.
+	var scratcher_workers := get_active_scratcher_workers()
+	var catnip_workers := get_active_catnip_workers()
+	var worker_count := scratcher_workers + catnip_workers
+	if worker_count <= 0:
+		return 0.0
+	var limits: Array[float] = []
+	if canned_food > 0:
+		var appetite := maxf(0.001, get_total_worker_appetite())
+		limits.append(float(canned_food) * WORKER_HOURS_PER_CANNED_FOOD * 3600.0 / appetite)
+	else:
+		return 0.0
+	if scratcher_workers > 0:
+		limits.append(
+			float(raw_scrap) * WORKER_SECONDS_PER_RAW_SCRAP / float(scratcher_workers)
+		)
+	if catnip_workers > 0:
+		limits.append(
+			float(raw_catnip) * WORKER_SECONDS_PER_RAW_CATNIP / float(catnip_workers)
+		)
+	if limits.is_empty():
+		return 0.0
+	var shortest: float = limits[0]
+	for value in limits:
+		shortest = minf(shortest, value)
+	return maxf(0.0, shortest)
+
+
+func get_churu_buff_definition(buff_id: String) -> Dictionary:
+	return (CHURU_BUFFS.get(buff_id, {}) as Dictionary).duplicate(true)
+
+
+func is_churu_buff_active(buff_id: String) -> bool:
+	return active_churu_buffs.has(buff_id)
+
+
+func try_activate_churu_buff(buff_id: String) -> bool:
+	if not CHURU_BUFFS.has(buff_id) or active_churu_buffs.has(buff_id):
+		return false
+	var cost := maxi(1, int((CHURU_BUFFS[buff_id] as Dictionary).get("cost", 1)))
+	if churu < cost:
+		return false
+	churu -= cost
+	active_churu_buffs.append(buff_id)
+	if buff_id == "full_belly":
+		player_health = get_max_health()
+	save_persistent_state()
+	return true
+
+
+func clear_churu_buffs() -> void:
+	if active_churu_buffs.is_empty():
+		return
+	active_churu_buffs.clear()
+	player_health = mini(player_health, get_max_health())
+
+
+func get_churu_bag_bonus_slots() -> int:
+	return 4 if is_churu_buff_active("big_pockets") else 0
+
+
+func get_shelter_stall_reason() -> String:
+	if get_active_scratcher_workers() + get_active_catnip_workers() <= 0:
+		return "no_workers"
+	if canned_food <= 0:
+		return "no_food"
+	if get_active_scratcher_workers() > 0 and raw_scrap <= 0:
+		return "no_raw_scrap"
+	if get_active_catnip_workers() > 0 and raw_catnip <= 0:
+		return "no_raw_catnip"
+	return ""
 
 
 func consume_offline_progress_notice() -> Dictionary:
@@ -2426,7 +2767,10 @@ func apply_level_reward(stat_id: String) -> bool:
 
 
 func get_max_health() -> int:
-	return 100 + int(player_stat_levels.get("max_health", 0)) * 8 + int(training_levels.get("vitality", 0)) * 10
+	var total := 100 + int(player_stat_levels.get("max_health", 0)) * 8 + int(training_levels.get("vitality", 0)) * 10
+	if is_churu_buff_active("full_belly"):
+		total += 25
+	return total
 
 
 func get_max_stamina() -> float:
@@ -2451,7 +2795,10 @@ func get_stamina_cost_multiplier() -> float:
 
 
 func get_stamina_recovery_multiplier() -> float:
-	return 1.0 + float(player_stat_levels.get("recovery", 0)) * 0.07 + float(training_levels.get("recovery", 0)) * 0.08
+	var multiplier := 1.0 + float(player_stat_levels.get("recovery", 0)) * 0.07 + float(training_levels.get("recovery", 0)) * 0.08
+	if is_churu_buff_active("sharp_claws"):
+		multiplier += 0.25
+	return multiplier
 
 
 func get_damage_taken_multiplier() -> float:
@@ -2520,73 +2867,130 @@ func try_upgrade_training(node_id: String) -> Dictionary:
 	return {"ok": true, "rank": rank + 1, "cost": cost}
 
 
-func get_current_contract_definition() -> Dictionary:
-	if contract_chain_index < 0 or contract_chain_index >= SAJA_FACILITY_CONTRACTS.size():
+# ── 퀘스트 엔진 ────────────────────────────────────────────────
+#
+# 사자 계약과 철근 임무는 데이터 스키마가 완전히 같은데도 조회/수락/진행
+# 로직이 따로 복사돼 있었다. 새 인물을 하나 추가하려면 그 한 벌을 또 쓰는
+# 구조였다.
+#
+# 이제 진행 규칙은 아래 제네릭 함수들이 전담한다. 새 서사 트랙은
+# QUESTLINES에 한 줄 + 대사 데이터 배열 하나면 된다.
+#
+# 기존 UI(217곳)를 건드리지 않으려고 예전 API는 얇은 래퍼로 남겨 둔다.
+
+
+func get_questline_chain(line_id: String) -> Array:
+	match line_id:
+		"saja":
+			return SAJA_FACILITY_CONTRACTS
+		"iron":
+			return IRON_SPECIAL_MISSIONS
+	return []
+
+
+func get_quest_definition(line_id: String, index: int) -> Dictionary:
+	var chain := get_questline_chain(line_id)
+	if index < 0 or index >= chain.size():
 		return {}
-	return (SAJA_FACILITY_CONTRACTS[contract_chain_index] as Dictionary).duplicate(true)
+	return (chain[index] as Dictionary).duplicate(true)
 
 
-func get_contract_state() -> Dictionary:
-	var definition := get_current_contract_definition()
+func _build_quest_state(
+	line_id: String, index: int, status: String, progress: int, completed: Array
+) -> Dictionary:
+	var chain := get_questline_chain(line_id)
+	var definition := get_quest_definition(line_id, index)
 	if definition.is_empty():
 		return {
 			"status": "finished",
 			"progress": 0,
 			"target": 0,
 			"definition": {},
-			"completed_count": completed_contract_ids.size(),
-			"total_count": SAJA_FACILITY_CONTRACTS.size(),
+			"completed_count": completed.size(),
+			"total_count": chain.size(),
 		}
+	var target := maxi(1, int(definition.get("target", 1)))
 	return {
-		"status": contract_status,
-		"progress": clampi(contract_progress, 0, int(definition.get("target", 1))),
-		"target": maxi(1, int(definition.get("target", 1))),
+		"status": status,
+		"progress": clampi(progress, 0, target),
+		"target": target,
 		"definition": definition,
-		"completed_count": completed_contract_ids.size(),
-		"total_count": SAJA_FACILITY_CONTRACTS.size(),
+		"completed_count": completed.size(),
+		"total_count": chain.size(),
 	}
 
 
-func accept_current_contract() -> Dictionary:
-	var definition := get_current_contract_definition()
+func _accept_quest(line_id: String, index: int, status: String) -> Dictionary:
+	var definition := get_quest_definition(line_id, index)
 	if definition.is_empty():
 		return {"ok": false, "reason": "finished"}
-	if contract_status != "available":
-		return {"ok": false, "reason": contract_status}
-	contract_status = "active"
-	contract_progress = 0
-	save_persistent_state()
+	if status != "available":
+		return {"ok": false, "reason": status}
 	return {
 		"ok": true,
 		"definition": definition,
-		"progress": contract_progress,
-		"target": int(definition.get("target", 1)),
+		"progress": 0,
+		"target": maxi(1, int(definition.get("target", 1))),
 	}
 
 
-func advance_contract(metric: String, amount: int = 1) -> Dictionary:
-	advance_iron_special_mission(metric, amount)
-	var definition := get_current_contract_definition()
+func _advance_quest(
+	line_id: String, index: int, status: String, progress: int, metric: String, amount: int
+) -> Dictionary:
+	# 진행 규칙은 한 곳에만 있어야 한다. 트랙마다 복사되면 반드시 어긋난다.
+	var definition := get_quest_definition(line_id, index)
 	if (
 		definition.is_empty()
-		or contract_status != "active"
+		or status != "active"
 		or str(definition.get("metric", "")) != metric
 		or amount <= 0
 	):
-		return {"changed": false}
+		return {"changed": false, "progress": progress, "status": status}
 	var target := maxi(1, int(definition.get("target", 1)))
-	var previous := contract_progress
-	contract_progress = mini(target, contract_progress + amount)
-	if contract_progress >= target:
-		contract_status = "complete"
-	save_persistent_state()
+	var next_progress := mini(target, progress + amount)
+	var next_status := "complete" if next_progress >= target else status
 	return {
-		"changed": contract_progress != previous,
-		"completed": contract_status == "complete",
-		"progress": contract_progress,
+		"changed": next_progress != progress,
+		"completed": next_status == "complete",
+		"progress": next_progress,
+		"status": next_status,
 		"target": target,
 		"definition": definition,
 	}
+
+
+func get_current_contract_definition() -> Dictionary:
+	return get_quest_definition("saja", contract_chain_index)
+
+
+func get_contract_state() -> Dictionary:
+	return _build_quest_state(
+		"saja", contract_chain_index, contract_status, contract_progress, completed_contract_ids
+	)
+
+
+func accept_current_contract() -> Dictionary:
+	var result := _accept_quest("saja", contract_chain_index, contract_status)
+	if not bool(result.get("ok", false)):
+		return result
+	contract_status = "active"
+	contract_progress = 0
+	save_persistent_state()
+	return result
+
+
+func advance_contract(metric: String, amount: int = 1) -> Dictionary:
+	# 하나의 지표가 여러 트랙을 동시에 진행시킨다. 트랙이 늘어도 여기만 돈다.
+	advance_iron_special_mission(metric, amount)
+	var result := _advance_quest(
+		"saja", contract_chain_index, contract_status, contract_progress, metric, amount
+	)
+	if not bool(result.get("changed", false)):
+		return {"changed": false}
+	contract_progress = int(result["progress"])
+	contract_status = str(result["status"])
+	save_persistent_state()
+	return result
 
 
 func claim_current_contract_reward() -> Dictionary:
@@ -2641,86 +3045,62 @@ func get_latest_contract_lore() -> String:
 	return unlocked_contract_lore.back()
 
 
+func _normalize_quest_progress(line_id: String, index: int, status: String, progress: int) -> Dictionary:
+	# 세이브가 깨졌거나 데이터가 바뀌었을 때 상태를 되돌려 놓는다.
+	var chain := get_questline_chain(line_id)
+	var safe_index := clampi(index, 0, chain.size())
+	if safe_index >= chain.size():
+		return {"index": safe_index, "status": "finished", "progress": 0}
+	var safe_status := status if status in ["available", "active", "complete"] else "available"
+	var definition := get_quest_definition(line_id, safe_index)
+	var target := maxi(1, int(definition.get("target", 1)))
+	var safe_progress := target if safe_status == "complete" else clampi(progress, 0, target)
+	return {"index": safe_index, "status": safe_status, "progress": safe_progress}
+
+
 func _normalize_contract_state() -> void:
-	contract_chain_index = clampi(contract_chain_index, 0, SAJA_FACILITY_CONTRACTS.size())
-	if contract_chain_index >= SAJA_FACILITY_CONTRACTS.size():
-		contract_status = "finished"
-		contract_progress = 0
-		return
-	if contract_status not in ["available", "active", "complete"]:
-		contract_status = "available"
-	var definition := get_current_contract_definition()
-	contract_progress = clampi(
-		contract_progress,
-		0,
-		maxi(1, int(definition.get("target", 1)))
+	var normalized := _normalize_quest_progress(
+		"saja", contract_chain_index, contract_status, contract_progress
 	)
-	if contract_status == "complete":
-		contract_progress = maxi(1, int(definition.get("target", 1)))
+	contract_chain_index = int(normalized["index"])
+	contract_status = str(normalized["status"])
+	contract_progress = int(normalized["progress"])
 
 
 func get_current_iron_mission_definition() -> Dictionary:
-	if iron_mission_index < 0 or iron_mission_index >= IRON_SPECIAL_MISSIONS.size():
-		return {}
-	return (IRON_SPECIAL_MISSIONS[iron_mission_index] as Dictionary).duplicate(true)
+	return get_quest_definition("iron", iron_mission_index)
 
 
 func get_iron_mission_state() -> Dictionary:
-	var definition := get_current_iron_mission_definition()
-	if definition.is_empty():
-		return {
-			"status": "finished",
-			"progress": 0,
-			"target": 0,
-			"definition": {},
-			"completed_count": completed_iron_mission_ids.size(),
-			"total_count": IRON_SPECIAL_MISSIONS.size(),
-		}
-	return {
-		"status": iron_mission_status,
-		"progress": clampi(iron_mission_progress, 0, int(definition.get("target", 1))),
-		"target": maxi(1, int(definition.get("target", 1))),
-		"definition": definition,
-		"completed_count": completed_iron_mission_ids.size(),
-		"total_count": IRON_SPECIAL_MISSIONS.size(),
-	}
+	return _build_quest_state(
+		"iron",
+		iron_mission_index,
+		iron_mission_status,
+		iron_mission_progress,
+		completed_iron_mission_ids
+	)
 
 
 func accept_current_iron_mission() -> Dictionary:
-	var definition := get_current_iron_mission_definition()
-	if definition.is_empty():
-		return {"ok": false, "reason": "finished"}
-	if iron_mission_status != "available":
-		return {"ok": false, "reason": iron_mission_status}
+	var result := _accept_quest("iron", iron_mission_index, iron_mission_status)
+	if not bool(result.get("ok", false)):
+		return result
 	iron_mission_status = "active"
 	iron_mission_progress = 0
 	save_persistent_state()
-	return {"ok": true, "definition": definition}
+	return result
 
 
 func advance_iron_special_mission(metric: String, amount: int = 1) -> Dictionary:
-	var definition := get_current_iron_mission_definition()
-	if (
-		definition.is_empty()
-		or iron_mission_status != "active"
-		or str(definition.get("metric", "")) != metric
-		or amount <= 0
-	):
+	var result := _advance_quest(
+		"iron", iron_mission_index, iron_mission_status, iron_mission_progress, metric, amount
+	)
+	if not bool(result.get("changed", false)):
 		return {"changed": false}
-	var target := maxi(1, int(definition.get("target", 1)))
-	var previous := iron_mission_progress
-	iron_mission_progress = mini(target, iron_mission_progress + amount)
-	if iron_mission_progress >= target:
-		iron_mission_status = "complete"
-	if iron_mission_progress != previous:
-		save_persistent_state()
-	return {
-		"changed": iron_mission_progress != previous,
-		"completed": iron_mission_status == "complete",
-		"progress": iron_mission_progress,
-		"target": target,
-		"definition": definition,
-	}
+	iron_mission_progress = int(result["progress"])
+	iron_mission_status = str(result["status"])
+	save_persistent_state()
+	return result
 
 
 func claim_current_iron_mission_reward() -> Dictionary:
@@ -2751,18 +3131,12 @@ func claim_current_iron_mission_reward() -> Dictionary:
 
 
 func _normalize_iron_mission_state() -> void:
-	iron_mission_index = clampi(iron_mission_index, 0, IRON_SPECIAL_MISSIONS.size())
-	if iron_mission_index >= IRON_SPECIAL_MISSIONS.size():
-		iron_mission_status = "finished"
-		iron_mission_progress = 0
-		return
-	if iron_mission_status not in ["available", "active", "complete"]:
-		iron_mission_status = "available"
-	var definition := get_current_iron_mission_definition()
-	var target := maxi(1, int(definition.get("target", 1)))
-	iron_mission_progress = clampi(iron_mission_progress, 0, target)
-	if iron_mission_status == "complete":
-		iron_mission_progress = target
+	var normalized := _normalize_quest_progress(
+		"iron", iron_mission_index, iron_mission_status, iron_mission_progress
+	)
+	iron_mission_index = int(normalized["index"])
+	iron_mission_status = str(normalized["status"])
+	iron_mission_progress = int(normalized["progress"])
 
 
 func save_persistent_state() -> bool:
@@ -2774,7 +3148,7 @@ func save_persistent_state() -> bool:
 	_normalize_iron_mission_state()
 	save_equipped_weapon_loadout()
 	var data := {
-		"version": 10,
+		"version": 11,
 		"map_seed": map_seed,
 		"raid_serial": raid_serial,
 		"player_health": player_health,
@@ -2789,6 +3163,13 @@ func save_persistent_state() -> bool:
 		"canned_food": canned_food,
 		"catnip": catnip,
 		"churu": churu,
+		"raw_scrap": raw_scrap,
+		"raw_catnip": raw_catnip,
+		"valuable_inventory": valuable_inventory,
+		"active_churu_buffs": active_churu_buffs,
+		"bag_pressure_lesson_seen": bag_pressure_lesson_seen,
+		"unlocked_milestones": unlocked_milestones,
+		"resident_reroll_counts": resident_reroll_counts,
 		"fatigue": fatigue,
 		"rescued_workers": rescued_workers,
 		"resident_cat_ids": resident_cat_ids,
@@ -2835,6 +3216,8 @@ func save_persistent_state() -> bool:
 		"shelter_scrap_fraction": shelter_scrap_fraction,
 		"shelter_catnip_fraction": shelter_catnip_fraction,
 		"shelter_food_fraction": shelter_food_fraction,
+		"shelter_raw_scrap_fraction": shelter_raw_scrap_fraction,
+		"shelter_raw_catnip_fraction": shelter_raw_catnip_fraction,
 		"shelter_return_serial": shelter_return_serial,
 		"merchant_last_roll_serial": merchant_last_roll_serial,
 		"merchant_status": merchant_status,
@@ -2905,6 +3288,17 @@ func load_persistent_state() -> bool:
 	canned_food = int(data.get("canned_food", canned_food))
 	catnip = maxi(0, roundi(float(data.get("catnip", catnip))))
 	churu = int(data.get("churu", churu))
+	raw_scrap = maxi(0, int(data.get("raw_scrap", raw_scrap)))
+	raw_catnip = maxi(0, int(data.get("raw_catnip", raw_catnip)))
+	valuable_inventory = (data.get("valuable_inventory", {}) as Dictionary).duplicate(true)
+	active_churu_buffs = _to_string_array(data.get("active_churu_buffs", []))
+	bag_pressure_lesson_seen = bool(data.get("bag_pressure_lesson_seen", bag_pressure_lesson_seen))
+	unlocked_milestones = _to_string_array(data.get("unlocked_milestones", []))
+	resident_reroll_counts = (data.get("resident_reroll_counts", {}) as Dictionary).duplicate(true)
+	if int(data.get("version", 0)) < 11:
+		# 구버전 세이브는 원자재 개념이 없다. 기존 진행이 즉시 멈추지 않도록 초기 연료를 지급한다.
+		raw_scrap = maxi(raw_scrap, 40)
+		raw_catnip = maxi(raw_catnip, 20)
 	fatigue = float(data.get("fatigue", fatigue))
 	rescued_workers = int(data.get("rescued_workers", rescued_workers))
 	resident_cat_ids = _to_string_array(data.get("resident_cat_ids", []))
@@ -2967,6 +3361,8 @@ func load_persistent_state() -> bool:
 	shelter_scrap_fraction = float(data.get("shelter_scrap_fraction", shelter_scrap_fraction))
 	shelter_catnip_fraction = float(data.get("shelter_catnip_fraction", shelter_catnip_fraction))
 	shelter_food_fraction = float(data.get("shelter_food_fraction", shelter_food_fraction))
+	shelter_raw_scrap_fraction = float(data.get("shelter_raw_scrap_fraction", shelter_raw_scrap_fraction))
+	shelter_raw_catnip_fraction = float(data.get("shelter_raw_catnip_fraction", shelter_raw_catnip_fraction))
 	shelter_return_serial = int(data.get("shelter_return_serial", shelter_return_serial))
 	merchant_last_roll_serial = int(data.get("merchant_last_roll_serial", merchant_last_roll_serial))
 	merchant_status = str(data.get("merchant_status", merchant_status))
@@ -3067,6 +3463,13 @@ func reset_run() -> void:
 	canned_food = 0
 	catnip = 0
 	churu = 0
+	raw_scrap = 0
+	raw_catnip = 0
+	valuable_inventory.clear()
+	active_churu_buffs.clear()
+	bag_pressure_lesson_seen = false
+	unlocked_milestones.clear()
+	resident_reroll_counts.clear()
 	fatigue = 0.0
 	rescued_workers = 0
 	resident_cat_ids.clear()
@@ -3144,6 +3547,8 @@ func reset_run() -> void:
 	shelter_scrap_fraction = 0.0
 	shelter_catnip_fraction = 0.0
 	shelter_food_fraction = 0.0
+	shelter_raw_scrap_fraction = 0.0
+	shelter_raw_catnip_fraction = 0.0
 	workbench_starter_parts_claimed = false
 	shelter_return_serial = 0
 	merchant_last_roll_serial = -1

@@ -37,7 +37,7 @@ const RECIPES := {
 			"id": "scope_2x",
 			"name": "폐점포 2x 스코프",
 			"desc": "스코프 렌즈를 조립한 완성 조준경입니다.",
-			"cost": {"scrap": 1800, "scope_lens": 1},
+			"cost": {"scrap": 1800, "catnip": 600, "scope_lens": 1},
 			"result": {"weapon_mod": "scope_2x", "amount": 1},
 		},
 		{
@@ -58,7 +58,7 @@ const RECIPES := {
 			"id": "quick_mag",
 			"name": "테이프 듀얼 탄창",
 			"desc": "탄창 스프링을 사용한 빠른 교체용 탄창입니다.",
-			"cost": {"scrap": 3200, "magazine_spring": 1},
+			"cost": {"scrap": 3200, "catnip": 800, "magazine_spring": 1},
 			"result": {"weapon_mod": "quick_mag", "amount": 1},
 		},
 		{
@@ -113,7 +113,7 @@ const RECIPES := {
 			"id": "mp5",
 			"name": "MP5 하악이",
 			"desc": "기동전과 좀비 소탕에 강한 기관단총.",
-			"cost": {"scrap": 20000, "canned_food": 10, "magazine_spring": 2, "rubber_gasket": 1},
+			"cost": {"scrap": 20000, "catnip": 1500, "canned_food": 10, "magazine_spring": 2, "rubber_gasket": 1},
 			"result": {"weapon": "mp5", "amount": 1},
 			"required_tier": 1,
 		},
@@ -121,7 +121,7 @@ const RECIPES := {
 			"id": "ak47",
 			"name": "AK-47 캣라시니코프",
 			"desc": "강한 반동과 총성을 감수하고 화력을 얻는 소총.",
-			"cost": {"scrap": 55000, "canned_food": 18, "scope_lens": 1, "magazine_spring": 2},
+			"cost": {"scrap": 55000, "catnip": 4200, "canned_food": 18, "scope_lens": 1, "magazine_spring": 2},
 			"result": {"weapon": "ak47", "amount": 1},
 			"required_tier": 3,
 			"required_blueprint": "rifle_blueprint",
@@ -130,7 +130,7 @@ const RECIPES := {
 			"id": "double_barrel",
 			"name": "더블배럴 참치 헌터",
 			"desc": "장전 중 무방비가 되지만 초근접 저지력이 강한 산탄총.",
-			"cost": {"scrap": 45000, "canned_food": 15, "rubber_gasket": 3, "magazine_spring": 2},
+			"cost": {"scrap": 45000, "catnip": 3400, "canned_food": 15, "rubber_gasket": 3, "magazine_spring": 2},
 			"result": {"weapon": "double_barrel", "amount": 1},
 			"required_tier": 3,
 			"required_blueprint": "shotgun_blueprint",
@@ -357,7 +357,7 @@ func _build_resource_strip() -> Control:
 	strip.add_theme_constant_override("h_separation", 7)
 	strip.add_theme_constant_override("v_separation", 6)
 	var compact := get_viewport().get_visible_rect().size.x < 1040.0
-	for key in ["scrap", "canned_food", "scope_lens", "rubber_gasket", "magazine_spring"]:
+	for key in ["scrap", "catnip", "canned_food", "scope_lens", "rubber_gasket", "magazine_spring"]:
 		var resource_key := str(key)
 		var chip := SHELTER_UI.make_resource_chip(
 			resource_key,
@@ -674,6 +674,8 @@ func _owned_resource(key: String) -> int:
 			return GameState.get_mod_component_count(key)
 		"canned_food":
 			return GameState.canned_food
+		"catnip":
+			return GameState.catnip
 	return 0
 
 
@@ -685,6 +687,8 @@ func _consume_resource(key: String, amount: int) -> void:
 			GameState.mod_component_inventory[key] = maxi(0, GameState.get_mod_component_count(key) - amount)
 		"canned_food":
 			GameState.canned_food = maxi(0, GameState.canned_food - amount)
+		"catnip":
+			GameState.catnip = maxi(0, GameState.catnip - amount)
 
 
 func _cost_short_text(recipe: Dictionary) -> String:
@@ -874,6 +878,8 @@ func _resource_name(key: String) -> String:
 	match key:
 		"scrap":
 			return "고철"
+		"catnip":
+			return "캣닢"
 		"scope_lens":
 			return "스코프 렌즈"
 		"rubber_gasket":

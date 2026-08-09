@@ -204,6 +204,19 @@ func _rebuild_ui() -> void:
 		not narrow
 	))
 
+	# 귀중품은 쓸 데가 없다. 여기가 유일한 출구다.
+	var valuable_total: int = GameState.get_valuable_total_value()
+	if valuable_total > 0:
+		var sell := Button.new()
+		sell.name = "SellValuablesButton"
+		sell.text = "귀중품 전부 팔기  ·  고철 +%s" % GameState.format_compact_number(valuable_total)
+		sell.custom_minimum_size = Vector2(0, 42)
+		sell.add_theme_font_override("font", FONT)
+		sell.add_theme_font_size_override("font_size", 14)
+		sell.add_theme_color_override("font_color", Color("#f0dda6"))
+		sell.pressed.connect(_sell_valuables, CONNECT_DEFERRED)
+		content.add_child(sell)
+
 	var summary := GridContainer.new()
 	summary.name = "StorageSummary"
 	summary.columns = 1 if viewport_size.x < 700.0 else 2
@@ -608,6 +621,12 @@ func _item_texture(item_type: String, item_id: String, size: int) -> Texture2D:
 		"weapon":
 			icon_name = "weapon"
 	return UI_ICONS.get_icon(icon_name, size, Color("#d7c27d"))
+
+
+func _sell_valuables() -> void:
+	var result: Dictionary = GameState.sell_all_valuables()
+	if int(result.get("count", 0)) > 0:
+		_rebuild_ui()
 
 
 func _icon_button(icon_name: String, tooltip: String, color: Color) -> Button:

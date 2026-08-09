@@ -1,10 +1,10 @@
 [gd_scene load_steps=7 format=3 uid="uid://ba71fq0o4bon3"]
 
 [ext_resource type="Script" uid="uid://yeja3jlhrnfx" path="res://scripts/shelter_workbench_module.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/interiors/factory/factory_gunsmith_cell_v1.png" id="2_hyomg"]
+[ext_resource type="Texture2D" path="res://assets/interiors/modules/shelter_workbench_wall_aligned_v4.png" id="2_hyomg"]
 
 [sub_resource type="BoxShape3D" id="BoxShape_workbench"]
-size = Vector3(5.2, 1.25, 2.6)
+size = Vector3(5.8, 1.2, 2.2)
 
 [sub_resource type="Shader" id="Shader_shadow"]
 code = "shader_type spatial;
@@ -25,7 +25,7 @@ shader = SubResource("Shader_shadow")
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_shadow"]
 material = SubResource("ShaderMaterial_shadow")
-size = Vector2(5.8, 1.35)
+size = Vector2(5.7, 1.6)
 
 [node name="ShelterWorkbenchModule" type="Node3D"]
 script = ExtResource("1_script")
@@ -34,12 +34,13 @@ script = ExtResource("1_script")
 collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="WorkbenchBody"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0.2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0.3)
 shape = SubResource("BoxShape_workbench")
 
 [node name="WorkbenchSprite" type="Sprite3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0.02)
-pixel_size = 0.00385
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.93, 0.02)
+flip_h = true
+pixel_size = 0.00394
 billboard = 1
 shaded = false
 transparent = true
@@ -49,6 +50,5 @@ texture = ExtResource("2_hyomg")
 
 [node name="GroundShadow" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.045, 0.88)
-visible = false
 cast_shadow = 0
 mesh = SubResource("PlaneMesh_shadow")

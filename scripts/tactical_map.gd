@@ -8,6 +8,7 @@ var world: Node3D
 var player: Node3D
 var extraction_positions: Array[Vector3] = []
 var discovered_extraction_indices: Dictionary = {}
+var sealed_extraction_indices: Dictionary = {}
 var corpse_recovery_position := Vector3.INF
 var corpse_recovery_available := false
 var boss_targets: Array[Node3D] = []
@@ -78,6 +79,20 @@ func discover_extraction(index: int) -> void:
 		return
 	discovered_extraction_indices[index] = true
 	queue_redraw()
+
+
+func seal_extraction(index: int) -> void:
+	# 봉쇄된 탈출로는 지도에서 죽은 표시로 남는다. 사라지면 플레이어가
+	# 그 경로를 계속 계획에 넣는다.
+	if index < 0 or index >= extraction_positions.size():
+		return
+	sealed_extraction_indices[index] = true
+	discovered_extraction_indices[index] = true
+	queue_redraw()
+
+
+func is_extraction_sealed(index: int) -> bool:
+	return bool(sealed_extraction_indices.get(index, false))
 
 
 func set_extraction_profiles(profiles: Array[Dictionary]) -> void:

@@ -243,6 +243,12 @@ func set_detection_profile(
 	detection_time_multiplier = clampf(time_multiplier, 0.55, 1.8)
 
 
+func apply_blackout() -> void:
+	# 정전 이벤트: 적도 앞이 안 보인다. 플레이어만 손해 보는 사건은 재미없다.
+	detection_range_multiplier = clampf(detection_range_multiplier * 0.62, 0.35, 1.25)
+	detection_time_multiplier = clampf(detection_time_multiplier * 1.35, 0.55, 2.4)
+
+
 func set_faction(value: String) -> void:
 	faction_id = value
 

@@ -25,7 +25,9 @@ func _run() -> void:
 	assert(narrative_panel.size.x <= root.get_viewport().get_visible_rect().size.x * 0.94)
 	var accept_lines := shelter.get("contract_story_lines") as Array
 	assert(accept_lines.size() >= 3)
-	assert(str(accept_lines[0]).contains("첫 계약"))
+	# 실제로 쓰이는 계약 체인은 SAJA_FACILITY_CONTRACTS다. 예전에는 쓰이지 않는
+	# MISSION_CONTRACTS 초안의 대사를 기대해서 이 단언이 항상 실패했다.
+	assert(str(accept_lines[0]).contains("쉘터"))
 	while bool(shelter.get("contract_story_open")):
 		shelter.call("_advance_contract_story")
 
@@ -35,8 +37,10 @@ func _run() -> void:
 	assert(bool(shelter.get("contract_story_open")))
 	var report_lines := shelter.get("contract_story_lines") as Array
 	assert(report_lines.size() >= 4)
-	assert(report_lines.any(func(line: Variant) -> bool: return str(line).contains("유리발톱")))
-	assert(report_lines.any(func(line: Variant) -> bool: return str(line).contains("기록 해독")))
+	# 첫 계약의 보상은 꾹꾹이 생산 라인 해금이고, 완료 시 사자의 기록이 열린다.
+	# (예전 단언은 삭제된 MISSION_CONTRACTS 초안의 문구를 찾고 있었다.)
+	assert(report_lines.any(func(line: Variant) -> bool: return str(line).contains("고철 생산기")))
+	assert(report_lines.any(func(line: Variant) -> bool: return str(line).contains("기록")))
 	while bool(shelter.get("contract_story_open")):
 		shelter.call("_advance_contract_story")
 	shelter.queue_free()
@@ -74,7 +78,9 @@ func _run() -> void:
 	var defeat_panel := main.get("boss_defeat_panel") as PanelContainer
 	assert(defeat_panel.size.x <= 720.0)
 	assert(defeat_panel.size.x <= root.get_viewport().get_visible_rect().size.x * 0.85)
-	assert((main.get("boss_defeat_title") as Label).text.contains("테스트 포격수 처치"))
+	# 처치 문구는 "<이름>, 침묵" 형식이다.
+	assert((main.get("boss_defeat_title") as Label).text.contains("테스트 포격수"))
+	assert((main.get("boss_defeat_title") as Label).text.contains("침묵"))
 	assert((main.get("boss_defeat_focus_position") as Vector3).distance_to(boss.global_position) < 0.01)
 	main.call("take_damage", 20)
 	assert(int(main.get("player_health")) == health_before)

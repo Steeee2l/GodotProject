@@ -10,8 +10,8 @@ const SCRATCHER_BANK_MODULE_SCENE := preload("res://scenes/modules/scratcher_ban
 const CATNIP_SCRAPER_MODULE_SCENE := preload("res://scenes/modules/catnip_scraper_module.tscn")
 const STORAGE_MODULE_SCENE := preload("res://scenes/modules/shelter_storage_module.tscn")
 const TRAINING_MODULE_SCENE := preload("res://scenes/modules/shelter_training_module.tscn")
-const FACTORY_CONVEYOR_TEXTURE := preload(
-	"res://assets/interiors/factory/factory_conveyor_spine_v1.png"
+const DORMITORY_RACK_TEXTURE := preload(
+	"res://assets/interiors/modules/dormitory_rack_v1.png"
 )
 const SHELTER_RESIDENT_SCRIPT := preload("res://scripts/shelter_resident_cat.gd")
 const SHELTER_MERCHANT_SCRIPT := preload("res://scripts/shelter_merchant.gd")
@@ -105,8 +105,17 @@ var current_station := ""
 var current_module: Node3D
 var prompt_label: Label
 var status_label: Label
+var status_panel: PanelContainer
+var status_hold := 0.0
 var stats_label: Label
+var health_bar: ProgressBar
+var health_value_label: Label
+var resident_meter_label: Label
+var production_meter_rows: Dictionary = {}
 var shelter_currency_labels: Dictionary = {}
+var shelter_runtime_label: Label
+var shelter_runtime_bar: ProgressBar
+var churu_buff_buttons: Dictionary = {}
 var scrap_gain_label: Label
 var shelter_upgrade_button: Button
 var interact_button: Button
@@ -201,19 +210,13 @@ func _north_module_z() -> float:
 	return -_room_half_extents().y + 0.76
 
 
-func _factory_cell_offset() -> float:
-	return 4.15 + minf(1.0, float(maxi(0, GameState.shelter_tier - 1)) * 0.22)
+func _factory_line_z() -> float:
+	# 생산 설비가 북쪽 벽에 밀착해 늘어서는 기준선 (wall_aligned 아트 전용).
+	return -_room_half_extents().y + 1.55
 
 
-func _factory_line_half_span() -> float:
-	return minf(
-		7.2 + float(maxi(0, GameState.shelter_tier - 1)) * 0.75,
-		_room_half_extents().x - 7.0
-	)
-
-
-func _has_factory_facility() -> bool:
-	for facility_id in ["workbench", "scratcher_bank", "catnip_scraper", "storage", "training"]:
+func _has_production_facility() -> bool:
+	for facility_id in ["scratcher_bank", "catnip_scraper", "storage"]:
 		if GameState.is_shelter_facility_unlocked(facility_id):
 			return true
 	return false
@@ -224,23 +227,25 @@ func _player_bed_position() -> Vector3:
 
 
 func _workbench_position() -> Vector3:
-	return Vector3(-2.4, 0.0, _factory_cell_offset())
+	# 서쪽 벽 정비 구역: 침대 남쪽.
+	return Vector3(-_room_half_extents().x + 3.1, 0.0, 1.6)
 
 
 func _scratcher_bank_position() -> Vector3:
-	return Vector3(7.4, 0.0, -_factory_cell_offset())
+	return Vector3(-_room_half_extents().x + 20.0, 0.0, _factory_line_z())
 
 
 func _catnip_scraper_position() -> Vector3:
-	return Vector3(-7.4, 0.0, -_factory_cell_offset())
+	return Vector3(-_room_half_extents().x + 13.0, 0.0, _factory_line_z())
 
 
 func _storage_position() -> Vector3:
-	return Vector3(-9.0, 0.0, _factory_cell_offset())
+	return Vector3(-_room_half_extents().x + 6.0, 0.0, _factory_line_z())
 
 
 func _training_position() -> Vector3:
-	return Vector3(5.0, 0.0, _factory_cell_offset())
+	# 서쪽 벽 정비 구역: 작업대 남쪽.
+	return Vector3(-_room_half_extents().x + 3.1, 0.0, 8.6)
 
 
 func _contract_agent_position() -> Vector3:
@@ -300,7 +305,16 @@ func _ready() -> void:
 	_apply_shelter_safe_layout()
 	_setup_merchant_visit()
 	_update_stats()
-	_show_status(_build_offline_status_text(offline_notice))
+	var corpse_notice: Dictionary = GameState.consume_corpse_decay_notice()
+	if not corpse_notice.is_empty():
+		_show_status(_build_corpse_decay_text(corpse_notice))
+	else:
+		_show_status(_build_offline_status_text(offline_notice))
+	# 문턱을 넘은 순간은 반드시 보여줘야 한다. 조용히 해금되면
+	# 강해졌다는 감각이 생기지 않는다.
+	var unlocks: Array[Dictionary] = GameState.consume_milestone_unlocks()
+	if not unlocks.is_empty():
+		call_deferred("_show_milestone_unlock_banner", unlocks)
 	call_deferred("_open_pending_shelter_story")
 
 
@@ -308,6 +322,7 @@ func _physics_process(delta: float) -> void:
 	if not is_instance_valid(player):
 		return
 	_update_factory_flow(delta)
+	_update_status_toast(delta)
 	_update_space_hold(delta)
 	if loafing:
 		roll_stamina = maxf(
@@ -365,7 +380,6 @@ func _physics_process(delta: float) -> void:
 	_update_nearby_station()
 	_update_roll_feedback()
 	_update_live_shelter_income(delta)
-	status_label.modulate.a = move_toward(status_label.modulate.a, 0.0, delta * 0.08)
 	if scrap_gain_label:
 		scrap_gain_label.modulate.a = move_toward(scrap_gain_label.modulate.a, 0.0, delta * 1.8)
 
@@ -528,7 +542,7 @@ func _refresh_unlocked_facilities(module_root: Node3D = null, animate: bool = tr
 
 
 func _build_production_lines(module_root: Node3D) -> void:
-	if not _has_factory_facility():
+	if not _has_production_facility():
 		return
 	var station_root := module_root.get_node_or_null("FactoryWorkerStations") as Node3D
 	if station_root == null:
@@ -548,123 +562,122 @@ func _build_production_lines(module_root: Node3D) -> void:
 
 
 func _build_factory_infrastructure(module_root: Node3D) -> void:
-	if not _has_factory_facility() or module_root.get_node_or_null("FactoryInfrastructure") != null:
+	if module_root.get_node_or_null("FactoryInfrastructure") != null:
 		return
 	var factory_root := Node3D.new()
 	factory_root.name = "FactoryInfrastructure"
 	factory_root.set_meta("shelter_tier", GameState.shelter_tier)
 	module_root.add_child(factory_root)
-	var half_span: float = _factory_line_half_span()
-	var deck_material := _material(Color("#131b1a"))
-	_add_plane(
-		"FactoryDeck",
-		Vector3(0.0, 0.012, 0.0),
-		Vector2(half_span * 2.0 + 1.2, 2.8),
-		deck_material,
-		factory_root
-	)
-	var edge_material := _emissive_material(Color("#46c7cc"), 1.7)
-	_add_visual_box(
-		"NorthSafetyRail",
-		Vector3(0.0, 0.035, -1.38),
-		Vector3(half_span * 2.0 + 1.2, 0.045, 0.07),
-		edge_material,
-		factory_root
-	)
-	_add_visual_box(
-		"SouthSafetyRail",
-		Vector3(0.0, 0.035, 1.38),
-		Vector3(half_span * 2.0 + 1.2, 0.045, 0.07),
-		edge_material,
-		factory_root
-	)
-	var spine := Sprite3D.new()
-	spine.name = "FactoryConveyorSpine"
-	spine.position = Vector3(0.0, 2.16, 0.02)
-	spine.texture = FACTORY_CONVEYOR_TEXTURE
-	spine.pixel_size = 0.00445
-	spine.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	spine.shaded = false
-	spine.transparent = true
-	spine.no_depth_test = false
-	spine.render_priority = 10
-	var native_width: float = float(FACTORY_CONVEYOR_TEXTURE.get_width()) * spine.pixel_size
-	spine.scale.x = (half_span * 2.0) / maxf(1.0, native_width)
-	factory_root.add_child(spine)
-	var conveyor_body := StaticBody3D.new()
-	conveyor_body.name = "FactoryConveyorCollision"
-	conveyor_body.position = Vector3(0.0, 0.55, 0.0)
-	conveyor_body.collision_layer = 1
-	conveyor_body.collision_mask = 0
-	factory_root.add_child(conveyor_body)
-	var conveyor_collision := CollisionShape3D.new()
-	var conveyor_shape := BoxShape3D.new()
-	conveyor_shape.size = Vector3(half_span * 2.0 - 0.8, 1.1, 1.85)
-	conveyor_collision.shape = conveyor_shape
-	conveyor_body.add_child(conveyor_collision)
+	var half := _room_half_extents()
+	if _has_production_facility():
+		# 생산 구역 데크: 북쪽 벽을 따라 창고~꾹꾹이 은행까지.
+		var span_min: float = _storage_position().x - 3.3
+		var span_max: float = _scratcher_bank_position().x + 3.3
+		var span_center: float = (span_min + span_max) * 0.5
+		var span_length: float = span_max - span_min
+		var deck_material := _material(Color("#131b1a"))
+		_add_plane(
+			"FactoryDeck",
+			Vector3(span_center, 0.012, -half.y + 2.7),
+			Vector2(span_length, 4.7),
+			deck_material,
+			factory_root
+		)
+		var edge_material := _emissive_material(Color("#46c7cc"), 1.7)
+		_add_visual_box(
+			"FactoryZoneRail",
+			Vector3(span_center, 0.035, -half.y + 5.15),
+			Vector3(span_length, 0.045, 0.07),
+			edge_material,
+			factory_root
+		)
+		_build_supply_rail(factory_root, span_min, span_max)
+		_build_factory_flow(factory_root, span_min, span_max)
+	# facing = 플레이어가 서는 방향. 북쪽 벽은 남쪽(+z), 서쪽 벽은 동쪽(+x)에서 접근한다.
 	for facility_data in [
-		["catnip_scraper", _catnip_scraper_position(), Color("#75c86c")],
-		["scratcher_bank", _scratcher_bank_position(), Color("#d4ad55")],
-		["storage", _storage_position(), Color("#67b9bd")],
-		["workbench", _workbench_position(), Color("#d19b4e")],
-		["training", _training_position(), Color("#d97855")],
+		["catnip_scraper", _catnip_scraper_position(), Color("#75c86c"), Vector3(0.0, 0.0, 1.0)],
+		["scratcher_bank", _scratcher_bank_position(), Color("#d4ad55"), Vector3(0.0, 0.0, 1.0)],
+		["storage", _storage_position(), Color("#67b9bd"), Vector3(0.0, 0.0, 1.0)],
+		["workbench", _workbench_position(), Color("#d19b4e"), Vector3(1.0, 0.0, 0.0)],
+		["training", _training_position(), Color("#d97855"), Vector3(1.0, 0.0, 0.0)],
 	]:
 		var facility_id: String = str(facility_data[0])
 		if GameState.is_shelter_facility_unlocked(facility_id):
-			_build_factory_connector(
+			_build_facility_dock(
 				factory_root,
 				facility_id,
 				facility_data[1] as Vector3,
-				facility_data[2] as Color
+				facility_data[2] as Color,
+				facility_data[3] as Vector3
 			)
-	_build_factory_flow(factory_root, half_span)
 
 
-func _build_factory_connector(parent: Node3D, facility_id: String, station: Vector3, color: Color) -> void:
-	var direction: float = signf(station.z)
-	var connector_length: float = maxf(0.9, absf(station.z) - 1.35)
-	var connector_z: float = direction * (1.35 + connector_length * 0.5)
-	var connector_root := Node3D.new()
-	connector_root.name = "%sConnector" % facility_id.to_pascal_case()
-	parent.add_child(connector_root)
-	_add_plane(
-		"ServiceLane",
-		Vector3(station.x, 0.018, connector_z),
-		Vector2(1.3, connector_length),
-		_material(Color(color, 0.18)),
-		connector_root
+func _build_supply_rail(parent: Node3D, span_min: float, span_max: float) -> void:
+	# 기계 앞을 지나는 저상 보급 레일: 벽면 설비 사이로 물자가 흐르는 시각 연출.
+	var rail_z: float = _factory_line_z() + 1.6
+	var rail_material := _emissive_material(Color("#8a6f3c"), 1.15)
+	_add_visual_box(
+		"SupplyRail",
+		Vector3((span_min + span_max) * 0.5, 0.05, rail_z),
+		Vector3(span_max - span_min, 0.05, 0.34),
+		_material(Color("#1b2320")),
+		parent
 	)
-	var line_material := _emissive_material(color, 1.55)
 	for side in [-1.0, 1.0]:
 		_add_visual_box(
-			"LaneEdge",
-			Vector3(station.x + side * 0.62, 0.038, connector_z),
-			Vector3(0.045, 0.035, connector_length),
-			line_material,
-			connector_root
+			"SupplyRailEdge",
+			Vector3((span_min + span_max) * 0.5, 0.075, rail_z + side * 0.19),
+			Vector3(span_max - span_min, 0.03, 0.035),
+			rail_material,
+			parent
 		)
+
+
+func _build_facility_dock(
+	parent: Node3D, facility_id: String, station: Vector3, color: Color, facing: Vector3
+) -> void:
+	# 시설 앞 상호작용 도크: 플레이어가 서는 쪽에만 짧게 깐다.
+	var dock_center := station + facing * 2.05
+	var dock_root := Node3D.new()
+	dock_root.name = "%sDock" % facility_id.to_pascal_case()
+	parent.add_child(dock_root)
+	var along_x := absf(facing.z) > absf(facing.x)
+	var dock_size := Vector2(2.15, 0.86) if along_x else Vector2(0.86, 2.15)
 	_add_plane(
 		"OperatorDock",
-		Vector3(station.x, 0.022, station.z - direction * 1.48),
-		Vector2(2.15, 0.86),
+		Vector3(dock_center.x, 0.022, dock_center.z),
+		dock_size,
 		_material(Color(color, 0.24)),
-		connector_root
+		dock_root
+	)
+	var line_material := _emissive_material(color, 1.55)
+	var edge_offset := facing * 0.55
+	_add_visual_box(
+		"DockEdge",
+		Vector3(dock_center.x + edge_offset.x, 0.038, dock_center.z + edge_offset.z),
+		Vector3(dock_size.x, 0.035, 0.05) if along_x else Vector3(0.05, 0.035, dock_size.y),
+		line_material,
+		dock_root
 	)
 
 
-func _build_factory_flow(parent: Node3D, half_span: float) -> void:
+func _build_factory_flow(parent: Node3D, span_min: float, span_max: float) -> void:
 	var cargo_material := _emissive_material(Color("#e5a847"), 2.0)
+	var flow_z: float = _factory_line_z() + 1.6
+	var flow_min: float = span_min + 1.2
+	var flow_max: float = span_max - 1.2
 	for index in 5:
 		var cargo := MeshInstance3D.new()
 		cargo.name = "MovingCargo%02d" % (index + 1)
 		cargo.set_meta("flow_offset", float(index) / 5.0)
-		cargo.set_meta("flow_half_span", half_span * 0.78)
+		cargo.set_meta("flow_min", flow_min)
+		cargo.set_meta("flow_max", flow_max)
 		var cargo_mesh := BoxMesh.new()
 		cargo_mesh.size = Vector3(0.48, 0.22, 0.38)
 		cargo_mesh.material = cargo_material
 		cargo.mesh = cargo_mesh
 		cargo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		cargo.position = Vector3(-half_span * 0.78, 0.21, -0.05)
+		cargo.position = Vector3(flow_min, 0.19, flow_z)
 		parent.add_child(cargo)
 		factory_flow_nodes.append(cargo)
 
@@ -677,9 +690,10 @@ func _update_factory_flow(delta: float) -> void:
 		if not is_instance_valid(cargo):
 			continue
 		var offset: float = float(cargo.get_meta("flow_offset", 0.0))
-		var half_span: float = float(cargo.get_meta("flow_half_span", 5.0))
+		var flow_min: float = float(cargo.get_meta("flow_min", -5.0))
+		var flow_max: float = float(cargo.get_meta("flow_max", 5.0))
 		var progress: float = fmod(factory_flow_phase + offset, 1.0)
-		cargo.position.x = lerpf(-half_span, half_span, progress)
+		cargo.position.x = lerpf(flow_min, flow_max, progress)
 		var pulse: float = 1.0 + sin((progress + offset) * TAU) * 0.08
 		cargo.scale = Vector3(pulse, 1.0, pulse)
 
@@ -1291,7 +1305,7 @@ func _scratcher_work_position(index: int) -> Vector3:
 	return Vector3(
 		station.x + _factory_worker_x_offset(column),
 		0.78,
-		station.z + 2.35 - float(row) * 1.08
+		station.z + 2.35 + float(row) * 1.08
 	)
 
 
@@ -1302,7 +1316,7 @@ func _catnip_work_position(index: int) -> Vector3:
 	return Vector3(
 		station.x + _factory_worker_x_offset(column),
 		0.78,
-		station.z + 2.35 - float(row) * 1.08
+		station.z + 2.35 + float(row) * 1.08
 	)
 
 
@@ -1357,25 +1371,46 @@ func _build_interface() -> void:
 	margin.add_theme_constant_override("margin_bottom", 12)
 	panel.add_child(margin)
 	var stats_box := VBoxContainer.new()
-	stats_box.add_theme_constant_override("separation", 3)
+	stats_box.add_theme_constant_override("separation", 7)
 	margin.add_child(stats_box)
 	stats_label = Label.new()
-	stats_label.add_theme_font_size_override("font_size", 16)
+	stats_label.add_theme_font_size_override("font_size", 15)
+	stats_label.add_theme_color_override("font_color", Color("#8fa79c"))
 	stats_box.add_child(stats_label)
+	stats_box.add_child(_build_health_row())
+	resident_meter_label = _build_meter_row(stats_box, "resident", "주민", Color("#9fc9d8"))
+	for production_data in [
+		["scratcher", "꾹꾹이", Color("#d4ad55")],
+		["catnip", "스크래핑", Color("#8fcf7a")],
+	]:
+		var production_id := str(production_data[0])
+		var row_label := _build_meter_row(
+			stats_box,
+			"scrap" if production_id == "scratcher" else "catnip",
+			str(production_data[1]),
+			production_data[2] as Color
+		)
+		production_meter_rows[production_id] = row_label
+	var divider := HSeparator.new()
+	divider.add_theme_constant_override("separation", 6)
+	stats_box.add_child(divider)
 	var resource_grid := GridContainer.new()
 	resource_grid.columns = 2
 	resource_grid.add_theme_constant_override("h_separation", 14)
-	resource_grid.add_theme_constant_override("v_separation", 2)
+	resource_grid.add_theme_constant_override("v_separation", 4)
 	stats_box.add_child(resource_grid)
 	for resource_data in [
 		["scrap", "고철", Color("#c7d1ce")],
 		["catnip", "캣닢", Color("#a9db78")],
 		["food", "통조림", Color("#e5b55b")],
 		["churu", "츄르", Color("#d99b67")],
+		["raw_scrap", "고철 조각", Color("#b9a68c")],
+		["raw_catnip", "캣닢 잎", Color("#8fd07a")],
 	]:
 		var chip := _currency_chip(str(resource_data[0]), str(resource_data[1]), resource_data[2], 20, 150)
 		resource_grid.add_child(chip)
 		shelter_currency_labels[str(resource_data[0])] = chip.get_meta("value_label")
+	stats_box.add_child(_build_runtime_row())
 	shelter_upgrade_button = Button.new()
 	shelter_upgrade_button.icon = UI_ICONS.get_icon("upgrade", 28, Color("#d8c47b"))
 	shelter_upgrade_button.expand_icon = true
@@ -1403,20 +1438,30 @@ func _build_interface() -> void:
 	prompt_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	prompt_label.add_theme_constant_override("outline_size", 6)
 	canvas.add_child(prompt_label)
+	# 토스트는 월드 위에 맨몸 텍스트로 떠 있으면 배경과 섞여 안 읽힌다.
+	status_panel = PanelContainer.new()
+	status_panel.name = "ShelterStatusToast"
+	status_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	status_panel.offset_left = -270.0
+	status_panel.offset_top = 24.0
+	status_panel.offset_right = 270.0
+	status_panel.offset_bottom = 76.0
+	status_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	status_panel.modulate.a = 0.0
+	status_panel.visible = false
+	status_panel.add_theme_stylebox_override(
+		"panel",
+		_rounded_panel_style(Color(0.015, 0.028, 0.025, 0.9), Color("#4f7a68"), 7)
+	)
+	canvas.add_child(status_panel)
 	status_label = Label.new()
-	status_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	status_label.offset_left = -270.0
-	status_label.offset_top = 24.0
-	status_label.offset_right = 270.0
-	status_label.offset_bottom = 82.0
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.add_theme_font_override("font", FONT)
-	status_label.add_theme_font_size_override("font_size", 17)
+	status_label.add_theme_font_size_override("font_size", 16)
 	status_label.add_theme_color_override("font_color", Color("#b7f0d4"))
-	status_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	status_label.add_theme_constant_override("outline_size", 6)
-	canvas.add_child(status_label)
+	status_panel.add_child(status_label)
 	_build_merchant_arrival_notice(canvas)
 	interact_button = Button.new()
 	interact_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
@@ -2467,6 +2512,148 @@ func _merchant_good_fallback_icon(good: Dictionary) -> Texture2D:
 	return UI_ICONS.get_icon("all", 48, Color("#aebdb5"))
 
 
+func _build_health_row() -> Control:
+	# 체력은 숫자만으로는 위험도가 안 읽혀서 바 + 수치를 함께 둔다.
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(20, 20)
+	icon.texture = UI_ICONS.get_icon("health", 20, Color("#e07a72"))
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(icon)
+	health_bar = ProgressBar.new()
+	health_bar.name = "ShelterHealthBar"
+	health_bar.custom_minimum_size = Vector2(186, 16)
+	health_bar.show_percentage = false
+	health_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(0.05, 0.07, 0.07, 0.95)
+	track.border_color = Color("#3d5148")
+	track.set_border_width_all(1)
+	track.set_corner_radius_all(4)
+	health_bar.add_theme_stylebox_override("background", track)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = Color("#c4574f")
+	fill.set_corner_radius_all(4)
+	health_bar.add_theme_stylebox_override("fill", fill)
+	row.add_child(health_bar)
+	health_value_label = Label.new()
+	health_value_label.add_theme_font_override("font", FONT)
+	health_value_label.add_theme_font_size_override("font_size", 14)
+	health_value_label.add_theme_color_override("font_color", Color("#dcdcd2"))
+	health_value_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(health_value_label)
+	return row
+
+
+func _build_meter_row(parent: Node, icon_name: String, title: String, color: Color) -> Label:
+	# 주민/생산 슬롯을 아이콘 + 라벨 + 수치의 같은 리듬으로 정렬한다.
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	parent.add_child(row)
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(20, 20)
+	icon.texture = UI_ICONS.get_icon(icon_name, 20, color)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(icon)
+	var title_label := Label.new()
+	title_label.text = title
+	title_label.custom_minimum_size.x = 74
+	title_label.add_theme_font_override("font", FONT)
+	title_label.add_theme_font_size_override("font_size", 14)
+	title_label.add_theme_color_override("font_color", Color("#9db3a9"))
+	row.add_child(title_label)
+	var value_label := Label.new()
+	value_label.add_theme_font_override("font", FONT)
+	value_label.add_theme_font_size_override("font_size", 14)
+	value_label.add_theme_color_override("font_color", color)
+	row.add_child(value_label)
+	value_label.set_meta("meter_row", row)
+	return value_label
+
+
+func _update_runtime_row() -> void:
+	if not is_instance_valid(shelter_runtime_label) or not is_instance_valid(shelter_runtime_bar):
+		return
+	var seconds: float = GameState.get_shelter_runtime_seconds()
+	var reason: String = GameState.get_shelter_stall_reason()
+	# 8시간을 가득 찬 상태로 본다. 그 이상은 어차피 여유롭다.
+	var ratio := clampf(seconds / (8.0 * 3600.0), 0.0, 1.0)
+	shelter_runtime_bar.value = ratio
+	var fill := shelter_runtime_bar.get_theme_stylebox("fill") as StyleBoxFlat
+	var accent := Color("#6fc4a4")
+	if seconds <= 0.0:
+		accent = Color("#c4574f")
+	elif seconds < 1800.0:
+		accent = Color("#d08a4a")
+	if fill != null:
+		fill.bg_color = accent
+	var text := _format_runtime_duration(seconds)
+	match reason:
+		"no_workers":
+			text = "주민 미배치"
+		"no_food":
+			text = "통조림 없음 · 정지"
+		"no_raw_scrap":
+			text = "고철 조각 없음"
+		"no_raw_catnip":
+			text = "캣닢 잎 없음"
+	shelter_runtime_label.text = text
+	shelter_runtime_label.add_theme_color_override("font_color", accent)
+
+
+func _build_runtime_row() -> Control:
+	# 쉘터가 앞으로 얼마나 더 돌 수 있는지. 0에 가까울수록 다음 출정 압박이 커진다.
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 8)
+	box.add_child(header)
+	var title_label := Label.new()
+	title_label.text = "가동 연료"
+	title_label.add_theme_font_override("font", FONT)
+	title_label.add_theme_font_size_override("font_size", 13)
+	title_label.add_theme_color_override("font_color", Color("#9db3a9"))
+	header.add_child(title_label)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(spacer)
+	shelter_runtime_label = Label.new()
+	shelter_runtime_label.add_theme_font_override("font", FONT)
+	shelter_runtime_label.add_theme_font_size_override("font_size", 13)
+	shelter_runtime_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	header.add_child(shelter_runtime_label)
+	shelter_runtime_bar = ProgressBar.new()
+	shelter_runtime_bar.custom_minimum_size.y = 6
+	shelter_runtime_bar.show_percentage = false
+	shelter_runtime_bar.min_value = 0.0
+	shelter_runtime_bar.max_value = 1.0
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(0.09, 0.12, 0.11, 0.9)
+	track.set_corner_radius_all(3)
+	shelter_runtime_bar.add_theme_stylebox_override("background", track)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = Color("#6fc4a4")
+	fill.set_corner_radius_all(3)
+	shelter_runtime_bar.add_theme_stylebox_override("fill", fill)
+	box.add_child(shelter_runtime_bar)
+	return box
+
+
+func _format_runtime_duration(seconds: float) -> String:
+	if seconds <= 0.0:
+		return "정지"
+	if seconds >= 3600.0:
+		return "%.1f시간" % (seconds / 3600.0)
+	if seconds >= 60.0:
+		return "%d분" % int(seconds / 60.0)
+	return "%d초" % int(seconds)
+
+
 func _currency_chip(icon_name: String, title: String, color: Color, icon_size: int, minimum_width: float) -> HBoxContainer:
 	var chip := HBoxContainer.new()
 	chip.custom_minimum_size.x = minimum_width
@@ -2586,11 +2773,11 @@ func _apply_shelter_safe_layout() -> void:
 		prompt_label.offset_right = 220.0
 		prompt_label.offset_bottom = -60.0 - safe.w
 		prompt_label.offset_top = prompt_label.offset_bottom - 52.0
-	if is_instance_valid(status_label):
-		status_label.offset_left = -270.0
-		status_label.offset_top = 24.0 + safe.y
-		status_label.offset_right = 270.0
-		status_label.offset_bottom = status_label.offset_top + 58.0
+	if is_instance_valid(status_panel):
+		status_panel.offset_left = -270.0
+		status_panel.offset_top = 24.0 + safe.y
+		status_panel.offset_right = 270.0
+		status_panel.offset_bottom = status_panel.offset_top + 52.0
 
 
 func _update_nearby_station() -> void:
@@ -2740,37 +2927,42 @@ func _interact() -> void:
 
 func _update_stats() -> void:
 	GameState._ensure_resident_records()
-	var stat_lines: Array[String] = [
-		"SHELTER 01  ·  Tier %d  ·  Lv.%d" % [
-			GameState.shelter_tier,
-			GameState.player_level,
-		],
-		"체력 %d/%d   주민 %d/%d" % [
-			GameState.player_health,
-			GameState.get_max_health(),
+	stats_label.text = "SHELTER 01   ·   Tier %d   ·   Lv.%d" % [
+		GameState.shelter_tier,
+		GameState.player_level,
+	]
+	var maximum_health := GameState.get_max_health()
+	if is_instance_valid(health_bar):
+		health_bar.max_value = maxf(1.0, float(maximum_health))
+		health_bar.value = clampf(float(GameState.player_health), 0.0, health_bar.max_value)
+		var ratio: float = float(GameState.player_health) / maxf(1.0, float(maximum_health))
+		var fill := health_bar.get_theme_stylebox("fill") as StyleBoxFlat
+		if fill != null:
+			# 위험 구간에서 색이 바뀌어야 숫자를 읽기 전에 상태가 보인다.
+			fill.bg_color = (
+				Color("#c4574f") if ratio <= 0.3
+				else Color("#c8a24e") if ratio <= 0.6
+				else Color("#5fa86a")
+			)
+	if is_instance_valid(health_value_label):
+		health_value_label.text = "%d/%d" % [GameState.player_health, maximum_health]
+	if is_instance_valid(resident_meter_label):
+		resident_meter_label.text = "%d/%d" % [
 			GameState.rescued_workers,
 			GameState.get_resident_capacity(),
-		],
-	]
-	var production_parts: Array[String] = []
-	if GameState.is_shelter_facility_unlocked("scratcher_bank"):
-		production_parts.append("꾹꾹이 %d/%d" % [
-			GameState.get_active_scratcher_workers(),
-			GameState.get_scratcher_worker_slots(),
-		])
-	if GameState.is_shelter_facility_unlocked("catnip_scraper"):
-		production_parts.append("스크래핑 %d/%d" % [
-			GameState.get_active_catnip_workers(),
-			GameState.get_catnip_worker_slots(),
-		])
-	if not production_parts.is_empty():
-		stat_lines.append("   ".join(production_parts))
-	stats_label.text = "\n".join(stat_lines)
+		]
+	_update_production_meter("scratcher", "scratcher_bank",
+		GameState.get_active_scratcher_workers(), GameState.get_scratcher_worker_slots())
+	_update_production_meter("catnip", "catnip_scraper",
+		GameState.get_active_catnip_workers(), GameState.get_catnip_worker_slots())
 	if shelter_currency_labels.has("scrap"):
 		(shelter_currency_labels["scrap"] as Label).text = "고철  %s" % GameState.format_compact_number(GameState.scrap)
 		(shelter_currency_labels["catnip"] as Label).text = "캣닢  %s" % GameState.format_compact_number(GameState.catnip)
 		(shelter_currency_labels["food"] as Label).text = "통조림  %s" % GameState.format_compact_number(GameState.canned_food)
 		(shelter_currency_labels["churu"] as Label).text = "츄르  %s" % GameState.format_compact_number(GameState.churu)
+		(shelter_currency_labels["raw_scrap"] as Label).text = "고철 조각  %s" % GameState.format_compact_number(GameState.raw_scrap)
+		(shelter_currency_labels["raw_catnip"] as Label).text = "캣닢 잎  %s" % GameState.format_compact_number(GameState.raw_catnip)
+	_update_runtime_row()
 	if shelter_upgrade_button:
 		var cost := GameState.get_shelter_upgrade_cost()
 		if cost.is_empty():
@@ -2786,6 +2978,25 @@ func _update_stats() -> void:
 			]
 			shelter_upgrade_button.disabled = GameState.scrap < scrap_cost or GameState.churu < churu_cost
 	_update_shelter_medkit_button()
+
+
+func _update_production_meter(
+	row_id: String, facility_id: String, active: int, slots: int
+) -> void:
+	var value_label := production_meter_rows.get(row_id) as Label
+	if not is_instance_valid(value_label):
+		return
+	var row := value_label.get_meta("meter_row") as Control
+	var unlocked: bool = GameState.is_shelter_facility_unlocked(facility_id)
+	if is_instance_valid(row):
+		row.visible = unlocked
+	if not unlocked:
+		return
+	value_label.text = "%d/%d" % [active, slots]
+	# 배치 가능한 빈 슬롯이 남았다는 걸 색으로 먼저 알린다.
+	value_label.modulate = (
+		Color(1.0, 1.0, 1.0, 1.0) if active >= slots else Color(1.0, 0.86, 0.45, 1.0)
+	)
 
 
 func _update_shelter_medkit_button() -> void:
@@ -3004,6 +3215,7 @@ func _open_raid_zone_select() -> void:
 	box.add_theme_constant_override("separation", 10)
 	margin.add_child(box)
 	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 12)
 	box.add_child(header)
 	var header_icon := TextureRect.new()
 	header_icon.custom_minimum_size = Vector2(42, 42)
@@ -3023,6 +3235,7 @@ func _open_raid_zone_select() -> void:
 	header.add_child(close)
 	var subtitle := Label.new()
 	subtitle.text = "폐허가 된 서울의 진입 지점을 선택하십시오. 높은 위험도일수록 희귀한 전리품을 확보할 수 있습니다."
+	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	subtitle.add_theme_font_override("font", FONT)
 	subtitle.add_theme_font_size_override("font_size", 14)
 	subtitle.add_theme_color_override("font_color", Color("#aebdb5"))
@@ -3098,9 +3311,18 @@ func _open_raid_zone_select() -> void:
 	for margin_name in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
 		detail_margin.add_theme_constant_override(margin_name, 16)
 	detail_panel.add_child(detail_margin)
+	var detail_column := VBoxContainer.new()
+	detail_column.add_theme_constant_override("separation", 10)
+	detail_margin.add_child(detail_column)
+	# 브리핑 본문은 스크롤 안에 둔다. 창이 낮아도 출정 버튼이 잘리지 않아야 한다.
+	var detail_scroll := ScrollContainer.new()
+	detail_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	detail_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	detail_column.add_child(detail_scroll)
 	var detail_box := VBoxContainer.new()
-	detail_box.add_theme_constant_override("separation", 10)
-	detail_margin.add_child(detail_box)
+	detail_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	detail_box.add_theme_constant_override("separation", 9)
+	detail_scroll.add_child(detail_box)
 	var briefing_header := HBoxContainer.new()
 	briefing_header.add_theme_constant_override("separation", 8)
 	detail_box.add_child(briefing_header)
@@ -3166,21 +3388,19 @@ func _open_raid_zone_select() -> void:
 	detail_box.add_child(_build_raid_zone_detail_entry("loot", "주요 전리품", raid_zone_detail_reward))
 	raid_zone_detail_requirement = Label.new()
 	raid_zone_detail_requirement.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	detail_box.add_child(_build_raid_zone_detail_entry("secure", "진입 조건", raid_zone_detail_requirement))
+	detail_box.add_child(_build_raid_zone_detail_entry("secure", "작전 규모 · 보급", raid_zone_detail_requirement))
 	raid_zone_resupply_button = _merchant_button("창고에서 빠른 보충", false, "backpack")
 	raid_zone_resupply_button.name = "RaidZoneResupplyButton"
 	raid_zone_resupply_button.custom_minimum_size.y = 44
 	raid_zone_resupply_button.tooltip_text = "장착 무기 탄약 90발과 구급약 2개까지 창고에서 꺼냅니다."
 	raid_zone_resupply_button.pressed.connect(_quick_resupply_for_raid, CONNECT_DEFERRED)
-	detail_box.add_child(raid_zone_resupply_button)
-	var detail_spacer := Control.new()
-	detail_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	detail_box.add_child(detail_spacer)
+	detail_column.add_child(raid_zone_resupply_button)
+	detail_column.add_child(_build_churu_buff_section())
 	raid_zone_launch_button = _merchant_button("선택 구역으로 출정", true, "raid")
 	raid_zone_launch_button.name = "RaidZoneLaunchButton"
-	raid_zone_launch_button.custom_minimum_size.y = 58
+	raid_zone_launch_button.custom_minimum_size.y = 52
 	raid_zone_launch_button.pressed.connect(_launch_selected_raid_zone, CONNECT_DEFERRED)
-	detail_box.add_child(raid_zone_launch_button)
+	detail_column.add_child(raid_zone_launch_button)
 
 	var initial_zone_id := ""
 	for zone_id in zone_ids:
@@ -3190,6 +3410,75 @@ func _open_raid_zone_select() -> void:
 	if initial_zone_id.is_empty() and not zone_ids.is_empty():
 		initial_zone_id = str(zone_ids[0])
 	_select_raid_zone_preview(initial_zone_id)
+
+
+func _build_churu_buff_section() -> Control:
+	# 나가기 직전에 츄르를 태울지 결정하게 만든다. 아껴두면 죽은 재화가 된다.
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 8)
+	box.add_child(header)
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(18, 18)
+	icon.texture = UI_ICONS.get_icon("churu", 18, Color("#e0a86c"))
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	header.add_child(icon)
+	var title := Label.new()
+	title.text = "츄르 보급 · 이번 출정 한정"
+	title.add_theme_font_override("font", FONT)
+	title.add_theme_font_size_override("font_size", 12)
+	title.add_theme_color_override("font_color", Color("#a9bcb2"))
+	header.add_child(title)
+	# 세로로 쌓으면 브리핑이 넘친다. 아이콘 + 비용만 남긴 가로 3칸으로 압축한다.
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	box.add_child(row)
+	churu_buff_buttons.clear()
+	for buff_id in GameState.CHURU_BUFFS.keys():
+		var definition: Dictionary = GameState.get_churu_buff_definition(str(buff_id))
+		var button := Button.new()
+		button.add_theme_font_override("font", FONT)
+		button.add_theme_font_size_override("font_size", 11)
+		button.custom_minimum_size.y = 34
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.clip_text = true
+		button.tooltip_text = "%s\n%s" % [
+			definition.get("title", buff_id),
+			definition.get("description", ""),
+		]
+		button.pressed.connect(_activate_churu_buff.bind(str(buff_id)), CONNECT_DEFERRED)
+		row.add_child(button)
+		churu_buff_buttons[str(buff_id)] = button
+	_refresh_churu_buff_buttons()
+	return box
+
+
+func _refresh_churu_buff_buttons() -> void:
+	for buff_id in churu_buff_buttons.keys():
+		var button := churu_buff_buttons[buff_id] as Button
+		if not is_instance_valid(button):
+			continue
+		var definition: Dictionary = GameState.get_churu_buff_definition(str(buff_id))
+		var cost := maxi(1, int(definition.get("cost", 1)))
+		var active: bool = GameState.is_churu_buff_active(str(buff_id))
+		var affordable: bool = GameState.churu >= cost
+		var short_title := str(definition.get("short_title", definition.get("title", buff_id)))
+		button.text = "✓ %s" % short_title if active else "%s ·%d" % [short_title, cost]
+		button.disabled = active or not affordable
+		button.add_theme_color_override(
+			"font_color",
+			Color("#8fd6a8") if active else (Color("#e0c07a") if affordable else Color("#6b7a74"))
+		)
+
+
+func _activate_churu_buff(buff_id: String) -> void:
+	if GameState.try_activate_churu_buff(buff_id):
+		var definition: Dictionary = GameState.get_churu_buff_definition(buff_id)
+		_show_status("%s 적용 · %s" % [definition.get("title", buff_id), definition.get("description", "")])
+		_refresh_churu_buff_buttons()
+		_update_stats()
 
 
 func _build_raid_zone_row(zone_id: String) -> Control:
@@ -3348,11 +3637,12 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 	var identity := str(zone.get("identity", ""))
 	var base_description := str(zone.get("description", ""))
 	var tactical_rule := str(zone.get("tactical_rule", ""))
-	raid_zone_detail_description.text = (
-		"%s\n%s\n전술: %s" % [identity, base_description, tactical_rule]
-		if not identity.is_empty()
-		else base_description
-	)
+	# 정체성과 설명은 같은 말을 두 번 하는 경우가 많다. 화면엔 한 줄만 남기고
+	# 상세 설명은 툴팁으로 내린다.
+	raid_zone_detail_description.text = identity if not identity.is_empty() else base_description
+	if not tactical_rule.is_empty():
+		raid_zone_detail_description.text += "\n전술 · %s" % tactical_rule
+	raid_zone_detail_description.tooltip_text = base_description
 	var threat_percent := roundi(float(zone.get("threat", 0.0)) * 100.0)
 	raid_zone_detail_threat.text = "%d%%" % threat_percent
 	raid_zone_detail_threat_bar.value = threat_percent
@@ -3386,15 +3676,15 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 		else:
 			raid_zone_detail_state.text = "▲ 준비 확인"
 			raid_zone_detail_state.add_theme_color_override("font_color", Color("#e3bd67"))
-		var warning_line := (
-			"\n경고: %s" % " · ".join(readiness_warnings)
-			if not readiness_warnings.is_empty()
-			else ""
+		# 경고는 헤더의 준비 상태 칩이 이미 말한다. 본문엔 수치만 남긴다.
+		raid_zone_detail_state.tooltip_text = (
+			" · ".join(readiness_warnings) if not readiness_warnings.is_empty() else "보급 충분"
 		)
-		raid_zone_detail_requirement.text = (
-			"예상 %d분 · 적 약 %d명\n%s%s"
-			% [duration, enemy_count, preparation, warning_line]
-		)
+		raid_zone_detail_requirement.text = "예상 %d분 · 적 약 %d명\n%s" % [
+			duration,
+			enemy_count,
+			preparation,
+		]
 		var weapon_id := str(manifest.get("weapon_id", ""))
 		var ammo_id := str(GameState.equipped_ammo_id) if not weapon_id.is_empty() else ""
 		var stored_ammo := (
@@ -3709,13 +3999,105 @@ func _build_module_plate(parent: Node3D, position: Vector3, slot_index: int, rot
 	_add_visual_box("EastBorder", Vector3(BED_MODULE_PLATE_SIZE.x * 0.5, 0.025, 0), Vector3(0.045, 0.045, BED_MODULE_PLATE_SIZE.y), border_material, slot)
 
 
+const STATUS_HOLD_DURATION := 3.2
+const STATUS_FADE_DURATION := 0.55
+
+
 func _show_status(message: String) -> void:
+	if not is_instance_valid(status_label):
+		return
 	if message.is_empty():
+		status_hold = 0.0
 		status_label.text = ""
-		status_label.modulate.a = 0.0
+		if is_instance_valid(status_panel):
+			status_panel.modulate.a = 0.0
 		return
 	status_label.text = message
-	status_label.modulate.a = 1.0
+	status_hold = STATUS_HOLD_DURATION + STATUS_FADE_DURATION
+	if is_instance_valid(status_panel):
+		status_panel.modulate.a = 1.0
+		status_panel.visible = true
+
+
+func _update_status_toast(delta: float) -> void:
+	# 예전에는 알파를 켜기만 하고 끄지 않아 토스트가 영구히 남아 있었다.
+	if status_hold <= 0.0 or not is_instance_valid(status_panel):
+		return
+	status_hold = maxf(0.0, status_hold - delta)
+	status_panel.modulate.a = clampf(status_hold / STATUS_FADE_DURATION, 0.0, 1.0)
+	if status_hold <= 0.0:
+		status_panel.visible = false
+		status_label.text = ""
+
+
+func _show_milestone_unlock_banner(unlocks: Array) -> void:
+	if unlocks.is_empty():
+		return
+	var layer := CanvasLayer.new()
+	layer.name = "MilestoneUnlockLayer"
+	layer.layer = 78
+	add_child(layer)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(center)
+	var panel := PanelContainer.new()
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.modulate.a = 0.0
+	panel.add_theme_stylebox_override(
+		"panel", _rounded_panel_style(Color(0.02, 0.028, 0.026, 0.97), Color("#e0c274"), 8)
+	)
+	center.add_child(panel)
+	var margin := MarginContainer.new()
+	for margin_name in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
+		margin.add_theme_constant_override(margin_name, 26)
+	panel.add_child(margin)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	margin.add_child(box)
+	var eyebrow := Label.new()
+	eyebrow.text = "새로 열린 문"
+	eyebrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	eyebrow.add_theme_font_override("font", FONT)
+	eyebrow.add_theme_font_size_override("font_size", 13)
+	eyebrow.add_theme_color_override("font_color", Color("#c39a4d"))
+	box.add_child(eyebrow)
+	for unlock in unlocks:
+		var entry := unlock as Dictionary
+		var title := Label.new()
+		title.text = str(entry.get("title", ""))
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.add_theme_font_override("font", FONT)
+		title.add_theme_font_size_override("font_size", 24)
+		title.add_theme_color_override("font_color", Color("#f3e3ba"))
+		box.add_child(title)
+		var body := Label.new()
+		body.text = str(entry.get("body", ""))
+		body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		body.custom_minimum_size.x = 420
+		body.add_theme_font_override("font", FONT)
+		body.add_theme_font_size_override("font_size", 14)
+		body.add_theme_color_override("font_color", Color("#b3c3ba"))
+		box.add_child(body)
+	var tween := create_tween()
+	tween.tween_property(panel, "modulate:a", 1.0, 0.35)
+	tween.tween_interval(2.6 + 0.6 * float(unlocks.size()))
+	tween.tween_property(panel, "modulate:a", 0.0, 0.5)
+	tween.tween_callback(layer.queue_free)
+
+
+func _build_corpse_decay_text(notice: Dictionary) -> String:
+	match str(notice.get("status", "")):
+		"lost":
+			return "두고 온 장비를 누군가 전부 가져갔다. 이제 그 자리엔 아무것도 없다."
+		"decayed":
+			var ratio := float(notice.get("ratio", 1.0))
+			return "두고 온 장비가 약탈당하고 있다 · 잔존 %d%% · 앞으로 %d회" % [
+				roundi(ratio * 100.0),
+				GameState.get_corpse_returns_remaining(),
+			]
+	return ""
 
 
 func _build_offline_status_text(progress: Dictionary) -> String:

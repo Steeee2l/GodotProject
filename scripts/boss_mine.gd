@@ -6,10 +6,10 @@ const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd"
 
 const FLIGHT_DURATION := 0.42
 const ARC_HEIGHT := 1.65
-const ARM_DELAY := 0.72
-const TRIGGER_RADIUS := 1.7
-const TRIGGER_FUSE := 0.46
-const MAX_ARMED_LIFETIME := 8.5
+const ARM_DELAY := 0.58
+const TRIGGER_RADIUS := 2.45
+const TRIGGER_FUSE := 0.32
+const MAX_ARMED_LIFETIME := 22.0
 
 var source_body: CollisionObject3D
 var target_body: CharacterBody3D

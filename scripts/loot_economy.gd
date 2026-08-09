@@ -6,9 +6,9 @@ const STAGE_PROFILES := {
 		"name": "초반 생존 구역",
 		"weapon_rarity_cap": 1,
 		"ammo_tier_cap": 1,
-		"field_value_cap": 2600,
+		"field_value_cap": 3600,
 		"enemy_value_cap": 1200,
-		"total_value_cap": 3800,
+		"total_value_cap": 4900,
 		"weapon_spawn_cap": 1,
 		"enemy_drop_cap": 18,
 		"raid_kill_cap": 40,
@@ -17,19 +17,24 @@ const STAGE_PROFILES := {
 		"canned_food_double_stack_chance": 0.22,
 		"container_counts": {
 			"street_cache": 14,
-			"ammo_case": 4,
+			"ammo_case": 6,
 			"toolbox": 6,
 			"clothing_cache": 4,
 			"weapon_case": 1,
+			"scrap_pile": 6,
+			"catnip_planter": 4,
+			"residential_pantry": 4,
+			"vending_machine": 3,
+			"pet_shop_crate": 3,
 		},
 	},
 	2: {
 		"name": "중간 파밍 구역",
 		"weapon_rarity_cap": 2,
 		"ammo_tier_cap": 2,
-		"field_value_cap": 3800,
+		"field_value_cap": 5200,
 		"enemy_value_cap": 1800,
-		"total_value_cap": 5600,
+		"total_value_cap": 7200,
 		"weapon_spawn_cap": 2,
 		"enemy_drop_cap": 22,
 		"raid_kill_cap": 55,
@@ -38,20 +43,26 @@ const STAGE_PROFILES := {
 		"canned_food_double_stack_chance": 0.24,
 		"container_counts": {
 			"street_cache": 15,
-			"ammo_case": 5,
+			"ammo_case": 7,
 			"toolbox": 7,
 			"clothing_cache": 5,
 			"weapon_case": 2,
 			"secure_cache": 1,
+			"scrap_pile": 7,
+			"catnip_planter": 5,
+			"residential_pantry": 3,
+			"vending_machine": 3,
+			"pharmacy_shelf": 3,
+			"jewelry_case": 2,
 		},
 	},
 	3: {
 		"name": "고위험 파밍 구역",
 		"weapon_rarity_cap": 3,
 		"ammo_tier_cap": 3,
-		"field_value_cap": 6000,
+		"field_value_cap": 8000,
 		"enemy_value_cap": 2800,
-		"total_value_cap": 8800,
+		"total_value_cap": 11000,
 		"weapon_spawn_cap": 3,
 		"enemy_drop_cap": 28,
 		"raid_kill_cap": 70,
@@ -65,15 +76,21 @@ const STAGE_PROFILES := {
 			"clothing_cache": 5,
 			"weapon_case": 3,
 			"secure_cache": 4,
+			"scrap_pile": 8,
+			"catnip_planter": 6,
+			"pharmacy_shelf": 3,
+			"electronics_bin": 4,
+			"office_desk": 3,
+			"subway_locker": 3,
 		},
 	},
 	4: {
 		"name": "봉인 고위험 구역",
 		"weapon_rarity_cap": 4,
 		"ammo_tier_cap": 4,
-		"field_value_cap": 9000,
+		"field_value_cap": 12000,
 		"enemy_value_cap": 4200,
-		"total_value_cap": 13200,
+		"total_value_cap": 16500,
 		"weapon_spawn_cap": 5,
 		"enemy_drop_cap": 34,
 		"raid_kill_cap": 85,
@@ -87,6 +104,12 @@ const STAGE_PROFILES := {
 			"clothing_cache": 6,
 			"weapon_case": 5,
 			"secure_cache": 5,
+			"scrap_pile": 9,
+			"catnip_planter": 7,
+			"electronics_bin": 5,
+			"office_desk": 4,
+			"subway_locker": 4,
+			"jewelry_case": 3,
 		},
 	},
 }
@@ -158,6 +181,95 @@ const CONTAINER_DEFINITIONS := {
 			["ammo_762_fmj", 10.0],
 		],
 	},
+	"scrap_pile": {
+		"display_name": "고철 더미",
+		"roll_min": 2,
+		"roll_max": 3,
+		"empty_chance": 0.05,
+		"entries": [
+			["raw_scrap", 82.0],
+			["raw_catnip", 8.0],
+			["rubber_gasket", 6.0],
+			["magazine_spring", 4.0],
+		],
+	},
+	"catnip_planter": {
+		"display_name": "야생 캣닢 화단",
+		"roll_min": 2,
+		"roll_max": 3,
+		"empty_chance": 0.08,
+		"entries": [
+			["raw_catnip", 78.0],
+			["raw_scrap", 10.0],
+			["canned_food", 12.0],
+		],
+	},
+	# ── 장소가 성격을 갖게 하는 컨테이너들 ──
+	"pharmacy_shelf": {
+		"display_name": "약국 진열대",
+		"roll_min": 1, "roll_max": 3, "empty_chance": 0.18,
+		"entries": [
+			["medkit", 46.0], ["canned_food", 18.0],
+			["rubber_gasket", 12.0], ["silver_spoon", 10.0], ["old_wristwatch", 14.0],
+		],
+	},
+	"electronics_bin": {
+		"display_name": "전자상가 부품함",
+		"roll_min": 2, "roll_max": 3, "empty_chance": 0.14,
+		"entries": [
+			["circuit_board", 32.0], ["lithium_cell", 22.0], ["fiber_spool", 14.0],
+			["copper_bundle", 18.0], ["scope_lens", 9.0], ["server_drive", 5.0],
+		],
+	},
+	"jewelry_case": {
+		"display_name": "귀금속 진열장",
+		"roll_min": 1, "roll_max": 2, "empty_chance": 0.34,
+		"minimum_stage": 2,
+		"entries": [
+			["gold_tooth", 30.0], ["wedding_ring", 24.0],
+			["gold_chain", 12.0], ["old_wristwatch", 22.0], ["silver_spoon", 12.0],
+		],
+	},
+	"pet_shop_crate": {
+		"display_name": "반려동물 용품 상자",
+		"roll_min": 2, "roll_max": 3, "empty_chance": 0.12,
+		"entries": [
+			["canned_food", 34.0], ["raw_catnip", 26.0], ["cat_toy_mouse", 18.0],
+			["bell_collar", 14.0], ["medkit", 8.0],
+		],
+	},
+	"vending_machine": {
+		"display_name": "부서진 자판기",
+		"roll_min": 1, "roll_max": 3, "empty_chance": 0.26,
+		"entries": [
+			["canned_food", 52.0], ["subway_token", 24.0], ["medkit", 10.0],
+			["cat_toy_mouse", 14.0],
+		],
+	},
+	"office_desk": {
+		"display_name": "사무실 책상",
+		"roll_min": 1, "roll_max": 2, "empty_chance": 0.28,
+		"entries": [
+			["faded_photo", 26.0], ["subway_map", 18.0], ["old_wristwatch", 16.0],
+			["circuit_board", 14.0], ["shelter_roster", 10.0], ["ceramic_shard", 16.0],
+		],
+	},
+	"subway_locker": {
+		"display_name": "지하철 물품보관함",
+		"roll_min": 1, "roll_max": 3, "empty_chance": 0.30,
+		"entries": [
+			["subway_token", 22.0], ["subway_map", 16.0], ["canned_food", 18.0],
+			["gold_tooth", 8.0], ["ammo_9mm_fmj", 20.0], ["bell_collar", 16.0],
+		],
+	},
+	"residential_pantry": {
+		"display_name": "가정집 찬장",
+		"roll_min": 2, "roll_max": 3, "empty_chance": 0.16,
+		"entries": [
+			["canned_food", 44.0], ["silver_spoon", 16.0], ["ceramic_shard", 14.0],
+			["faded_photo", 12.0], ["medkit", 14.0],
+		],
+	},
 	"secure_cache": {
 		"display_name": "봉인 보급함",
 		"roll_min": 1,
@@ -190,6 +302,27 @@ const ITEM_CATALOG := {
 		"rarity_tier": 1,
 		"minimum_stage": 1,
 	},
+	# 원자재: 쉘터 가동 연료. 개당 가치는 낮지만 부피가 커서 가방을 압박한다.
+	"raw_scrap": {
+		"loot_type": "raw_scrap",
+		"display_name": "고철 조각",
+		"base_value": 14,
+		"slot_size": 1,
+		"rarity_tier": 1,
+		"minimum_stage": 1,
+		"stack_min": 3,
+		"stack_max": 6,
+	},
+	"raw_catnip": {
+		"loot_type": "raw_catnip",
+		"display_name": "캣닢 잎",
+		"base_value": 11,
+		"slot_size": 1,
+		"rarity_tier": 1,
+		"minimum_stage": 1,
+		"stack_min": 2,
+		"stack_max": 5,
+	},
 	"medkit": {
 		"loot_type": "medkit",
 		"display_name": "구급약",
@@ -197,6 +330,90 @@ const ITEM_CATALOG := {
 		"slot_size": 1,
 		"rarity_tier": 1,
 		"minimum_stage": 1,
+	},
+	# ── 귀중품 ────────────────────────────────────────────────
+	# 쓸 데는 없고 값만 나가는 물건들. 가방 한 칸을 무엇으로 채울지가
+	# 이 게임의 핵심 판단인데, 그 판단을 순수하게 만드는 계열이다.
+	# 사람이 사라진 서울에 남은 것들 — 고양이에겐 쓸모없지만 값은 나간다.
+	"subway_token": {
+		"loot_type": "valuable", "display_name": "지하철 승차권 뭉치",
+		"base_value": 55, "slot_size": 1, "rarity_tier": 1, "minimum_stage": 1,
+		"stack_min": 2, "stack_max": 4,
+	},
+	"ceramic_shard": {
+		"loot_type": "valuable", "display_name": "청자 조각",
+		"base_value": 90, "slot_size": 1, "rarity_tier": 1, "minimum_stage": 1,
+	},
+	"silver_spoon": {
+		"loot_type": "valuable", "display_name": "은수저",
+		"base_value": 140, "slot_size": 1, "rarity_tier": 1, "minimum_stage": 1,
+		"stack_min": 1, "stack_max": 3,
+	},
+	"old_wristwatch": {
+		"loot_type": "valuable", "display_name": "낡은 손목시계",
+		"base_value": 180, "slot_size": 1, "rarity_tier": 2, "minimum_stage": 1,
+	},
+	"circuit_board": {
+		"loot_type": "valuable", "display_name": "회로 기판",
+		"base_value": 210, "slot_size": 1, "rarity_tier": 2, "minimum_stage": 1,
+		"stack_min": 1, "stack_max": 3,
+	},
+	"lithium_cell": {
+		"loot_type": "valuable", "display_name": "리튬 셀",
+		"base_value": 260, "slot_size": 1, "rarity_tier": 2, "minimum_stage": 2,
+		"stack_min": 1, "stack_max": 3,
+	},
+	"copper_bundle": {
+		"loot_type": "valuable", "display_name": "구리 배선 뭉치",
+		"base_value": 175, "slot_size": 1, "rarity_tier": 1, "minimum_stage": 1,
+		"stack_min": 2, "stack_max": 4,
+	},
+	"server_drive": {
+		"loot_type": "valuable", "display_name": "서버 하드디스크",
+		"base_value": 420, "slot_size": 1, "rarity_tier": 3, "minimum_stage": 2,
+	},
+	"fiber_spool": {
+		"loot_type": "valuable", "display_name": "광섬유 다발",
+		"base_value": 330, "slot_size": 1, "rarity_tier": 2, "minimum_stage": 2,
+	},
+	"gold_tooth": {
+		"loot_type": "valuable", "display_name": "금니",
+		"base_value": 480, "slot_size": 1, "rarity_tier": 3, "minimum_stage": 1,
+	},
+	"wedding_ring": {
+		"loot_type": "valuable", "display_name": "결혼반지",
+		"base_value": 620, "slot_size": 1, "rarity_tier": 3, "minimum_stage": 2,
+	},
+	"gold_chain": {
+		"loot_type": "valuable", "display_name": "순금 목걸이",
+		"base_value": 880, "slot_size": 1, "rarity_tier": 4, "minimum_stage": 3,
+	},
+	# 고양이에게만 의미가 있는 것들 — 값은 낮지만 세계관을 만든다
+	"bell_collar": {
+		"loot_type": "valuable", "display_name": "낡은 방울 목걸이",
+		"base_value": 70, "slot_size": 1, "rarity_tier": 1, "minimum_stage": 1,
+	},
+	"faded_photo": {
+		"loot_type": "valuable", "display_name": "빛바랜 가족사진",
+		"base_value": 45, "slot_size": 1, "rarity_tier": 1, "minimum_stage": 1,
+	},
+	"cat_toy_mouse": {
+		"loot_type": "valuable", "display_name": "쥐 인형",
+		"base_value": 60, "slot_size": 1, "rarity_tier": 1, "minimum_stage": 1,
+		"stack_min": 1, "stack_max": 3,
+	},
+	# 정보 — 서사와 지역 해금의 씨앗
+	"subway_map": {
+		"loot_type": "valuable", "display_name": "지하철 노선도",
+		"base_value": 300, "slot_size": 1, "rarity_tier": 2, "minimum_stage": 1,
+	},
+	"shelter_roster": {
+		"loot_type": "valuable", "display_name": "대피소 명단",
+		"base_value": 380, "slot_size": 1, "rarity_tier": 3, "minimum_stage": 2,
+	},
+	"military_freq": {
+		"loot_type": "valuable", "display_name": "군용 주파수표",
+		"base_value": 700, "slot_size": 1, "rarity_tier": 4, "minimum_stage": 3,
 	},
 	"rubber_gasket": {
 		"loot_type": "mod_component",
@@ -636,6 +853,9 @@ static func try_register_loot(
 	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 4)] as Dictionary
 	var value := get_definition_value(definition)
 	var loot_type := str(definition.get("type", ""))
+	# 원자재는 쉘터 가동 연료다. 가치 상한 때문에 스폰이 막히면 진행이 멈추므로 제외한다.
+	if loot_type in ["raw_scrap", "raw_catnip"]:
+		return true
 	if not ignore_caps:
 		if (
 			loot_type == "weapon"
@@ -713,6 +933,10 @@ static func simulate_stage_supply(stage_tier: int, run_count: int, seed_value: i
 		for container_type in build_container_plan(stage_tier, random):
 			for definition in roll_container(container_type, stage_tier, "street_mixed", random):
 				var value := get_definition_value(definition)
+				# 원자재는 전리품이 아니라 연료다. try_register_loot과 마찬가지로
+				# 가치 예산에서 빼야 탄약·부품 스폰을 잠식하지 않는다.
+				if str(definition.get("type", "")) in ["raw_scrap", "raw_catnip"]:
+					continue
 				if run_value + value > int(profile.get("field_value_cap", 0)):
 					continue
 				if (
@@ -842,9 +1066,17 @@ static func _materialize_item(
 			random,
 			enemy_stack
 		)
+	elif catalog.has("stack_min") or catalog.has("stack_max"):
+		# 원자재처럼 뭉쳐 나오는 아이템은 카탈로그의 스택 범위를 굴린다.
+		var stack_min := maxi(1, int(catalog.get("stack_min", 1)))
+		var stack_max := maxi(stack_min, int(catalog.get("stack_max", stack_min)))
+		var tier_bonus := clampi(stage_tier - 1, 0, 3)
+		amount = random.randi_range(stack_min, stack_max + tier_bonus)
 	var data := catalog.duplicate(true)
 	data.erase("loot_type")
 	data.erase("weight")
+	data.erase("stack_min")
+	data.erase("stack_max")
 	data["amount"] = amount
 	data["item_id"] = item_id
 	data["stage_tier"] = clampi(stage_tier, 1, 4)

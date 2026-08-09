@@ -4,7 +4,7 @@ extends RefCounted
 const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 
-const SCALAR_LOOT_KEYS := ["medkits", "canned_food", "churu"]
+const SCALAR_LOOT_KEYS := ["medkits", "canned_food", "churu", "raw_scrap", "raw_catnip"]
 const INVENTORY_LOOT_KEYS := [
 	"ammo_inventory",
 	"mod_component_inventory",
@@ -27,6 +27,8 @@ static func build_death_corpse_loot() -> Dictionary:
 		"medkits": maxi(0, GameState.medkits),
 		"canned_food": GameState.get_backpack_storage_count("food", "canned_food"),
 		"churu": maxi(0, GameState.churu),
+		"raw_scrap": maxi(0, GameState.raw_scrap),
+		"raw_catnip": maxi(0, GameState.raw_catnip),
 		"mod_component_inventory": GameState.mod_component_inventory.duplicate(true),
 		"progression_item_inventory": GameState.progression_item_inventory.duplicate(true),
 		"weapon_mod_inventory": GameState.weapon_mod_inventory.duplicate(true),
@@ -90,6 +92,8 @@ static func get_total_value(loot: Dictionary) -> int:
 		["medkits", "medkit", "medkit"],
 		["canned_food", "food", "canned_food"],
 		["churu", "churu", "churu"],
+		["raw_scrap", "raw_scrap", "raw_scrap"],
+		["raw_catnip", "raw_catnip", "raw_catnip"],
 	]:
 		total += RAID_ITEM_ECONOMY.get_total_value(
 			str(scalar[1]),
@@ -187,6 +191,8 @@ static func format_loss_summary(loot: Dictionary) -> String:
 		["medkits", "구급약"],
 		["canned_food", "통조림"],
 		["churu", "츄르"],
+		["raw_scrap", "고철 조각"],
+		["raw_catnip", "캣닢 잎"],
 	]:
 		var amount := maxi(0, int(loot.get(scalar[0], 0)))
 		if amount > 0:

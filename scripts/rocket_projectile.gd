@@ -1,5 +1,7 @@
 extends Node3D
 
+const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
+
 signal exploded(world_position: Vector3, radius: float)
 
 const FLIGHT_DURATION := 1.05
@@ -49,12 +51,47 @@ func _physics_process(delta: float) -> void:
 	var next_position := start_position.lerp(impact_position, progress)
 	next_position.y += sin(progress * PI) * ARC_HEIGHT
 	var travel := next_position - global_position
+	# 로켓은 예전에 아무것도 통과했다. 이제 비행 구간마다 엄폐물을 검사해
+	# 부딪히면 그 자리에서 터진다. 버스 뒤에 숨으면 실제로 막힌다.
+	var blocker := _find_flight_blocker(global_position, next_position)
+	if not blocker.is_empty():
+		global_position = blocker.get("position", next_position) as Vector3
+		impact_position = global_position
+		_detonate()
+		return
 	global_position = next_position
 	if travel.length_squared() > 0.0001:
 		look_at(global_position + travel.normalized(), Vector3.UP)
 	_update_target_marker(progress)
 	if progress >= 1.0:
 		_detonate()
+
+
+func _find_flight_blocker(from: Vector3, to: Vector3) -> Dictionary:
+	if from.distance_squared_to(to) < 0.000001:
+		return {}
+	var query := PhysicsRayQueryParameters3D.create(
+		from, to, COLLISION_PROFILES.WORLD_PROJECTILE_LAYER
+	)
+	var exclusions: Array[RID] = []
+	if is_instance_valid(source_body) and source_body is CollisionObject3D:
+		exclusions.append((source_body as CollisionObject3D).get_rid())
+	query.exclude = exclusions
+	return get_world_3d().direct_space_state.intersect_ray(query)
+
+
+func _has_blast_line_of_sight(body: CollisionObject3D) -> bool:
+	# 폭심에서 대상까지 엄폐물이 가로막으면 폭풍 피해가 닿지 않는다.
+	# 수류탄(_has_clear_blast_path)과 같은 규칙을 쓴다.
+	var query := PhysicsRayQueryParameters3D.create(
+		impact_position + Vector3(0.0, 0.35, 0.0),
+		body.global_position + Vector3(0.0, 0.35, 0.0),
+		COLLISION_PROFILES.WORLD_ONLY_SIGHT_MASK
+	)
+	if is_instance_valid(source_body) and source_body is CollisionObject3D:
+		query.exclude = [(source_body as CollisionObject3D).get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	return hit.is_empty() or hit.get("collider") == body
 
 
 func get_flight_progress() -> float:
@@ -193,7 +230,7 @@ func _detonate() -> void:
 		var offset := target_body.global_position - impact_position
 		offset.y = 0.0
 		var distance := offset.length()
-		if distance <= blast_radius:
+		if distance <= blast_radius and _has_blast_line_of_sight(target_body):
 			var falloff := lerpf(1.0, 0.52, distance / blast_radius)
 			var applied_damage := maxi(1, roundi(float(damage) * falloff))
 			var hit_direction := offset.normalized() if distance > 0.01 else Vector3.RIGHT

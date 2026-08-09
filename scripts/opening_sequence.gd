@@ -4,6 +4,7 @@ const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
 const CAT_ROOT := "res://assets/characters/cat_8way"
 const ROLL_ROOT := "res://assets/characters/cat_roll"
 const SHELTER_SCENE := "res://scenes/shelter_interior.tscn"
@@ -27,11 +28,13 @@ const GAMEPLAY_PHASES := [
 	"tutorial_extract",
 ]
 const DIALOGUE_LINES := [
-	"여기라면 찾을 수 있겠지.",
-	"끊어진 구조 신호는 한강 북쪽에서 왔어. 아직 누군가 살아 있다는 뜻이야.",
-	"통조림도 탄약도 오래 버티지 못해. 오늘은 반드시 쉴 곳을 찾아야 해.",
-	"철교를 먼저 차지했군. 저 순찰대를 지나야 북쪽으로 갈 수 있어.",
-	"숨을 고르고, 시선을 들어. 좋아... 시작해 볼까.",
+	"사람이 사라진 지 삼백 일째.",
+	"도시는 아직 서 있는데, 도시를 쓰던 것들만 없어졌다.",
+	"신호는 사흘 전부터 같은 자리에서 반복됐다. 한강 북쪽, 짧게 세 번.",
+	"살아 있는 누군가가 보내는 거다. 아니면… 살아 있었던 누군가거나.",
+	"가방엔 통조림 두 개. 탄창은 하나. 돌아갈 곳은 아직 없다.",
+	"다리 위에 먼저 온 것들이 있다. 저들을 지나야 북쪽이다.",
+	"…좋아. 숨 고르고.",
 ]
 
 const PLAYER_SPEED := 5.2
@@ -419,7 +422,10 @@ func _add_vehicle(
 	shape.size = collision_size
 	collision.shape = shape
 	collision.position = collision_offset
-	var collision_yaw := 90.0 + screen_rotation
+	# 스프라이트는 화면 공간(z회전), 충돌은 월드 공간(y yaw)이다. 두 각도를
+	# 그냥 더하면 아이소메트릭 투영 때문에 반드시 어긋난다. 예전 코드의
+	# `90.0 + screen_rotation`은 상자를 통째로 옆 축으로 돌려버렸다.
+	var collision_yaw := COLLISION_PROFILES.sprite_tilt_to_collision_yaw(screen_rotation)
 	collision.rotation_degrees.y = collision_yaw
 	body.add_child(collision)
 	body.set_meta("collision_size", collision_size)
@@ -786,7 +792,7 @@ func _build_dialogue_ui(hud: CanvasLayer) -> void:
 	column.add_theme_constant_override("separation", 5)
 	margin.add_child(column)
 	var speaker := Label.new()
-	speaker.text = "생존자"
+	speaker.text = "나비"
 	speaker.add_theme_font_override("font", FONT)
 	speaker.add_theme_font_size_override("font_size", 18)
 	speaker.add_theme_color_override("font_color", Color("#d7b765"))
@@ -1297,8 +1303,8 @@ func _start_tutorial_move() -> void:
 	camera_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	camera_tween.tween_property(camera, "size", GAMEPLAY_CAMERA_SIZE, 0.6)
 	_show_objective(
-		"첫걸음",
-		"왼쪽 조이스틱으로 이동해 보세요." if touch_enabled else "WASD로 이동해 보세요.",
+		"다시 걷기",
+		"왼쪽 조이스틱으로 이동합니다." if touch_enabled else "WASD로 이동합니다.",
 		"이동 거리 0 / 3m"
 	)
 	_set_letterbox(false)
@@ -1427,8 +1433,8 @@ func _start_tutorial_dash() -> void:
 	phase = "tutorial_dash"
 	tutorial_transitioning = false
 	_show_objective(
-		"위기 회피",
-		"대시 버튼을 눌러 회피하세요." if touch_enabled else "SPACE를 눌러 대시하세요.",
+		"몸을 던져라",
+		"대시 버튼으로 굴러 피합니다." if touch_enabled else "SPACE로 굴러 피합니다.",
 		"입력 대기"
 	)
 
@@ -1437,8 +1443,8 @@ func _start_tutorial_aim() -> void:
 	phase = "tutorial_aim"
 	tutorial_transitioning = false
 	_show_objective(
-		"시야 확보",
-		"조준 버튼을 켜 시야와 사격 방향을 확보하세요." if touch_enabled else "마우스 오른쪽 버튼을 누른 채 조준하세요.",
+		"어둠 너머를 보다",
+		"조준 버튼을 켜면 시야가 열립니다." if touch_enabled else "마우스 오른쪽 버튼을 누른 채 조준합니다.",
 		"조준 유지 0.5초"
 	)
 
@@ -1449,7 +1455,7 @@ func _start_tutorial_combat() -> void:
 	aim_hold_duration = 0.0
 	tutorial_enemies_activated = false
 	_show_objective(
-		"교량 돌파",
+		"다리를 건너다",
 		"전진한 뒤 조준과 발사 버튼으로 적들을 소탕하세요." if touch_enabled else "전진한 뒤 오른쪽 버튼으로 조준하고 왼쪽 버튼으로 사격하세요.",
 		"경계병에게 접근하세요 · 남은 적 %d" % enemies_remaining
 	)
@@ -1512,8 +1518,8 @@ func _start_tutorial_extract() -> void:
 		if child.has_meta("tutorial_extraction_visual"):
 			child.visible = true
 	_show_objective(
-		"첫 번째 쉘터",
-		"화살표를 따라 하수구로 이동하세요.",
+		"불빛이 있는 곳",
+		"신호가 오던 방향이다. 하수구로 내려간다.",
 		"하수구까지 %.0fm" % player.global_position.distance_to(sewer_exit.global_position)
 	)
 
@@ -1607,7 +1613,7 @@ func _try_enter_shelter() -> void:
 	restarting = true
 	player.velocity = Vector3.ZERO
 	objective_title.text = "쉘터 진입"
-	objective_detail.text = "지하에서 희미한 발전기 소리가 들립니다."
+	objective_detail.text = "쇠문 너머에서 발전기가 돌고 있다. 누군가 아직 불을 켜 두었다."
 	objective_progress.text = ""
 	var tween := create_tween()
 	tween.tween_property(fade_rect, "color:a", 1.0, 0.9)

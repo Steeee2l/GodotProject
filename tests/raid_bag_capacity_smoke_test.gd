@@ -49,14 +49,19 @@ func _run() -> void:
     assert(int(state.remove_raid_bag_item("weapon", "mp5", 1)) == 1)
     assert(int(state.get_raid_bag_used_slots()) == 14)
     assert(state.can_add_raid_item("ammo", "9mm_fmj", 1), "Freeing one slot must allow a new stack.")
-    assert(state.can_add_raid_items([
+    # can_add_raid_items takes Array[Dictionary]; an untyped literal is rejected.
+    var same_stack_batch: Array[Dictionary] = [
         {"type": "ammo", "id": "9mm_fmj", "amount": 30},
         {"type": "ammo", "id": "9mm_fmj", "amount": 30},
-    ]), "Repeated items in one loot container must share one new slot.")
-    assert(not state.can_add_raid_items([
+    ]
+    assert(state.can_add_raid_items(same_stack_batch),
+        "Repeated items in one loot container must share one new slot.")
+    var mixed_stack_batch: Array[Dictionary] = [
         {"type": "ammo", "id": "9mm_fmj", "amount": 30},
         {"type": "component", "id": "magazine_spring", "amount": 1},
-    ]), "Different new stacks in one loot container need separate free slots.")
+    ]
+    assert(not state.can_add_raid_items(mixed_stack_batch),
+        "Different new stacks in one loot container need separate free slots.")
 
     state.weapon_inventory.clear()
     state.ammo_inventory.clear()

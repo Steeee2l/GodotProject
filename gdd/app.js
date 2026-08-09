@@ -81,7 +81,7 @@
         cinematics:{label:"연출",icon:"◉"}, production:{label:"제작 소스",icon:"◎"}, other:{label:"기타",icon:"·"}
     };
     const characters = {
-        yunseo:{name:"윤서",role:"주인공 · 종로 정찰묘",code:"CHAR_YUNSEO",desc:"검은 털과 흰 얼굴 무늬, 붉은 스카프와 전술 배낭을 착용한 플레이어 캐릭터."},
+        nabi:{name:"나비 (Nabi)",role:"주인공 · 종로 정찰묘",code:"CHAR_NABI",desc:"검은 털과 흰 얼굴 무늬, 붉은 스카프와 전술 배낭을 착용한 플레이어 캐릭터. 재앙 이전 누군가의 집고양이였고, 그때 불리던 이름을 아직 쓴다."},
         seorin:{name:"서린",role:"동료 · 생존 전투묘",code:"CHAR_SEORIN",desc:"검은 코트와 전술 장비를 갖춘 여성 동료 고양이."},
         moka:{name:"모카",role:"구조 주민 · 겁먹은 상태",code:"CHAR_MOKA",desc:"베이지색 장모의 어린 구조 주민. 구조와 회복 장면에 사용."},
         dodam:{name:"도담",role:"쉘터 주민 · 작업묘",code:"CHAR_DODAM",desc:"베이지색 장모 주민의 작업·이동 스프라이트 세트."},

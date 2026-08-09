@@ -1,7 +1,7 @@
 extends Node3D
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
-const SPRITE_ROOT := "res://assets/generated/sprites/character-11/curated"
+const SPRITE_ROOT := "res://assets/sprites/trainer_curated"
 const IDLE_FRAME_COUNT := 4
 
 var trainer_sprite: AnimatedSprite3D

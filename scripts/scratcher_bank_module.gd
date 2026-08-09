@@ -292,23 +292,47 @@ func _worker_slot_button(index: int, slots: int) -> Button:
 	button.disabled = not available or resident_id.is_empty()
 	var display_name := str(trait_data.get("display_name", "이름 없는 주민"))
 	if active:
-		button.text = "%s · %s\n작업 중 · 꾹꾹이 x%.2f" % [
+		button.text = "%s · %s\n작업 중 · 꾹꾹이 x%.2f · 식비 x%.2f" % [
 			display_name,
 			trait_data.get("name", ""),
 			trait_data.get("kneading", 1.0),
+			trait_data.get("appetite", 1.0),
 		]
 	elif resident_id.is_empty():
 		button.text = "빈 주민 슬롯"
 	else:
-		button.text = "%s · %s\n꾹꾹이 x%.2f  캣닢 x%.2f" % [
+		button.text = "%s · %s\n꾹꾹이 x%.2f  캣닢 x%.2f\n식비 x%.2f" % [
 			display_name,
 			trait_data.get("name", ""),
 			trait_data.get("kneading", 1.0),
 			trait_data.get("catnip", 1.0),
+			trait_data.get("appetite", 1.0),
 		]
 	if not resident_id.is_empty():
 		button.pressed.connect(func(): _toggle_worker(resident_id))
+		# 특성이 트레이드오프가 된 이상, 안 맞는 조합을 바꿀 길이 필요하다.
+		# 우클릭 = 캣닢으로 재굴림.
+		button.gui_input.connect(func(event: InputEvent) -> void:
+			if (
+				event is InputEventMouseButton
+				and (event as InputEventMouseButton).pressed
+				and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_RIGHT
+			):
+				_reroll_worker(resident_id)
+		)
+		var reroll_cost := GameState.get_resident_reroll_cost(resident_id)
+		button.tooltip_text = "%s\n좌클릭: 배치/해제\n우클릭: 특성 재굴림 · 캣닢 %s" % [
+			display_name,
+			GameState.format_compact_number(reroll_cost),
+		]
 	return button
+
+
+func _reroll_worker(resident_id: String) -> void:
+	var result: Dictionary = GameState.try_reroll_resident_trait(resident_id)
+	if bool(result.get("ok", false)):
+		get_tree().call_group("shelter_resident_host", "refresh_shelter_residents", false)
+		_rebuild_ui()
 
 
 func _toggle_worker(resident_id: String) -> void:
