@@ -2767,7 +2767,10 @@ func _build_mobile_utility_buttons(font: Font) -> void:
 	)
 	if not touch_enabled:
 		mobile_medkit_button.pressed.connect(_use_quick_medkit)
-	mobile_medkit_button.visible = true
+	# 표시 여부는 _layout_mobile_utility_row()가 단독으로 정한다. 예전에는
+	# 여기서 visible=true를 박아, 레이아웃이 소유하지 않는 데스크톱/전환 상황에
+	# 버튼이 생성 좌표(화면 하단)에 떠 있었다.
+	mobile_medkit_button.visible = false
 	_update_medkit_button()
 
 

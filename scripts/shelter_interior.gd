@@ -27,6 +27,7 @@ const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const BGM_DIRECTOR := preload("res://scripts/audio/bgm_director.gd")
+const TOUCH_JOYSTICK := preload("res://scripts/hud/touch_joystick.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
 const AMMO_TEXTURE := preload("res://assets/items/ammo_762.png")
@@ -130,8 +131,7 @@ var interact_button: Button
 var dash_button: Button
 var shelter_medkit_button: Button
 var roll_cooldown_indicator: Control
-var touch_stick: Control
-var touch_knob: Control
+var touch_stick: TouchJoystick
 var touch_id := -1
 var touch_origin := Vector2.ZERO
 var touch_vector := Vector2.ZERO
@@ -2821,29 +2821,14 @@ func _rounded_panel_style(background: Color, border: Color, radius: int) -> Styl
 func _build_touch_stick(canvas: CanvasLayer) -> void:
 	# 크기는 _layout_touch_stick()이 화면에 맞춰 정한다. 128px 고정이었을 때
 	# 출정 화면 스틱만 커지고 쉘터는 그대로여서 조작감이 화면마다 달랐다.
-	touch_stick = Control.new()
+	# 필드와 같은 공용 위젯을 쓴다. 예전에는 쉘터만 ColorRect 링+노브라
+	# 화면마다 조작감이 달랐다.
+	touch_stick = TOUCH_JOYSTICK.new()
 	touch_stick.name = "ShelterTouchStick"
-	touch_stick.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	touch_stick.moved.connect(func(vector: Vector2) -> void: touch_vector = vector)
 	canvas.add_child(touch_stick)
-	var ring := ColorRect.new()
-	ring.name = "Ring"
-	ring.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	ring.color = Color(0.35, 0.45, 0.42, 0.28)
-	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	touch_stick.add_child(ring)
-	touch_knob = ColorRect.new()
-	touch_knob.name = "Knob"
-	touch_knob.color = Color(0.65, 0.85, 0.75, 0.58)
-	touch_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	touch_stick.add_child(touch_knob)
 	touch_stick.visible = DisplayServer.is_touchscreen_available()
 	_layout_touch_stick()
-
-
-func _touch_stick_knob_home() -> Vector2:
-	if not is_instance_valid(touch_stick) or not is_instance_valid(touch_knob):
-		return Vector2.ZERO
-	return (touch_stick.size - touch_knob.size) * 0.5
 
 
 func _layout_touch_stick() -> void:
@@ -2863,11 +2848,7 @@ func _layout_touch_stick() -> void:
 	touch_stick.offset_bottom = -bottom_margin
 	touch_stick.offset_top = -bottom_margin - stick_size
 	touch_stick.set_size(Vector2(stick_size, stick_size))
-	if is_instance_valid(touch_knob):
-		var knob_size := maxf(42.0, stick_size * 0.30)
-		touch_knob.size = Vector2(knob_size, knob_size)
-		if touch_id == -1:
-			touch_knob.position = _touch_stick_knob_home()
+	touch_stick.queue_redraw()
 
 
 func _apply_shelter_safe_layout() -> void:
@@ -4447,22 +4428,15 @@ func _input(event: InputEvent) -> void:
 		if touch.pressed and touch.position.x < get_viewport().get_visible_rect().size.x * 0.55:
 			if touch_id == -1:
 				touch_id = touch.index
-				touch_origin = touch.position
-				touch_vector = Vector2.ZERO
-				touch_stick.position = touch_origin - touch_stick.size * 0.5
+				touch_stick.position = touch.position - touch_stick.size * 0.5
+				touch_stick.begin_touch(touch.index, touch.position)
 				get_viewport().set_input_as_handled()
 		elif not touch.pressed and touch.index == touch_id:
 			touch_id = -1
-			touch_vector = Vector2.ZERO
-			touch_knob.position = _touch_stick_knob_home()
+			touch_stick.end_touch()
 			get_viewport().set_input_as_handled()
 	elif event is InputEventScreenDrag and event.index == touch_id:
-		# 반지름과 노브 원점을 실제 크기에서 뽑는다. 예전에는 128px 스틱을
-		# 전제한 상수(40, 0.34)가 박혀 있어 크기를 바꾸면 조작이 어긋났다.
-		var radius := maxf(1.0, touch_stick.size.x * 0.34)
-		var offset: Vector2 = (event.position - touch_origin).limit_length(radius)
-		touch_vector = offset / radius
-		touch_knob.position = _touch_stick_knob_home() + offset
+		touch_stick.update_touch(event.position)
 		get_viewport().set_input_as_handled()
 
 
