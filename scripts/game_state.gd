@@ -483,7 +483,7 @@ const RAID_ZONES := {
 		"name": "남산 오염 핵심부",
 		"description": "서울에서 가장 위험한 심야 전투 구역입니다.",
 		"required_tier": 5,
-		"stage_tier": 4,
+		"stage_tier": 5,
 		"threat": 1.0,
 		"enemy_multiplier": 2.3,
 		"boss": true,

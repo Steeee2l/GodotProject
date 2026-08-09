@@ -112,6 +112,34 @@ const STAGE_PROFILES := {
 			"jewelry_case": 2,
 		},
 	},
+	5: {
+		"name": "남산 오염 핵심부",
+		"weapon_rarity_cap": 4,
+		"ammo_tier_cap": 4,
+		"field_value_cap": 17000,
+		"enemy_value_cap": 6000,
+		"total_value_cap": 23000,
+		"weapon_spawn_cap": 6,
+		"enemy_drop_cap": 40,
+		"raid_kill_cap": 100,
+		"weapon_case_chance": 0.5,
+		"guaranteed_canned_food_pickups": 28,
+		"canned_food_double_stack_chance": 0.30,
+		"container_counts": {
+			"street_cache": 14,
+			"ammo_case": 9,
+			"toolbox": 10,
+			"clothing_cache": 6,
+			"weapon_case": 7,
+			"secure_cache": 8,
+			"scrap_pile": 8,
+			"catnip_planter": 6,
+			"electronics_bin": 5,
+			"office_desk": 4,
+			"subway_locker": 4,
+			"jewelry_case": 4,
+		},
+	},
 }
 
 const CONTAINER_DEFINITIONS := {
@@ -289,6 +317,7 @@ const CONTAINER_DEFINITIONS := {
 			["rifle_blueprint", 3.2],
 			["shotgun_blueprint", 3.2],
 			["sealed_zone_keycard", 1.4],
+			["churu", 8.0],
 		],
 	},
 }
@@ -301,6 +330,14 @@ const ITEM_CATALOG := {
 		"slot_size": 1,
 		"rarity_tier": 1,
 		"minimum_stage": 1,
+	},
+	"churu": {
+		"loot_type": "churu",
+		"display_name": "희귀 츄르",
+		"base_value": 1500,
+		"slot_size": 1,
+		"rarity_tier": 4,
+		"minimum_stage": 4,
 	},
 	# 원자재: 쉘터 가동 연료. 개당 가치는 낮지만 부피가 커서 가방을 압박한다.
 	"raw_scrap": {
@@ -673,11 +710,11 @@ static func get_stage_for_zone(zone_data: Dictionary) -> int:
 
 
 static func get_stage_profile(stage_tier: int) -> Dictionary:
-	return (STAGE_PROFILES[clampi(stage_tier, 1, 4)] as Dictionary).duplicate(true)
+	return (STAGE_PROFILES[clampi(stage_tier, 1, 5)] as Dictionary).duplicate(true)
 
 
 static func get_guaranteed_canned_food_pickup_count(stage_tier: int) -> int:
-	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 4)] as Dictionary
+	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 5)] as Dictionary
 	return maxi(0, int(profile.get("guaranteed_canned_food_pickups", 0)))
 
 
@@ -685,7 +722,7 @@ static func roll_guaranteed_canned_food_amount(
 	stage_tier: int,
 	random: RandomNumberGenerator
 ) -> int:
-	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 4)] as Dictionary
+	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 5)] as Dictionary
 	var double_stack_chance := float(
 		profile.get("canned_food_double_stack_chance", 0.0)
 	)
@@ -699,7 +736,7 @@ static func get_container_display_name(container_type: String) -> String:
 
 static func build_container_plan(stage_tier: int, random: RandomNumberGenerator) -> Array[String]:
 	var result: Array[String] = []
-	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 4)] as Dictionary
+	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 5)] as Dictionary
 	var counts := profile.get("container_counts", {}) as Dictionary
 	for container_type_value in counts.keys():
 		var container_type := str(container_type_value)
@@ -719,7 +756,7 @@ static func roll_container(
 	district: String,
 	random: RandomNumberGenerator
 ) -> Array[Dictionary]:
-	var stage := clampi(stage_tier, 1, 4)
+	var stage := clampi(stage_tier, 1, 5)
 	var container := CONTAINER_DEFINITIONS.get(container_type, {}) as Dictionary
 	if container.is_empty() or stage < int(container.get("minimum_stage", 1)):
 		return []
@@ -773,7 +810,7 @@ static func roll_enemy_drop(
 	random: RandomNumberGenerator,
 	unarmed_recovery: bool = false
 ) -> Dictionary:
-	var stage := clampi(stage_tier, 1, 4)
+	var stage := clampi(stage_tier, 1, 5)
 	var weapon_drop_chance := (
 		0.58
 		if unarmed_recovery
@@ -827,7 +864,7 @@ static func roll_enemy_drop(
 
 
 static func get_enemy_weapon_drop_chance(stage_tier: int) -> float:
-	return 0.05 + float(clampi(stage_tier, 1, 4) - 1) * 0.01
+	return 0.05 + float(clampi(stage_tier, 1, 5) - 1) * 0.01
 
 
 static func get_definition_value(definition: Dictionary) -> int:
@@ -850,7 +887,7 @@ static func try_register_loot(
 ) -> bool:
 	if definition.is_empty():
 		return false
-	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 4)] as Dictionary
+	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 5)] as Dictionary
 	var value := get_definition_value(definition)
 	var loot_type := str(definition.get("type", ""))
 	# 원자재는 쉘터 가동 연료다. 가치 상한 때문에 스폰이 막히면 진행이 멈추므로 제외한다.
@@ -917,7 +954,7 @@ static func simulate_stage_supply(stage_tier: int, run_count: int, seed_value: i
 	var total_canned_food := 0
 	var total_components := 0
 	var runs_with_common_supply := 0
-	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 4)] as Dictionary
+	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 5)] as Dictionary
 	for _run_index in maxi(1, run_count):
 		var run_value := 0
 		var guaranteed_supply_value := 0
@@ -1029,7 +1066,7 @@ static func _weighted_pick(entries: Array, random: RandomNumberGenerator) -> Str
 
 
 static func _item_allowed(definition: Dictionary, stage_tier: int) -> bool:
-	var stage := clampi(stage_tier, 1, 4)
+	var stage := clampi(stage_tier, 1, 5)
 	var profile := STAGE_PROFILES[stage] as Dictionary
 	if stage < int(definition.get("minimum_stage", 1)):
 		return false
@@ -1079,7 +1116,7 @@ static func _materialize_item(
 	data.erase("stack_max")
 	data["amount"] = amount
 	data["item_id"] = item_id
-	data["stage_tier"] = clampi(stage_tier, 1, 4)
+	data["stage_tier"] = clampi(stage_tier, 1, 5)
 	data["total_value"] = int(data.get("base_value", 0)) * amount
 	data["value_per_slot"] = float(data["total_value"]) / float(maxi(1, int(data.get("slot_size", 1))))
 	return {"type": loot_type, "data": data}
@@ -1095,7 +1132,7 @@ static func _roll_ammo_amount(
 		return random.randi_range(3, 8)
 	if ammo_tier >= 3:
 		return random.randi_range(2, 5) if stage_tier == 3 else random.randi_range(3, 6)
-	match clampi(stage_tier, 1, 4):
+	match clampi(stage_tier, 1, 5):
 		1:
 			return random.randi_range(4, 7)
 		2:
