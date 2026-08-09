@@ -4275,6 +4275,15 @@ func _tick_raid_event_director(delta: float) -> void:
 		raid_event_last_fired,
 		raid_event_random
 	)
+	# 첫 판 보장: 첫 출정은 threat 0.15에 보스도 없어서, 운이 나쁘면 사건이
+	# 폭우 한 번으로 끝난다. 첫인상을 운에 맡기지 않는다 — 2분쯤에 수송대
+	# 추락을 한 번은 반드시 보여준다.
+	if (
+		GameState.shelter_return_serial == 0
+		and raid_elapsed_seconds >= 110.0
+		and not raid_event_last_fired.has("convoy_wreck")
+	):
+		event_id = "convoy_wreck"
 	raid_event_cooldown = RAID_EVENT_DIRECTOR.get_event_interval(raid_pressure_level)
 	if event_id.is_empty():
 		return
@@ -6109,6 +6118,19 @@ func _open_field_loot_container(point: Node3D) -> void:
 	_add_fatigue(FATIGUE_LOOT_GAIN)
 	if spawned_count == 0:
 		_show_field_notice("%s · 비어 있습니다." % LOOT_ECONOMY.get_container_display_name(container_type))
+	elif (
+		container_type in ["scrap_pile", "catnip_planter"]
+		and not GameState.raw_material_tip_seen
+	):
+		# 첫 원자재 컨테이너 — 이 조각이 왜 필요한지 여기서 한 번만 가르친다.
+		GameState.raw_material_tip_seen = true
+		GameState.save_persistent_state()
+		_show_field_notice(
+			"%s 개방.
+이 조각들이 쉘터 생산 라인의 연료다. 주민이 일하려면 이걸 가져가야 한다.
+부피가 커서 10개마다 가방 한 칸을 차지한다."
+			% LOOT_ECONOMY.get_container_display_name(container_type)
+		)
 	else:
 		_show_field_notice(
 			"%s 개방 · 전리품 %d개" % [

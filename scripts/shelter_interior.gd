@@ -505,6 +505,62 @@ func _build_stage_one_modules() -> void:
 	_refresh_unlocked_facilities(module_root, false)
 
 
+const LOCKED_FACILITY_HINTS := {
+	"scratcher_bank": "사자의 첫 계약",
+	"catnip_scraper": "사자의 두 번째 계약",
+	"workbench": "사자의 계약 진행",
+	"storage": "첫 출정에서 복귀",
+	"training": "첫 출정에서 복귀",
+}
+
+
+func _ensure_locked_silhouette(
+	module_root: Node3D, facility_id: String, facility_position: Vector3
+) -> void:
+	var silhouette_name := "LockedSilhouette_%s" % facility_id
+	if module_root.get_node_or_null(silhouette_name) != null:
+		return
+	var texture_paths := {
+		"workbench": "res://assets/interiors/modules/shelter_workbench_wall_aligned_v4.png",
+		"scratcher_bank": "res://assets/interiors/modules/scratcher_bank_wall_aligned_v1.png",
+		"catnip_scraper": "res://assets/interiors/modules/catnip_scraper_wall_aligned_v1.png",
+		"storage": "res://assets/interiors/modules/shelter_storage_wall_aligned_v4.png",
+		"training": "res://assets/interiors/modules/shelter_training_wall_aligned_v1.png",
+	}
+	var path := str(texture_paths.get(facility_id, ""))
+	if path.is_empty() or not ResourceLoader.exists(path):
+		return
+	var root := Node3D.new()
+	root.name = silhouette_name
+	root.position = facility_position
+	module_root.add_child(root)
+	var sprite := Sprite3D.new()
+	sprite.name = "SilhouetteSprite"
+	sprite.texture = load(path) as Texture2D
+	var height := float(sprite.texture.get_height())
+	sprite.pixel_size = 5.6 / float(maxi(1, sprite.texture.get_width()))
+	sprite.position.y = height * sprite.pixel_size * 0.5 + 0.02
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.shaded = false
+	sprite.transparent = true
+	sprite.render_priority = 8
+	# 어둡고 반투명한 청사진 느낌. 실물과 헷갈리면 안 된다.
+	sprite.modulate = Color(0.35, 0.45, 0.52, 0.30)
+	root.add_child(sprite)
+	var label := Label3D.new()
+	label.name = "UnlockHint"
+	label.text = "잠김 · %s" % LOCKED_FACILITY_HINTS.get(facility_id, "계약으로 해금")
+	label.font = FONT
+	label.font_size = 40
+	label.pixel_size = 0.008
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.modulate = Color(0.62, 0.72, 0.78, 0.85)
+	label.outline_size = 8
+	label.position.y = 0.55
+	root.add_child(label)
+
+
 func _refresh_unlocked_facilities(module_root: Node3D = null, animate: bool = true) -> Array[String]:
 	if module_root == null:
 		module_root = get_node_or_null("StageOneModules") as Node3D
@@ -520,10 +576,15 @@ func _refresh_unlocked_facilities(module_root: Node3D = null, animate: bool = tr
 	]:
 		var facility_id := str(facility_data[0])
 		var node_name := str(facility_data[1])
-		if (
-			not GameState.is_shelter_facility_unlocked(facility_id)
-			or module_root.get_node_or_null(node_name) != null
-		):
+		if not GameState.is_shelter_facility_unlocked(facility_id):
+			# 잠긴 시설도 자리는 보여야 한다. 빈 방은 "여기서 뭘 하지"가 되고,
+			# 실루엣이 있는 방은 "저걸 어떻게 열지"가 된다.
+			_ensure_locked_silhouette(module_root, facility_id, facility_data[3] as Vector3)
+			continue
+		var silhouette := module_root.get_node_or_null("LockedSilhouette_%s" % facility_id)
+		if silhouette != null:
+			silhouette.queue_free()
+		if module_root.get_node_or_null(node_name) != null:
 			continue
 		var scene := facility_data[2] as PackedScene
 		var module := scene.instantiate() as Node3D

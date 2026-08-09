@@ -145,6 +145,8 @@ var active_churu_buffs: Array[String] = []
 var last_corpse_decay_notice: Dictionary = {}
 # 첫 판에서 "가방이 꽉 찼을 때의 갈등"을 한 번은 반드시 겪게 한다.
 var bag_pressure_lesson_seen: bool = false
+# 첫 원자재 컨테이너 개봉 시 한 번만 용도를 설명한다.
+var raw_material_tip_seen: bool = false
 # 첫 출정에서 한 번씩만 뜨는 코칭. 다리 위 튜토리얼은 동사(이동·조준·사격)만
 # 가르치고 끝나서, 정작 이 게임의 결정 구조는 아무도 설명하지 않았다.
 var raw_material_lesson_seen: bool = false
@@ -227,7 +229,7 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"objective": "기초 부품 확보",
 		"metric": "parts",
 		"target": 3,
-		"reward": {"xp": 80, "canned_food": 4},
+		"reward": {"xp": 80, "canned_food": 4, "churu": 1},
 		"facility_unlock": "scratcher_bank",
 		"lore_title": "사자의 기록 01 · 공생",
 		"lore": "사자는 쉘터를 지키는 대신, 생존자들이 가져온 자원으로 공동 설비를 세우기로 했다.",
@@ -1004,6 +1006,7 @@ func get_pending_shelter_story_event() -> Dictionary:
 			"lines": [
 				"한 번 나갔다가 제 발로 돌아왔군. 그 정도면 이곳의 열쇠를 조금 더 맡겨도 되겠어.",
 				"창고와 체력 훈련장을 열어 뒀다. 전리품은 창고에 남기고, 통조림은 몸에 투자해.",
+				"그리고 도시의 고철 더미와 캣닢 화단을 눈여겨봐. 그 조각들이 이 쉘터를 돌리는 연료다.",
 				"저 근육 덩어리는 철근이다. 시설 공사는 내게 맡기고, 녀석에게는 특별 훈련을 받아.",
 				"오늘은 행상인도 파이프 근처를 기웃거릴 거다. 들일지 말지는 네가 결정해.",
 				"내 계약을 해결하면 고철, 캣닢, 무기 정비 설비를 하나씩 세워 주지.",
@@ -3318,6 +3321,7 @@ func save_persistent_state() -> bool:
 		"valuable_inventory": valuable_inventory,
 		"active_churu_buffs": active_churu_buffs,
 		"bag_pressure_lesson_seen": bag_pressure_lesson_seen,
+		"raw_material_tip_seen": raw_material_tip_seen,
 		"raw_material_lesson_seen": raw_material_lesson_seen,
 		"fatigue_lesson_seen": fatigue_lesson_seen,
 		"extraction_choice_lesson_seen": extraction_choice_lesson_seen,
@@ -3447,6 +3451,7 @@ func load_persistent_state() -> bool:
 	valuable_inventory = (data.get("valuable_inventory", {}) as Dictionary).duplicate(true)
 	active_churu_buffs = _to_string_array(data.get("active_churu_buffs", []))
 	bag_pressure_lesson_seen = bool(data.get("bag_pressure_lesson_seen", bag_pressure_lesson_seen))
+	raw_material_tip_seen = bool(data.get("raw_material_tip_seen", raw_material_tip_seen))
 	raw_material_lesson_seen = bool(data.get("raw_material_lesson_seen", raw_material_lesson_seen))
 	fatigue_lesson_seen = bool(data.get("fatigue_lesson_seen", fatigue_lesson_seen))
 	extraction_choice_lesson_seen = bool(data.get("extraction_choice_lesson_seen", extraction_choice_lesson_seen))
@@ -3636,6 +3641,7 @@ func reset_run() -> void:
 	valuable_inventory.clear()
 	active_churu_buffs.clear()
 	bag_pressure_lesson_seen = false
+	raw_material_tip_seen = false
 	raw_material_lesson_seen = false
 	fatigue_lesson_seen = false
 	extraction_choice_lesson_seen = false
