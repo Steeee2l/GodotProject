@@ -384,18 +384,18 @@ func _collect_nearby_ammo() -> void:
 
 
 func _maybe_teach_raw_material(loot_type: String) -> void:
-	# 원자재는 쉘터 생산의 유일한 연료인데, 필드에서는 다른 잡템과 똑같이
-	# 생겼고 아무도 설명하지 않았다. 처음 줍는 순간이 유일한 교육 기회다.
+	# 용도와 부피는 컨테이너를 처음 열 때 raw_material_tip_seen이 이미 가르친다.
+	# 여기서는 한 걸음 더 나간 것만 말한다 — 이 칸을 자원에 쓸지 장비에 쓸지가
+	# 이 게임의 실제 선택이라는 것. 앞선 안내를 본 뒤에만 뜬다.
 	if loot_type != "raw_scrap" and loot_type != "raw_catnip":
 		return
-	if GameState.raw_material_lesson_seen:
+	if GameState.raw_material_lesson_seen or not GameState.raw_material_tip_seen:
 		return
 	GameState.raw_material_lesson_seen = true
 	GameState.save_persistent_state()
 	host._show_field_notice(
-		"원자재를 주웠다.\n"
-		+ "쉘터는 원자재를 만들지 못한다. 네가 들고 온 만큼만 가공한다.\n"
-		+ "가방 한 칸을 원자재에 쓸지 장비에 쓸지가 이 도시의 진짜 선택이다."
+		"가방 한 칸을 원자재에 쓸지 장비에 쓸지가 이 도시의 진짜 선택이다.\n"
+		+ "살아 돌아온 가방만 쉘터의 것이 된다."
 	)
 
 
