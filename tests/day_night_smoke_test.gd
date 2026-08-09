@@ -203,7 +203,7 @@ func _run() -> void:
 	assert(bat_sprite != null and bat_sprite.texture != null)
 	main_scene.call("_play_bat_swing", Vector3(1.0, 0.0, 0.0))
 	assert((main_scene.get("melee_bat_overlay") as Sprite2D).visible)
-	assert(main_scene.get("melee_button") != null)
+	assert(main_scene.get("hud").melee_button != null)
 	assert(main_scene.get("mobile_context_button") is Button)
 	assert(main_scene.get("mobile_reload_button") is Button)
 	assert(main_scene.get("mobile_flashlight_button") is Button)
@@ -230,8 +230,8 @@ func _run() -> void:
 	assert(bool(tactical_map.call("is_open")))
 	map_close_button.pressed.emit()
 	assert(not bool(tactical_map.call("is_open")))
-	var fire_button := main_scene.get("fire_button") as Button
-	var dash_button := main_scene.get("dash_button") as Button
+	var fire_button := main_scene.get("hud").fire_button as Button
+	var dash_button := main_scene.get("hud").dash_button as Button
 	fire_button.visible = true
 	dash_button.visible = true
 	await process_frame
@@ -278,8 +278,8 @@ func _run() -> void:
 	main_scene.set("magazine_ammo", 24)
 	main_scene.set("reserve_ammo", 95)
 	main_scene.call("_update_equipment_ui")
-	assert((main_scene.get("equipment_ammo_label") as Label).text.contains("24 / 30"))
-	assert((main_scene.get("equipment_reserve_ammo_label") as Label).text.contains("예비 95발"))
+	assert((main_scene.get("hud").equipment_ammo_label as Label).text.contains("24 / 30"))
+	assert((main_scene.get("hud").equipment_reserve_ammo_label as Label).text.contains("예비 95발"))
 
 	pistol_enemy.set("magazine_ammo", 0)
 	pistol_enemy.call("_start_reload")

@@ -41,7 +41,7 @@ func _run() -> void:
 		assert(field_sprite.sprite_frames.get_frame_count(roll_animation) == 4)
 		assert(not field_sprite.sprite_frames.get_animation_loop(roll_animation))
 		assert(is_equal_approx(field_sprite.sprite_frames.get_animation_speed(roll_animation), 10.0))
-	assert(main_scene.get("roll_cooldown_indicator") is Control)
+	assert(main_scene.get("hud").roll_cooldown_indicator is Control)
 	main_scene.call("_set_facing", "s")
 	main_scene.call("_try_start_roll")
 	assert(main_scene.get("roll_active"))

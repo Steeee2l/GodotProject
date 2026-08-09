@@ -44,11 +44,11 @@ func _run() -> void:
 	root.add_child(main_scene)
 	await process_frame
 	await physics_frame
-	assert(main_scene.get("aim_direction_indicator") != null)
-	assert(main_scene.get("laser_beam") != null)
-	assert(main_scene.get("aim_reticle") != null)
+	assert(main_scene.get("hud").aim_direction_indicator != null)
+	assert(main_scene.get("hud").laser_beam != null)
+	assert(main_scene.get("hud").aim_reticle != null)
 	assert((main_scene.get("laser_glow_layers") as Array).size() == 3)
-	assert(main_scene.get("laser_endpoint") != null)
+	assert(main_scene.get("hud").laser_endpoint != null)
 	var equipped_weapon_sprite := main_scene.get("weapon_sprite") as AnimatedSprite3D
 	var visual_catalog: Script = load("res://scripts/weapon_visual_catalog.gd")
 	assert(is_equal_approx(
@@ -73,12 +73,12 @@ func _run() -> void:
 	main_scene.call("_update_building_overlays")
 	assert(equipped_weapon_sprite.animation == "idle_n")
 	assert(equipped_weapon_overlay.z_index < survivor_overlay.z_index)
-	assert(main_scene.get("player_world_health_bar") != null)
-	var compact_health_bar := main_scene.get("player_world_health_bar") as Control
+	assert(main_scene.get("hud").player_world_health_bar != null)
+	var compact_health_bar := main_scene.get("hud").player_world_health_bar as Control
 	assert(compact_health_bar.size == Vector2(48, 7))
 	assert(compact_health_bar.get_node_or_null("Background") is Panel)
 	assert(compact_health_bar.get_node_or_null("Fill") is Panel)
-	assert(main_scene.get("damage_vignette_material") != null)
+	assert(main_scene.get("hud").damage_vignette_material != null)
 	var health_before_hit := int(main_scene.get("player_health"))
 	main_scene.call("take_hit", 5, Vector3.RIGHT)
 	assert(int(main_scene.get("player_health")) == health_before_hit - 5)

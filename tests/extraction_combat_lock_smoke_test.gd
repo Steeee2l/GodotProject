@@ -18,7 +18,7 @@ func _run() -> void:
 	assert(bool(main_scene.get("extraction_transition_active")))
 	assert(paused, "The raid must pause as soon as extraction succeeds.")
 	assert(
-		(main_scene.get("extraction_result_panel") as Control).process_mode
+		(main_scene.get("hud").extraction_result_panel as Control).process_mode
 		== Node.PROCESS_MODE_WHEN_PAUSED
 	)
 

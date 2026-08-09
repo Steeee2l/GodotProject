@@ -30,8 +30,8 @@ func _run() -> void:
 	assert(hotspot_types.has("pharmacy"))
 	assert(hotspot_types.has("sealed_parts"))
 
-	var pressure_panel := main_scene.get("raid_pressure_panel") as PanelContainer
-	var pressure_bar := main_scene.get("raid_pressure_bar") as ProgressBar
+	var pressure_panel := main_scene.get("hud").raid_pressure_panel as PanelContainer
+	var pressure_bar := main_scene.get("hud").raid_pressure_bar as ProgressBar
 	assert(is_instance_valid(pressure_panel))
 	assert(is_instance_valid(pressure_bar))
 	assert(not pressure_panel.visible)
@@ -41,7 +41,7 @@ func _run() -> void:
 	main_scene.call("_refresh_raid_pressure_hud")
 	assert(int(main_scene.get("raid_pressure_level")) == 2)
 	assert(is_equal_approx(float(main_scene.get("raid_reward_multiplier")), 1.35))
-	assert((main_scene.get("jackpot_pressure_label") as Label).text == "추적")
+	assert((main_scene.get("hud").jackpot_pressure_label as Label).text == "추적")
 	assert((main_scene.get("enemies") as Array).size() > initial_enemy_count)
 
 	var extraction_sites: Array = main_scene.get("extraction_sites")
@@ -63,10 +63,10 @@ func _run() -> void:
 	var jackpot_clue := main_scene.get("jackpot_clue_site") as Node3D
 	assert(is_instance_valid(jackpot_clue))
 	assert(jackpot_clue.get_node_or_null("JackpotPropSprite") is Sprite3D)
-	var jackpot_hud := main_scene.get("jackpot_hud") as PanelContainer
+	var jackpot_hud := main_scene.get("hud").jackpot_hud as PanelContainer
 	assert(is_instance_valid(jackpot_hud))
 	assert(jackpot_hud.size.y <= 70.0)
-	assert((main_scene.get("jackpot_detail_label") as Label).text.contains("TAB"))
+	assert((main_scene.get("hud").jackpot_detail_label as Label).text.contains("TAB"))
 	main_scene.call("_complete_field_interaction", jackpot_clue)
 	assert(str(main_scene.get("jackpot_state")) == "power")
 	var jackpot_power := main_scene.get("jackpot_power_site") as Node3D
@@ -93,7 +93,7 @@ func _run() -> void:
 	var incident_site := main_scene.get("dynamic_incident_site") as Node3D
 	assert(is_instance_valid(incident_site))
 	assert(incident_site.get_node_or_null("ConvoyWreck") is Sprite3D)
-	assert((main_scene.get("dynamic_incident_hud") as PanelContainer).visible)
+	assert((main_scene.get("hud").dynamic_incident_hud as PanelContainer).visible)
 	var incident_factions: Array[String] = []
 	var raider_survivors: Array[CharacterBody3D] = []
 	var feral_survivors: Array[CharacterBody3D] = []
@@ -129,7 +129,7 @@ func _run() -> void:
 
 	main_scene.call("_complete_field_interaction", incident_site)
 	assert(str(main_scene.get("dynamic_incident_state")) == "claimed")
-	assert(not (main_scene.get("dynamic_incident_hud") as PanelContainer).visible)
+	assert(not (main_scene.get("hud").dynamic_incident_hud as PanelContainer).visible)
 
 	main_scene.set("selected_extraction_index", 2)
 	main_scene.set("selected_extraction_multiplier", 1.4)

@@ -62,7 +62,7 @@ func _run() -> void:
 	assert(found_boss)
 
 	main_scene.call("_show_extraction_result", 0)
-	var summary := main_scene.get("extraction_result_summary") as Label
+	var summary := main_scene.get("hud").extraction_result_summary as Label
 	assert(summary.text.contains("기초 부품 확보"))
 	assert(summary.text.contains("지하철역 입구 조사"))
 	assert(summary.text.contains("임무 XP +210"))

@@ -74,7 +74,7 @@ func _run() -> void:
 	assert(not bool(main.get("mouse_fire_held")))
 	assert(not bool(main.get("laser_aim_held")))
 	assert((main.get("touch_vector") as Vector2).is_zero_approx())
-	assert(not (main.get("aim_canvas") as CanvasLayer).visible)
+	assert(not ((main.get("hud").aim_canvas) as CanvasLayer).visible)
 	var defeat_panel := main.get("boss_defeat_panel") as PanelContainer
 	assert(defeat_panel.size.x <= 720.0)
 	assert(defeat_panel.size.x <= root.get_viewport().get_visible_rect().size.x * 0.85)
@@ -87,7 +87,7 @@ func _run() -> void:
 	await create_timer(1.9, true, false, true).timeout
 	assert(not bool(main.get("boss_defeat_sequence_active")))
 	assert(is_equal_approx(Engine.time_scale, 1.0))
-	assert((main.get("aim_canvas") as CanvasLayer).visible)
+	assert(((main.get("hud").aim_canvas) as CanvasLayer).visible)
 
 	print("CONTRACT_NARRATIVE_BOSS_OK voice=true story=true lore=true focus=true slowmo=true shake=true")
 	main.queue_free()

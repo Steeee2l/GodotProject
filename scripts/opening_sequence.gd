@@ -81,6 +81,8 @@ var movement_distance := 0.0
 var aim_hold_duration := 0.0
 var aim_held := false
 var fire_held := false
+var opening_fire_touch := -1
+var dialogue_advance_msec := 0
 var fire_cooldown := 0.0
 var reloading := false
 var reload_remaining := 0.0
@@ -200,6 +202,54 @@ func _physics_process(delta: float) -> void:
 	_update_hud()
 
 
+
+func _opening_button_contains(button: Button, position: Vector2) -> bool:
+	return (
+		is_instance_valid(button)
+		and button.visible
+		and button.get_global_rect().has_point(position)
+	)
+
+
+func _handle_opening_action_touch(touch: InputEventScreenTouch) -> bool:
+	# 손가락을 뗐을 때: 발사를 잡고 있던 인덱스면 반드시 해제한다.
+	if not touch.pressed:
+		if touch.index == opening_fire_touch:
+			opening_fire_touch = -1
+			fire_held = false
+			return true
+		return false
+	if _opening_button_contains(mobile_fire_button, touch.position):
+		if opening_fire_touch != -1:
+			return true
+		opening_fire_touch = touch.index
+		if not mobile_aim_active:
+			mobile_aim_active = true
+			mobile_aim_button.set_pressed_no_signal(true)
+		aim_held = true
+		fire_held = true
+		_try_fire()
+		return true
+	if _opening_button_contains(mobile_dash_button, touch.position):
+		_try_dash()
+		return true
+	if _opening_button_contains(mobile_aim_button, touch.position):
+		mobile_aim_active = not mobile_aim_active
+		mobile_aim_button.set_pressed_no_signal(mobile_aim_active)
+		aim_held = mobile_aim_active
+		if mobile_aim_active:
+			current_aim_direction = _get_facing_world_direction()
+		return true
+	if _opening_button_contains(mobile_interact_button, touch.position):
+		if phase == "tutorial_extract":
+			_try_enter_shelter()
+		return true
+	if _opening_button_contains(opening_medkit_button, touch.position):
+		_use_opening_medkit()
+		return true
+	return false
+
+
 func _input(event: InputEvent) -> void:
 	if restarting:
 		return
@@ -219,6 +269,12 @@ func _input(event: InputEvent) -> void:
 			mobile_joystick_touch = -1
 			mobile_move_vector = Vector2.ZERO
 			mobile_joystick.queue_redraw()
+			get_viewport().set_input_as_handled()
+		elif _handle_opening_action_touch(touch):
+			# 버튼 시그널에 기대면 두 번째 손가락이 무시된다. Godot의 마우스
+			# 에뮬레이션은 첫 터치 인덱스만 따라가기 때문이다. 그래서 조이스틱을
+			# 잡은 채로는 대시가 눌리지 않았고, 발사 버튼에서 손을 떼도 해제
+			# 이벤트가 사라져 총이 계속 나갔다. 인덱스를 직접 추적한다.
 			get_viewport().set_input_as_handled()
 	elif event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
@@ -1069,7 +1125,12 @@ func _build_mobile_controls(hud: CanvasLayer) -> void:
 	mobile_fire_button.offset_top = -116
 	mobile_fire_button.offset_right = -24
 	mobile_fire_button.offset_bottom = -24
+	# 터치는 _handle_opening_action_touch가 인덱스별로 직접 처리한다.
+	# 여기 시그널은 마우스(데스크톱 미리보기)에서만 의미가 있고,
+	# 터치에서 두 번 발동하지 않도록 진행 중이면 무시한다.
 	mobile_fire_button.button_down.connect(func() -> void:
+		if opening_fire_touch != -1:
+			return
 		if not mobile_aim_active:
 			mobile_aim_active = true
 			mobile_aim_button.set_pressed_no_signal(true)
@@ -1077,7 +1138,10 @@ func _build_mobile_controls(hud: CanvasLayer) -> void:
 		fire_held = true
 		_try_fire()
 	)
-	mobile_fire_button.button_up.connect(func() -> void: fire_held = false)
+	mobile_fire_button.button_up.connect(func() -> void:
+		if opening_fire_touch == -1:
+			fire_held = false
+	)
 	mobile_controls_root.add_child(mobile_fire_button)
 
 	mobile_aim_button = _make_mobile_action_button("AimButton", "조준", "flashlight", Color("#e8df9f"))
@@ -1318,6 +1382,13 @@ func _show_dialogue() -> void:
 
 
 func _advance_dialogue() -> void:
+	# 모바일에서는 한 번의 탭이 InputEventScreenTouch와 에뮬레이트된
+	# 마우스 클릭을 둘 다 만들어서 대사가 두세 줄씩 건너뛰었다.
+	# 입력 경로를 늘리는 대신 짧은 디바운스로 막는다.
+	var now := Time.get_ticks_msec()
+	if now - dialogue_advance_msec < 260:
+		return
+	dialogue_advance_msec = now
 	if phase == "intro_dialogue":
 		dialogue_index += 1
 		if dialogue_index < 3:
