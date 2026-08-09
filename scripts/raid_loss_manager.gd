@@ -39,12 +39,14 @@ static func build_death_corpse_loot() -> Dictionary:
 		"weapon_mod_loadouts": GameState.weapon_mod_loadouts.duplicate(true),
 		"raid_special_cargo": GameState.raid_special_cargo.duplicate(true),
 	}
-	GameState.secure_dog_items.clear()
+	# 부작용 없음 — 탈출 결정 화면에서 "지금 확보 가치"를 미리 보여줄 때도 쓰므로
+	# 여기서 시큐어 슬롯을 비우지 않는다. 실제 사망 처리(store_death_corpse)에서만 비운다.
 	return loot
 
 
 static func store_death_corpse(player_position: Vector3) -> Dictionary:
 	var loot := build_death_corpse_loot()
+	GameState.secure_dog_items.clear()
 	if get_item_count(loot) <= 0:
 		GameState.clear_pending_corpse_recovery()
 		return loot

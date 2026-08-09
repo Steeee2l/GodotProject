@@ -368,6 +368,8 @@ var scent_focus_active := false
 var raid_hotspots: Array[Node3D] = []
 var raid_elapsed_seconds := 0.0
 var raid_pressure_level := 0
+var _carried_value_cache := 0
+var _carried_value_cache_msec := 0
 # 긴장도의 실제 입력. 시간·전투·소음·전리품이 여기에 누적된다.
 var raid_pressure_points := 0.0
 var raid_seconds_since_noise := 0.0
@@ -6010,10 +6012,17 @@ func _update_field_interactions(delta: float) -> void:
 		if is_locked:
 			detail = locked_reason
 		elif interaction_type == "extraction":
-			detail = "정산 배율 ×%.2f · 후송 %d명" % [
-				float(nearby_field_interaction.get_meta("reward_multiplier", 1.0)),
-				rescued_followers.size(),
-			]
+			# 이 게임의 심장 박동: 지금 확보할 가치와 죽으면 잃을 가치를 같은 줄에
+			# 나란히 세운다. 배율은 "더 버티면 커진다"는 신호로 뒤에 붙인다.
+			var carried_value := _get_carried_loot_value_cached()
+			var multiplier := float(nearby_field_interaction.get_meta("reward_multiplier", 1.0))
+			if carried_value > 0:
+				detail = "지금 확보 %s  ·  죽으면 전부 잃는다  ·  정산 ×%.2f" % [
+					GameState.format_compact_number(roundi(float(carried_value) * multiplier)),
+					multiplier,
+				]
+			else:
+				detail = "가방이 비었다 · 정산 ×%.2f로 빈손 탈출" % multiplier
 		elif field_interaction_candidates.size() > 1:
 			detail = "[G] 다음 · %s" % next_name
 		hud.field_interaction_action_detail_label.text = detail
@@ -6854,6 +6863,19 @@ func _show_extraction_result(rescued_count: int) -> void:
 
 func _grant_extraction_route_bonus() -> Dictionary:
 	return extraction._grant_extraction_route_bonus()
+
+
+func _get_carried_loot_value_cached() -> int:
+	# 탈출 프롬프트는 매 프레임 갱신되지만, 가방 가치 집계는 딕셔너리를 여럿
+	# 복제하므로 0.4초마다 한 번만 다시 계산한다. 시체 전리품 가치 = 지금 죽으면
+	# 잃을 것 = 지금 나가면 확보할 것. 부작용 없는 build_death_corpse_loot을 쓴다.
+	var now := Time.get_ticks_msec()
+	if now - _carried_value_cache_msec < 400:
+		return _carried_value_cache
+	_carried_value_cache_msec = now
+	var loot := RAID_LOSS_MANAGER.build_death_corpse_loot()
+	_carried_value_cache = RAID_LOSS_MANAGER.get_total_value(loot)
+	return _carried_value_cache
 
 
 func _update_field_missions(delta: float) -> void:
