@@ -3382,8 +3382,18 @@ func load_persistent_state() -> bool:
 			if not shelter_facility_unlocks.has(facility_id):
 				shelter_facility_unlocks[facility_id] = facility_id == "bed"
 	else:
-		# Preserve facilities in saves made before the staged shelter progression existed.
-		unlock_all_shelter_facilities()
+		# 단계별 해금이 생기기 전 세이브. 예전에는 여기서 전부 열어 버려서
+		# 오래된 세이브를 불러오면 첫 복귀에 생산기가 다 서 있었다.
+		# 기본값(침대만)으로 두면 바로 아래 sync_shelter_progression_milestones()가
+		# 완료한 계약과 복귀 횟수로부터 올바른 해금 상태를 다시 만들어 준다.
+		shelter_facility_unlocks = {
+			"bed": true,
+			"storage": false,
+			"training": false,
+			"workbench": false,
+			"scratcher_bank": false,
+			"catnip_scraper": false,
+		}
 	contract_agent_intro_seen = bool(data.get("contract_agent_intro_seen", shelter_return_serial >= CONTRACT_AGENT_UNLOCK_RETURN))
 	saja_intro_seen = bool(data.get("saja_intro_seen", false))
 	saja_second_run_intro_seen = bool(data.get("saja_second_run_intro_seen", false))

@@ -4161,17 +4161,28 @@ func _apply_hud_layout() -> void:
 			and not hud_blocked
 		)
 
+	var action_button_size := clampf(minf(viewport_size.y * 0.12, 108.0), 72.0, 102.0)
 	if equipment_panel:
 		var eq_width := minf(360.0, maxf(250.0, viewport_size.x * 0.28))
 		var eq_height := clampf(viewport_size.y * 0.21, 108.0, 190.0)
 		equipment_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 		equipment_panel.offset_right = -side_margin
-		equipment_panel.offset_bottom = -bottom_margin
 		equipment_panel.offset_left = -side_margin - eq_width
-		equipment_panel.offset_top = -bottom_margin - eq_height
+		if touch_available:
+			# 터치 환경에서는 우하단이 사격/근접/대시 버튼과 그 위 유틸리티 줄의
+			# 자리다. 무기 정보를 같은 코너에 두면 반드시 겹친다.
+			# 버튼 두 줄 위로 올린다.
+			var utility_row := clampf(action_button_size * 0.84, 60.0, 92.0)
+			var stack_height := (
+				action_button_size + utility_row + clampf(13.0 * ui_scale, 8.0, 16.0) + 10.0
+			)
+			equipment_panel.offset_bottom = -bottom_margin - stack_height
+			eq_height = minf(eq_height, maxf(72.0, viewport_size.y - stack_height - top_margin - 80.0))
+		else:
+			equipment_panel.offset_bottom = -bottom_margin
+		equipment_panel.offset_top = equipment_panel.offset_bottom - eq_height
 		equipment_panel.visible = not hud_blocked
 
-	var action_button_size := clampf(minf(viewport_size.y * 0.12, 108.0), 72.0, 102.0)
 	var action_base := -side_margin
 	var action_gap := clampf(11.0 * ui_scale, 8.0, 15.0)
 	var hide_action := hud_blocked

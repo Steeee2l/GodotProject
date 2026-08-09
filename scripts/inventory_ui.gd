@@ -259,7 +259,7 @@ func _build_modal() -> void:
 func _build_inventory_panel() -> Control:
 	var panel := PanelContainer.new()
 	panel.name = "CompactInventoryPanel"
-	panel.custom_minimum_size = Vector2(480, 620)
+	panel.custom_minimum_size = Vector2(320, 260)
 	panel.clip_contents = true
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.035, 0.043, 0.049, 0.98), Color(0.66, 0.78, 0.73, 0.7), 8))
 	var margin := _margin(16, 14, 16, 14)
@@ -323,7 +323,7 @@ func _build_inventory_panel() -> Control:
 
 	bag_scroll = ScrollContainer.new()
 	bag_scroll.name = "BagScroll"
-	bag_scroll.custom_minimum_size = Vector2(0, 174)
+	bag_scroll.custom_minimum_size = Vector2(0, 110)
 	bag_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bag_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	bag_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -412,7 +412,7 @@ func _build_item_detail_panel() -> Control:
 func _build_weapon_panel() -> Control:
 	var panel := PanelContainer.new()
 	panel.name = "WeaponDetailPanel"
-	panel.custom_minimum_size = Vector2(480, 620)
+	panel.custom_minimum_size = Vector2(320, 260)
 	panel.clip_contents = true
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.028, 0.035, 0.04, 0.98), Color(0.69, 0.62, 0.4, 0.68), 8))
 	var margin := _margin(18, 14, 18, 16)
@@ -1693,12 +1693,15 @@ func _apply_responsive_layout() -> void:
 		open_button.add_theme_font_size_override("font_size", 14 if viewport_size.x >= 760 else 11)
 
 	var safe_width := clampf(viewport_size.x - safe.x - safe.z - 24.0, 300.0, 1600.0)
-	var safe_height := clampf(viewport_size.y - safe.y - safe.w - 26.0, 340.0, 1200.0)
+	# 예전에는 최소 340으로 올려 잡아서, 가로 모드 폰처럼 낮은 화면에서는
+	# 패널이 화면보다 커져 레이아웃이 무너졌다. 실제 가용 높이를 넘지 않는다.
+	var available_height := maxf(160.0, viewport_size.y - safe.y - safe.w - 26.0)
+	var safe_height := minf(clampf(available_height, 240.0, 1200.0), available_height)
 	var panel_width := clampf(460.0 * ui_scale, 320.0, 540.0)
 	if responsive_compact:
 		panel_width = clampf(minf(500.0, safe_width - 20.0), 300.0, 520.0)
 
-	var panel_height := clampf(safe_height * 0.90, 390.0, 730.0)
+	var panel_height := minf(clampf(safe_height * 0.94, 260.0, 730.0), safe_height)
 	var panel_margin := clampf(minf(16.0, viewport_size.x * 0.020), 8.0, 16.0)
 	var showing_weapon := weapon_detail_open and has_weapon_state
 	if modal:

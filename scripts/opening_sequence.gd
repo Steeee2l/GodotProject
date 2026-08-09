@@ -5,6 +5,8 @@ const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
+
+var _texture_bottom_padding_cache: Dictionary = {}
 const CAT_ROOT := "res://assets/characters/cat_8way"
 const ROLL_ROOT := "res://assets/characters/cat_roll"
 const SHELTER_SCENE := "res://scenes/shelter_interior.tscn"
@@ -414,7 +416,13 @@ func _add_vehicle(
 	sprite.shaded = false
 	sprite.transparent = true
 	sprite.rotation_degrees.z = screen_rotation
-	sprite.position.y = maxf(0.9, float(sprite.texture.get_height()) * pixel_size * 0.32)
+	# 스프라이트를 텍스처 높이의 임의 비율(0.32)로 띄우면 아트의 접지선이
+	# 지면에 닿지 않는다. 버스는 0.71, 택시는 0.81만큼 공중에 떠 있었고
+	# 아이소메트릭에서 그 높이 차이가 그대로 화면상 어긋남으로 보였다.
+	# 알파의 실제 바닥을 찾아 그 지점이 y=0에 오도록 맞춘다.
+	sprite.position.y = _ground_aligned_sprite_height(
+		sprite.texture, pixel_size, world_position.y
+	)
 	body.add_child(sprite)
 	var collision := CollisionShape3D.new()
 	collision.name = "VehicleCollision"
@@ -434,6 +442,50 @@ func _add_vehicle(
 	if SHOW_VEHICLE_COLLISION_DEBUG:
 		_add_vehicle_collision_debug(body, collision_size, collision_yaw, collision_offset)
 	add_child(body)
+
+
+func _ground_aligned_sprite_height(
+	texture: Texture2D, pixel_size: float, body_height: float
+) -> float:
+	# 텍스처 아래쪽 투명 여백만큼 스프라이트를 내려서, 눈에 보이는 바닥이
+	# 실제 지면과 만나게 한다. 이 값이 틀리면 충돌 영역이 아무리 정확해도
+	# 그림과 어긋나 보인다.
+	if texture == null:
+		return maxf(0.9, body_height)
+	var height := float(texture.get_height())
+	var bottom_padding_px := _texture_bottom_padding(texture)
+	return maxf(
+		0.05,
+		height * pixel_size * 0.5 - bottom_padding_px * pixel_size - body_height
+	)
+
+
+func _texture_bottom_padding(texture: Texture2D) -> float:
+	# 아래에서부터 올라가며 처음으로 불투명 픽셀이 나오는 행을 찾는다.
+	var cache_key := texture.resource_path
+	if _texture_bottom_padding_cache.has(cache_key):
+		return float(_texture_bottom_padding_cache[cache_key])
+	var image := texture.get_image()
+	if image == null:
+		return 0.0
+	if image.is_compressed():
+		# 압축 텍스처는 픽셀을 직접 못 읽는다. 여백 보정을 포기하고 원래대로 둔다.
+		_texture_bottom_padding_cache[cache_key] = 0.0
+		return 0.0
+	var width := image.get_width()
+	var height := image.get_height()
+	var padding := 0.0
+	for row in range(height - 1, -1, -1):
+		var opaque := false
+		for column in range(0, width, 3):  # 3픽셀 간격이면 충분히 정확하다
+			if image.get_pixel(column, row).a > 0.02:
+				opaque = true
+				break
+		if opaque:
+			padding = float(height - 1 - row)
+			break
+	_texture_bottom_padding_cache[cache_key] = padding
+	return padding
 
 
 func _add_vehicle_collision_debug(
