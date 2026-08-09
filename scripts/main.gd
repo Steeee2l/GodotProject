@@ -325,6 +325,8 @@ var bgm := BgmDirector.new()
 var stealth := StealthSystem.new()
 var weapon_combat := WeaponCombat.new()
 var raid_zone_data: Dictionary = {}
+var active_zone_rule := ""
+var toxic_zone_tick := 0.0
 var active_field_mission: Node3D
 var active_mission_collectibles: Array[Node3D] = []
 var field_mission_elapsed := 0.0
@@ -388,6 +390,7 @@ var dynamic_incident_winning_faction := ""
 func _ready() -> void:
 	run_started_msec = Time.get_ticks_msec()
 	raid_zone_data = GameState.get_raid_zone()
+	active_zone_rule = str(raid_zone_data.get("zone_rule", ""))
 	world_time_hours = GameState.world_time_hours
 	night_intensity = _get_night_intensity(world_time_hours)
 	spawn_random.seed = GameState.map_seed + 9137
@@ -510,6 +513,7 @@ func _ready() -> void:
 	_setup_world_lore_clues(world)
 	_setup_corpse_recovery(world)
 	_register_building_entrance_interactions()
+	_apply_zone_rule_on_start()
 	_setup_raid_opportunities(world)
 	_setup_tactical_map(world)
 	var health_bar := get_node_or_null("HUD/TopLeft/Margin/VBox/Health") as ProgressBar
@@ -634,6 +638,7 @@ func _physics_process(delta: float) -> void:
 		stealth._update_enemy_visibility(delta)
 		return
 	_update_day_night(delta)
+	_update_zone_rule(delta)
 	_update_lightning(delta)
 	_update_enemy_pressure(delta)
 	stealth._update_scent_system(delta)
@@ -4454,6 +4459,47 @@ func _apply_raid_blackout() -> void:
 	for enemy in get_tree().get_nodes_in_group("enemy"):
 		if is_instance_valid(enemy) and enemy.has_method("apply_blackout"):
 			enemy.call("apply_blackout")
+
+
+func _apply_zone_rule_on_start() -> void:
+	# 존마다 플레이가 달라야 한다. 숫자만 다른 5개 존이 아니라, 각자 다르게
+	# 움직여야 하는 5개 구역으로.
+	match active_zone_rule:
+		"darkness":
+			# 지하: 상시 어둠. 시야가 좁아진다(정전과 같은 셰이더 재사용).
+			_set_blackout_strength(0.7)
+		"crowd":
+			# 무리: 분대가 더 크게 뭉친다. enemy_director가 참조한다.
+			pass
+		"sniper":
+			# 감시: 트인 곳이 위험. field_incidents의 고지 감시를 시작부터 건다.
+			var world := $World as ProceduralCityMap
+			if world != null:
+				incidents._spawn_high_value_hotspots(world)
+		"toxic":
+			_show_field_notice("오염 지대 진입 · 머무는 동안 체력이 깎인다. 빠르게 움직여라.")
+	if not active_zone_rule.is_empty() and active_zone_rule != "darkness":
+		var brief := str(raid_zone_data.get("rule_brief", ""))
+		if not brief.is_empty():
+			_show_field_notice(brief)
+
+
+func _update_zone_rule(delta: float) -> void:
+	if extraction_transition_active or player_death_sequence_active:
+		return
+	match active_zone_rule:
+		"toxic":
+			# 오염: 초당 서서히 깎되 죽지는 않는 하한(20%)을 둔다. 압박은 주되
+			# 좌절은 주지 않는다. 은신처(건물 안)에서는 멈춘다.
+			toxic_zone_tick += delta
+			if toxic_zone_tick >= 2.0:
+				toxic_zone_tick = 0.0
+				var floor_hp := roundi(GameState.get_max_health() * 0.2)
+				if player_health > floor_hp:
+					player_health = maxi(floor_hp, player_health - 2)
+					var health_bar := get_node_or_null("HUD/TopLeft/Margin/VBox/Health") as ProgressBar
+					if health_bar:
+						health_bar.value = player_health
 
 
 func _set_blackout_strength(strength: float) -> void:

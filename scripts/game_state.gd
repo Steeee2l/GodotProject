@@ -448,6 +448,8 @@ const RAID_ZONES := {
 		"enemy_multiplier": 1.0,
 		"boss": false,
 		"reward": "통조림 · 기초 부품",
+		"zone_rule": "",
+		"rule_brief": "안정적인 초반 구역. 특수 규칙 없음.",
 	},
 	"namdaemun_market": {
 		"name": "남대문 폐시장",
@@ -458,6 +460,8 @@ const RAID_ZONES := {
 		"enemy_multiplier": 1.25,
 		"boss": true,
 		"reward": "츄르 · 총기 부품",
+		"zone_rule": "crowd",
+		"rule_brief": "상가 통로가 좁다. 적이 무리로 몰려오니 퇴로를 확보하라.",
 	},
 	"euljiro_depths": {
 		"name": "을지로 지하구역",
@@ -468,6 +472,8 @@ const RAID_ZONES := {
 		"enemy_multiplier": 1.55,
 		"boss": true,
 		"reward": "고급 부품 · 츄르",
+		"zone_rule": "darkness",
+		"rule_brief": "지하는 어둡다. 시야가 좁고 소음이 멀리 퍼진다.",
 	},
 	"yongsan_blockade": {
 		"name": "용산 봉쇄선",
@@ -478,6 +484,8 @@ const RAID_ZONES := {
 		"enemy_multiplier": 1.9,
 		"boss": true,
 		"reward": "특수 모듈 · 츄르",
+		"zone_rule": "sniper",
+		"rule_brief": "정예 병력이 트인 길을 감시한다. 엄폐물을 끼고 움직여라.",
 	},
 	"namsan_core": {
 		"name": "남산 오염 핵심부",
@@ -488,6 +496,8 @@ const RAID_ZONES := {
 		"enemy_multiplier": 2.3,
 		"boss": true,
 		"reward": "최상급 부품 · 대량 츄르",
+		"zone_rule": "toxic",
+		"rule_brief": "오염 지대. 머무는 동안 체력이 서서히 깎이니 빠르게 움직여라.",
 	},
 }
 

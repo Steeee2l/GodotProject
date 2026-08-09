@@ -204,6 +204,9 @@ func _build_enemy_squad_sizes(total_count: int) -> Array[int]:
 		if host._is_first_stage_zone():
 			if remaining >= 2 and spawn_random.randf() >= FIRST_STAGE_SOLO_SQUAD_CHANCE:
 				squad_size = 2
+		elif host.active_zone_rule == "crowd":
+			# 무리 규칙(남대문): 분대를 더 크게 뭉친다. 좁은 통로에서 몰려온다.
+			squad_size = mini(remaining, 3 if remaining >= 3 else remaining)
 		elif remaining == 2 or remaining == 4:
 			squad_size = 2
 		elif remaining == 3:

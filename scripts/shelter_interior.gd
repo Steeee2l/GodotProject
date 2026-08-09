@@ -186,6 +186,7 @@ var raid_zone_map_markers: Dictionary = {}
 var raid_zone_detail_state: Label
 var raid_zone_detail_title: Label
 var raid_zone_detail_description: Label
+var raid_zone_detail_rule: Label
 var raid_zone_detail_threat: Label
 var raid_zone_detail_threat_bar: ProgressBar
 var raid_zone_detail_reward: Label
@@ -3478,6 +3479,13 @@ func _open_raid_zone_select() -> void:
 	raid_zone_detail_description.add_theme_font_size_override("font_size", 14)
 	raid_zone_detail_description.add_theme_color_override("font_color", Color("#b7c7bf"))
 	detail_box.add_child(raid_zone_detail_description)
+	raid_zone_detail_rule = Label.new()
+	raid_zone_detail_rule.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	raid_zone_detail_rule.add_theme_font_override("font", FONT)
+	raid_zone_detail_rule.add_theme_font_size_override("font_size", 14)
+	raid_zone_detail_rule.add_theme_color_override("font_color", Color("#d8bd72"))
+	raid_zone_detail_rule.visible = false
+	detail_box.add_child(raid_zone_detail_rule)
 	var separator := HSeparator.new()
 	separator.add_theme_constant_override("separation", 4)
 	detail_box.add_child(separator)
@@ -3784,6 +3792,15 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 	raid_zone_detail_description.text = identity if not identity.is_empty() else base_description
 	if not tactical_rule.is_empty():
 		raid_zone_detail_description.text += "\n전술 · %s" % tactical_rule
+	# 존 고유 규칙 — 이 구역이 다른 구역과 어떻게 다르게 굴러가는지. 위협도
+	# 숫자가 아니라, 준비물이 달라지는 정보라 눈에 띄게 노란색으로 붙인다.
+	var rule_brief := str(zone.get("rule_brief", ""))
+	if is_instance_valid(raid_zone_detail_rule):
+		if rule_brief.is_empty():
+			raid_zone_detail_rule.visible = false
+		else:
+			raid_zone_detail_rule.visible = true
+			raid_zone_detail_rule.text = "⚑ %s" % rule_brief
 	# 나가기 직전에 "지난 출정 이후 내가 뭐가 나아졌는지"를 확인시킨다. 성장은
 	# 숫자가 오르는 순간이 아니라, 그 숫자를 들고 나가는 순간에 체감된다.
 	var growth := GameState.build_pre_raid_changes()
