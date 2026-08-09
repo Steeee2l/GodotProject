@@ -213,8 +213,12 @@ func configure(
 		)
 		magazine_ammo = magazine_size
 		reload_duration = maxf(0.6, float(weapon_stats.get("reload_time", 1.8)))
-	var base_health := 150 if enemy_kind == "melee" else (122 if enemy_kind == "grenadier" else 105)
-	var threat_health_bonus := 70.0 if enemy_kind == "melee" else (62.0 if enemy_kind == "grenadier" else 55.0)
+	# 파밍의 손맛은 "스택이 체감될 때" 산다. 예전 곡선은 종로(위협 0.15)~남산
+	# (1.0) 사이 체력이 1.4배밖에 안 벌어져서, 장비를 갖춰도 초반이 안 물렁하고
+	# 후반이 안 단단했다. 기본값을 낮추고 위협 보너스를 키워 곡선을 2배 가까이
+	# 벌린다 — 갖추면 초반을 쓸어버리고, 심층은 진짜 벽이 되도록.
+	var base_health := 120 if enemy_kind == "melee" else (100 if enemy_kind == "grenadier" else 84)
+	var threat_health_bonus := 150.0 if enemy_kind == "melee" else (132.0 if enemy_kind == "grenadier" else 118.0)
 	health = base_health + roundi(threat_health_bonus * threat_level)
 	max_health = health
 	health_ratio = 1.0

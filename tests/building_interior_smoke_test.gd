@@ -139,7 +139,7 @@ func _initialize() -> void:
 		_assert(str(spawned_enemy.get("weapon_id")) in ["m1911", "mp5", "ak47", "double_barrel"], "Every building enemy must visibly carry a firearm.")
 	if not spawned_enemies.is_empty():
 		var test_enemy: CharacterBody3D = spawned_enemies[0]
-		_assert(int(test_enemy.get("max_health")) >= 105, "Enemy health must use the tougher global baseline.")
+		_assert(int(test_enemy.get("max_health")) >= 80, "Enemy health must use the global baseline (lowered so geared players can sweep early zones, while high-threat zones scale up steeply).")
 		test_enemy.call("take_hit", 1, Vector3.RIGHT, false)
 		_assert(bool(test_enemy.get("alerted")), "The first hit must immediately alert the enemy.")
 		_assert(float(test_enemy.get("pursuit_time")) >= 8.0, "A hit enemy must immediately pursue and fight back.")
