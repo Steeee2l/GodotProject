@@ -116,6 +116,11 @@ var shelter_currency_labels: Dictionary = {}
 var shelter_runtime_label: Label
 var shelter_runtime_bar: ProgressBar
 var churu_buff_buttons: Dictionary = {}
+var stats_collapse_button: Button
+var stats_summary_label: Label
+var stats_body_box: VBoxContainer
+var stats_panel_expanded := true
+var stats_panel_default_applied := false
 var scrap_gain_label: Label
 var shelter_upgrade_button: Button
 var interact_button: Button
@@ -1370,14 +1375,41 @@ func _build_interface() -> void:
 	margin.add_theme_constant_override("margin_right", 14)
 	margin.add_theme_constant_override("margin_bottom", 12)
 	panel.add_child(margin)
-	var stats_box := VBoxContainer.new()
-	stats_box.add_theme_constant_override("separation", 7)
-	margin.add_child(stats_box)
+	var outer_box := VBoxContainer.new()
+	outer_box.add_theme_constant_override("separation", 6)
+	margin.add_child(outer_box)
+
+	# 헤더는 늘 보인다. 여기까지가 "지금 무슨 일이 벌어지는가"의 최소 단위다.
+	var header_row := HBoxContainer.new()
+	header_row.add_theme_constant_override("separation", 8)
+	outer_box.add_child(header_row)
 	stats_label = Label.new()
+	stats_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	stats_label.add_theme_font_size_override("font_size", 15)
 	stats_label.add_theme_color_override("font_color", Color("#8fa79c"))
-	stats_box.add_child(stats_label)
-	stats_box.add_child(_build_health_row())
+	header_row.add_child(stats_label)
+	stats_collapse_button = Button.new()
+	stats_collapse_button.name = "StatsCollapseButton"
+	stats_collapse_button.custom_minimum_size = Vector2(34, 26)
+	stats_collapse_button.focus_mode = Control.FOCUS_NONE
+	stats_collapse_button.add_theme_font_override("font", FONT)
+	stats_collapse_button.add_theme_font_size_override("font_size", 13)
+	stats_collapse_button.add_theme_color_override("font_color", Color("#9db3a9"))
+	stats_collapse_button.pressed.connect(_toggle_stats_panel)
+	header_row.add_child(stats_collapse_button)
+	outer_box.add_child(_build_health_row())
+	# 접혔을 때도 이 한 줄은 남는다. 나갈 이유를 늘 보여주기 위해서.
+	stats_summary_label = Label.new()
+	stats_summary_label.add_theme_font_override("font", FONT)
+	stats_summary_label.add_theme_font_size_override("font_size", 13)
+	stats_summary_label.add_theme_color_override("font_color", Color("#9db3a9"))
+	outer_box.add_child(stats_summary_label)
+
+	var stats_box := VBoxContainer.new()
+	stats_box.name = "ShelterStatsBody"
+	stats_box.add_theme_constant_override("separation", 7)
+	outer_box.add_child(stats_box)
+	stats_body_box = stats_box
 	resident_meter_label = _build_meter_row(stats_box, "resident", "주민", Color("#9fc9d8"))
 	for production_data in [
 		["scratcher", "꾹꾹이", Color("#d4ad55")],
@@ -2576,6 +2608,48 @@ func _build_meter_row(parent: Node, icon_name: String, title: String, color: Col
 	return value_label
 
 
+func _toggle_stats_panel() -> void:
+	_set_stats_panel_expanded(not stats_panel_expanded)
+
+
+func _set_stats_panel_expanded(expanded: bool) -> void:
+	stats_panel_expanded = expanded
+	if is_instance_valid(stats_body_box):
+		stats_body_box.visible = expanded
+	if is_instance_valid(stats_collapse_button):
+		stats_collapse_button.text = "▲" if expanded else "▼"
+		stats_collapse_button.tooltip_text = "쉘터 정보 접기" if expanded else "쉘터 정보 펼치기"
+	if is_instance_valid(stats_summary_label):
+		stats_summary_label.visible = not expanded
+	_update_stats_summary()
+
+
+func _update_stats_summary() -> void:
+	# 접힌 상태에서 남길 것은 딱 두 가지다.
+	# 지금 얼마나 모았는가, 그리고 언제 다시 나가야 하는가.
+	if not is_instance_valid(stats_summary_label) or stats_panel_expanded:
+		return
+	var reason: String = GameState.get_shelter_stall_reason()
+	var fuel := _format_runtime_duration(GameState.get_shelter_runtime_seconds())
+	match reason:
+		"no_workers":
+			fuel = "주민 미배치"
+		"no_food":
+			fuel = "통조림 없음"
+		"no_raw_scrap":
+			fuel = "고철 조각 없음"
+		"no_raw_catnip":
+			fuel = "캣닢 잎 없음"
+	stats_summary_label.text = "고철 %s  ·  가동 %s" % [
+		GameState.format_compact_number(GameState.scrap),
+		fuel,
+	]
+	stats_summary_label.add_theme_color_override(
+		"font_color",
+		Color("#c4574f") if not reason.is_empty() else Color("#9db3a9")
+	)
+
+
 func _update_runtime_row() -> void:
 	if not is_instance_valid(shelter_runtime_label) or not is_instance_valid(shelter_runtime_bar):
 		return
@@ -2747,6 +2821,17 @@ func _apply_shelter_safe_layout() -> void:
 	var stats_panel := get_node_or_null("ShelterHUD/ShelterStatsPanel") as Control
 	if stats_panel:
 		stats_panel.position = Vector2(24.0 + safe.x, 22.0 + safe.y)
+		# 낮은 화면에서 전개 상태로 두면 패널이 세로 절반을 먹는다.
+		# 처음 한 번만 화면에 맞춰 기본값을 정하고, 이후엔 플레이어 선택을 존중한다.
+		if not stats_panel_default_applied:
+			stats_panel_default_applied = true
+			var roomy := viewport_size.y >= 760.0 and not DisplayServer.is_touchscreen_available()
+			_set_stats_panel_expanded(roomy)
+		stats_panel.custom_minimum_size.x = (
+			clampf(viewport_size.x * 0.42, 240.0, 370.0)
+			if DisplayServer.is_touchscreen_available()
+			else 370.0
+		)
 	if is_instance_valid(touch_stick):
 		touch_stick.offset_left = 34.0 + safe.x
 		touch_stick.offset_top = -160.0 - safe.w
@@ -2963,6 +3048,7 @@ func _update_stats() -> void:
 		(shelter_currency_labels["raw_scrap"] as Label).text = "고철 조각  %s" % GameState.format_compact_number(GameState.raw_scrap)
 		(shelter_currency_labels["raw_catnip"] as Label).text = "캣닢 잎  %s" % GameState.format_compact_number(GameState.raw_catnip)
 	_update_runtime_row()
+	_update_stats_summary()
 	if shelter_upgrade_button:
 		var cost := GameState.get_shelter_upgrade_cost()
 		if cost.is_empty():

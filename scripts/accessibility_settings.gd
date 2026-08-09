@@ -19,6 +19,7 @@ var battery_saver := false
 
 var backdrop: ColorRect
 var panel: PanelContainer
+var panel_center: CenterContainer
 var mobile_button: Button
 var was_tree_paused := false
 
@@ -56,7 +57,7 @@ func open() -> void:
 		return
 	was_tree_paused = get_tree().paused
 	backdrop.visible = true
-	panel.visible = true
+	panel_center.visible = true
 	get_tree().paused = true
 	_apply_layout()
 
@@ -65,14 +66,14 @@ func close() -> void:
 	if not is_open():
 		return
 	backdrop.visible = false
-	panel.visible = false
+	panel_center.visible = false
 	get_tree().paused = was_tree_paused
 	_save_settings()
 	_apply_layout()
 
 
 func is_open() -> bool:
-	return is_instance_valid(panel) and panel.visible
+	return is_instance_valid(panel_center) and panel_center.visible
 
 
 func _build_ui() -> void:
@@ -82,11 +83,16 @@ func _build_ui() -> void:
 	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
 	backdrop.visible = false
 	add_child(backdrop)
+	panel_center = CenterContainer.new()
+	panel_center.name = "SettingsCenter"
+	panel_center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	panel_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel_center.visible = false
+	add_child(panel_center)
 	panel = PanelContainer.new()
-	panel.visible = false
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	panel.add_theme_stylebox_override("panel", _panel_style())
-	add_child(panel)
+	panel_center.add_child(panel)
 	var margin := MarginContainer.new()
 	for side in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
 		margin.add_theme_constant_override(side, 22)
@@ -198,12 +204,13 @@ func _label(text: String, size: int, color: Color) -> Label:
 func _apply_layout() -> void:
 	var viewport_size := get_viewport().get_visible_rect().size
 	var safe := UISafeArea.get_margins(viewport_size)
-	panel.set_anchors_preset(Control.PRESET_CENTER)
+	# 예전에는 position을 직접 계산해서, 컨테이너 최소 크기가 요청 크기보다
+	# 커지면 패널이 화면 왼쪽 위로 밀려 잘렸다. 배치는 CenterContainer에 맡긴다.
 	var panel_size := Vector2(
-		minf(620.0, viewport_size.x - safe.x - safe.z - 24.0),
-		minf(700.0, viewport_size.y - safe.y - safe.w - 24.0)
+		clampf(viewport_size.x - safe.x - safe.z - 24.0, 260.0, 620.0),
+		clampf(viewport_size.y - safe.y - safe.w - 24.0, 200.0, 700.0)
 	)
-	panel.position = -panel_size * 0.5
+	panel.custom_minimum_size = panel_size
 	panel.size = panel_size
 	mobile_button.visible = DisplayServer.is_touchscreen_available() and not is_open()
 	mobile_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)

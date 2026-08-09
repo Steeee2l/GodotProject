@@ -46,10 +46,6 @@ const COMPONENT_TEXTURES := {
 
 @export var interaction_radius := 4.0
 
-const FACTORY_CELL_TEXTURE := preload(
-	"res://assets/interiors/factory/factory_logistics_cell_v1.png"
-)
-
 @onready var sprite: Sprite3D = $StorageSprite
 
 var ui_layer: CanvasLayer
@@ -61,9 +57,7 @@ func _ready() -> void:
 	add_to_group("shelter_module")
 	add_to_group("shelter_storage")
 	set_meta("module_kind", "storage")
-	sprite.texture = FACTORY_CELL_TEXTURE
-	sprite.position = Vector3(0.0, 2.02, 0.02)
-	sprite.pixel_size = 0.0038
+	# 텍스처·위치·크기는 씬(.tscn)이 정한다.
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.region_enabled = false
 	sprite.no_depth_test = false

@@ -3414,19 +3414,19 @@ func _create_loot_pickup(loot_type: String, world_position: Vector3, data: Dicti
 			highlight_color = Color("#f2bd55")
 		"raw_scrap":
 			sprite.texture = UI_ICONS.get_icon("scrap", 96, Color("#b9a68c"))
-			sprite.pixel_size = 0.0062
+			sprite.pixel_size = _pickup_pixel_size(sprite.texture, 0.62)
 			highlight_color = Color("#b9a68c")
 		"raw_catnip":
 			sprite.texture = UI_ICONS.get_icon("catnip", 96, Color("#8fd07a"))
-			sprite.pixel_size = 0.0062
+			sprite.pixel_size = _pickup_pixel_size(sprite.texture, 0.62)
 			highlight_color = Color("#8fd07a")
 		"valuable":
 			sprite.texture = UI_ICONS.get_icon("loot", 96, Color("#e6c979"))
-			sprite.pixel_size = 0.0062
+			sprite.pixel_size = _pickup_pixel_size(sprite.texture, 0.58)
 			highlight_color = Color("#e6c979")
 		"medkit":
 			sprite.texture = UI_ICONS.get_icon("medkit", 96, Color("#f4eee2"))
-			sprite.pixel_size = 0.0062
+			sprite.pixel_size = _pickup_pixel_size(sprite.texture, 0.62)
 			highlight_color = Color("#f2b16a")
 		"mod_component":
 			var component_id := str(data.get("component_id", "rubber_gasket"))
@@ -3464,6 +3464,16 @@ func _create_loot_pickup(loot_type: String, world_position: Vector3, data: Dicti
 	_add_loot_highlight(pickup, highlight_color, 0.92)
 	ammo_pickups.append(pickup)
 	return pickup
+
+
+func _pickup_pixel_size(texture: Texture2D, target_world_size: float) -> float:
+	# UI_ICONS.get_icon()은 커런시/아이템 아이콘에 대해 size 인자를 무시하고
+	# 원본 해상도(예: 1254px)를 그대로 돌려준다. 고정 pixel_size를 쓰면
+	# 아트 해상도에 따라 픽업이 건물만 해진다. 목표 월드 크기로 역산한다.
+	if texture == null:
+		return 0.0062
+	var long_edge := float(maxi(texture.get_width(), texture.get_height()))
+	return target_world_size / maxf(long_edge, 1.0)
 
 
 func _loot_weapon_pixel_size(texture: Texture2D, weapon_id: String) -> float:

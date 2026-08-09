@@ -54,11 +54,14 @@ func _build_mobile_reset_ui() -> void:
 	reset_button = Button.new()
 	reset_button.name = "MobileResetButton"
 	reset_button.text = "↻  초기화"
-	reset_button.position = Vector2(16, 16)
-	reset_button.size = Vector2(126, 50)
+	# 좌상단은 쉘터 스탯 패널 자리다. 예전에는 (16,16)에 그대로 얹어서
+	# 제목을 덮었다. 비어 있는 상단 중앙으로 옮기고 크기도 줄인다.
+	reset_button.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	reset_button.size = Vector2(96, 38)
+	reset_button.position = Vector2(-48, 10)
 	reset_button.focus_mode = Control.FOCUS_NONE
 	reset_button.add_theme_font_override("font", FONT)
-	reset_button.add_theme_font_size_override("font_size", 17)
+	reset_button.add_theme_font_size_override("font_size", 13)
 	reset_button.add_theme_color_override("font_color", Color("#f1d9d5"))
 	reset_button.add_theme_color_override("font_hover_color", Color.WHITE)
 	reset_button.add_theme_stylebox_override(

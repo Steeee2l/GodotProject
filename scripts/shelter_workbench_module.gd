@@ -198,10 +198,6 @@ const CATEGORY_ICONS := {
 
 @export var interaction_radius := 3.9
 
-const FACTORY_CELL_TEXTURE := preload(
-	"res://assets/interiors/factory/factory_gunsmith_cell_v1.png"
-)
-
 @onready var sprite: Sprite3D = $WorkbenchSprite
 
 var has_focus := false
@@ -217,9 +213,8 @@ func _ready() -> void:
 	add_to_group("shelter_module")
 	add_to_group("shelter_workbench")
 	set_meta("module_kind", "workbench")
-	sprite.texture = FACTORY_CELL_TEXTURE
-	sprite.position = Vector3(0.0, 2.0, 0.02)
-	sprite.pixel_size = 0.00385
+	# 텍스처·위치·크기는 씬(.tscn)이 정한다. 예전에는 여기서 덮어써서
+	# 씬에 새 아트를 넣어도 런타임에는 옛 이미지가 나왔다.
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.region_enabled = false
 	sprite.no_depth_test = false
