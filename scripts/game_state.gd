@@ -491,9 +491,9 @@ const RAID_ZONES := {
 	},
 }
 
-const WORKBENCH_UPGRADE_COSTS := {2: 7500, 3: 55000, 4: 400000, 5: 3000000}
-const SCRATCHER_UPGRADE_COSTS := {2: 12000, 3: 150000, 4: 2000000, 5: 30000000}
-const CATNIP_SCRAPER_UPGRADE_COSTS := {2: 10000, 3: 120000, 4: 1500000, 5: 20000000}
+const WORKBENCH_UPGRADE_COSTS := {2: 7500, 3: 40000, 4: 180000, 5: 800000}
+const SCRATCHER_UPGRADE_COSTS := {2: 12000, 3: 60000, 4: 280000, 5: 1300000}
+const CATNIP_SCRAPER_UPGRADE_COSTS := {2: 10000, 3: 50000, 4: 230000, 5: 1000000}
 const STORAGE_GRID_BY_LEVEL := {
 	1: Vector2i(6, 5),
 	2: Vector2i(7, 6),
@@ -503,18 +503,21 @@ const STORAGE_GRID_BY_LEVEL := {
 }
 const STORAGE_UPGRADE_COSTS := {
 	2: {"scrap": 8000, "churu": 0},
-	3: {"scrap": 60000, "churu": 1},
-	4: {"scrap": 500000, "churu": 2},
-	5: {"scrap": 4000000, "churu": 4},
+	3: {"scrap": 38000, "churu": 1},
+	4: {"scrap": 170000, "churu": 2},
+	5: {"scrap": 700000, "churu": 4},
 }
 const SHELTER_CAPACITY_BY_TIER := {1: 5, 2: 10, 3: 20, 4: 35, 5: 50}
 const KNEADING_SLOTS_BY_TIER := {1: 3, 2: 6, 3: 10, 4: 15, 5: 20}
 const CATNIP_SLOTS_BY_TIER := {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
+# 예전 곡선은 티어마다 약 13배(30k→400k→5M→60M)라 중반부터 출정이 재미가
+# 아니라 고철 대기가 됐다. 스텝을 약 5배로 낮춰 진행이 계단이 아니라
+# 곡선이 되게 한다. 츄르 요구는 완만히 유지해 성취감은 남긴다.
 const SHELTER_UPGRADE_COSTS := {
 	2: {"scrap": 30000, "churu": 1},
-	3: {"scrap": 400000, "churu": 3},
-	4: {"scrap": 5000000, "churu": 8},
-	5: {"scrap": 60000000, "churu": 20},
+	3: {"scrap": 150000, "churu": 2},
+	4: {"scrap": 750000, "churu": 4},
+	5: {"scrap": 3500000, "churu": 8},
 }
 # ── 캣닢 경제 ──────────────────────────────────────────────────
 # 캣닢은 시설 하나를 통째로 쓰면서 소비처가 부스트 하나뿐이었다.
@@ -2352,6 +2355,17 @@ func get_valuable_total_value() -> int:
 			(LOOT_ECONOMY.ITEM_CATALOG.get(str(valuable_id), {}) as Dictionary).get("base_value", 0)
 		)
 	return total
+
+
+func grant_extraction_risk_payout(kills: int, pressure_level: int, reward_multiplier: float) -> int:
+	# 출정 자체가 진행 통화를 벌게 한다. 예전에는 고철이 거의 전부 쉘터
+	# 수동 생산에서 나와, 중반부터 출정이 "심부름"이 되고 진행은 대기가 됐다.
+	# 오래 버티고(긴장도) 싸운(킬) 대가를 고철로 직접 준다.
+	var base := 800 + maxi(0, kills) * 140
+	var risk := 1.0 + float(clampi(pressure_level, 0, 3)) * 0.6
+	var payout := roundi(float(base) * risk * maxf(1.0, reward_multiplier))
+	scrap += payout
+	return payout
 
 
 func sell_all_valuables() -> Dictionary:

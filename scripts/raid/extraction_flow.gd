@@ -213,6 +213,9 @@ func _show_extraction_result(rescued_count: int) -> void:
 		"font_color",
 		route_color.lightened(0.18)
 	)
+	var risk_payout := GameState.grant_extraction_risk_payout(
+		host.run_kills, host.raid_pressure_level, selected_extraction_multiplier
+	)
 	pending_extraction_xp_result = GameState.add_raid_experience(xp_reward)
 	host.hud.extraction_result_title.text = "탈출 성공 · Lv.%d" % int(pending_extraction_xp_result.get("new_level", GameState.player_level))
 	var mission_summary := "완료한 임무 없음"
@@ -233,6 +236,7 @@ func _show_extraction_result(rescued_count: int) -> void:
 		mission_summary,
 		cargo_summary,
 		"경로 XP +%d · 총 경험치 +%d" % [route_xp_bonus, xp_reward],
+		"위험 정산금  고철 +%s" % GameState.format_compact_number(risk_payout),
 	]
 	# 가방을 "시간"으로 환산한다. 원자재 12개는 아무 느낌도 없지만
 	# "쉘터 가동 3시간 12분"은 다음 출정의 이유가 된다.
