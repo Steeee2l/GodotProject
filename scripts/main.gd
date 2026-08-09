@@ -222,7 +222,8 @@ const DIRECTION_VECTORS := {
 @onready var camera_rig: Node3D = $CameraRig
 @onready var camera: Camera3D = $CameraRig/Camera3D
 @onready var touch_stick: Control = $HUD/TouchStick
-@onready var touch_knob: Control = $HUD/TouchStick/Knob
+# Knob은 TouchJoystick 위젯이 직접 그린다. 옛 씬 호환용으로만 남긴다.
+@onready var touch_knob: Control = $HUD/TouchStick.get_node_or_null("Knob")
 @onready var location_label: Label = $HUD/TopRight/Location
 @onready var state_label: Label = $HUD/TopRight/State
 @onready var time_label: Label = $HUD/TopRight/Time
@@ -781,11 +782,9 @@ func _physics_process(delta: float) -> void:
 	_update_weapon_ballistics(delta, input_vector.length_squared() > 0.01)
 
 	var world_direction := Vector3(input_vector.x + input_vector.y, 0, -input_vector.x + input_vector.y)
-	if (
-		has_ak
-		and not _uses_mouse_aim()
-		and (laser_aim_held or fire_button_held)
-	):
+	if not _uses_mouse_aim() and (laser_aim_held or fire_button_held):
+		# 예전에는 has_ak 조건이 붙어 있어서, 무기를 잃으면 조준 중에
+		# 방향이 아예 갱신되지 않고 얼어붙었다.
 		_update_mobile_aim_direction(world_direction)
 	var aim_is_locked := (
 		melee_attack_active
@@ -805,7 +804,10 @@ func _physics_process(delta: float) -> void:
 		if weapon_reloading:
 			movement_speed *= 0.55
 		player.velocity = world_direction * movement_speed + recoil_velocity
-		if not aim_is_locked:
+		# 모바일에서 조준을 켜면 방향이 잠겨 회전이 안 됐다. 조준 보조는
+		# 발사 순간(_get_current_fire_direction)에만 걸면 충분하다.
+		# 움직이는 동안에는 언제나 가는 쪽을 본다.
+		if not aim_is_locked or not _uses_mouse_aim():
 			_update_facing(input_vector)
 		_set_motion_state("walk")
 		state_label.text = "식빵 자세 이동" if loafing else "이동 중"
@@ -814,7 +816,13 @@ func _physics_process(delta: float) -> void:
 		_set_motion_state("idle")
 		state_label.text = "식빵 자세 대기" if loafing else "경계 중"
 
-	if not roll_active and aim_is_locked and locked_aim_direction.length_squared() > 0.01:
+	var mobile_steering := not _uses_mouse_aim() and input_vector.length_squared() > 0.01
+	if (
+		not roll_active
+		and aim_is_locked
+		and not mobile_steering
+		and locked_aim_direction.length_squared() > 0.01
+	):
 		_set_facing_from_world_direction(locked_aim_direction)
 	_update_weapon_pose()
 	player.set_meta("tactical_heading", _get_current_facing_world_direction())
@@ -3235,7 +3243,8 @@ func _apply_hud_layout() -> void:
 		top_right_panel.offset_right = -side_margin
 		top_right_panel.offset_bottom = top_margin + 88.0
 
-	var touch_stick_size := clampf(minf(viewport_size.x, viewport_size.y) * 0.20, 126.0, 220.0)
+	# 손가락 기준으로 키운다. 예전 최소 126px는 폰에서 너무 작았다.
+	var touch_stick_size := clampf(minf(viewport_size.x, viewport_size.y) * 0.30, 168.0, 260.0)
 	if touch_stick:
 		touch_stick.visible = touch_available
 		if touch_available:
@@ -3245,6 +3254,8 @@ func _apply_hud_layout() -> void:
 			touch_stick.offset_right = side_margin + touch_stick_size
 			touch_stick.offset_bottom = -bottom_margin
 			touch_stick.set_size(Vector2(touch_stick_size, touch_stick_size))
+			if touch_stick.has_method("queue_redraw"):
+				touch_stick.queue_redraw()
 			var ring := touch_stick.get_node_or_null("Ring") as ColorRect
 			var knob := touch_stick.get_node_or_null("Knob") as ColorRect
 			if ring:
@@ -3329,7 +3340,7 @@ func _apply_hud_layout() -> void:
 			and not hud_blocked
 		)
 
-	var action_button_size := clampf(minf(viewport_size.y * 0.12, 108.0), 72.0, 102.0)
+	var action_button_size := clampf(minf(viewport_size.y * 0.17, 132.0), 96.0, 128.0)
 	if hud.equipment_panel:
 		var eq_width := minf(360.0, maxf(250.0, viewport_size.x * 0.28))
 		var eq_height := clampf(viewport_size.y * 0.21, 108.0, 190.0)
@@ -3379,7 +3390,7 @@ func _apply_hud_layout() -> void:
 		hud.dash_button.offset_left = action_base - action_button_size * 3.0 - action_gap * 2.0
 		hud.dash_button.custom_minimum_size = Vector2(action_button_size, action_button_size)
 
-	var utility_size := clampf(action_button_size * 0.84, 60.0, 92.0)
+	var utility_size := clampf(action_button_size * 0.78, 76.0, 104.0)
 	var utility_base_bottom := -bottom_margin - action_button_size - clampf(13.0 * ui_scale, 8.0, 16.0)
 	var utility_gap := clampf(10.0 * ui_scale, 6.0, 12.0)
 	if mobile_context_button:
@@ -6753,18 +6764,17 @@ func _spawn_onboarding_loot_cluster(world: ProceduralCityMap) -> void:
 	# 첫 판에서 가방 갈등을 반드시 한 번 겪게 한다. 부피가 큰 원자재와
 	# 값비싼 소형 물품을 같이 깔아, 무엇을 실을지 고르게 만든다.
 	var origin := player.global_position
+	# 한 자리에 몰아 두면 "왜 이렇게 많아?"가 된다. 수를 줄이고 넓게 흩뿌린다.
 	var plan := [
-		{"type": "raw_scrap", "amount": 9, "data": {}},
 		{"type": "raw_scrap", "amount": 8, "data": {}},
-		{"type": "raw_catnip", "amount": 7, "data": {}},
-		{"type": "canned_food", "amount": 3, "data": {}},
+		{"type": "raw_catnip", "amount": 6, "data": {}},
 		{"type": "medkit", "amount": 1, "data": {}},
 		{"type": "mod_component", "amount": 1, "data": {"component_id": "scope_lens"}},
 	]
 	for index in plan.size():
 		var entry := plan[index] as Dictionary
-		var angle := TAU * float(index) / float(plan.size())
-		var radius := spawn_random.randf_range(5.5, 9.0)
+		var angle := TAU * float(index) / float(plan.size()) + spawn_random.randf_range(-0.4, 0.4)
+		var radius := spawn_random.randf_range(9.0, 16.0)
 		var drop := origin + Vector3(cos(angle), 0.0, sin(angle)) * radius
 		var data := (entry["data"] as Dictionary).duplicate()
 		data["amount"] = int(entry["amount"])
@@ -10498,12 +10508,18 @@ func _input(event: InputEvent) -> void:
 				touch_vector = Vector2.ZERO
 				touch_stick.visible = true
 				touch_stick.position = touch_origin - touch_stick.size * 0.5
+				# 공용 위젯이 손가락 위치를 그린다.
+				if touch_stick.has_method("begin_touch"):
+					touch_stick.call("begin_touch", touch.index, touch.position)
 				get_viewport().set_input_as_handled()
 		else:
 			if touch.index == touch_id:
 				touch_id = -1
 				touch_vector = Vector2.ZERO
-				touch_knob.position = (touch_stick.size - touch_knob.size) * 0.5
+				if touch_stick.has_method("end_touch"):
+					touch_stick.call("end_touch")
+				elif touch_knob:
+					touch_knob.position = (touch_stick.size - touch_knob.size) * 0.5
 				get_viewport().set_input_as_handled()
 	elif event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
@@ -10533,7 +10549,10 @@ func _input(event: InputEvent) -> void:
 		var radius := touch_stick.size.x * 0.34
 		var offset := (drag.position - touch_origin).limit_length(radius)
 		touch_vector = offset / radius
-		touch_knob.position = (touch_stick.size - touch_knob.size) * 0.5 + offset
+		if touch_stick.has_method("update_touch"):
+			touch_stick.call("update_touch", drag.position)
+		elif touch_knob:
+			touch_knob.position = (touch_stick.size - touch_knob.size) * 0.5 + offset
 		get_viewport().set_input_as_handled()
 
 

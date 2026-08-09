@@ -116,6 +116,7 @@ var shelter_currency_labels: Dictionary = {}
 var shelter_runtime_label: Label
 var shelter_runtime_bar: ProgressBar
 var churu_buff_buttons: Dictionary = {}
+var raid_zone_emergency_button: Button
 var stats_collapse_button: Button
 var stats_summary_label: Label
 var stats_body_box: VBoxContainer
@@ -3481,6 +3482,14 @@ func _open_raid_zone_select() -> void:
 	raid_zone_resupply_button.tooltip_text = "장착 무기 탄약 90발과 구급약 2개까지 창고에서 꺼냅니다."
 	raid_zone_resupply_button.pressed.connect(_quick_resupply_for_raid, CONNECT_DEFERRED)
 	detail_column.add_child(raid_zone_resupply_button)
+	raid_zone_emergency_button = _merchant_button("사자에게 예비 권총 받기", false, "weapon")
+	raid_zone_emergency_button.name = "RaidZoneEmergencyButton"
+	raid_zone_emergency_button.custom_minimum_size.y = 42
+	raid_zone_emergency_button.tooltip_text = (
+		"무기를 전부 잃었을 때 사자가 창고 바닥을 긁어 권총 한 자루를 내어 줍니다."
+	)
+	raid_zone_emergency_button.pressed.connect(_claim_emergency_weapon, CONNECT_DEFERRED)
+	detail_column.add_child(raid_zone_emergency_button)
 	detail_column.add_child(_build_churu_buff_section())
 	raid_zone_launch_button = _merchant_button("선택 구역으로 출정", true, "raid")
 	raid_zone_launch_button.name = "RaidZoneLaunchButton"
@@ -3496,6 +3505,17 @@ func _open_raid_zone_select() -> void:
 	if initial_zone_id.is_empty() and not zone_ids.is_empty():
 		initial_zone_id = str(zone_ids[0])
 	_select_raid_zone_preview(initial_zone_id)
+
+
+func _claim_emergency_weapon() -> void:
+	var result: Dictionary = GameState.grant_emergency_weapon()
+	if not bool(result.get("ok", false)):
+		return
+	_show_status("사자가 예비 권총과 탄약 %d발을 건넸다." % int(result.get("ammo", 0)))
+	if is_instance_valid(raid_zone_emergency_button):
+		raid_zone_emergency_button.visible = false
+	_select_raid_zone_preview(raid_zone_selected_id)
+	_update_stats()
 
 
 func _build_churu_buff_section() -> Control:
@@ -3784,6 +3804,9 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 			or (medkit_count < 2 and stored_medkits > 0)
 		)
 		raid_zone_resupply_button.visible = true
+		if is_instance_valid(raid_zone_emergency_button):
+			# 맨손일 때만 보인다. 사망이 진행 정지로 이어지지 않게 하는 안전장치다.
+			raid_zone_emergency_button.visible = GameState.needs_emergency_weapon()
 		raid_zone_resupply_button.disabled = not can_resupply
 		raid_zone_resupply_button.text = (
 			"창고에서 보충 · 탄약 %d / 구급약 %d" % [stored_ammo, stored_medkits]
@@ -3797,6 +3820,8 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 			"봉쇄 구역 키카드 필요" if needs_keycard else "쉘터 Tier %d 필요" % required_tier
 		)
 		raid_zone_resupply_button.visible = false
+		if is_instance_valid(raid_zone_emergency_button):
+			raid_zone_emergency_button.visible = false
 	raid_zone_launch_button.disabled = not unlocked
 	raid_zone_launch_button.text = (
 		"선택 구역으로 출정"

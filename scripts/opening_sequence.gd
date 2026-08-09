@@ -5,6 +5,7 @@ const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
+const TOUCH_JOYSTICK := preload("res://scripts/hud/touch_joystick.gd")
 
 var _texture_bottom_padding_cache: Dictionary = {}
 const CAT_ROOT := "res://assets/characters/cat_8way"
@@ -131,7 +132,7 @@ var muzzle_flash: MeshInstance3D
 var visibility_rect: ColorRect
 var visibility_material: ShaderMaterial
 var mobile_controls_root: Control
-var mobile_joystick: Control
+var mobile_joystick: TouchJoystick
 var mobile_dash_button: Button
 var mobile_aim_button: Button
 var mobile_fire_button: Button
@@ -261,14 +262,8 @@ func _input(event: InputEvent) -> void:
 			return
 		if not GAMEPLAY_PHASES.has(phase):
 			return
-		if touch.pressed and mobile_joystick != null and mobile_joystick.get_global_rect().has_point(touch.position):
-			mobile_joystick_touch = touch.index
-			_update_mobile_joystick(touch.position)
-			get_viewport().set_input_as_handled()
-		elif not touch.pressed and touch.index == mobile_joystick_touch:
-			mobile_joystick_touch = -1
-			mobile_move_vector = Vector2.ZERO
-			mobile_joystick.queue_redraw()
+		if mobile_joystick != null and mobile_joystick.handle_touch(touch):
+			mobile_joystick_touch = mobile_joystick.touch_index
 			get_viewport().set_input_as_handled()
 		elif _handle_opening_action_touch(touch):
 			# 버튼 시그널에 기대면 두 번째 손가락이 무시된다. Godot의 마우스
@@ -278,8 +273,7 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 	elif event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
-		if drag.index == mobile_joystick_touch:
-			_update_mobile_joystick(drag.position)
+		if mobile_joystick != null and mobile_joystick.handle_drag(drag):
 			get_viewport().set_input_as_handled()
 
 
@@ -1101,28 +1095,21 @@ func _build_mobile_controls(hud: CanvasLayer) -> void:
 	mobile_controls_root.z_index = 90
 	hud.add_child(mobile_controls_root)
 
-	mobile_joystick = Control.new()
+	# 필드/쉘터와 같은 위젯을 쓴다. 화면마다 조작감이 다르면 안 된다.
+	mobile_joystick = TOUCH_JOYSTICK.new()
 	mobile_joystick.name = "MovementJoystick"
 	mobile_joystick.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	mobile_joystick.offset_left = 24
-	mobile_joystick.offset_top = -204
-	mobile_joystick.offset_right = 204
+	mobile_joystick.offset_top = -236
+	mobile_joystick.offset_right = 236
 	mobile_joystick.offset_bottom = -24
-	mobile_joystick.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	mobile_joystick.draw.connect(func() -> void:
-		var center := mobile_joystick.size * 0.5
-		var radius := minf(mobile_joystick.size.x, mobile_joystick.size.y) * 0.38
-		mobile_joystick.draw_circle(center, radius, Color(0.02, 0.04, 0.05, 0.68))
-		mobile_joystick.draw_arc(center, radius, 0, TAU, 48, Color(0.48, 0.72, 0.64, 0.82), 3.0, true)
-		var knob := center + mobile_move_vector * radius * 0.72
-		mobile_joystick.draw_circle(knob, radius * 0.34, Color(0.55, 0.86, 0.73, 0.92))
-	)
+	mobile_joystick.moved.connect(func(vector: Vector2) -> void: mobile_move_vector = vector)
 	mobile_controls_root.add_child(mobile_joystick)
 
 	mobile_fire_button = _make_mobile_action_button("FireButton", "발사", "weapon", Color("#ffd29a"))
 	mobile_fire_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	mobile_fire_button.offset_left = -116
-	mobile_fire_button.offset_top = -116
+	mobile_fire_button.offset_left = -140
+	mobile_fire_button.offset_top = -140
 	mobile_fire_button.offset_right = -24
 	mobile_fire_button.offset_bottom = -24
 	# 터치는 _handle_opening_action_touch가 인덱스별로 직접 처리한다.
@@ -1147,9 +1134,9 @@ func _build_mobile_controls(hud: CanvasLayer) -> void:
 	mobile_aim_button = _make_mobile_action_button("AimButton", "조준", "flashlight", Color("#e8df9f"))
 	mobile_aim_button.toggle_mode = true
 	mobile_aim_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	mobile_aim_button.offset_left = -216
-	mobile_aim_button.offset_top = -116
-	mobile_aim_button.offset_right = -124
+	mobile_aim_button.offset_left = -264
+	mobile_aim_button.offset_top = -140
+	mobile_aim_button.offset_right = -148
 	mobile_aim_button.offset_bottom = -24
 	mobile_aim_button.toggled.connect(func(enabled: bool) -> void:
 		mobile_aim_active = enabled
@@ -1161,19 +1148,19 @@ func _build_mobile_controls(hud: CanvasLayer) -> void:
 
 	mobile_dash_button = _make_mobile_action_button("DashButton", "대시", "dash", Color("#d8e5de"))
 	mobile_dash_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	mobile_dash_button.offset_left = -316
-	mobile_dash_button.offset_top = -116
-	mobile_dash_button.offset_right = -224
+	mobile_dash_button.offset_left = -388
+	mobile_dash_button.offset_top = -140
+	mobile_dash_button.offset_right = -272
 	mobile_dash_button.offset_bottom = -24
 	mobile_dash_button.pressed.connect(_try_dash)
 	mobile_controls_root.add_child(mobile_dash_button)
 
 	mobile_interact_button = _make_mobile_action_button("InteractButton", "진입", "interact", Color("#b8f2d4"))
 	mobile_interact_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	mobile_interact_button.offset_left = -116
-	mobile_interact_button.offset_top = -216
+	mobile_interact_button.offset_left = -140
+	mobile_interact_button.offset_top = -264
 	mobile_interact_button.offset_right = -24
-	mobile_interact_button.offset_bottom = -124
+	mobile_interact_button.offset_bottom = -148
 	mobile_interact_button.pressed.connect(_try_enter_shelter)
 	mobile_controls_root.add_child(mobile_interact_button)
 	_apply_mobile_safe_layout()
@@ -1192,7 +1179,7 @@ func _apply_mobile_safe_layout() -> void:
 	var button_layout: Array = [
 		[mobile_fire_button, Vector4(-116, -116, -24, -24)],
 		[mobile_aim_button, Vector4(-216, -116, -124, -24)],
-		[mobile_dash_button, Vector4(-316, -116, -224, -24)],
+		[mobile_dash_button, Vector4(-388, -140, -272, -24)],
 		[mobile_interact_button, Vector4(-116, -216, -24, -124)],
 	]
 	for entry in button_layout:
@@ -1226,15 +1213,6 @@ func _make_mobile_action_button(
 	button.add_theme_stylebox_override("hover", _panel_style(Color(0.04, 0.06, 0.065, 0.94), accent.darkened(0.18), 2, 42))
 	button.add_theme_stylebox_override("pressed", _panel_style(Color(0.08, 0.12, 0.12, 0.97), accent, 3, 42))
 	return button
-
-
-func _update_mobile_joystick(screen_position: Vector2) -> void:
-	if mobile_joystick == null:
-		return
-	var center := mobile_joystick.get_global_rect().get_center()
-	var radius := minf(mobile_joystick.size.x, mobile_joystick.size.y) * 0.38
-	mobile_move_vector = ((screen_position - center) / maxf(radius, 1.0)).limit_length(1.0)
-	mobile_joystick.queue_redraw()
 
 
 func _build_visibility_fog() -> void:

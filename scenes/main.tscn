@@ -1,6 +1,7 @@
-[gd_scene load_steps=16 format=3 uid="uid://7dm40nar4tvh"]
+[gd_scene load_steps=17 format=3 uid="uid://7dm40nar4tvh"]
 
 [ext_resource type="Script" uid="uid://yj6kvktvj5ii" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://scripts/hud/touch_joystick.gd" id="touch_joystick"]
 [ext_resource type="Script" uid="uid://15ueittqbm4l" path="res://scripts/procedural_map.gd" id="2_map"]
 [ext_resource type="FontFile" uid="uid://b5cd8veegbh1s" path="res://assets/fonts/Pretendard-Regular.otf" id="4_font"]
 [ext_resource type="PackedScene" path="res://scenes/female_cat_companion.tscn" id="5_companion"]
@@ -251,26 +252,8 @@ horizontal_alignment = 2
 layout_mode = 3
 anchors_preset = 0
 offset_left = 74.0
-offset_top = 500.0
-offset_right = 202.0
+offset_top = 460.0
+offset_right = 242.0
 offset_bottom = 628.0
 mouse_filter = 2
-
-[node name="Ring" type="ColorRect" parent="HUD/TouchStick"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-color = Color(0.25, 0.28, 0.3, 0.25)
-
-[node name="Knob" type="ColorRect" parent="HUD/TouchStick"]
-layout_mode = 0
-offset_left = 40.0
-offset_top = 40.0
-offset_right = 88.0
-offset_bottom = 88.0
-mouse_filter = 2
-color = Color(0.72, 0.76, 0.73, 0.48)
+script = ExtResource("touch_joystick")

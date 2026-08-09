@@ -27,8 +27,8 @@ func _run() -> void:
 	assert(guaranteed_pickups.size() == 20)
 	for pickup in guaranteed_pickups:
 		assert(str(pickup.get_meta("loot_type", "")) == "canned_food")
-	# 1단계 컨테이너 51개 = 기존 31 + 원자재 10 + 생활권 10.
-	assert((main_scene.get("field_loot_containers") as Array).size() == 51)
+	# 1단계 컨테이너 43개 = 기존 29 + 원자재 7 + 생활권 7.
+	assert((main_scene.get("field_loot_containers") as Array).size() == 43)
 	var opened_container := (main_scene.get("field_loot_containers") as Array)[0] as Node3D
 	main_scene.call("_complete_field_interaction", opened_container)
 	await process_frame

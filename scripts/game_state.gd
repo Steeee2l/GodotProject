@@ -2605,6 +2605,43 @@ func get_weapon_count(weapon_id: String) -> int:
 	return int(weapon_inventory.get(weapon_id, 0))
 
 
+func has_any_weapon() -> bool:
+	for count in weapon_inventory.values():
+		if int(count) > 0:
+			return true
+	return false
+
+
+# ── 비상 지급 ─────────────────────────────────────────────────
+# 사망으로 무기를 전부 잃으면 맨손으로 나가야 하고, 맨손으로는 무기를
+# 구하기 어렵다. 진행이 멈추는 구간이 생긴다.
+# 사자가 창고 바닥을 긁어 권총 한 자루를 내어 준다. 공짜지만 최소한이다.
+const EMERGENCY_WEAPON_ID := "m1911"
+const EMERGENCY_AMMO_ID := "45_fmj"
+const EMERGENCY_AMMO_COUNT := 24
+
+
+func needs_emergency_weapon() -> bool:
+	return not has_any_weapon()
+
+
+func grant_emergency_weapon() -> Dictionary:
+	if has_any_weapon():
+		return {"ok": false, "reason": "already_armed"}
+	add_weapon(EMERGENCY_WEAPON_ID, 1)
+	set_ammo_count(EMERGENCY_AMMO_ID, get_ammo_count(EMERGENCY_AMMO_ID) + EMERGENCY_AMMO_COUNT)
+	equipped_weapon_id = EMERGENCY_WEAPON_ID
+	equipped_ammo_id = EMERGENCY_AMMO_ID
+	has_ak = true
+	weapon_durability = 100.0
+	save_persistent_state()
+	return {
+		"ok": true,
+		"weapon_id": EMERGENCY_WEAPON_ID,
+		"ammo": EMERGENCY_AMMO_COUNT,
+	}
+
+
 func get_weapon_enhancement_level(weapon_id: String) -> int:
 	return clampi(int(weapon_enhancement_levels.get(weapon_id, 0)), 0, MAX_WEAPON_ENHANCEMENT)
 
