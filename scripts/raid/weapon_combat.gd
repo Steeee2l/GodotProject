@@ -281,6 +281,8 @@ func _update_weapon_ballistics(delta: float, is_moving: bool) -> void:
 				host.reload_timer,
 				reload_ammo_name,
 			]
+			# 상태줄은 평소 숨어 있다. 재장전 중에는 반드시 보여야 한다.
+			host.hud.equipment_condition_label.visible = true
 		if host.reload_timer <= 0.0:
 			_finish_reload()
 

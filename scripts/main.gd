@@ -53,7 +53,9 @@ const ROLL_START_SPEED := 42.0
 const ROLL_END_SPEED := 4.4
 const ROLL_AFTERIMAGE_INTERVAL := 0.055
 const LOAF_HOLD_THRESHOLD := 0.45
-const LOAF_MOVE_MULTIPLIER := 1.0
+# 식빵 자세는 퍼짐 -55%, 반동 -72%, 피탐지 -52%를 준다. 이동 페널티가 1.0이면
+# 켜두는 게 언제나 이득이라 자세가 선택이 아니라 기본값이 된다. 대가를 붙인다.
+const LOAF_MOVE_MULTIPLIER := 0.6
 const LOAF_STAMINA_DRAIN_PER_SECOND := 7.5
 const LOAF_MIN_STAMINA := 1.0
 const LOAF_VISIBILITY_MULTIPLIER := 0.48
@@ -138,6 +140,7 @@ const ESCORT_SPEED_PENALTY := 0.07
 const FIELD_MISSION_TRIGGER_RADIUS := 4.6
 const LORE_CLUE_COUNT := 6
 const RAID_PRESSURE_THRESHOLDS := [120.0, 300.0, 540.0]
+const RAID_PRESSURE_REVEAL_SECONDS := 3.4
 const RAID_PRESSURE_REWARD_MULTIPLIERS := [1.0, 1.15, 1.35, 1.65]
 const DYNAMIC_INCIDENT_DELAY_MIN := 55.0
 const DYNAMIC_INCIDENT_DELAY_MAX := 85.0
@@ -264,6 +267,8 @@ var camera_shake_time := 0.0
 var camera_shake_strength := 0.0
 var hit_stop_serial := 0
 var combat_hit_stop_cooldown := 0.0
+# 같은 프레임에 들어간 피해 합. 샷건 펠릿 8발이 한 방으로 읽히게 한다.
+var hit_stop_damage_accumulator := 0
 var player_hit_flash_time := 0.0
 var player_hit_stun_time := 0.0
 var last_damage_source_name := "알 수 없는 공격자"
@@ -362,6 +367,9 @@ var raid_curfew_active := false
 var raid_event_random := RandomNumberGenerator.new()
 var raid_sealed_extraction_index := -1
 var raid_reward_multiplier := 1.0
+# 긴장도 패널은 상시 표시하면 다른 스무 개와 같은 목소리가 되어 아무도 안 읽는다.
+# 단계가 실제로 바뀌는 순간에만 잠깐 띄운다. 이 게임에서 가장 중요한 숫자다.
+var raid_pressure_reveal_time := 0.0
 var raid_hotspots_opened := 0
 var dynamic_incident_site: Node3D
 var dynamic_incident_state := "scheduled"
@@ -626,6 +634,11 @@ func _physics_process(delta: float) -> void:
 	jackpot._update_jackpot_event(delta)
 	melee_attack_cooldown = maxf(0.0, melee_attack_cooldown - delta)
 	combat_hit_stop_cooldown = maxf(0.0, combat_hit_stop_cooldown - delta)
+	hit_stop_damage_accumulator = 0
+	if raid_pressure_reveal_time > 0.0:
+		raid_pressure_reveal_time = maxf(0.0, raid_pressure_reveal_time - delta)
+		if raid_pressure_reveal_time <= 0.0 and is_instance_valid(hud.raid_pressure_panel):
+			hud.raid_pressure_panel.visible = false
 	_update_melee_attack(delta)
 	aim_hold_time = maxf(0.0, aim_hold_time - delta)
 	player_hit_stun_time = maxf(0.0, player_hit_stun_time - delta)
@@ -1940,6 +1953,21 @@ func _format_survival_time() -> String:
 	return "%02d:%02d" % [minutes, seconds]
 
 
+func _build_death_lesson() -> String:
+	# "누가 나를 죽였나"는 이미 보여준다. 정작 필요한 건 "그래서 무엇이
+	# 문제였나"다. 죽는 순간의 상태에서 가장 큰 원인 하나만 짚어 준다.
+	# 사망이 처벌로만 끝나면 배우는 게 없다.
+	if fatigue >= 65.0:
+		return "피로 %d%% · 이동이 느려지고 탄이 퍼진 상태였습니다. 더 일찍 빠져나올 수 있었습니다." % roundi(fatigue)
+	if magazine_ammo <= 0 and reserve_ammo <= 0:
+		return "탄약이 바닥난 상태였습니다. 탄이 떨어지면 그 자리가 곧 한계선입니다."
+	if raid_pressure_level >= 2:
+		return "도시 긴장도가 높아 증원이 계속 도착하고 있었습니다. 추출 비콘이 가까웠다면 그쪽이 답이었습니다."
+	if GameState.medkits > 0:
+		return "치료 키트가 %d개 남아 있었습니다. 다음엔 더 일찍 쓰세요." % GameState.medkits
+	return "무리한 교전 하나가 판 전체를 가져갑니다. 다음엔 한 발 물러서는 것도 선택입니다."
+
+
 func _begin_player_death_sequence() -> void:
 	if player_death_sequence_active:
 		return
@@ -1967,6 +1995,7 @@ func _begin_player_death_sequence() -> void:
 			RAID_LOSS_MANAGER.get_total_value(corpse_loot)
 		),
 		"loot": corpse_loot,
+		"lesson": _build_death_lesson(),
 	})
 	Engine.time_scale = 0.18
 	var tween := create_tween()
@@ -2357,6 +2386,13 @@ func _apply_hud_layout() -> void:
 	top_left_status_panel.offset_right = side_margin + safe_left_width
 	top_left_status_panel.offset_bottom = top_margin + status_height
 
+	# 좌측 열은 아래로 무한정 자랄 수 없다. 조이스틱이 차지할 자리를 미리 빼두고
+	# 남는 높이 안에서만 목표 패널을 키운다. 예산을 안 걸었을 때 폰 가로 모드에서
+	# 40px까지 겹쳤다. 스틱 크기도 고정 하한 168px 대신 화면 높이에 비례시킨다.
+	var touch_stick_size := clampf(minf(viewport_size.x, viewport_size.y) * 0.28, 124.0, 240.0)
+	var left_column_limit := viewport_size.y - bottom_margin - 10.0
+	if touch_available:
+		left_column_limit -= touch_stick_size
 	objective_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	objective_panel.offset_left = side_margin
 	objective_panel.offset_top = (
@@ -2365,8 +2401,12 @@ func _apply_hud_layout() -> void:
 		else top_margin
 	)
 	objective_panel.offset_right = side_margin + safe_left_width
-	objective_panel.offset_bottom = objective_panel.offset_top + objective_height
+	objective_panel.offset_bottom = objective_panel.offset_top + minf(
+		objective_height,
+		maxf(48.0, left_column_limit - objective_panel.offset_top)
+	)
 
+	var right_column_top := top_margin
 	var top_right_panel := get_node_or_null("HUD/TopRight") as VBoxContainer
 	if top_right_panel != null:
 		var status_width := clampf(minf(viewport_size.x * 0.28, 360.0), 180.0, 360.0)
@@ -2375,9 +2415,9 @@ func _apply_hud_layout() -> void:
 		top_right_panel.offset_top = top_margin
 		top_right_panel.offset_right = -side_margin
 		top_right_panel.offset_bottom = top_margin + 88.0
+		if top_right_panel.visible:
+			right_column_top = top_right_panel.offset_bottom + 8.0
 
-	# 손가락 기준으로 키운다. 예전 최소 126px는 폰에서 너무 작았다.
-	var touch_stick_size := clampf(minf(viewport_size.x, viewport_size.y) * 0.30, 168.0, 260.0)
 	if touch_stick:
 		touch_stick.visible = touch_available
 		if touch_available:
@@ -2407,7 +2447,8 @@ func _apply_hud_layout() -> void:
 	if hud.pickup_panel:
 		hud.pickup_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 		var panel_w := clampf(viewport_size.x * 0.52, 300.0, 380.0)
-		var panel_h := clampf(72.0 * ui_scale, 68.0, 86.0)
+		# 버튼 48 + 진행바 8 + 여백이 들어가야 한다.
+		var panel_h := clampf(80.0 * ui_scale, 76.0, 94.0)
 		hud.pickup_panel.offset_left = -panel_w * 0.5
 		hud.pickup_panel.offset_right = panel_w * 0.5
 		hud.pickup_panel.offset_bottom = -maxf(bottom_margin + 118.0, viewport_size.y * 0.18)
@@ -2415,7 +2456,7 @@ func _apply_hud_layout() -> void:
 		var pickup_button := hud.pickup_panel.get_node_or_null("VBoxContainer/Button") as Button
 		var pickup_progress_bar := hud.pickup_panel.get_node_or_null("VBoxContainer/ProgressBar") as ProgressBar
 		if pickup_button != null:
-			pickup_button.custom_minimum_size = Vector2(maxf(250.0, panel_w - 24.0), 40.0)
+			pickup_button.custom_minimum_size = Vector2(maxf(250.0, panel_w - 24.0), 48.0)
 		if pickup_progress_bar != null:
 			pickup_progress_bar.custom_minimum_size = Vector2(maxf(250.0, panel_w - 24.0), 8.0)
 
@@ -2442,16 +2483,34 @@ func _apply_hud_layout() -> void:
 			hud.field_interaction_progress.custom_minimum_size = Vector2(0.0, 6.0)
 
 	if hud.fatigue_panel:
-		var fatigue_w := minf(300.0, maxf(230.0, viewport_size.x * 0.22))
-		var fatigue_h := 72.0 if fatigue >= 35.0 else 50.0
-		hud.fatigue_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		hud.fatigue_panel.offset_left = side_margin
-		hud.fatigue_panel.offset_top = objective_panel.offset_bottom + 8.0 if objective_panel.visible else top_margin
-		hud.fatigue_panel.offset_right = side_margin + fatigue_w
-		hud.fatigue_panel.offset_bottom = hud.fatigue_panel.offset_top + fatigue_h
+		# 피로는 좌측 열 세 번째 칸이었는데, 폰 가로 모드에서 그 열이 조이스틱까지
+		# 내려와 겹쳤다. 좌측은 "나는 누구인가/무엇을 하는가", 우측은 "얼마나 더
+		# 버틸 수 있는가"로 나눈다.
+		var fatigue_w := minf(300.0, maxf(200.0, viewport_size.x * 0.22))
+		# 세로가 짧은 폰에서는 압축형으로. 경고 문구는 임계치를 넘을 때만 자리를 쓴다.
+		var fatigue_compact := viewport_size.y < 430.0
+		var fatigue_h := 44.0 if fatigue_compact else 72.0
+		if fatigue < 35.0:
+			fatigue_h = 32.0 if fatigue_compact else 50.0
+		hud.fatigue_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		hud.fatigue_panel.offset_right = -side_margin
+		hud.fatigue_panel.offset_left = -side_margin - fatigue_w
+		hud.fatigue_panel.offset_top = right_column_top
+		hud.fatigue_panel.offset_bottom = right_column_top + fatigue_h
+		right_column_top = hud.fatigue_panel.offset_bottom
 
 	if hud.raid_pressure_panel:
-		hud.raid_pressure_panel.visible = false
+		# 상시 표시가 아니라 "방금 바뀌었다"는 알림이다. 화면 중앙 위쪽, 시선이
+		# 자연스럽게 지나가는 자리에 잠깐만 띄운다.
+		var pressure_w := clampf(viewport_size.x * 0.42, 300.0, 460.0)
+		var pressure_h := clampf(74.0 * ui_scale, 64.0, 84.0)
+		hud.raid_pressure_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+		hud.raid_pressure_panel.offset_left = -pressure_w * 0.5
+		hud.raid_pressure_panel.offset_right = pressure_w * 0.5
+		hud.raid_pressure_panel.offset_top = top_margin + 10.0
+		hud.raid_pressure_panel.offset_bottom = top_margin + 10.0 + pressure_h
+		hud.raid_pressure_panel.pivot_offset = Vector2(pressure_w * 0.5, pressure_h * 0.5)
+		hud.raid_pressure_panel.visible = raid_pressure_reveal_time > 0.0 and not hud_blocked
 	if hud.jackpot_hud:
 		var objective_width := clampf(viewport_size.x * 0.38, 310.0, 430.0)
 		var jackpot_objective_height := clampf(62.0 * ui_scale, 58.0, 68.0)
@@ -2473,28 +2532,9 @@ func _apply_hud_layout() -> void:
 			and not hud_blocked
 		)
 
-	var action_button_size := clampf(minf(viewport_size.y * 0.17, 132.0), 96.0, 128.0)
-	if hud.equipment_panel:
-		var eq_width := minf(360.0, maxf(250.0, viewport_size.x * 0.28))
-		var eq_height := clampf(viewport_size.y * 0.21, 108.0, 190.0)
-		hud.equipment_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-		hud.equipment_panel.offset_right = -side_margin
-		hud.equipment_panel.offset_left = -side_margin - eq_width
-		if touch_available:
-			# 터치 환경에서는 우하단이 사격/근접/대시 버튼과 그 위 유틸리티 줄의
-			# 자리다. 무기 정보를 같은 코너에 두면 반드시 겹친다.
-			# 버튼 두 줄 위로 올린다.
-			var utility_row := clampf(action_button_size * 0.84, 60.0, 92.0)
-			var stack_height := (
-				action_button_size + utility_row + clampf(13.0 * ui_scale, 8.0, 16.0) + 10.0
-			)
-			hud.equipment_panel.offset_bottom = -bottom_margin - stack_height
-			eq_height = minf(eq_height, maxf(72.0, viewport_size.y - stack_height - top_margin - 80.0))
-		else:
-			hud.equipment_panel.offset_bottom = -bottom_margin
-		hud.equipment_panel.offset_top = hud.equipment_panel.offset_bottom - eq_height
-		hud.equipment_panel.visible = not hud_blocked
-
+	# 하한 96px은 짧은 화면에서 버튼 하나가 높이의 25%를 차지했다. 비율을 따르되
+	# 손가락이 닿는 최소치(68px)까지만 내려간다.
+	var action_button_size := clampf(viewport_size.y * 0.155, 68.0, 128.0)
 	var action_base := -side_margin
 	var action_gap := clampf(11.0 * ui_scale, 8.0, 15.0)
 	var hide_action := hud_blocked
@@ -2523,58 +2563,67 @@ func _apply_hud_layout() -> void:
 		hud.dash_button.offset_left = action_base - action_button_size * 3.0 - action_gap * 2.0
 		hud.dash_button.custom_minimum_size = Vector2(action_button_size, action_button_size)
 
-	var utility_size := clampf(action_button_size * 0.78, 76.0, 104.0)
+	# 유틸리티 줄은 우하단 액션 버튼 바로 위에 오른쪽부터 채운다. 버튼을 추가하거나
+	# 빼도 위치가 자동으로 다시 잡히도록 배열을 돌린다. 예전에는 각 버튼이 앞 버튼의
+	# offset_left를 직접 참조해서, 하나만 숨겨도 줄 전체가 어긋났다.
+	var utility_size := clampf(action_button_size * 0.72, 52.0, 96.0)
 	var utility_base_bottom := -bottom_margin - action_button_size - clampf(13.0 * ui_scale, 8.0, 16.0)
 	var utility_gap := clampf(10.0 * ui_scale, 6.0, 12.0)
-	if mobile_context_button:
-		mobile_context_button.visible = touch_available and not hud_blocked
-		mobile_context_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-		mobile_context_button.offset_right = -side_margin
-		mobile_context_button.offset_left = mobile_context_button.offset_right - utility_size
-		mobile_context_button.offset_bottom = utility_base_bottom
-		mobile_context_button.offset_top = utility_base_bottom - utility_size
-		mobile_context_button.custom_minimum_size = Vector2(utility_size, utility_size)
-	if mobile_reload_button:
-		mobile_reload_button.visible = touch_available and not hud_blocked
-		mobile_reload_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-		mobile_reload_button.offset_right = mobile_context_button.offset_left - utility_gap if mobile_context_button else -side_margin - utility_size - utility_gap
-		mobile_reload_button.offset_left = mobile_reload_button.offset_right - utility_size
-		mobile_reload_button.offset_bottom = utility_base_bottom
-		mobile_reload_button.offset_top = utility_base_bottom - utility_size
-		mobile_reload_button.custom_minimum_size = Vector2(utility_size, utility_size)
-	if mobile_flashlight_button:
-		mobile_flashlight_button.visible = touch_available and not hud_blocked
-		mobile_flashlight_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-		mobile_flashlight_button.offset_right = (mobile_reload_button.offset_left - utility_gap if mobile_reload_button else -side_margin - utility_size * 2.0) if mobile_reload_button else -side_margin - utility_size * 2.0
-		mobile_flashlight_button.offset_left = mobile_flashlight_button.offset_right - utility_size
-		mobile_flashlight_button.offset_bottom = utility_base_bottom
-		mobile_flashlight_button.offset_top = utility_base_bottom - utility_size
-		mobile_flashlight_button.custom_minimum_size = Vector2(utility_size, utility_size)
-	if mobile_map_button:
-		mobile_map_button.visible = (
-			touch_available
-			and not _is_inventory_open()
-			and not lore_reader.is_open()
-			and not extraction_transition_active
+	var map_visible := (
+		touch_available
+		and not _is_inventory_open()
+		and not lore_reader.is_open()
+		and not extraction_transition_active
+	)
+	# 자동 재장전이 켜져 있으면 장전 버튼은 아무 일도 하지 않는다. 설정을 끈
+	# 플레이어에게만 자리를 내준다.
+	var manual_reload := not bool(AccessibilitySettings.auto_reload)
+	var utility_row: Array[Button] = []
+	for entry in [
+		[mobile_context_button, touch_available and not hud_blocked],
+		[mobile_medkit_button, not hud_blocked],
+		[mobile_reload_button, touch_available and manual_reload and not hud_blocked],
+		[mobile_flashlight_button, touch_available and not hud_blocked],
+		[mobile_map_button, map_visible],
+	]:
+		var button := entry[0] as Button
+		if button == null:
+			continue
+		button.visible = bool(entry[1])
+		if button.visible:
+			utility_row.append(button)
+	var utility_cursor := -side_margin
+	for button in utility_row:
+		button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		button.offset_right = utility_cursor
+		button.offset_left = utility_cursor - utility_size
+		button.offset_bottom = utility_base_bottom
+		button.offset_top = utility_base_bottom - utility_size
+		button.custom_minimum_size = Vector2(utility_size, utility_size)
+		utility_cursor -= utility_size + utility_gap
+
+	# 장비 패널은 우하단 스택 "실제로 보이는 높이" 위에 얹는다. 예전에는 터치
+	# 여부만 보고 고정값을 빼서, 버튼이 숨겨진 상황에서도 빈 자리를 남기거나
+	# 반대로 겹쳤다.
+	if hud.equipment_panel:
+		var right_stack := 0.0
+		if hud.fire_button != null and hud.fire_button.visible:
+			right_stack += action_button_size + action_gap
+		if not utility_row.is_empty():
+			right_stack += utility_size + clampf(13.0 * ui_scale, 8.0, 16.0)
+		var eq_width := minf(360.0, maxf(250.0, viewport_size.x * 0.28))
+		var eq_height := clampf(viewport_size.y * 0.21, 108.0, 190.0)
+		hud.equipment_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		hud.equipment_panel.offset_right = -side_margin
+		hud.equipment_panel.offset_left = -side_margin - eq_width
+		hud.equipment_panel.offset_bottom = -bottom_margin - right_stack
+		# 같은 우측 열의 피로 패널 아래로만 자란다. 짧은 화면에서 둘이 겹쳤다.
+		var right_column_room := (
+			viewport_size.y - bottom_margin - right_stack - right_column_top - 8.0
 		)
-		mobile_map_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-		mobile_map_button.offset_right = mobile_flashlight_button.offset_left - utility_gap if mobile_flashlight_button else -side_margin - utility_size * 3.0
-		mobile_map_button.offset_left = mobile_map_button.offset_right - utility_size
-		mobile_map_button.offset_bottom = utility_base_bottom
-		mobile_map_button.offset_top = utility_base_bottom - utility_size
-		mobile_map_button.custom_minimum_size = Vector2(utility_size, utility_size)
-	if mobile_medkit_button:
-		mobile_medkit_button.visible = not hud_blocked
-		mobile_medkit_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-		var med_size_w := clampf(side_margin + 64.0, 58.0, 84.0)
-		mobile_medkit_button.offset_left = side_margin
-		mobile_medkit_button.offset_right = side_margin + med_size_w
-		var medkit_bottom := -bottom_margin
-		if touch_available and touch_stick:
-			medkit_bottom -= touch_stick_size + action_gap
-		mobile_medkit_button.offset_bottom = medkit_bottom
-		mobile_medkit_button.offset_top = medkit_bottom - med_size_w
-		mobile_medkit_button.custom_minimum_size = Vector2(med_size_w, med_size_w)
+		eq_height = minf(eq_height, maxf(72.0, right_column_room))
+		hud.equipment_panel.offset_top = hud.equipment_panel.offset_bottom - eq_height
+		hud.equipment_panel.visible = not hud_blocked
 
 	if hud.ammo_notice:
 		hud.ammo_notice.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -3091,6 +3140,19 @@ func _show_no_ammo_notice() -> void:
 	_update_equipment_ui()
 
 
+func _weapon_condition_tint() -> Color:
+	# 내구도를 별도 라벨 대신 무기 그림의 색으로 알린다. 숫자를 읽지 않아도
+	# 총이 점점 붉어지는 것만으로 "곧 수리해야 한다"가 전달된다.
+	if not has_ak:
+		return Color(1.0, 1.0, 1.0, 1.0)
+	var ratio := clampf(GameState.weapon_durability / 100.0, 0.0, 1.0)
+	if ratio >= 0.6:
+		return Color(1.0, 1.0, 1.0, 1.0)
+	if ratio >= 0.3:
+		return Color(1.0, 0.86, 0.62, 1.0)
+	return Color(1.0, 0.62, 0.55, 1.0)
+
+
 func _update_equipment_ui() -> void:
 	var weapon_name := str(weapon_stats.get("display_name", "AK-47"))
 	var magazine_size := int(weapon_stats.get("magazine_size", 30))
@@ -3105,27 +3167,26 @@ func _update_equipment_ui() -> void:
 		reload_timer,
 		ammo_name
 	)
-	if hud.equipment_label:
-		hud.equipment_label.text = "%s +%d" % [weapon_name, enhancement_level] if has_ak else "무기 없음"
+	# 무기 이름 라벨은 무기 그림과 같은 말을 두 번 하는 자리였다. 그림만 남기고,
+	# 강화 수치와 내구도는 그림 위에 색으로 얹는다. 총이 출정 중에 바뀌는 게임이라
+	# 그림 자체는 유일한 즉시 식별 수단이므로 지우지 않는다.
 	if hud.equipment_weapon_image:
 		hud.equipment_weapon_image.texture = WEAPON_VISUAL_CATALOG.get_weapon_texture(equipped_weapon_id)
 		hud.equipment_weapon_image.visible = has_ak
+		hud.equipment_weapon_image.modulate = _weapon_condition_tint()
+		hud.equipment_weapon_image.tooltip_text = (
+			"%s +%d" % [weapon_name, enhancement_level] if has_ak else "무기 없음"
+		)
 	if hud.equipment_ammo_label:
-		hud.equipment_ammo_label.text = str(hud_state.get("ammo_text", "-- / --"))
+		hud.equipment_ammo_label.text = str(hud_state.get("ammo_combined_text", "-- / --"))
 		var hud_ammo_color: Color = hud_state.get("ammo_color", Color("#f1ce70"))
 		hud.equipment_ammo_label.add_theme_color_override(
 			"font_color",
 			hud_ammo_color
 		)
-	if hud.equipment_reserve_ammo_label:
-		hud.equipment_reserve_ammo_label.text = str(hud_state.get("reserve_text", "예비 없음"))
-		var hud_reserve_color: Color = hud_state.get("reserve_color", Color("#c5d0c9"))
-		hud.equipment_reserve_ammo_label.add_theme_color_override(
-			"font_color",
-			hud_reserve_color
-		)
 	if hud.equipment_condition_label:
 		hud.equipment_condition_label.text = str(hud_state.get("condition_text", ""))
+		hud.equipment_condition_label.visible = bool(hud_state.get("condition_notable", true))
 	if hud.equipment_reload_bar:
 		var reload_duration := maxf(0.01, float(weapon_stats.get("reload_time", 2.15)))
 		hud.equipment_reload_bar.value = 1.0 - clampf(reload_timer / reload_duration, 0.0, 1.0) if weapon_reloading else 1.0
@@ -4366,6 +4427,7 @@ func _add_raid_pressure(amount: float) -> void:
 
 
 func _apply_raid_pressure_level(new_level: int) -> void:
+	var previous_multiplier := raid_reward_multiplier
 	raid_pressure_level = clampi(
 		new_level,
 		0,
@@ -4374,6 +4436,9 @@ func _apply_raid_pressure_level(new_level: int) -> void:
 	raid_reward_multiplier = float(
 		RAID_PRESSURE_REWARD_MULTIPLIERS[raid_pressure_level]
 	)
+	if not is_equal_approx(previous_multiplier, raid_reward_multiplier):
+		raid_pressure_reveal_time = RAID_PRESSURE_REVEAL_SECONDS
+		_show_pressure_change_notice(previous_multiplier, raid_reward_multiplier)
 	if raid_pressure_level <= 0:
 		return
 	var world := $World as ProceduralCityMap
@@ -4399,6 +4464,25 @@ func _apply_raid_pressure_level(new_level: int) -> void:
 	raid_event_cooldown = 0.0
 
 
+func _show_pressure_change_notice(previous: float, current: float) -> void:
+	# "지금 얼마인가"가 아니라 "방금 올랐다"를 보여준다. 버틴 대가가 눈에 보여야
+	# 다음 판에도 조금 더 버틸 이유가 생긴다.
+	if not is_instance_valid(hud.raid_pressure_panel):
+		return
+	hud.raid_pressure_panel.visible = true
+	if is_instance_valid(hud.raid_pressure_detail):
+		hud.raid_pressure_detail.text = "전리품 ×%.2f  →  ×%.2f" % [previous, current]
+	hud.raid_pressure_panel.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	hud.raid_pressure_panel.scale = Vector2(0.96, 0.96)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(hud.raid_pressure_panel, "modulate:a", 1.0, 0.18)
+	tween.tween_property(hud.raid_pressure_panel, "scale", Vector2.ONE, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.set_parallel(false)
+	tween.tween_interval(RAID_PRESSURE_REVEAL_SECONDS - 0.9)
+	tween.tween_property(hud.raid_pressure_panel, "modulate:a", 0.0, 0.5)
+
+
 func _refresh_raid_pressure_hud() -> void:
 	if not is_instance_valid(hud.raid_pressure_panel):
 		return
@@ -4414,6 +4498,10 @@ func _refresh_raid_pressure_hud() -> void:
 		hud.jackpot_pressure_label.text = level_names[raid_pressure_level]
 		hud.jackpot_pressure_label.add_theme_color_override("font_color", color)
 	hud.raid_pressure_title.text = "도시 긴장도 · %s" % level_names[raid_pressure_level]
+	# 승급 알림이 떠 있는 동안에는 "×1.15 → ×1.35" 문구를 덮어쓰지 않는다.
+	if raid_pressure_reveal_time > 0.0:
+		hud.raid_pressure_icon.texture = UI_ICONS.get_icon("alert", 44, color)
+		return
 	if raid_pressure_level < RAID_PRESSURE_THRESHOLDS.size():
 		# 시계가 아니라 게이지를 보여준다. 플레이어가 속도를 통제할 수 있어야 한다.
 		var progress: float = RAID_EVENT_DIRECTOR.get_level_progress(raid_pressure_points)
@@ -5772,54 +5860,57 @@ func _update_field_interactions(delta: float) -> void:
 	var prompt_state := INTERACTION_TARGETING.build_prompt_state(
 		interaction_type,
 		display_name,
-		hold_duration,
-		locked_reason,
-		float(nearby_field_interaction.get_meta("reward_multiplier", 1.0)),
-		rescued_followers.size(),
-		field_interaction_candidates.size(),
-		next_name
+		locked_reason
 	)
 	var is_locked: bool = not locked_reason.is_empty()
 	var action_label: String = INTERACTION_TARGETING.get_action_label(interaction_type)
 	_refresh_field_interaction_visual(interaction_type, is_locked)
-	if hud.field_interaction_target_label:
-		hud.field_interaction_target_label.text = str(prompt_state.get("target_text", display_name))
+	# 이 게임의 심장은 첫 추출 비콘 앞에서 멈추는 순간이다. 지금 나갈지 더 갈지를
+	# 한 번은 명시적으로 물어봐야 그 다음부터 스스로 계산한다.
+	if (
+		interaction_type == "extraction"
+		and not is_locked
+		and not GameState.extraction_choice_lesson_seen
+	):
+		GameState.extraction_choice_lesson_seen = true
+		GameState.save_persistent_state()
+		_show_field_notice(
+			"탈출로를 찾았다.\n"
+			+ "지금 나가면 가방에 든 것이 전부 내 것이 된다. 죽으면 전부 놓고 간다.\n"
+			+ "더 버티면 전리품 배율이 오른다. 어느 쪽을 고를지는 네 몫이다."
+		)
 	if hud.field_interaction_button:
 		hud.field_interaction_button.disabled = bool(prompt_state.get("disabled", false))
+	# 주 문구 한 줄: "행동 · 대상". 대상 이름과 행동을 따로 띄울 이유가 없다.
 	if hud.field_interaction_action_label:
-		hud.field_interaction_action_label.text = action_label
+		hud.field_interaction_action_label.text = "%s · %s" % [action_label, display_name]
+	# 보조 문구는 정말 할 말이 있을 때만. 평상시 "길게 눌러 진행"은 한 번 배우면
+	# 다시 읽지 않는 문장이라 자리를 비운다.
 	if hud.field_interaction_action_detail_label:
+		var detail := ""
 		if is_locked:
-			hud.field_interaction_action_detail_label.text = locked_reason
+			detail = locked_reason
 		elif interaction_type == "extraction":
-			hud.field_interaction_action_detail_label.text = "즉시 탈출 · 정산 배율 x%.2f" % float(
-				nearby_field_interaction.get_meta("reward_multiplier", 1.0)
-			)
-		else:
-			hud.field_interaction_action_detail_label.text = "길게 눌러 진행"
+			detail = "정산 배율 ×%.2f · 후송 %d명" % [
+				float(nearby_field_interaction.get_meta("reward_multiplier", 1.0)),
+				rescued_followers.size(),
+			]
+		elif field_interaction_candidates.size() > 1:
+			detail = "[G] 다음 · %s" % next_name
+		hud.field_interaction_action_detail_label.text = detail
+		hud.field_interaction_action_detail_label.visible = not detail.is_empty()
 	if hud.field_interaction_duration_label:
 		if is_locked:
 			hud.field_interaction_duration_label.text = "잠김"
 		elif interaction_type == "extraction":
 			hud.field_interaction_duration_label.text = "즉시"
 		elif field_interaction_hold_time > 0.0:
-			hud.field_interaction_duration_label.text = "%.1f초 남음" % maxf(
+			hud.field_interaction_duration_label.text = "%.1f초" % maxf(
 				0.0,
 				hold_duration - field_interaction_hold_time
 			)
 		else:
 			hud.field_interaction_duration_label.text = "%.1f초" % hold_duration
-	if hud.field_interaction_hint_label:
-		var footer_parts: PackedStringArray = []
-		if is_locked:
-			footer_parts.append("조건을 충족해야 사용할 수 있습니다")
-		elif interaction_type == "extraction":
-			footer_parts.append("후송 주민 %d명" % rescued_followers.size())
-		else:
-			footer_parts.append("키를 놓으면 취소됩니다")
-		if field_interaction_candidates.size() > 1:
-			footer_parts.append("[G] 다음 · %s" % next_name)
-		hud.field_interaction_hint_label.text = "  ·  ".join(footer_parts)
 	if hud.field_interaction_progress:
 		hud.field_interaction_progress.max_value = maxf(hold_duration, 1.0)
 		hud.field_interaction_progress.value = field_interaction_hold_time
@@ -6157,6 +6248,16 @@ func _add_fatigue(amount: float) -> void:
 	fatigue = clampf(fatigue + amount * GameState.get_fatigue_gain_multiplier(), 0.0, FATIGUE_MAX)
 	GameState.fatigue = fatigue
 	_refresh_fatigue_hud()
+	# 피로는 체력이 아니라 "얼마나 더 머무를 수 있는가"다. 보스가 튀어나오는
+	# 50에 도달하기 전에 한 번은 그 규칙을 말해 줘야 한다.
+	if fatigue >= 25.0 and not GameState.fatigue_lesson_seen:
+		GameState.fatigue_lesson_seen = true
+		GameState.save_persistent_state()
+		_show_field_notice(
+			"피로가 쌓이고 있다.\n"
+			+ "체력과 달리 피로는 회복되지 않는다. 이 판에 남은 시간 그 자체다.\n"
+			+ "절반을 넘기면 도시가 사냥꾼을 보낸다."
+		)
 	enemy_director._trigger_fatigue_boss_event()
 
 
@@ -6178,14 +6279,11 @@ func _refresh_fatigue_hud() -> void:
 		status = "피곤"
 		color = Color("#d5c16b")
 		next_warning_band = 1
-	if hud.fatigue_bar:
-		hud.fatigue_bar.visible = next_warning_band > 0
+	# 정보가 있는 쪽은 바다. 예전에는 35 미만에서 바를 숨기고 "안정"이라는
+	# 글자만 남겨서, 정작 배워야 할 게이지가 안 보였다. 뒤집는다.
 	if hud.fatigue_status_label:
-		hud.fatigue_status_label.text = (
-			"%d%% · %s" % [roundi(fatigue), status]
-			if next_warning_band > 0
-			else "안정"
-		)
+		hud.fatigue_status_label.text = "%d%% · %s" % [roundi(fatigue), status]
+		hud.fatigue_status_label.visible = next_warning_band > 0
 		hud.fatigue_status_label.add_theme_color_override("font_color", color)
 	if hud.fatigue_fill_style:
 		hud.fatigue_fill_style.bg_color = color

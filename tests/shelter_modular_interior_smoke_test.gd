@@ -154,7 +154,8 @@ func _run() -> void:
 	assert(factory_root.get_node_or_null("SupplyRail") is MeshInstance3D)
 	assert(factory_root.get_node_or_null("FactoryConveyorCollision") == null)
 	assert(factory_root.get_node("FactoryDeck") is MeshInstance3D)
-	assert(factory_root.find_children("MovingCargo*", "MeshInstance3D", true, false).size() == 5)
+	# 흐르는 화물 연출은 시선을 뺏기만 해서 걷어냈다. 설비는 정적인 채로 둔다.
+	assert(factory_root.find_children("MovingCargo*", "MeshInstance3D", true, false).is_empty())
 	var worker_stations := module_root.get_node("FactoryWorkerStations") as Node3D
 	assert(worker_stations.get_node_or_null("ScratcherWorkerLane") != null)
 	assert(worker_stations.get_node_or_null("CatnipWorkerLane") != null)

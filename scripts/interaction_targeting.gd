@@ -65,33 +65,13 @@ static func get_action_label(interaction_type: String) -> String:
 static func build_prompt_state(
 	interaction_type: String,
 	display_name: String,
-	hold_duration: float,
-	locked_reason: String,
-	reward_multiplier: float,
-	rescued_count: int,
-	candidate_count: int,
-	next_name: String
+	locked_reason: String
 ) -> Dictionary:
-	var action_label := get_action_label(interaction_type)
-	var button_text := "[F] 길게 눌러 %s" % action_label
-	var hints: PackedStringArray = []
-	if not locked_reason.is_empty():
-		button_text = "잠김 · %s" % locked_reason
-		hints.append("필요 조건을 충족해야 합니다")
-	elif interaction_type == "extraction":
-		button_text = "[F] %s · 보상 ×%.2f · 주민 %d명" % [
-			action_label,
-			reward_multiplier,
-			maxi(0, rescued_count),
-		]
-	else:
-		hints.append("%.1f초 · 키를 놓으면 취소" % maxf(0.0, hold_duration))
-	if candidate_count > 1:
-		hints.append("주변 %d개 · [G] 다음: %s" % [candidate_count, next_name])
+	# 예전에는 여기서 button_text / hint_text 문자열까지 조립했지만 읽는 곳이
+	# 없었다. HUD가 "행동 · 대상" 한 줄로 합쳐지면서 소요시간·배율·후송 인원·
+	# 후보 개수 인자도 전부 쓰이지 않게 되어 함께 걷어냈다.
 	return {
 		"target_text": display_name,
-		"button_text": button_text,
-		"hint_text": "  |  ".join(hints),
 		"disabled": not locked_reason.is_empty(),
 		"show_progress": interaction_type != "extraction" and locked_reason.is_empty(),
 		"can_hold": interaction_type != "extraction" and locked_reason.is_empty(),

@@ -20,31 +20,33 @@ const MOD_COMPONENTS := {
 	"bell_bait": {"component": "magazine_spring", "amount": 1, "scrap": 20},
 	"ak_precision_receiver": {"component": "scope_lens", "amount": 2, "scrap": 160},
 }
-const BAG_FILTER_ORDER := ["all", "ammo", "resource", "weapon", "equipment", "mod"]
+# 15칸짜리 가방에 분류 탭 여섯 개는 과했다. 게다가 component/progression/
+# special_cargo는 어느 탭에도 안 걸려서, 필터를 켜면 화면에서 사라졌다.
+#
+# 이 게임에서 가방을 두고 다투는 건 결국 둘이다.
+#   자원 — 쉘터를 돌리는 입력
+#   장비 — 나를 강하게 만드는 것
+# 탭을 그 축에 맞추면 분류가 곧 선택이 된다.
+const BAG_FILTER_ORDER := ["all", "resource", "gear"]
+
+# 자원 = 쉘터로 가져가는 것, 장비 = 지금 이 출정에서 쓰는 것.
+const BAG_FILTER_RESOURCE_TYPES := ["resource", "progression", "special_cargo"]
+const BAG_FILTER_GEAR_TYPES := ["weapon", "equipment", "mod", "component", "ammo"]
 
 const BAG_FILTER_MIN_WIDTH := {
-	"all": 52,
-	"ammo": 58,
-	"resource": 64,
-	"weapon": 58,
-	"equipment": 68,
-	"mod": 58,
+	"all": 62,
+	"resource": 74,
+	"gear": 74,
 }
 const BAG_FILTER_TITLES := {
 	"all": "전체",
-	"ammo": "탄약",
 	"resource": "자원",
-	"weapon": "무기",
-	"equipment": "방어구",
-	"mod": "모듈",
+	"gear": "장비",
 }
 const BAG_FILTER_ICON := {
 	"all": "",
-	"ammo": "",
 	"resource": "",
-	"weapon": "",
-	"equipment": "",
-	"mod": "",
+	"gear": "",
 }
 
 var font_ref: Font
@@ -611,6 +613,10 @@ func _should_show_bag_item(item: Dictionary) -> bool:
 func _bag_filter_matches_item(filter_id: String, item_type: String) -> bool:
 	if filter_id == "all":
 		return true
+	if filter_id == "resource":
+		return BAG_FILTER_RESOURCE_TYPES.has(str(item_type))
+	if filter_id == "gear":
+		return BAG_FILTER_GEAR_TYPES.has(str(item_type))
 	return str(item_type) == filter_id
 
 

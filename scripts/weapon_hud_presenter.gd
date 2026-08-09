@@ -35,11 +35,25 @@ static func build_state(
 		status_text = "탄창 부족"
 		ammo_color = LOW_COLOR
 
+	# 출정 HUD는 탄창과 예비탄을 한 줄로 합쳐 쓴다. 두 라벨을 따로 두면
+	# 같은 정보가 두 번 자리를 차지한다. 건물 내부 HUD는 기존 키를 그대로 쓴다.
+	var combined_text := "-- / --"
+	if has_weapon:
+		combined_text = "%02d / %02d  ·  %d" % [
+			safe_current_ammo,
+			safe_magazine_size,
+			safe_reserve_ammo,
+		]
+	# 평상시 "사격 준비 · 사용 탄환 7.62mm"는 읽을 이유가 없는 문장이다.
+	# 재장전·부족·비움처럼 실제로 손을 움직여야 할 때만 자리를 준다.
+	var notable := (not has_weapon) or reloading or safe_current_ammo <= low_threshold
 	return {
 		"ammo_text": "%02d / %02d" % [safe_current_ammo, safe_magazine_size] if has_weapon else "-- / --",
+		"ammo_combined_text": combined_text,
 		"reserve_text": "예비 %d발" % safe_reserve_ammo if has_weapon else "예비 없음",
 		"status_text": status_text,
 		"condition_text": "%s · 사용 탄환  %s" % [status_text, ammo_name] if has_weapon else "가방을 열어 보유 무기를 선택하고 장착하세요.",
+		"condition_notable": notable,
 		"ammo_color": ammo_color,
 		"reserve_color": EMPTY_COLOR if has_weapon and safe_reserve_ammo <= 0 else RESERVE_COLOR,
 		"is_low": has_weapon and safe_current_ammo > 0 and safe_current_ammo <= low_threshold,

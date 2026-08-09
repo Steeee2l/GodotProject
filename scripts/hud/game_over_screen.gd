@@ -425,6 +425,9 @@ func present(result: Dictionary) -> void:
 	var blocked := int(result.get("blocked", 0))
 	if blocked > 0:
 		cause += "  ·  방어구가 마지막 공격에서 %d 방어" % blocked
+	var lesson := str(result.get("lesson", ""))
+	if not lesson.is_empty():
+		cause += "\n%s" % lesson
 	cause_label.text = cause
 	loss_value_label.text = "회수 가치 %s" % result.get("loss_value_text", "0")
 	loss_label.text = "휴대품은 현장에 남았습니다. 다음 탐사에서 사망 지점의 가방을 한 번 회수할 수 있습니다."

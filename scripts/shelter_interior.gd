@@ -195,8 +195,6 @@ var raid_loadout_ui_layer: CanvasLayer
 var raid_loadout_ui_open := false
 var raid_launch_in_progress := false
 var inventory_ui: Control
-var factory_flow_nodes: Array[MeshInstance3D] = []
-var factory_flow_phase := 0.0
 
 
 func _room_art_size() -> Vector2:
@@ -327,7 +325,6 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if not is_instance_valid(player):
 		return
-	_update_factory_flow(delta)
 	_update_status_toast(delta)
 	_update_space_hold(delta)
 	if loafing:
@@ -598,7 +595,6 @@ func _build_factory_infrastructure(module_root: Node3D) -> void:
 			factory_root
 		)
 		_build_supply_rail(factory_root, span_min, span_max)
-		_build_factory_flow(factory_root, span_min, span_max)
 	# facing = 플레이어가 서는 방향. 북쪽 벽은 남쪽(+z), 서쪽 벽은 동쪽(+x)에서 접근한다.
 	for facility_data in [
 		["catnip_scraper", _catnip_scraper_position(), Color("#75c86c"), Vector3(0.0, 0.0, 1.0)],
@@ -665,43 +661,6 @@ func _build_facility_dock(
 		line_material,
 		dock_root
 	)
-
-
-func _build_factory_flow(parent: Node3D, span_min: float, span_max: float) -> void:
-	var cargo_material := _emissive_material(Color("#e5a847"), 2.0)
-	var flow_z: float = _factory_line_z() + 1.6
-	var flow_min: float = span_min + 1.2
-	var flow_max: float = span_max - 1.2
-	for index in 5:
-		var cargo := MeshInstance3D.new()
-		cargo.name = "MovingCargo%02d" % (index + 1)
-		cargo.set_meta("flow_offset", float(index) / 5.0)
-		cargo.set_meta("flow_min", flow_min)
-		cargo.set_meta("flow_max", flow_max)
-		var cargo_mesh := BoxMesh.new()
-		cargo_mesh.size = Vector3(0.48, 0.22, 0.38)
-		cargo_mesh.material = cargo_material
-		cargo.mesh = cargo_mesh
-		cargo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		cargo.position = Vector3(flow_min, 0.19, flow_z)
-		parent.add_child(cargo)
-		factory_flow_nodes.append(cargo)
-
-
-func _update_factory_flow(delta: float) -> void:
-	if factory_flow_nodes.is_empty():
-		return
-	factory_flow_phase = fmod(factory_flow_phase + delta * 0.12, 1.0)
-	for cargo in factory_flow_nodes:
-		if not is_instance_valid(cargo):
-			continue
-		var offset: float = float(cargo.get_meta("flow_offset", 0.0))
-		var flow_min: float = float(cargo.get_meta("flow_min", -5.0))
-		var flow_max: float = float(cargo.get_meta("flow_max", 5.0))
-		var progress: float = fmod(factory_flow_phase + offset, 1.0)
-		cargo.position.x = lerpf(flow_min, flow_max, progress)
-		var pulse: float = 1.0 + sin((progress + offset) * TAU) * 0.08
-		cargo.scale = Vector3(pulse, 1.0, pulse)
 
 
 func _build_factory_worker_lane(parent: Node3D, lane_name: String, slot_count: int, kind: String) -> void:
@@ -3748,6 +3707,11 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 	raid_zone_detail_description.text = identity if not identity.is_empty() else base_description
 	if not tactical_rule.is_empty():
 		raid_zone_detail_description.text += "\n전술 · %s" % tactical_rule
+	# 나가기 직전에 "지난 출정 이후 내가 뭐가 나아졌는지"를 확인시킨다. 성장은
+	# 숫자가 오르는 순간이 아니라, 그 숫자를 들고 나가는 순간에 체감된다.
+	var growth := GameState.build_pre_raid_changes()
+	if not growth.is_empty():
+		raid_zone_detail_description.text += "\n\n지난 출정 이후 ·  %s" % "    ".join(growth)
 	raid_zone_detail_description.tooltip_text = base_description
 	var threat_percent := roundi(float(zone.get("threat", 0.0)) * 100.0)
 	raid_zone_detail_threat.text = "%d%%" % threat_percent
@@ -4037,6 +4001,8 @@ func _confirm_launch_raid_zone(zone_id: String) -> void:
 		raid_zone_launch_button.text = "출정 준비 중..."
 	GameState.confirm_raid_loadout(zone_id)
 	GameState.start_new_raid()
+	# 다음 브리핑에서 "지난 출정 이후"를 계산할 기준점을 여기서 찍는다.
+	GameState.capture_pre_raid_snapshot()
 	GameState.returning_from_shelter = true
 	GameState.save_persistent_state()
 	call_deferred("_change_to_raid_scene")
@@ -4212,21 +4178,34 @@ func _build_corpse_decay_text(notice: Dictionary) -> String:
 
 
 func _build_offline_status_text(progress: Dictionary) -> String:
+	# 돌아왔더니 뭔가 쌓여 있다는 감각이 재방문을 만든다. 예전에는 한 줄 토스트로
+	# 지나갔다. 쌓인 것과 함께 "앞으로 얼마나 더 돌아가는지"를 붙여서, 복귀가
+	# 정산이 아니라 다음 출정의 이유가 되게 한다.
 	var scrap_gain := int(progress.get("scrap", 0))
 	var catnip_gain := int(progress.get("catnip", 0))
 	var repair_gain := float(progress.get("repair", 0.0))
-	if scrap_gain > 0 or catnip_gain > 0 or repair_gain > 0.01:
-		return "오프라인 정산 · 고철 +%s · 캣닢 +%s · 내구도 +%.1f%%" % [
-			GameState.format_compact_number(scrap_gain),
-			GameState.format_compact_number(catnip_gain),
-			repair_gain,
-		]
-	if (
-		GameState.is_shelter_facility_unlocked("scratcher_bank")
+	var has_line := GameState.is_shelter_facility_unlocked("scratcher_bank") \
 		or GameState.is_shelter_facility_unlocked("catnip_scraper")
-	):
-		return "쉘터에 복귀했습니다. 생산기에 주민을 배치할 수 있습니다."
-	return ""
+	var lines: PackedStringArray = []
+	if scrap_gain > 0 or catnip_gain > 0 or repair_gain > 0.01:
+		var parts: PackedStringArray = []
+		if scrap_gain > 0:
+			parts.append("고철 +%s" % GameState.format_compact_number(scrap_gain))
+		if catnip_gain > 0:
+			parts.append("캣닢 +%s" % GameState.format_compact_number(catnip_gain))
+		if repair_gain > 0.01:
+			parts.append("내구도 +%.1f%%" % repair_gain)
+		lines.append("자리를 비운 사이 ·  %s" % "  ".join(parts))
+	if has_line:
+		var runtime := GameState.get_shelter_runtime_seconds()
+		if runtime > 0.0:
+			lines.append("남은 원자재로 %s 더 돌아갑니다." % GameState.format_duration_korean(runtime))
+		elif GameState.get_active_scratcher_workers() + GameState.get_active_catnip_workers() > 0:
+			# 이게 이 게임의 연결 고리다. 라인이 멈췄다는 건 곧 나가야 한다는 뜻이다.
+			lines.append("원자재가 떨어져 생산이 멈췄습니다. 도시에서 더 가져와야 합니다.")
+		elif lines.is_empty():
+			lines.append("쉘터에 복귀했습니다. 생산기에 주민을 배치할 수 있습니다.")
+	return "\n".join(lines)
 
 
 func _update_facing(screen_direction: Vector2) -> void:

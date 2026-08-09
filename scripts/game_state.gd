@@ -132,6 +132,8 @@ var workbench_repair_weapon_id: String = "ak47"
 var shelter_offline_scrap_pending: int = 0
 var shelter_offline_catnip_pending: int = 0
 var shelter_offline_repair_pending: float = 0.0
+# 지난 출정 직전의 성장 지표. 다음 브리핑에서 "무엇이 달라졌는지"를 만든다.
+var pre_raid_snapshot: Dictionary = {}
 var workbench_starter_parts_claimed: bool = false
 var shelter_scrap_fraction: float = 0.0
 var shelter_catnip_fraction: float = 0.0
@@ -143,6 +145,11 @@ var active_churu_buffs: Array[String] = []
 var last_corpse_decay_notice: Dictionary = {}
 # 첫 판에서 "가방이 꽉 찼을 때의 갈등"을 한 번은 반드시 겪게 한다.
 var bag_pressure_lesson_seen: bool = false
+# 첫 출정에서 한 번씩만 뜨는 코칭. 다리 위 튜토리얼은 동사(이동·조준·사격)만
+# 가르치고 끝나서, 정작 이 게임의 결정 구조는 아무도 설명하지 않았다.
+var raw_material_lesson_seen: bool = false
+var fatigue_lesson_seen: bool = false
+var extraction_choice_lesson_seen: bool = false
 var unlocked_milestones: Array[String] = []
 var pending_milestone_unlocks: Array[Dictionary] = []
 var resident_reroll_counts: Dictionary = {}
@@ -954,10 +961,15 @@ func unlock_all_shelter_facilities() -> void:
 func sync_shelter_progression_milestones() -> Array[String]:
 	var newly_unlocked: Array[String] = []
 	shelter_facility_unlocks["bed"] = true
+	# 창고는 처음부터 연다. 사망하면 "창고에 넣어둔 것만" 살아남는데, 예전에는
+	# 창고가 첫 복귀 뒤에 열려서 첫 출정에서 죽은 신규 플레이어는 완충 장치가
+	# 존재하지도 않는 상태로 전부 잃었다. 배우기 전의 실패는 학습이 아니라 벌이다.
+	if unlock_shelter_facility("storage"):
+		newly_unlocked.append("storage")
+	# 훈련장은 철근이 등장하는 첫 복귀 이후 그대로 둔다.
 	if is_contract_agent_available():
-		for facility_id in ["storage", "training"]:
-			if unlock_shelter_facility(facility_id):
-				newly_unlocked.append(facility_id)
+		if unlock_shelter_facility("training"):
+			newly_unlocked.append("training")
 	for contract_value in SAJA_FACILITY_CONTRACTS:
 		var contract := contract_value as Dictionary
 		if not completed_contract_ids.has(str(contract.get("id", ""))):
@@ -2464,6 +2476,107 @@ func get_shelter_runtime_seconds() -> float:
 	return maxf(0.0, shortest)
 
 
+func capture_pre_raid_snapshot() -> void:
+	# 출정 직전 상태를 남겨 둔다. 다음 출정 브리핑에서 "지난번과 무엇이
+	# 달라졌는지"를 만들기 위한 기준점이다.
+	pre_raid_snapshot = {
+		"bag_capacity": get_raid_bag_capacity(),
+		"max_health": get_max_health(),
+		"player_level": player_level,
+		"weapon_level": get_weapon_enhancement_level(equipped_weapon_id),
+		"shelter_tier": shelter_tier,
+		"residents": resident_cat_ids.size(),
+		"facilities": shelter_facility_unlocks.keys().filter(
+			func(key: Variant) -> bool: return bool(shelter_facility_unlocks.get(key, false))
+		).size(),
+	}
+	save_persistent_state()
+
+
+func build_pre_raid_changes() -> Array[String]:
+	# 성장은 상태가 아니라 차이에서 느껴진다. 출정 전에 자기가 강해진 것을
+	# 확인하고 나가는 것과 그냥 나가는 것은 완전히 다르다.
+	var changes: Array[String] = []
+	if pre_raid_snapshot.is_empty():
+		return changes
+	var rows := [
+		["bag_capacity", "가방", get_raid_bag_capacity(), "칸"],
+		["max_health", "최대 체력", get_max_health(), ""],
+		["player_level", "레벨", player_level, ""],
+		["weapon_level", "무기 강화", get_weapon_enhancement_level(equipped_weapon_id), "단계"],
+		["shelter_tier", "쉘터 단계", shelter_tier, ""],
+		["residents", "주민", resident_cat_ids.size(), "명"],
+	]
+	for row in rows:
+		var key := str(row[0])
+		if not pre_raid_snapshot.has(key):
+			continue
+		var before := int(pre_raid_snapshot.get(key, 0))
+		var after := int(row[2])
+		if after <= before:
+			continue
+		changes.append("%s  %d → %d%s" % [str(row[1]), before, after, str(row[3])])
+	var facility_before := int(pre_raid_snapshot.get("facilities", 0))
+	var facility_after := shelter_facility_unlocks.keys().filter(
+		func(key: Variant) -> bool: return bool(shelter_facility_unlocks.get(key, false))
+	).size()
+	if facility_after > facility_before:
+		changes.append("새 시설 %d곳 가동" % (facility_after - facility_before))
+	return changes
+
+
+func get_raw_material_runtime_seconds() -> float:
+	# "원자재 12개"는 아무 느낌도 주지 않는다. "쉘터 가동 3시간 12분"은 준다.
+	# 정산 화면에서 가방을 시간으로 환산해 보여주기 위한 값이다.
+	#
+	# 주민이 아직 없어도 숫자가 0이 되면 안 된다. 그러면 첫 출정에서 원자재를
+	# 주워 온 플레이어가 아무 보상도 못 느낀다. 주민 1명을 기준으로 환산한다.
+	var scrap_workers := maxi(1, get_active_scratcher_workers())
+	var catnip_workers := maxi(1, get_active_catnip_workers())
+	var scrap_seconds := float(raw_scrap) * WORKER_SECONDS_PER_RAW_SCRAP / float(scrap_workers)
+	var catnip_seconds := float(raw_catnip) * WORKER_SECONDS_PER_RAW_CATNIP / float(catnip_workers)
+	return maxf(0.0, maxf(scrap_seconds, catnip_seconds))
+
+
+static func format_duration_korean(total_seconds: float) -> String:
+	var seconds := maxi(0, roundi(total_seconds))
+	if seconds <= 0:
+		return "0분"
+	var hours := seconds / 3600
+	var minutes := (seconds % 3600) / 60
+	if hours > 0 and minutes > 0:
+		return "%d시간 %d분" % [hours, minutes]
+	if hours > 0:
+		return "%d시간" % hours
+	return "%d분" % maxi(1, minutes)
+
+
+func get_active_contract_progress_text() -> String:
+	# 정산 화면이 "끝난 것"만 정리하고 "다음"을 말하지 않으면 한 판 더 나갈
+	# 이유가 텍스트로만 남는다. 남은 거리를 숫자로 보여준다.
+	var contract := get_current_contract_definition()
+	if contract.is_empty() or contract_status != "active":
+		return ""
+	var target := maxi(1, int(contract.get("target", 1)))
+	var progress := clampi(contract_progress, 0, target)
+	var remaining := maxi(0, target - progress)
+	var objective := str(contract.get("objective", "목표"))
+	if remaining <= 0:
+		return "%s %d / %d · 사자에게 보고하면 %s" % [
+			objective,
+			progress,
+			target,
+			get_shelter_facility_name(str(contract.get("facility_unlock", "다음 시설"))),
+		]
+	return "%s %d / %d · %d개 더 모으면 %s" % [
+		objective,
+		progress,
+		target,
+		remaining,
+		get_shelter_facility_name(str(contract.get("facility_unlock", "다음 시설"))),
+	]
+
+
 func get_churu_buff_definition(buff_id: String) -> Dictionary:
 	return (CHURU_BUFFS.get(buff_id, {}) as Dictionary).duplicate(true)
 
@@ -3205,6 +3318,9 @@ func save_persistent_state() -> bool:
 		"valuable_inventory": valuable_inventory,
 		"active_churu_buffs": active_churu_buffs,
 		"bag_pressure_lesson_seen": bag_pressure_lesson_seen,
+		"raw_material_lesson_seen": raw_material_lesson_seen,
+		"fatigue_lesson_seen": fatigue_lesson_seen,
+		"extraction_choice_lesson_seen": extraction_choice_lesson_seen,
 		"unlocked_milestones": unlocked_milestones,
 		"resident_reroll_counts": resident_reroll_counts,
 		"fatigue": fatigue,
@@ -3246,6 +3362,7 @@ func save_persistent_state() -> bool:
 		"storage_inventory": storage_inventory,
 		"storage_food_in_total": true,
 		"catnip_boost_end_time": catnip_boost_end_time,
+		"pre_raid_snapshot": pre_raid_snapshot,
 		"shelter_last_progress_time": shelter_last_progress_time,
 		"workbench_repair_active": workbench_repair_active,
 		"workbench_repair_weapon_id": workbench_repair_weapon_id,
@@ -3330,6 +3447,9 @@ func load_persistent_state() -> bool:
 	valuable_inventory = (data.get("valuable_inventory", {}) as Dictionary).duplicate(true)
 	active_churu_buffs = _to_string_array(data.get("active_churu_buffs", []))
 	bag_pressure_lesson_seen = bool(data.get("bag_pressure_lesson_seen", bag_pressure_lesson_seen))
+	raw_material_lesson_seen = bool(data.get("raw_material_lesson_seen", raw_material_lesson_seen))
+	fatigue_lesson_seen = bool(data.get("fatigue_lesson_seen", fatigue_lesson_seen))
+	extraction_choice_lesson_seen = bool(data.get("extraction_choice_lesson_seen", extraction_choice_lesson_seen))
 	unlocked_milestones = _to_string_array(data.get("unlocked_milestones", []))
 	resident_reroll_counts = (data.get("resident_reroll_counts", {}) as Dictionary).duplicate(true)
 	if int(data.get("version", 0)) < 11:
@@ -3391,6 +3511,7 @@ func load_persistent_state() -> bool:
 		canned_food += get_stored_storage_count("food", "canned_food")
 	_trim_stored_canned_food_to_total()
 	catnip_boost_end_time = int(data.get("catnip_boost_end_time", catnip_boost_end_time))
+	pre_raid_snapshot = data.get("pre_raid_snapshot", {}) as Dictionary
 	shelter_last_progress_time = int(data.get("shelter_last_progress_time", shelter_last_progress_time))
 	workbench_repair_active = bool(data.get("workbench_repair_active", workbench_repair_active))
 	workbench_repair_weapon_id = str(data.get("workbench_repair_weapon_id", workbench_repair_weapon_id))
@@ -3515,6 +3636,9 @@ func reset_run() -> void:
 	valuable_inventory.clear()
 	active_churu_buffs.clear()
 	bag_pressure_lesson_seen = false
+	raw_material_lesson_seen = false
+	fatigue_lesson_seen = false
+	extraction_choice_lesson_seen = false
 	unlocked_milestones.clear()
 	resident_reroll_counts.clear()
 	fatigue = 0.0

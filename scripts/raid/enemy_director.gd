@@ -378,9 +378,13 @@ func _on_enemy_died(enemy: CharacterBody3D) -> void:
 
 func _on_enemy_damaged(_enemy: CharacterBody3D, amount: int) -> void:
 	host.run_damage_dealt += maxi(0, amount)
-	if amount >= 20 and host.combat_hit_stop_cooldown <= 0.0:
+	# 예전 판정은 "한 발 피해 >= 20"이었다. MP5(18)와 샷건 펠릿(18)이 영원히
+	# 걸리지 않아서, 한 방에 144를 넣는 샷건이 가장 밋밋했다. 같은 프레임에
+	# 들어간 피해를 합산해서 본다.
+	host.hit_stop_damage_accumulator += maxi(0, amount)
+	if host.hit_stop_damage_accumulator >= 20 and host.combat_hit_stop_cooldown <= 0.0:
 		host.combat_hit_stop_cooldown = 0.12
-		host._trigger_hit_stop(0.028)
+		host._trigger_hit_stop(0.06)
 
 
 func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:

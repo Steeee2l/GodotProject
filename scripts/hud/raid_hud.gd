@@ -68,14 +68,11 @@ var ammo_prompt_panel: PanelContainer
 var dash_button: Button
 var equipment_ammo_label: Label
 var equipment_condition_label: Label
-var equipment_label: Label
 var equipment_panel: PanelContainer
 var equipment_reload_bar: ProgressBar
-var equipment_reserve_ammo_label: Label
 var equipment_weapon_image: TextureRect
 var fatigue_bar: ProgressBar
 var fatigue_fill_style: StyleBoxFlat
-var fatigue_label: Label
 var fatigue_panel: PanelContainer
 var fatigue_status_label: Label
 var field_interaction_action_card: PanelContainer
@@ -83,13 +80,11 @@ var field_interaction_action_detail_label: Label
 var field_interaction_action_label: Label
 var field_interaction_button: Button
 var field_interaction_duration_label: Label
-var field_interaction_hint_label: Label
 var field_interaction_icon: TextureRect
 var field_interaction_key_label: Label
 var field_interaction_key_panel: PanelContainer
 var field_interaction_panel: PanelContainer
 var field_interaction_progress: ProgressBar
-var field_interaction_target_label: Label
 var field_interaction_touch_held := false
 var fire_button: Button
 var inventory_ui: Control
@@ -124,7 +119,9 @@ func build(owner_node: Node) -> void:
 	pickup_box.add_theme_constant_override("separation", 5)
 	pickup_panel.add_child(pickup_box)
 	var pickup_button := Button.new()
-	pickup_button.custom_minimum_size = Vector2(330, 40)
+	# 전투 중에 누르는 버튼이다. 권장 최소 터치 타겟(48px) 아래로 내려가면
+	# 놓치는 순간이 그대로 피해로 이어진다.
+	pickup_button.custom_minimum_size = Vector2(330, 48)
 	pickup_button.text = "AK-47  길게 눌러 줍기  [F]"
 	pickup_button.icon = AK_DROP_TEXTURE
 	pickup_button.expand_icon = true
@@ -185,29 +182,9 @@ func build(owner_node: Node) -> void:
 	field_box.name = "VBoxContainer"
 	field_box.add_theme_constant_override("separation", 4)
 	field_interaction_panel.add_child(field_box)
-	var field_header := HBoxContainer.new()
-	field_header.name = "Header"
-	field_header.add_theme_constant_override("separation", 8)
-	field_box.add_child(field_header)
-	field_interaction_target_label = Label.new()
-	field_interaction_target_label.name = "TargetLabel"
-	field_interaction_target_label.text = "상호작용 대상"
-	field_interaction_target_label.add_theme_font_override("font", font)
-	field_interaction_target_label.add_theme_font_size_override("font_size", 17)
-	field_interaction_target_label.add_theme_color_override("font_color", Color("#f0e7cf"))
-	field_interaction_target_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	field_interaction_target_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	field_header.add_child(field_interaction_target_label)
-	field_interaction_duration_label = Label.new()
-	field_interaction_duration_label.name = "DurationLabel"
-	field_interaction_duration_label.text = "1.0초"
-	field_interaction_duration_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	field_interaction_duration_label.custom_minimum_size = Vector2(58.0, 0.0)
-	field_interaction_duration_label.add_theme_font_override("font", font)
-	field_interaction_duration_label.add_theme_font_size_override("font_size", 12)
-	field_interaction_duration_label.add_theme_color_override("font_color", Color("#91b7a6"))
-	field_header.add_child(field_interaction_duration_label)
-
+	# 예전에는 대상 이름 / 행동 / 상세 / 소요시간 / 안내 다섯 줄을 동시에 띄웠다.
+	# "F를 눌러 분해"를 말하는 데 여섯 줄이 필요할 이유가 없다. 한 줄로 합치고,
+	# 상세줄은 정말 할 말이 있을 때(잠김 사유·탈출 배율)만 자리를 쓴다.
 	field_interaction_action_card = PanelContainer.new()
 	field_interaction_action_card.name = "ActionCard"
 	field_interaction_action_card.custom_minimum_size = Vector2(0.0, 52.0)
@@ -221,8 +198,10 @@ func build(owner_node: Node) -> void:
 	action_row.add_theme_constant_override("separation", 9)
 	field_interaction_action_card.add_child(action_row)
 
+	# 터치에서는 카드 전체가 버튼이라 키캡이 가리킬 키가 없다. 데스크톱에서만 남긴다.
 	field_interaction_key_panel = PanelContainer.new()
 	field_interaction_key_panel.name = "Keycap"
+	field_interaction_key_panel.visible = not DisplayServer.is_touchscreen_available()
 	field_interaction_key_panel.custom_minimum_size = Vector2(40.0, 40.0)
 	field_interaction_key_panel.add_theme_stylebox_override(
 		"panel",
@@ -271,6 +250,17 @@ func build(owner_node: Node) -> void:
 	field_interaction_action_detail_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	action_copy.add_child(field_interaction_action_detail_label)
 
+	field_interaction_duration_label = Label.new()
+	field_interaction_duration_label.name = "DurationLabel"
+	field_interaction_duration_label.text = "1.0초"
+	field_interaction_duration_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	field_interaction_duration_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	field_interaction_duration_label.custom_minimum_size = Vector2(58.0, 0.0)
+	field_interaction_duration_label.add_theme_font_override("font", font)
+	field_interaction_duration_label.add_theme_font_size_override("font_size", 12)
+	field_interaction_duration_label.add_theme_color_override("font_color", Color("#91b7a6"))
+	action_row.add_child(field_interaction_duration_label)
+
 	field_interaction_button = Button.new()
 	field_interaction_button.name = "Button"
 	field_interaction_button.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -311,15 +301,6 @@ func build(owner_node: Node) -> void:
 	)
 	field_interaction_progress.name = "ProgressBar"
 	field_box.add_child(field_interaction_progress)
-	field_interaction_hint_label = Label.new()
-	field_interaction_hint_label.name = "HintLabel"
-	field_interaction_hint_label.text = "키를 놓으면 취소됩니다"
-	field_interaction_hint_label.add_theme_font_override("font", font)
-	field_interaction_hint_label.add_theme_font_size_override("font_size", 11)
-	field_interaction_hint_label.add_theme_color_override("font_color", Color("#8fa79b"))
-	field_interaction_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	field_interaction_hint_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	field_box.add_child(field_interaction_hint_label)
 	host._setup_stealth_takedown_prompt(font)
 
 	fatigue_panel = PanelContainer.new()
@@ -354,16 +335,12 @@ func build(owner_node: Node) -> void:
 	fatigue_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	fatigue_box.add_theme_constant_override("separation", 2)
 	fatigue_row.add_child(fatigue_box)
+	# "피로도"라는 고정 라벨은 아이콘과 같은 말을 두 번 하는 자리였다. 지우고
+	# 상태 문구만 남긴다. 그 문구도 임계치를 넘을 때만 나온다.
 	var fatigue_header := HBoxContainer.new()
 	fatigue_box.add_child(fatigue_header)
-	fatigue_label = Label.new()
-	fatigue_label.text = "피로도"
-	fatigue_label.add_theme_font_override("font", font)
-	fatigue_label.add_theme_font_size_override("font_size", 13)
-	fatigue_label.add_theme_color_override("font_color", Color("#d6e0d9"))
-	fatigue_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	fatigue_header.add_child(fatigue_label)
 	fatigue_status_label = Label.new()
+	fatigue_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	fatigue_status_label.text = "0% · 안정"
 	fatigue_status_label.add_theme_font_override("font", font)
 	fatigue_status_label.add_theme_font_size_override("font_size", 12)
@@ -398,8 +375,11 @@ func build(owner_node: Node) -> void:
 	var equipment_row := HBoxContainer.new()
 	equipment_row.add_theme_constant_override("separation", 13)
 	equipment_margin.add_child(equipment_row)
+	# 무기 그림은 출정 중 총이 바뀌는 이 게임에서 유일한 즉시 식별 수단이라
+	# 남긴다. 대신 이름 라벨(그림과 중복)과 예비탄 라벨(탄약줄과 중복)은 걷어냈고,
+	# 그림이 정보를 더 지도록 내구도를 색으로 얹는다.
 	equipment_weapon_image = TextureRect.new()
-	equipment_weapon_image.custom_minimum_size = Vector2(104, 72)
+	equipment_weapon_image.custom_minimum_size = Vector2(76, 54)
 	equipment_weapon_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	equipment_weapon_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	equipment_row.add_child(equipment_weapon_image)
@@ -407,28 +387,12 @@ func build(owner_node: Node) -> void:
 	weapon_text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	weapon_text_box.add_theme_constant_override("separation", 2)
 	equipment_row.add_child(weapon_text_box)
-	equipment_label = Label.new()
-	equipment_label.add_theme_font_override("font", font)
-	equipment_label.add_theme_font_size_override("font_size", 16)
-	equipment_label.add_theme_color_override("font_color", Color("#e7e3d2"))
-	weapon_text_box.add_child(equipment_label)
-	var equipment_ammo_row := HBoxContainer.new()
-	equipment_ammo_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	equipment_ammo_row.add_theme_constant_override("separation", 8)
-	weapon_text_box.add_child(equipment_ammo_row)
 	equipment_ammo_label = Label.new()
 	equipment_ammo_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	equipment_ammo_label.add_theme_font_override("font", font)
 	equipment_ammo_label.add_theme_font_size_override("font_size", 22)
 	equipment_ammo_label.add_theme_color_override("font_color", Color("#f1ce70"))
-	equipment_ammo_row.add_child(equipment_ammo_label)
-	equipment_reserve_ammo_label = Label.new()
-	equipment_reserve_ammo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	equipment_reserve_ammo_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	equipment_reserve_ammo_label.add_theme_font_override("font", font)
-	equipment_reserve_ammo_label.add_theme_font_size_override("font_size", 14)
-	equipment_reserve_ammo_label.add_theme_color_override("font_color", Color("#c5d0c9"))
-	equipment_ammo_row.add_child(equipment_reserve_ammo_label)
+	weapon_text_box.add_child(equipment_ammo_label)
 	equipment_condition_label = Label.new()
 	equipment_condition_label.custom_minimum_size = Vector2(0, 22)
 	equipment_condition_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL

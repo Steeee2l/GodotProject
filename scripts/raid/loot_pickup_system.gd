@@ -307,6 +307,7 @@ func _collect_nearby_ammo() -> void:
 	host._add_fatigue(FATIGUE_LOOT_GAIN)
 	var loot_type := str(host.nearby_ammo_pickup.get_meta("loot_type", "ammo"))
 	var amount := int(host.nearby_ammo_pickup.get_meta("amount", 1))
+	_maybe_teach_raw_material(loot_type)
 	match loot_type:
 		"canned_food":
 			GameState.canned_food += amount
@@ -380,6 +381,22 @@ func _collect_nearby_ammo() -> void:
 	host.nearby_ammo_pickup.queue_free()
 	host.nearby_ammo_pickup = null
 	host.hud.ammo_prompt_panel.visible = false
+
+
+func _maybe_teach_raw_material(loot_type: String) -> void:
+	# 원자재는 쉘터 생산의 유일한 연료인데, 필드에서는 다른 잡템과 똑같이
+	# 생겼고 아무도 설명하지 않았다. 처음 줍는 순간이 유일한 교육 기회다.
+	if loot_type != "raw_scrap" and loot_type != "raw_catnip":
+		return
+	if GameState.raw_material_lesson_seen:
+		return
+	GameState.raw_material_lesson_seen = true
+	GameState.save_persistent_state()
+	host._show_field_notice(
+		"원자재를 주웠다.\n"
+		+ "쉘터는 원자재를 만들지 못한다. 네가 들고 온 만큼만 가공한다.\n"
+		+ "가방 한 칸을 원자재에 쓸지 장비에 쓸지가 이 도시의 진짜 선택이다."
+	)
 
 
 func _show_bag_full_notice() -> void:

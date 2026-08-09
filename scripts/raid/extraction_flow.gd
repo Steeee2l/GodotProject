@@ -222,18 +222,29 @@ func _show_extraction_result(rescued_count: int) -> void:
 			host.completed_mission_xp,
 		]
 	var cargo_summary := str(cargo_result.get("summary", "특별 화물 없음"))
-	host.hud.extraction_result_summary.text = "처치 %d명 · 보스 %d명 · 주민 후송 %d명\n%s\n%s\n%s ×%.2f · 경로 XP +%d · 총 경험치 +%d\n%s\n획득품은 가방에 보존됩니다." % [
-		host.run_kills,
-		host.enemy_director.run_boss_kills,
-		rescued_count,
+	# 경로 이름·배율·보급 보너스는 바로 위 extraction_route_label이 이미 말한다.
+	# 여기서 한 번 더 반복하지 않는다.
+	var lines: PackedStringArray = [
+		"처치 %d명 · 보스 %d명 · 주민 후송 %d명" % [
+			host.run_kills,
+			host.enemy_director.run_boss_kills,
+			rescued_count,
+		],
 		mission_summary,
 		cargo_summary,
-		selected_extraction_title,
-		selected_extraction_multiplier,
-		route_xp_bonus,
-		xp_reward,
-		str(route_bonus.get("summary", "경로 보급 보너스 없음")),
+		"경로 XP +%d · 총 경험치 +%d" % [route_xp_bonus, xp_reward],
 	]
+	# 가방을 "시간"으로 환산한다. 원자재 12개는 아무 느낌도 없지만
+	# "쉘터 가동 3시간 12분"은 다음 출정의 이유가 된다.
+	var runtime_seconds := GameState.get_raw_material_runtime_seconds()
+	if runtime_seconds > 0.0:
+		lines.append("가져온 원자재  →  쉘터 가동 %s" % GameState.format_duration_korean(runtime_seconds))
+	# 끝난 것만 정리하지 말고 다음까지 남은 거리를 보여준다.
+	var next_goal := GameState.get_active_contract_progress_text()
+	if not next_goal.is_empty():
+		lines.append(next_goal)
+	lines.append("획득품은 가방에 보존됩니다.")
+	host.hud.extraction_result_summary.text = "\n".join(lines)
 	var new_xp := int(pending_extraction_xp_result.get("new_xp", GameState.player_xp))
 	var required := maxi(1, int(pending_extraction_xp_result.get("new_required", GameState.get_xp_required())))
 	host.hud.extraction_xp_bar.value = float(new_xp) / float(required) * 100.0
