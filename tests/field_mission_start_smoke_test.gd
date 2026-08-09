@@ -14,7 +14,7 @@ func _run() -> void:
 	main_scene.process_mode = Node.PROCESS_MODE_DISABLED
 
 	var player := main_scene.get("player") as CharacterBody3D
-	var mission_sites: Array[Node3D] = main_scene.get("field_mission_sites")
+	var mission_sites: Array[Node3D] = main_scene.get("field_missions").field_mission_sites
 	var field_interactions: Array[Node3D] = main_scene.get("field_interactions")
 	assert(player != null)
 	assert(not mission_sites.is_empty())
@@ -42,8 +42,8 @@ func _run() -> void:
 
 	main_scene.call("_complete_field_interaction", site)
 	assert(main_scene.get("active_field_mission") == site)
-	assert(str(main_scene.get("field_mission_phase")) == "preparing")
-	assert(is_equal_approx(float(main_scene.get("field_mission_prepare_timer")), 5.0))
+	assert(str(main_scene.get("field_missions").field_mission_phase) == "preparing")
+	assert(is_equal_approx(float(main_scene.get("field_missions").field_mission_prepare_timer), 5.0))
 	assert(int(main_scene.get("field_mission_spawned_enemies")) == 0)
 	var objective_label := main_scene.get("objective_label") as Label
 	assert(objective_label.text.count("\n") <= 3)
@@ -51,24 +51,24 @@ func _run() -> void:
 	assert(not objective_label.text.contains("보상"))
 
 	main_scene.call("_update_field_missions", 2.0)
-	assert(str(main_scene.get("field_mission_phase")) == "preparing")
+	assert(str(main_scene.get("field_missions").field_mission_phase) == "preparing")
 	assert(int(main_scene.get("field_mission_spawned_enemies")) == 0)
 	assert(objective_label != null and objective_label.text.contains("시작까지"))
 
 	main_scene.call("_update_field_missions", 3.1)
-	assert(str(main_scene.get("field_mission_phase")) == "active")
+	assert(str(main_scene.get("field_missions").field_mission_phase) == "active")
 	assert(int(main_scene.get("field_mission_spawned_enemies")) == 0)
 	assert(objective_label.text.contains("다음 접근"))
 
 	main_scene.call("_update_field_missions", 1.3)
 	var spawned_count := int(main_scene.get("field_mission_spawned_enemies"))
 	assert(spawned_count >= 2 and spawned_count <= 3)
-	var first_wave_interval := float(main_scene.get("field_mission_wave_timer"))
+	var first_wave_interval := float(main_scene.get("field_missions").field_mission_wave_timer)
 	assert(is_equal_approx(first_wave_interval, 4.2))
 
 	main_scene.call("_update_field_missions", first_wave_interval + 0.1)
 	var escalated_count := int(main_scene.get("field_mission_spawned_enemies"))
-	var escalated_interval := float(main_scene.get("field_mission_wave_timer"))
+	var escalated_interval := float(main_scene.get("field_missions").field_mission_wave_timer)
 	assert(escalated_count > spawned_count)
 	assert(escalated_interval < first_wave_interval)
 

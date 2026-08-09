@@ -32,7 +32,7 @@ func _run() -> void:
 
 func _verify_mission_distribution(main_scene: Node) -> void:
 	var found_types: Dictionary = {}
-	for site_value in main_scene.get("field_mission_sites"):
+	for site_value in main_scene.get("field_missions").field_mission_sites:
 		var site := site_value as Node3D
 		found_types[str(site.get_meta("type", ""))] = true
 	for mission_type in ["defense", "eliminate", "collect", "stealth", "investigate", "stealth_reach"]:

@@ -82,8 +82,11 @@ const RAID_EVENT_DIRECTOR := preload("res://scripts/raid_event_director.gd")
 const GameOverScreen := preload("res://scripts/hud/game_over_screen.gd")
 const LoreReader := preload("res://scripts/hud/lore_reader.gd")
 const RaidHud := preload("res://scripts/hud/raid_hud.gd")
+const JackpotEvent := preload("res://scripts/raid/jackpot_event.gd")
+const FieldMissionController := preload("res://scripts/raid/field_mission_controller.gd")
+const FieldIncidents := preload("res://scripts/raid/field_incidents.gd")
+const ExtractionFlow := preload("res://scripts/raid/extraction_flow.gd")
 const RAID_LOSS_MANAGER := preload("res://scripts/raid_loss_manager.gd")
-const RAID_EXTRACTION_POLICY := preload("res://scripts/raid_extraction_policy.gd")
 const WEAPON_HUD_PRESENTER := preload("res://scripts/weapon_hud_presenter.gd")
 const FIELD_MISSION_CATALOG := preload("res://scripts/field_mission_catalog.gd")
 const OVERLAY_DEPTH_SORT := preload("res://scripts/overlay_depth_sort.gd")
@@ -99,22 +102,8 @@ const LORE_POSTER_TEXTURE := preload("res://assets/lore/forgotten_notice_board_v
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
 const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
 const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/magazine_spring.png")
-const EXTRACTION_BEACON_TEXTURE := preload("res://assets/extraction/extraction_beacon_generated_v1.png")
-const GENERATED_MISSION_ICON_PATHS := {
-	"defense": "res://assets/generated/p0_sliced/mission_icons/defend.png",
-	"eliminate": "res://assets/generated/p0_sliced/mission_icons/eliminate.png",
-	"collect": "res://assets/generated/p0_sliced/mission_icons/collect_cache.png",
-	"investigate": "res://assets/generated/p0_sliced/mission_icons/investigate.png",
-	"stealth": "res://assets/generated/p0_sliced/mission_icons/stealth.png",
-	"stealth_reach": "res://assets/generated/p0_sliced/mission_icons/waypoint.png",
-}
 const BROKEN_SENTRY_TEXTURE := preload("res://assets/props/broken_sentry_salvage.png")
 const FIELD_LOOT_CACHE_TEXTURE := preload("res://assets/interiors/office_dungeon/modules/office_salvage_loot_v1.png")
-const SECURE_MILITARY_CACHE_TEXTURE := preload("res://assets/events/secure_military_cache_v1.png")
-const PHARMACY_EMERGENCY_CACHE_TEXTURE := preload("res://assets/events/pharmacy_emergency_cache_v1.png")
-const CRASHED_CONVOY_CACHE_TEXTURE := preload("res://assets/events/crashed_convoy_cache_v1.png")
-const SUBWAY_MANIFEST_TERMINAL_TEXTURE := preload("res://assets/events/subway_manifest_terminal_v2.png")
-const SUBWAY_EMERGENCY_GENERATOR_TEXTURE := preload("res://assets/events/subway_emergency_generator_v2.png")
 const SUBWAY_SEALED_CARGO_TEXTURE := preload("res://assets/events/subway_sealed_cargo_v2.png")
 const START_WITH_COMPANION := false
 const AK_PICKUP_POSITION := Vector3(1.15, 0.32, 0.7)
@@ -177,32 +166,15 @@ const FATIGUE_ROLL_GAIN := 0.45
 const FATIGUE_DAMAGE_PER_POINT := 0.045
 const FATIGUE_SPEED_MIN := 0.58
 const ESCORT_SPEED_PENALTY := 0.07
-const FIELD_MISSION_COUNT := 6
 const FIELD_MISSION_TRIGGER_RADIUS := 4.6
-const FIELD_MISSION_ACTIVE_RADIUS := 22.0
 const FIELD_MISSION_STEALTH_HOLD_RADIUS := 14.0
-const FIELD_MISSION_FAIL_RADIUS := 72.0
-const FIELD_MISSION_RESULT_DURATION := 2.8
-const FIELD_MISSION_START_HOLD_DURATION := 0.65
-const FIELD_MISSION_PREPARE_DURATION := 5.0
-const FIELD_MISSION_FIRST_WAVE_DELAY := 1.2
-const FIELD_MISSION_ENEMY_MIN_PLAYER_DISTANCE := 16.0
-const FIELD_MISSION_ENEMY_MIN_SITE_DISTANCE := 23.0
-const FIELD_MISSION_ENEMY_MAX_SITE_DISTANCE := 34.0
 const FATIGUE_BOSS_TRIGGER := 50.0
 const FATIGUE_BOSS_NAME := "폐허의 포격수 묘르"
 const LORE_CLUE_COUNT := 6
-const RAID_HOTSPOT_COUNT := 3
-const RAID_HOTSPOT_DISCOVERY_DISTANCE := 24.0
 const RAID_PRESSURE_THRESHOLDS := [120.0, 300.0, 540.0]
 const RAID_PRESSURE_REWARD_MULTIPLIERS := [1.0, 1.15, 1.35, 1.65]
 const DYNAMIC_INCIDENT_DELAY_MIN := 55.0
 const DYNAMIC_INCIDENT_DELAY_MAX := 85.0
-const DYNAMIC_INCIDENT_DURATION := 150.0
-const DYNAMIC_INCIDENT_GUARD_RADIUS := 6.0
-const DYNAMIC_INCIDENT_GUARD_ROUTE_POINTS := 6
-const JACKPOT_ALARM_WAVE_INTERVAL := 9.0
-const JACKPOT_ALARM_WAVE_COUNT := 3
 const LORE_ENTRIES := preload("res://scripts/lore_catalog.gd").ENTRIES
 const DIRECTION_VECTORS := {
 	"n": Vector2(0, -1),
@@ -363,13 +335,9 @@ var scope_camera_offset := Vector3.ZERO
 var weapon_random := RandomNumberGenerator.new()
 var tactical_map: Control
 var extraction_site: Node3D
-var extraction_position := Vector3.ZERO
 var extraction_sites: Array[Node3D] = []
-var extraction_prompt: Control
 var extraction_transition_active := false
 var extraction_fade: ColorRect
-var extraction_success_label: Label
-var pending_extraction_xp_result: Dictionary = {}
 var discovered_extraction_indices: Dictionary = {}
 var lightning_overlay: ColorRect
 var lightning_timer := 12.0
@@ -393,19 +361,17 @@ var corpse_recovery_point: Node3D
 var game_over_screen := GameOverScreen.new()
 var lore_reader := LoreReader.new()
 var hud := RaidHud.new()
+var jackpot := JackpotEvent.new()
+var field_missions := FieldMissionController.new()
+var incidents := FieldIncidents.new()
+var extraction := ExtractionFlow.new()
 var raid_zone_data: Dictionary = {}
-var field_mission_sites: Array[Node3D] = []
 var active_field_mission: Node3D
 var active_mission_collectibles: Array[Node3D] = []
 var field_mission_elapsed := 0.0
-var field_mission_wave_timer := 0.0
-var field_mission_prepare_timer := 0.0
-var field_mission_phase := "idle"
 var field_mission_spawned_enemies := 0
 var field_mission_kills := 0
 var field_mission_collected := 0
-var field_mission_result_timer := 0.0
-var field_mission_runtime := 0.0
 var field_mission_detection_time := 0.0
 var field_mission_investigation_hold := 0.0
 var field_mission_investigation_target: Node3D
@@ -436,7 +402,6 @@ var scent_system: Node3D
 var objective_scent_guidance: Node
 var scent_focus_active := false
 var scent_awareness_tick := 0.0
-var faction_conflict_tick := 0.0
 var raid_hotspots: Array[Node3D] = []
 var raid_elapsed_seconds := 0.0
 var raid_pressure_level := 0
@@ -454,18 +419,6 @@ var dynamic_incident_site: Node3D
 var dynamic_incident_state := "scheduled"
 var dynamic_incident_timer := 0.0
 var dynamic_incident_winning_faction := ""
-var selected_extraction_index := 0
-var selected_extraction_multiplier := 1.0
-var selected_extraction_title := "안전 귀환로"
-var jackpot_clue_site: Node3D
-var jackpot_power_site: Node3D
-var jackpot_cargo_site: Node3D
-var jackpot_power_position := Vector3.ZERO
-var jackpot_cargo_position := Vector3.ZERO
-var jackpot_state := "clue"
-var jackpot_alarm_wave_timer := 0.0
-var jackpot_alarm_waves_spawned := 0
-var jackpot_carried_sprite: Sprite3D
 
 
 func _ready() -> void:
@@ -536,6 +489,10 @@ func _ready() -> void:
 	_setup_weapon_layer()
 	_setup_melee_weapon()
 	hud.attach(self)
+	jackpot.attach(self)
+	field_missions.attach(self)
+	incidents.attach(self)
+	extraction.attach(self)
 	hud.setup_aim_feedback()
 	hud.setup_player_combat_feedback()
 	game_over_screen.build(self)
@@ -576,11 +533,11 @@ func _ready() -> void:
 	_update_day_night(0.0)
 	_update_enemy_visibility()
 	_set_facing("s")
-	_setup_extraction_site(world)
+	extraction._setup_extraction_site(world)
 	if launched_from_shelter:
 		_play_raid_entry_fade()
 	_setup_field_objectives(world)
-	_setup_procedural_field_missions(world)
+	field_missions._setup_procedural_field_missions(world)
 	_setup_basic_raid_missions(world)
 	_setup_world_lore_clues(world)
 	_setup_corpse_recovery(world)
@@ -712,9 +669,9 @@ func _physics_process(delta: float) -> void:
 	_update_lightning(delta)
 	_update_enemy_pressure(delta)
 	_update_scent_system(delta)
-	_update_faction_conflicts(delta)
+	incidents._update_faction_conflicts(delta)
 	_update_raid_opportunities(delta)
-	_update_jackpot_event(delta)
+	jackpot._update_jackpot_event(delta)
 	melee_attack_cooldown = maxf(0.0, melee_attack_cooldown - delta)
 	combat_hit_stop_cooldown = maxf(0.0, combat_hit_stop_cooldown - delta)
 	_update_melee_attack(delta)
@@ -749,7 +706,7 @@ func _physics_process(delta: float) -> void:
 	if mobile_reload_button:
 		mobile_reload_button.disabled = weapon_reloading or loafing or not has_ak or reserve_ammo <= 0
 	_update_field_interactions(delta)
-	_update_extraction_discovery()
+	extraction._update_extraction_discovery()
 	_update_combat_overlay_visibility()
 	_update_stealth_takedown_prompt()
 	if (
@@ -767,7 +724,7 @@ func _physics_process(delta: float) -> void:
 		_update_visibility_fog()
 		_update_enemy_visibility(delta)
 		return
-	_update_field_missions(delta)
+	field_missions._update_field_missions(delta)
 	var input_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	if Input.is_key_pressed(KEY_A): input_vector.x -= 1.0
 	if Input.is_key_pressed(KEY_D): input_vector.x += 1.0
@@ -3644,7 +3601,7 @@ func _on_mobile_context_button_down() -> void:
 			return
 		var interaction_type := str(nearby_field_interaction.get_meta("interaction_type", ""))
 		if interaction_type == "extraction":
-			_begin_extraction()
+			extraction._begin_extraction()
 		else:
 			hud.field_interaction_touch_held = true
 	elif is_instance_valid(nearby_ammo_pickup):
@@ -4028,7 +3985,7 @@ func _fire_ak47() -> void:
 		return
 	magazine_ammo -= 1
 	GameState.magazine_ammo = magazine_ammo
-	if _active_field_mission_requires_silence():
+	if field_missions._active_field_mission_requires_silence():
 		field_mission_noise_breached = true
 	fire_cooldown = float(weapon_stats.get("fire_interval", 0.12))
 	var aim_direction := _get_current_fire_direction()
@@ -5756,116 +5713,6 @@ func _update_scent_system(delta: float) -> void:
 			enemy.call("add_scent_suspicion", player.global_position, strength * 0.0018)
 
 
-func _update_faction_conflicts(delta: float) -> void:
-	faction_conflict_tick += delta
-	if faction_conflict_tick < 0.8:
-		return
-	faction_conflict_tick = 0.0
-	_update_dynamic_incident_winner_guard()
-	for enemy in enemies:
-		if not is_instance_valid(enemy) or not enemy.has_method("get_faction_id"):
-			continue
-		if bool(enemy.get_meta("dynamic_incident_guard", false)):
-			continue
-		var is_dynamic_incident_actor := bool(enemy.get_meta("dynamic_incident", false))
-		if (
-			not is_dynamic_incident_actor
-			and enemy.has_method("is_targeting_player")
-			and not bool(enemy.call("is_targeting_player"))
-		):
-			continue
-		if not is_dynamic_incident_actor and bool(enemy.get("alerted")):
-			continue
-		var nearest_hostile: CharacterBody3D
-		var nearest_distance := 30.0 if is_dynamic_incident_actor else 14.0
-		for other in enemies:
-			if (
-				not is_instance_valid(other)
-				or bool(other.get("dying"))
-				or other == enemy
-				or not other.has_method("get_faction_id")
-			):
-				continue
-			if is_dynamic_incident_actor and not bool(other.get_meta("dynamic_incident", false)):
-				continue
-			if str(other.call("get_faction_id")) == str(enemy.call("get_faction_id")):
-				continue
-			var distance := enemy.global_position.distance_to(other.global_position)
-			if distance < nearest_distance:
-				nearest_distance = distance
-				nearest_hostile = other
-		if is_instance_valid(nearest_hostile) and enemy.has_method("set_combat_target"):
-			enemy.call("set_combat_target", nearest_hostile)
-
-
-func _update_dynamic_incident_winner_guard() -> void:
-	if (
-		dynamic_incident_state != "active"
-		or not is_instance_valid(dynamic_incident_site)
-		or not dynamic_incident_winning_faction.is_empty()
-	):
-		return
-	var survivors: Array[CharacterBody3D] = []
-	var surviving_factions: Array[String] = []
-	for enemy in enemies:
-		if (
-			not is_instance_valid(enemy)
-			or bool(enemy.get("dying"))
-			or not bool(enemy.get_meta("dynamic_incident", false))
-			or not enemy.has_method("get_faction_id")
-		):
-			continue
-		var faction_id := str(enemy.call("get_faction_id"))
-		if faction_id.is_empty():
-			continue
-		survivors.append(enemy)
-		if not surviving_factions.has(faction_id):
-			surviving_factions.append(faction_id)
-	if survivors.is_empty() or surviving_factions.size() != 1:
-		return
-	dynamic_incident_winning_faction = surviving_factions[0]
-	var route := _build_dynamic_incident_guard_route(dynamic_incident_site.global_position)
-	for survivor_index in survivors.size():
-		var survivor := survivors[survivor_index]
-		survivor.set_meta("dynamic_incident_guard", true)
-		if survivor.has_method("restore_player_target"):
-			survivor.call("restore_player_target")
-		if survivor.has_method("assign_squad"):
-			var angle := TAU * float(survivor_index) / float(maxi(1, survivors.size()))
-			var formation_offset := Vector3(cos(angle), 0.0, sin(angle)) * 1.8
-			survivor.call(
-				"assign_squad",
-				9000,
-				dynamic_incident_site.global_position,
-				formation_offset
-			)
-		if survivor.has_method("configure_patrol"):
-			var assigned_route: Array[Vector3] = []
-			for route_offset in route.size():
-				assigned_route.append(route[(route_offset + survivor_index) % route.size()])
-			survivor.call("configure_patrol", "route", assigned_route)
-	_show_field_notice("수송품 교전 종료 · 승리 세력이 보급품 주변을 경계합니다.")
-
-
-func _build_dynamic_incident_guard_route(center: Vector3) -> Array[Vector3]:
-	var route: Array[Vector3] = []
-	var world := get_node_or_null("World") as ProceduralCityMap
-	if world == null:
-		route.append(center)
-		return route
-	for index in DYNAMIC_INCIDENT_GUARD_ROUTE_POINTS:
-		var angle := TAU * float(index) / float(DYNAMIC_INCIDENT_GUARD_ROUTE_POINTS)
-		var requested := center + Vector3(cos(angle), 0.0, sin(angle)) * DYNAMIC_INCIDENT_GUARD_RADIUS
-		var position := world.find_nearest_physically_open_position(
-			requested,
-			0.62,
-			[player.get_rid()]
-		)
-		position.y = 0.78
-		route.append(position)
-	return route
-
-
 func take_damage(amount: int) -> void:
 	if (
 		amount <= 0
@@ -6342,395 +6189,9 @@ func _setup_raid_opportunities(world: ProceduralCityMap) -> void:
 	hud.build_raid_opportunity_hud()
 	if not GameState.bag_pressure_lesson_seen:
 		_spawn_onboarding_loot_cluster(world)
-	_spawn_high_value_hotspots(world)
-	_setup_jackpot_event(world)
+	incidents._spawn_high_value_hotspots(world)
+	jackpot._setup_jackpot_event(world)
 	_refresh_raid_pressure_hud()
-
-
-func _setup_jackpot_event(world: ProceduralCityMap) -> void:
-	hud.build_jackpot_hud()
-	if not GameState.raid_special_cargo.is_empty():
-		jackpot_state = "carried"
-		_attach_jackpot_cargo_visual()
-		_set_jackpot_step(
-			"탈출 필요 · 4/4",
-			"특수 화물 운반 중 · 가장 가까운 하수구로 이동하세요",
-			4
-		)
-		return
-	var occupied: Array[Vector3] = []
-	for site in extraction_sites:
-		if is_instance_valid(site):
-			occupied.append(site.global_position)
-	var clue_position := _find_stratified_map_position(world, 1, 3, 34.0, 22.0, occupied, 0.08)
-	occupied.append(clue_position)
-	jackpot_power_position = _find_stratified_map_position(world, 2, 3, 42.0, 26.0, occupied, 0.08)
-	occupied.append(jackpot_power_position)
-	jackpot_cargo_position = _find_stratified_map_position(world, 0, 3, 48.0, 30.0, occupied, 0.08)
-	jackpot_state = "clue"
-	jackpot_clue_site = _create_field_interaction(
-		"jackpot_clue",
-		clue_position,
-		"격리 수송 기록 판독",
-		1.6
-	)
-	jackpot_clue_site.name = "JackpotManifestTerminal"
-	jackpot_clue_site.set_meta("interaction_distance", 3.2)
-	_build_jackpot_prop(
-		jackpot_clue_site,
-		SUBWAY_MANIFEST_TERMINAL_TEXTURE,
-		0.00105,
-		Color("#62c9ca"),
-		0.95
-	)
-	_set_jackpot_step(
-		"특별 기회 · 격리 신호 0/4",
-		"TAB 지도 확인 → 주황 신호의 단말을 조사하세요",
-		0
-	)
-	call_deferred("_register_jackpot_map_marker", "jackpot_clue", clue_position, "불명 격리 신호")
-
-
-func _set_jackpot_step(title: String, detail: String, step: int) -> void:
-	if not is_instance_valid(hud.jackpot_hud):
-		return
-	hud.jackpot_step_label.text = title
-	hud.jackpot_detail_label.text = detail
-	hud.jackpot_progress.value = clampi(step, 0, 4)
-	hud.jackpot_hud.modulate.a = 0.35
-	var tween := create_tween()
-	tween.tween_property(hud.jackpot_hud, "modulate:a", 1.0, 0.25)
-	tween.tween_property(hud.jackpot_hud, "modulate", Color("#fff0c9"), 0.12)
-	tween.tween_property(hud.jackpot_hud, "modulate", Color.WHITE, 0.28)
-
-
-func _build_jackpot_prop(
-	point: Node3D,
-	texture: Texture2D,
-	pixel_size: float,
-	color: Color,
-	height: float
-) -> void:
-	var sprite := Sprite3D.new()
-	sprite.name = "JackpotPropSprite"
-	sprite.texture = texture
-	sprite.pixel_size = pixel_size
-	sprite.position.y = height
-	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sprite.shaded = false
-	sprite.transparent = true
-	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
-	sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	sprite.render_priority = 12
-	point.add_child(sprite)
-	_add_interaction_marker(point, color, 1.35, false)
-	var beacon := Sprite3D.new()
-	beacon.name = "JackpotBeacon"
-	beacon.texture = _get_loot_glow_texture()
-	beacon.position = Vector3(0, 2.35, 0)
-	beacon.pixel_size = 0.0065
-	beacon.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	beacon.shaded = false
-	beacon.transparent = true
-	beacon.no_depth_test = true
-	beacon.render_priority = 122
-	beacon.modulate = color
-	point.add_child(beacon)
-
-
-func _register_jackpot_map_marker(
-	marker_id: String,
-	position: Vector3,
-	label: String
-) -> void:
-	if is_instance_valid(tactical_map) and tactical_map.has_method("register_raid_marker"):
-		tactical_map.call("register_raid_marker", marker_id, position, "jackpot", label, true)
-
-
-func _remove_jackpot_map_marker(marker_id: String) -> void:
-	if is_instance_valid(tactical_map) and tactical_map.has_method("remove_raid_marker"):
-		tactical_map.call("remove_raid_marker", marker_id)
-
-
-func _handle_jackpot_clue() -> void:
-	jackpot_state = "power"
-	_remove_jackpot_map_marker("jackpot_clue")
-	jackpot_power_site = _create_field_interaction(
-		"jackpot_power",
-		jackpot_power_position,
-		"지하선 비상 전력 복구",
-		2.8
-	)
-	jackpot_power_site.name = "JackpotEmergencyGenerator"
-	jackpot_power_site.set_meta("interaction_distance", 3.4)
-	_build_jackpot_prop(
-		jackpot_power_site,
-		SUBWAY_EMERGENCY_GENERATOR_TEXTURE,
-		0.00115,
-		Color("#e7a847"),
-		0.72
-	)
-	_register_jackpot_map_marker(
-		"jackpot_power",
-		jackpot_power_position,
-		"지하선 비상 발전기"
-	)
-	_set_jackpot_step(
-		"비상 전력 복구 · 1/4",
-		"주황 발전기로 이동해 전력을 복구하세요",
-		1
-	)
-	_show_field_notice("격리 기록 복원 · 지하선 3번 화물의 비상 전력 좌표가 지도에 표시됩니다.")
-
-
-func _handle_jackpot_power() -> void:
-	jackpot_state = "alarm"
-	jackpot_alarm_wave_timer = 0.8
-	jackpot_alarm_waves_spawned = 0
-	_remove_jackpot_map_marker("jackpot_power")
-	jackpot_cargo_site = _create_field_interaction(
-		"jackpot_cargo",
-		jackpot_cargo_position,
-		"봉인 화물 분리",
-		4.2
-	)
-	jackpot_cargo_site.name = "JackpotSealedCargo"
-	jackpot_cargo_site.set_meta("interaction_distance", 3.5)
-	_build_jackpot_prop(
-		jackpot_cargo_site,
-		SUBWAY_SEALED_CARGO_TEXTURE,
-		0.00118,
-		Color("#e66a47"),
-		0.82
-	)
-	_register_jackpot_map_marker(
-		"jackpot_cargo",
-		jackpot_cargo_position,
-		"경보 발생 · 봉인 화물"
-	)
-	_set_jackpot_step(
-		"봉인 화물 회수 · 2/4",
-		"붉은 화물 위치로 이동 · 접근하는 약탈대를 경계하세요",
-		2
-	)
-	_show_jackpot_alarm_flash()
-	_show_field_notice("경보 발생 · 봉인 화물 좌표 노출 · 접근하는 대응대를 경계하십시오.")
-
-
-func _show_jackpot_alarm_flash() -> void:
-	var flash := ColorRect.new()
-	flash.name = "JackpotAlarmFlash"
-	flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	flash.color = Color(0.85, 0.16, 0.06, 0.0)
-	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	flash.z_index = 81
-	$HUD.add_child(flash)
-	var tween := create_tween()
-	for pulse in 3:
-		tween.tween_property(flash, "color:a", 0.16, 0.12)
-		tween.tween_property(flash, "color:a", 0.0, 0.22)
-	tween.tween_callback(flash.queue_free)
-
-
-func _update_jackpot_event(delta: float) -> void:
-	if jackpot_state != "alarm" or jackpot_alarm_waves_spawned >= JACKPOT_ALARM_WAVE_COUNT:
-		return
-	jackpot_alarm_wave_timer -= delta
-	if jackpot_alarm_wave_timer > 0.0:
-		return
-	_spawn_jackpot_alarm_wave()
-	jackpot_alarm_waves_spawned += 1
-	jackpot_alarm_wave_timer = JACKPOT_ALARM_WAVE_INTERVAL
-	_set_jackpot_step(
-		"봉인 화물 회수 · 3/4",
-		"대응대 %d/%d · 화물에 접근해 분리하세요" % [
-			jackpot_alarm_waves_spawned,
-			JACKPOT_ALARM_WAVE_COUNT,
-		],
-		3
-	)
-
-
-func _spawn_jackpot_alarm_wave() -> void:
-	var world := $World as ProceduralCityMap
-	var anchor := _find_event_position_near_player(world, 17.0, 26.0)
-	var kinds: Array[String] = ["pistol", "melee"]
-	if jackpot_alarm_waves_spawned == 1:
-		kinds = ["pistol", "pistol"]
-	elif jackpot_alarm_waves_spawned >= 2:
-		kinds = ["pistol", "grenadier", "pistol"]
-	_spawn_enemy_squad(
-		world,
-		anchor,
-		kinds,
-		maxf(0.58, night_intensity),
-		jackpot_cargo_position,
-		{"jackpot_response": true}
-	)
-
-
-func _attempt_take_jackpot_cargo(point: Node3D) -> void:
-	var cargo := {
-		"id": "seoul_line3_relief_core",
-		"title": "서울 지하선 3번 보급 코어",
-		"description": "인간 격리 당시 보호소 이송 명부와 냉각 보급품이 함께 봉인된 대형 화물입니다.",
-	}
-	if not GameState.can_add_raid_item("special_cargo", str(cargo.id), 1):
-		_show_bag_full_notice()
-		return
-	_claim_jackpot_cargo(point)
-
-
-func _claim_jackpot_cargo(point: Node3D) -> void:
-	if not is_instance_valid(point):
-		return
-	var cargo := {
-		"id": "seoul_line3_relief_core",
-		"title": "서울 지하선 3번 보급 코어",
-		"description": "인간 격리 당시 보호소 이송 명부와 냉각 보급품이 함께 봉인된 대형 화물입니다.",
-	}
-	if not GameState.try_take_story_cargo(cargo):
-		_show_bag_full_notice()
-		return
-	point.set_meta("completed", true)
-	field_interactions.erase(point)
-	nearby_field_interaction = null
-	field_interaction_hold_time = 0.0
-	field_interaction_keyboard_held = false
-	hud.field_interaction_touch_held = false
-	if hud.field_interaction_panel:
-		hud.field_interaction_panel.visible = false
-	_remove_jackpot_map_marker("jackpot_cargo")
-	point.queue_free()
-	jackpot_cargo_site = null
-	jackpot_state = "carried"
-	_attach_jackpot_cargo_visual()
-	GameState.save_persistent_state()
-	_set_jackpot_step(
-		"탈출 필요 · 4/4",
-		"특수 화물 운반 중 · 가장 가까운 하수구로 이동하세요",
-		4
-	)
-	_show_field_notice("특수 화물 확보 · 탈출 시 특별 보상과 기록 해금")
-
-
-func _attach_jackpot_cargo_visual() -> void:
-	if is_instance_valid(jackpot_carried_sprite):
-		return
-	jackpot_carried_sprite = Sprite3D.new()
-	jackpot_carried_sprite.name = "CarriedSubwayCargo"
-	jackpot_carried_sprite.texture = SUBWAY_SEALED_CARGO_TEXTURE
-	jackpot_carried_sprite.pixel_size = 0.00048
-	jackpot_carried_sprite.position = Vector3(-0.62, 0.48, 0.42)
-	jackpot_carried_sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	jackpot_carried_sprite.shaded = false
-	jackpot_carried_sprite.transparent = true
-	jackpot_carried_sprite.no_depth_test = true
-	jackpot_carried_sprite.render_priority = 124
-	player.add_child(jackpot_carried_sprite)
-
-
-func _restore_jackpot_cargo_presentation() -> void:
-	if GameState.raid_special_cargo.is_empty():
-		return
-	for site in [jackpot_clue_site, jackpot_power_site, jackpot_cargo_site]:
-		if not is_instance_valid(site):
-			continue
-		field_interactions.erase(site)
-		site.queue_free()
-	jackpot_clue_site = null
-	jackpot_power_site = null
-	jackpot_cargo_site = null
-	for marker_id in ["jackpot_clue", "jackpot_power", "jackpot_cargo"]:
-		_remove_jackpot_map_marker(marker_id)
-	jackpot_state = "carried"
-	_attach_jackpot_cargo_visual()
-	_set_jackpot_step(
-		"화물 재회수 · 4/4",
-		"되찾은 특수 화물을 운반해 하수구로 탈출하세요",
-		4
-	)
-
-
-func _spawn_high_value_hotspots(world: ProceduralCityMap) -> void:
-	raid_hotspots.clear()
-	var occupied_positions: Array[Vector3] = []
-	for site in extraction_sites:
-		if is_instance_valid(site):
-			occupied_positions.append(site.global_position)
-	var hotspot_types := ["military", "pharmacy", "sealed_parts"]
-	for index in RAID_HOTSPOT_COUNT:
-		var position := _find_stratified_map_position(
-			world,
-			index,
-			RAID_HOTSPOT_COUNT,
-			30.0,
-			24.0,
-			occupied_positions,
-			0.08
-		)
-		occupied_positions.append(position)
-		var hotspot_type: String = hotspot_types[index % hotspot_types.size()]
-		var display_name := "봉쇄 약국 응급 캐시"
-		if hotspot_type == "military":
-			display_name = "잠긴 군용 보급함"
-		elif hotspot_type == "sealed_parts":
-			display_name = "기밀 정비 부품함"
-		var point := _create_field_interaction(
-			"high_value_cache",
-			position,
-			display_name,
-			3.0
-		)
-		var marker_id := "hotspot_%02d" % index
-		point.name = "HighValueHotspot_%02d" % index
-		point.set_meta("hotspot_type", hotspot_type)
-		point.set_meta("map_marker_id", marker_id)
-		point.set_meta("map_discovered", false)
-		point.set_meta("interaction_distance", 3.2)
-		_build_high_value_hotspot_prop(point, hotspot_type)
-		raid_hotspots.append(point)
-
-
-func _build_high_value_hotspot_prop(point: Node3D, hotspot_type: String) -> void:
-	var sprite := Sprite3D.new()
-	sprite.name = "HotspotSprite"
-	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sprite.shaded = false
-	sprite.transparent = true
-	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
-	sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	sprite.render_priority = 9
-	sprite.position.y = 0.72
-	var color := Color("#dfb85d")
-	match hotspot_type:
-		"pharmacy":
-			sprite.texture = PHARMACY_EMERGENCY_CACHE_TEXTURE
-			sprite.pixel_size = 0.00145
-			sprite.position.y = 1.02
-			color = Color("#62d5d8")
-		"sealed_parts":
-			sprite.texture = SECURE_MILITARY_CACHE_TEXTURE
-			sprite.pixel_size = 0.00185
-			sprite.modulate = Color("#b6cee0")
-			color = Color("#8fb9db")
-		_:
-			sprite.texture = SECURE_MILITARY_CACHE_TEXTURE
-			sprite.pixel_size = 0.00185
-	point.add_child(sprite)
-	_add_interaction_marker(point, color, 1.55, false)
-	var marker := Sprite3D.new()
-	marker.name = "HotspotBeacon"
-	marker.texture = _get_loot_glow_texture()
-	marker.position = Vector3(0, 2.35, 0)
-	marker.pixel_size = 0.0055
-	marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	marker.shaded = false
-	marker.transparent = true
-	marker.no_depth_test = true
-	marker.render_priority = 121
-	marker.modulate = color
-	point.add_child(marker)
 
 
 func _update_raid_opportunities(delta: float) -> void:
@@ -6756,8 +6217,8 @@ func _update_raid_opportunities(delta: float) -> void:
 		_apply_raid_pressure_level(next_pressure_level)
 	_tick_raid_event_director(delta)
 	_refresh_raid_pressure_hud()
-	_update_hotspot_discovery()
-	_update_dynamic_incident(delta)
+	incidents._update_hotspot_discovery()
+	incidents._update_dynamic_incident(delta)
 
 
 func _spawn_onboarding_loot_cluster(world: ProceduralCityMap) -> void:
@@ -6816,7 +6277,7 @@ func _event_spawn_hostile_squad() -> void:
 
 
 func _event_seal_extraction() -> void:
-	_seal_one_extraction_route()
+	extraction._seal_one_extraction_route()
 
 
 func _event_blackout() -> void:
@@ -6832,7 +6293,7 @@ func _event_convoy_wreck() -> void:
 	if dynamic_incident_state == "active":
 		return
 	dynamic_incident_state = "scheduled"
-	_spawn_dynamic_convoy_incident($World as ProceduralCityMap)
+	incidents._spawn_dynamic_convoy_incident($World as ProceduralCityMap)
 
 
 func _event_spawn_overwatch() -> void:
@@ -6897,34 +6358,6 @@ func _spawn_raid_event_squad(level: int) -> void:
 		player.global_position,
 		{"raid_pressure_response": level}
 	)
-
-
-func _seal_one_extraction_route() -> void:
-	# 탈출로 하나를 실제로 잠근다. 계획이 무너지는 순간을 만드는 장치다.
-	var sites := get_tree().get_nodes_in_group("field_extraction")
-	var candidates: Array[Node3D] = []
-	for site in sites:
-		if not is_instance_valid(site):
-			continue
-		var node := site as Node3D
-		if int(node.get_meta("extraction_index", 0)) == 0:
-			continue  # 기본 귀환로는 남겨 둔다. 완전히 갇히면 좌절만 남는다.
-		if bool(node.get_meta("extraction_sealed", false)):
-			continue
-		candidates.append(node)
-	if candidates.is_empty():
-		return
-	var target := candidates[raid_event_random.randi_range(0, candidates.size() - 1)]
-	target.set_meta("extraction_sealed", true)
-	raid_sealed_extraction_index = int(target.get_meta("extraction_index", -1))
-	target.remove_from_group("field_extraction")
-	for child in target.get_children():
-		if child is Sprite3D:
-			(child as Sprite3D).modulate = Color(0.42, 0.36, 0.36, 0.85)
-		elif child is MeshInstance3D:
-			(child as MeshInstance3D).visible = false
-	if is_instance_valid(tactical_map) and tactical_map.has_method("seal_extraction"):
-		tactical_map.call("seal_extraction", raid_sealed_extraction_index)
 
 
 func _apply_raid_blackout() -> void:
@@ -7045,141 +6478,6 @@ func _refresh_raid_pressure_hud() -> void:
 	)
 
 
-func _update_hotspot_discovery() -> void:
-	for point in raid_hotspots:
-		if (
-			not is_instance_valid(point)
-			or bool(point.get_meta("completed", false))
-			or bool(point.get_meta("map_discovered", false))
-		):
-			continue
-		if player.global_position.distance_to(point.global_position) > RAID_HOTSPOT_DISCOVERY_DISTANCE:
-			continue
-		point.set_meta("map_discovered", true)
-		var marker_id := str(point.get_meta("map_marker_id", ""))
-		if is_instance_valid(tactical_map) and tactical_map.has_method("discover_raid_marker"):
-			tactical_map.call("discover_raid_marker", marker_id)
-		_show_field_notice(
-			"고가치 지점 발견 · %s" % str(point.get_meta("display_name", "보급 거점"))
-		)
-
-
-func _update_dynamic_incident(delta: float) -> void:
-	# 발동 시점은 이제 raid_event_director가 정한다. 여기서는 진행 중인
-	# 사건의 남은 시간과 HUD만 돌본다.
-	if dynamic_incident_state != "active":
-		return
-	dynamic_incident_timer = maxf(0.0, dynamic_incident_timer - delta)
-	if is_instance_valid(hud.dynamic_incident_hud):
-		var distance := (
-			player.global_position.distance_to(dynamic_incident_site.global_position)
-			if is_instance_valid(dynamic_incident_site)
-			else 0.0
-		)
-		var remaining := ceili(dynamic_incident_timer)
-		hud.dynamic_incident_detail.text = "수송품 쟁탈전 · %dm · %02d:%02d" % [
-			roundi(distance),
-			remaining / 60,
-			remaining % 60,
-		]
-		hud.dynamic_incident_progress.value = dynamic_incident_timer
-	if dynamic_incident_timer <= 0.0:
-		_expire_dynamic_incident()
-
-
-func _spawn_dynamic_convoy_incident(world: ProceduralCityMap) -> void:
-	if dynamic_incident_state != "scheduled":
-		return
-	dynamic_incident_winning_faction = ""
-	var incident_position := _find_event_position_near_player(world, 36.0, 58.0)
-	dynamic_incident_site = _create_field_interaction(
-		"dynamic_incident_cache",
-		incident_position,
-		"추락 수송대 보급품 확보",
-		2.8
-	)
-	dynamic_incident_site.name = "DynamicConvoyIncident"
-	dynamic_incident_site.set_meta("map_marker_id", "dynamic_convoy")
-	dynamic_incident_site.set_meta("map_discovered", true)
-	dynamic_incident_site.set_meta("interaction_distance", 3.5)
-	var sprite := Sprite3D.new()
-	sprite.name = "ConvoyWreck"
-	sprite.texture = CRASHED_CONVOY_CACHE_TEXTURE
-	sprite.pixel_size = 0.0019
-	sprite.position.y = 0.86
-	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sprite.shaded = false
-	sprite.transparent = true
-	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
-	sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	sprite.render_priority = 9
-	dynamic_incident_site.add_child(sprite)
-	_add_interaction_marker(
-		dynamic_incident_site,
-		Color("#e76549"),
-		1.85,
-		false
-	)
-	var conflict_axis := Vector3(
-		spawn_random.randf_range(-1.0, 1.0),
-		0.0,
-		spawn_random.randf_range(-1.0, 1.0)
-	).normalized()
-	if conflict_axis.length_squared() < 0.1:
-		conflict_axis = Vector3.RIGHT
-	var first_anchor := world.find_nearest_physically_open_position(
-		incident_position + conflict_axis * 6.5,
-		0.62,
-		[player.get_rid()]
-	)
-	var second_anchor := world.find_nearest_physically_open_position(
-		incident_position - conflict_axis * 6.5,
-		0.62,
-		[player.get_rid()]
-	)
-	first_anchor.y = 0.78
-	second_anchor.y = 0.78
-	var first_squad := _spawn_enemy_squad(
-		world,
-		first_anchor,
-		["pistol", "melee"],
-		maxf(0.45, night_intensity),
-		Vector3.INF,
-		{"dynamic_incident": true}
-	)
-	var second_squad := _spawn_enemy_squad(
-		world,
-		second_anchor,
-		["pistol", "pistol"],
-		maxf(0.5, night_intensity),
-		Vector3.INF,
-		{"dynamic_incident": true}
-	)
-	for enemy in first_squad:
-		enemy.call("set_faction", "raider")
-	for enemy in second_squad:
-		enemy.call("set_faction", "feral")
-	if not first_squad.is_empty() and not second_squad.is_empty():
-		for enemy in first_squad:
-			enemy.call("set_combat_target", second_squad[0])
-		for enemy in second_squad:
-			enemy.call("set_combat_target", first_squad[0])
-	dynamic_incident_state = "active"
-	dynamic_incident_timer = DYNAMIC_INCIDENT_DURATION
-	hud.dynamic_incident_hud.visible = true
-	hud.dynamic_incident_progress.value = DYNAMIC_INCIDENT_DURATION
-	if is_instance_valid(tactical_map) and tactical_map.has_method("register_raid_marker"):
-		tactical_map.call(
-			"register_raid_marker",
-			"dynamic_convoy",
-			incident_position,
-			"incident",
-			"추락 수송대",
-			true
-		)
-	_show_field_notice("돌발 사건 · 두 약탈 세력이 추락 수송품을 두고 교전합니다.")
-
-
 func _find_event_position_near_player(
 	world: ProceduralCityMap,
 	minimum_distance: float,
@@ -7209,25 +6507,11 @@ func _find_event_position_near_player(
 	return fallback
 
 
-func _expire_dynamic_incident() -> void:
-	dynamic_incident_state = "expired"
-	if is_instance_valid(hud.dynamic_incident_hud):
-		hud.dynamic_incident_hud.visible = false
-	if is_instance_valid(tactical_map) and tactical_map.has_method("remove_raid_marker"):
-		tactical_map.call("remove_raid_marker", "dynamic_convoy")
-	if is_instance_valid(dynamic_incident_site):
-		field_interactions.erase(dynamic_incident_site)
-		field_loot_containers.erase(dynamic_incident_site)
-		dynamic_incident_site.queue_free()
-	dynamic_incident_site = null
-	_show_field_notice("돌발 사건 종료 · 수송품이 다른 세력에게 넘어갔습니다.")
-
-
 func _complete_raid_opportunity(point: Node3D) -> void:
 	var interaction_type := str(point.get_meta("interaction_type", ""))
 	var spawned_count := 0
 	if interaction_type == "dynamic_incident_cache":
-		spawned_count = _spawn_dynamic_incident_rewards(point.global_position)
+		spawned_count = incidents._spawn_dynamic_incident_rewards(point.global_position)
 		dynamic_incident_state = "claimed"
 		dynamic_incident_site = null
 		if is_instance_valid(hud.dynamic_incident_hud):
@@ -7276,38 +6560,6 @@ func _spawn_high_value_cache_rewards(origin: Vector3, hotspot_type: String) -> i
 		false
 	)
 	for item_id in guaranteed_ids:
-		var definition := _build_guaranteed_opportunity_definition(
-			item_id,
-			stage_tier,
-			random
-		)
-		if _spawn_opportunity_definition(
-			origin,
-			definition,
-			spawned_count,
-			true
-		):
-			spawned_count += 1
-	return spawned_count
-
-
-func _spawn_dynamic_incident_rewards(origin: Vector3) -> int:
-	var stage_tier := LOOT_ECONOMY.get_stage_for_zone(raid_zone_data)
-	var random := RandomNumberGenerator.new()
-	random.seed = GameState.map_seed ^ 0x51C7 ^ hash(origin)
-	var container_type := "secure_cache" if stage_tier >= 3 else "weapon_case"
-	var definitions: Array[Dictionary] = LOOT_ECONOMY.roll_container(
-		container_type,
-		stage_tier,
-		"open_space_edge",
-		random
-	)
-	var spawned_count := _spawn_opportunity_definitions(
-		origin,
-		definitions,
-		false
-	)
-	for item_id in ["ammo", "medkit", "scope_lens"]:
 		var definition := _build_guaranteed_opportunity_definition(
 			item_id,
 			stage_tier,
@@ -7518,177 +6770,6 @@ func _is_tactical_map_open() -> bool:
 	return is_instance_valid(tactical_map) and bool(tactical_map.call("is_open"))
 
 
-func _find_random_extraction_position(
-	world: ProceduralCityMap,
-	random: RandomNumberGenerator,
-	minimum_player_distance: float,
-	occupied_positions: Array[Vector3]
-) -> Vector3:
-	var map_limit := world.get_map_limit() * 0.82
-	var fallback := world.get_extraction_position()
-	fallback.y = 0.08
-	var fallback_separation := -1.0
-	for _attempt in 160:
-		var requested := Vector3(
-			random.randf_range(-map_limit, map_limit),
-			0.08,
-			random.randf_range(-map_limit, map_limit)
-		)
-		var candidate := world.find_nearest_physically_open_position(
-			requested,
-			0.72,
-			[player.get_rid()]
-		)
-		candidate.y = 0.08
-		if candidate.distance_to(player.global_position) < minimum_player_distance:
-			continue
-		if world.is_position_in_safe_zone(candidate):
-			continue
-		var nearest_extraction_distance := INF
-		for occupied_position in occupied_positions:
-			nearest_extraction_distance = minf(
-				nearest_extraction_distance,
-				candidate.distance_to(occupied_position)
-			)
-		if occupied_positions.is_empty():
-			nearest_extraction_distance = 32.0
-		if nearest_extraction_distance > fallback_separation:
-			fallback = candidate
-			fallback_separation = nearest_extraction_distance
-		if nearest_extraction_distance >= 32.0:
-			return candidate
-	return fallback
-
-
-func _setup_extraction_site(world: ProceduralCityMap) -> void:
-	extraction_sites.clear()
-	discovered_extraction_indices.clear()
-	var extraction_random := RandomNumberGenerator.new()
-	extraction_random.seed = (
-		int(GameState.map_seed)
-		^ (int(GameState.raid_serial) * 982451653)
-		^ 0x45584954
-	)
-	var positions: Array[Vector3] = []
-	for index in 3:
-		positions.append(_find_random_extraction_position(
-			world,
-			extraction_random,
-			24.0 + float(index) * 3.0,
-			positions
-		))
-	for index in positions.size():
-		var site := _create_extraction_beacon(positions[index], index)
-		extraction_sites.append(site)
-		field_interactions.append(site)
-		if index == 0:
-			site.set_meta("map_discovered", true)
-			discovered_extraction_indices[index] = true
-	extraction_site = extraction_sites[0]
-	extraction_position = extraction_site.global_position
-	extraction_prompt = hud.field_interaction_panel
-
-	extraction_fade = ColorRect.new()
-	extraction_fade.name = "ExtractionFade"
-	extraction_fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	extraction_fade.color = Color(0, 0, 0, 0)
-	extraction_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	extraction_fade.z_index = 500
-	$HUD.add_child(extraction_fade)
-	extraction_success_label = Label.new()
-	extraction_success_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	extraction_success_label.text = "탈출 성공"
-	extraction_success_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	extraction_success_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	extraction_success_label.add_theme_font_override("font", preload("res://assets/fonts/Pretendard-Regular.otf"))
-	extraction_success_label.add_theme_font_size_override("font_size", 44)
-	extraction_success_label.add_theme_color_override("font_color", Color("#e6dfc4"))
-	extraction_success_label.modulate.a = 0.0
-	extraction_success_label.z_index = 501
-	$HUD.add_child(extraction_success_label)
-	hud.build_extraction_progress_ui()
-
-
-func _show_extraction_result(rescued_count: int) -> void:
-	_refresh_pointer_mode()
-	_update_combat_overlay_visibility()
-	var combat_xp := GameState.get_raid_experience_reward(run_kills, run_boss_kills)
-	var cargo_result := _settle_jackpot_cargo()
-	var cargo_xp := int(cargo_result.get("xp", 0))
-	var base_xp_reward := combat_xp + completed_mission_xp + cargo_xp
-	var xp_reward := roundi(float(base_xp_reward) * selected_extraction_multiplier)
-	var route_xp_bonus := maxi(0, xp_reward - base_xp_reward)
-	var route_bonus := _grant_extraction_route_bonus()
-	var route_definition := RAID_EXTRACTION_POLICY.get_route(selected_extraction_index)
-	var route_color: Color = route_definition.get("color", Color("#d9b44a"))
-	hud.extraction_route_icon.texture = UI_ICONS.get_icon("raid", 44, route_color)
-	hud.extraction_route_label.text = "%s  ·  정산 배율 ×%.2f\n%s" % [
-		selected_extraction_title,
-		selected_extraction_multiplier,
-		str(route_bonus.get("summary", "경로 보급 보너스 없음")),
-	]
-	hud.extraction_route_label.add_theme_color_override(
-		"font_color",
-		route_color.lightened(0.18)
-	)
-	pending_extraction_xp_result = GameState.add_raid_experience(xp_reward)
-	hud.extraction_result_title.text = "탈출 성공 · Lv.%d" % int(pending_extraction_xp_result.get("new_level", GameState.player_level))
-	var mission_summary := "완료한 임무 없음"
-	if not completed_mission_titles.is_empty():
-		mission_summary = "완료 임무 · %s · 임무 XP +%d" % [
-			", ".join(completed_mission_titles),
-			completed_mission_xp,
-		]
-	var cargo_summary := str(cargo_result.get("summary", "특별 화물 없음"))
-	hud.extraction_result_summary.text = "처치 %d명 · 보스 %d명 · 주민 후송 %d명\n%s\n%s\n%s ×%.2f · 경로 XP +%d · 총 경험치 +%d\n%s\n획득품은 가방에 보존됩니다." % [
-		run_kills,
-		run_boss_kills,
-		rescued_count,
-		mission_summary,
-		cargo_summary,
-		selected_extraction_title,
-		selected_extraction_multiplier,
-		route_xp_bonus,
-		xp_reward,
-		str(route_bonus.get("summary", "경로 보급 보너스 없음")),
-	]
-	var new_xp := int(pending_extraction_xp_result.get("new_xp", GameState.player_xp))
-	var required := maxi(1, int(pending_extraction_xp_result.get("new_required", GameState.get_xp_required())))
-	hud.extraction_xp_bar.value = float(new_xp) / float(required) * 100.0
-	hud.extraction_xp_label.text = "Lv.%d   %d / %d XP" % [GameState.player_level, new_xp, required]
-	hud.extraction_result_panel.visible = true
-	if GameState.pending_level_choices > 0:
-		_show_level_reward_choices()
-	else:
-		var wait_tween := create_tween()
-		wait_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
-		wait_tween.tween_interval(1.25)
-		wait_tween.tween_callback(_finish_extraction_to_shelter)
-
-
-func _settle_jackpot_cargo() -> Dictionary:
-	var cargo := GameState.complete_story_cargo()
-	if cargo.is_empty():
-		return {"xp": 0, "summary": "특별 화물 없음"}
-	GameState.canned_food += 8
-	GameState.churu += 1
-	GameState.add_mod_component("scope_lens", 1)
-	var cargo_lore := (
-		"붉은비 격리 기록 · 3번선 마지막 명부\n"
-		+ "봉인된 명부에는 인간이 떠나기 직전 개방한 고양이 보호소 27곳이 적혀 있었다. "
-		+ "누군가는 재난의 마지막 순간까지 이 도시의 작은 생존자들이 지하로 도망칠 길을 남겨 두었다."
-	)
-	if not GameState.unlocked_contract_lore.has(cargo_lore):
-		GameState.unlocked_contract_lore.append(cargo_lore)
-	if is_instance_valid(jackpot_carried_sprite):
-		jackpot_carried_sprite.queue_free()
-	jackpot_carried_sprite = null
-	return {
-		"xp": 220,
-		"summary": "지하선 3번 보급 코어 개봉 · 통조림 +8 · 츄르 +1 · 스코프 렌즈 +1 · XP +220\n새 세계 기록 · ‘3번선 마지막 명부’ 해금",
-	}
-
-
 func _show_level_reward_choices() -> void:
 	hud.extraction_level_choice_title.visible = true
 	hud.extraction_level_choice_row.visible = true
@@ -7730,105 +6811,7 @@ func _on_level_reward_selected(stat_id: String) -> void:
 	var wait_tween := create_tween()
 	wait_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
 	wait_tween.tween_interval(0.75)
-	wait_tween.tween_callback(_finish_extraction_to_shelter)
-
-
-func _finish_extraction_to_shelter() -> void:
-	get_tree().paused = false
-	GameState.returning_from_shelter = false
-	GameState.register_shelter_return()
-	SceneTransition.transition_to("res://scenes/shelter_interior.tscn")
-
-
-func _grant_extraction_route_bonus() -> Dictionary:
-	var bonus := RAID_EXTRACTION_POLICY.calculate_route_bonus(
-		selected_extraction_index,
-		raid_hotspots_opened,
-		dynamic_incident_state == "claimed",
-		run_kills,
-		GameState.map_seed
-	)
-	GameState.canned_food += int(bonus.get("food", 0))
-	GameState.medkits += int(bonus.get("medkits", 0))
-	var component_id := str(bonus.get("component_id", ""))
-	var component_count := int(bonus.get("component_count", 0))
-	if not component_id.is_empty() and component_count > 0:
-		GameState.add_mod_component(component_id, component_count)
-	return bonus
-
-
-func _create_extraction_beacon(world_position: Vector3, index: int) -> Node3D:
-	var site := Node3D.new()
-	var route_definition := RAID_EXTRACTION_POLICY.get_route(index)
-	var route_color: Color = route_definition.get("color", Color("#d9b44a"))
-	var route_title := str(route_definition.get("title", "안전 귀환로"))
-	var reward_multiplier := float(route_definition.get("reward_multiplier", 1.0))
-	site.name = "SewerExtraction_%02d" % (index + 1)
-	add_child(site)
-	site.global_position = Vector3(world_position.x, 0.08, world_position.z)
-	site.set_meta("interaction_type", "extraction")
-	site.set_meta(
-		"display_name",
-		"안전 귀환 하수구" if index == 0 else route_title
-	)
-	site.set_meta("hold_duration", 0.0)
-	site.set_meta("interaction_distance", FIELD_INTERACTION_DISTANCE)
-	site.set_meta("extraction_index", index)
-	site.set_meta("map_discovered", false)
-	site.set_meta("route_title", route_title)
-	site.set_meta("reward_multiplier", reward_multiplier)
-	site.set_meta("route_color", route_color)
-	site.add_to_group("field_extraction")
-
-	var sewer_sprite := Sprite3D.new()
-	sewer_sprite.name = "SewerHatch"
-	sewer_sprite.texture = EXTRACTION_BEACON_TEXTURE
-	# The generated beacon is a taller freestanding prop than the old flat hatch.
-	# Keep its footprint inside the extraction ring and lift the visual bottom to
-	# the ground line instead of letting the transparent canvas sink below it.
-	sewer_sprite.pixel_size = 0.0022
-	sewer_sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sewer_sprite.shaded = false
-	sewer_sprite.transparent = true
-	sewer_sprite.position.y = 0.92
-	sewer_sprite.render_priority = 4
-	site.add_child(sewer_sprite)
-
-	_add_interaction_marker(site, route_color, 1.55, true)
-	var beam_material := StandardMaterial3D.new()
-	beam_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	beam_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	beam_material.albedo_color = Color(
-		route_color.r,
-		route_color.g,
-		route_color.b,
-		0.12
-	)
-	beam_material.emission_enabled = true
-	beam_material.emission = route_color
-	beam_material.emission_energy_multiplier = 1.8
-	var beam_mesh := CylinderMesh.new()
-	beam_mesh.top_radius = 0.28
-	beam_mesh.bottom_radius = 1.25
-	beam_mesh.height = 5.5
-	beam_mesh.radial_segments = 24
-	beam_mesh.material = beam_material
-	var beam := MeshInstance3D.new()
-	beam.name = "ExtractionBeacon"
-	beam.position.y = 2.75
-	beam.mesh = beam_mesh
-	beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	site.add_child(beam)
-
-	var light := OmniLight3D.new()
-	light.name = "ExtractionLight"
-	light.position.y = 1.15
-	light.light_color = route_color
-	light.light_energy = 3.2
-	light.omni_range = 7.5
-	light.shadow_enabled = false
-	site.add_child(light)
-	return site
+	wait_tween.tween_callback(extraction._finish_extraction_to_shelter)
 
 
 func _find_random_field_position(world: ProceduralCityMap, minimum_player_distance: float = 18.0) -> Vector3:
@@ -8261,304 +7244,8 @@ func _refresh_objective_panel() -> void:
 	_apply_hud_layout()
 
 
-func _setup_procedural_field_missions(world: ProceduralCityMap) -> void:
-	field_mission_sites.clear()
-	active_field_mission = null
-	active_mission_collectibles.clear()
-	objective_panel.visible = false
-	var occupied_positions: Array[Vector3] = []
-	for site in extraction_sites:
-		if is_instance_valid(site):
-			occupied_positions.append(site.global_position)
-	for interaction in field_interactions:
-		if is_instance_valid(interaction):
-			occupied_positions.append(interaction.global_position)
-	for index in FIELD_MISSION_COUNT:
-		var mission_position := _find_randomized_mission_position(
-			world,
-			38.0,
-			36.0,
-			occupied_positions,
-			0.08
-		)
-		occupied_positions.append(mission_position)
-		var definition := _pick_field_mission_definition(index)
-		var mission_site := Node3D.new()
-		mission_site.name = "FieldMission_%02d" % (index + 1)
-		add_child(mission_site)
-		mission_site.global_position = mission_position
-		mission_site.set_meta("mission_id", index + 1)
-		mission_site.set_meta("status", "waiting")
-		mission_site.set_meta("interaction_type", "mission_start")
-		mission_site.set_meta(
-			"display_name",
-			"현장 작전 · %s · %s" % [
-				_get_field_mission_category(str(definition.get("type", "defense"))),
-				str(definition.get("title", "현장 임무")),
-			]
-		)
-		mission_site.set_meta("hold_duration", FIELD_MISSION_START_HOLD_DURATION)
-		mission_site.set_meta("interaction_distance", FIELD_INTERACTION_DISTANCE + 0.45)
-		mission_site.set_meta("completed", false)
-		for key in definition:
-			mission_site.set_meta(str(key), definition[key])
-		mission_site.add_to_group("field_mission_site")
-		mission_site.add_to_group("field_interaction")
-		field_mission_sites.append(mission_site)
-		field_interactions.append(mission_site)
-		_build_field_mission_marker(mission_site)
-
-
-func _pick_field_mission_definition(index: int) -> Dictionary:
-	return FIELD_MISSION_CATALOG.pick_definition(index, mission_random)
-
-
-func _get_field_mission_category(mission_type: String) -> String:
-	return FIELD_MISSION_CATALOG.get_category(mission_type)
-
-
-func _get_field_mission_active_radius() -> float:
-	return float(raid_zone_data.get("mission_radius", FIELD_MISSION_ACTIVE_RADIUS))
-
-
-func _get_field_mission_fail_radius() -> float:
-	return maxf(FIELD_MISSION_FAIL_RADIUS, _get_field_mission_active_radius() * 3.0)
-
-
-func _get_field_mission_rules(site: Node3D) -> String:
-	return FIELD_MISSION_CATALOG.build_rules(
-		str(site.get_meta("type", "defense")),
-		bool(site.get_meta("silence_required", false)),
-		_get_field_mission_fail_radius()
-	)
-
-
-func _format_field_mission_reward(reward: Dictionary) -> String:
-	return FIELD_MISSION_CATALOG.format_reward(reward)
-
-
-func _build_field_mission_marker(site: Node3D) -> void:
-	var mission_type := str(site.get_meta("type", "defense"))
-	var marker_color := Color("#5eb9ad")
-	var marker_text := "F · %s 작전" % _get_field_mission_category(mission_type)
-	match mission_type:
-		"stealth":
-			marker_color = Color("#6aa8b9")
-		"investigate":
-			marker_color = Color("#c5a964")
-		"stealth_reach":
-			marker_color = Color("#78b59a")
-	var marker_material := StandardMaterial3D.new()
-	marker_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	marker_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	marker_material.albedo_color = Color(marker_color, 0.16)
-	marker_material.emission_enabled = true
-	marker_material.emission = marker_color
-	marker_material.emission_energy_multiplier = 1.2
-	var ring_mesh := TorusMesh.new()
-	ring_mesh.inner_radius = 2.5
-	ring_mesh.outer_radius = 2.64
-	ring_mesh.rings = 32
-	ring_mesh.ring_segments = 12
-	ring_mesh.material = marker_material
-	var ring := MeshInstance3D.new()
-	ring.name = "MissionBoundary"
-	ring.mesh = ring_mesh
-	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	site.add_child(ring)
-	site.set_meta("marker_material", marker_material)
-
-	var active_boundary_material := StandardMaterial3D.new()
-	active_boundary_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	active_boundary_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	active_boundary_material.albedo_color = Color(marker_color, 0.10)
-	active_boundary_material.emission_enabled = true
-	active_boundary_material.emission = marker_color
-	active_boundary_material.emission_energy_multiplier = 0.65
-	var active_boundary_mesh := TorusMesh.new()
-	var active_radius := _get_field_mission_active_radius()
-	active_boundary_mesh.inner_radius = active_radius - 0.18
-	active_boundary_mesh.outer_radius = active_radius
-	active_boundary_mesh.rings = 64
-	active_boundary_mesh.ring_segments = 12
-	active_boundary_mesh.material = active_boundary_material
-	var active_boundary := MeshInstance3D.new()
-	active_boundary.name = "MissionPlayArea"
-	active_boundary.position.y = 0.025
-	active_boundary.mesh = active_boundary_mesh
-	active_boundary.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	active_boundary.visible = false
-	site.add_child(active_boundary)
-	site.set_meta("active_boundary_material", active_boundary_material)
-
-	var marker_label := Label3D.new()
-	marker_label.name = "MissionMarkerLabel"
-	marker_label.text = marker_text
-	marker_label.position = Vector3(0.0, 1.15, 0.0)
-	marker_label.font = FONT
-	marker_label.font_size = 28
-	marker_label.modulate = marker_color.lightened(0.2)
-	marker_label.outline_size = 7
-	marker_label.outline_modulate = Color(0.01, 0.02, 0.018, 0.94)
-	marker_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	marker_label.no_depth_test = true
-	site.add_child(marker_label)
-	var mission_icon_path := str(GENERATED_MISSION_ICON_PATHS.get(mission_type, ""))
-	if not mission_icon_path.is_empty() and ResourceLoader.exists(mission_icon_path):
-		var mission_icon := Sprite3D.new()
-		mission_icon.name = "MissionIcon"
-		mission_icon.texture = load(mission_icon_path) as Texture2D
-		mission_icon.pixel_size = 0.0048
-		mission_icon.position = Vector3(0.0, 0.66, 0.0)
-		mission_icon.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		mission_icon.shaded = false
-		mission_icon.transparent = true
-		mission_icon.no_depth_test = true
-		mission_icon.render_priority = 18
-		site.add_child(mission_icon)
-	if is_instance_valid(objective_scent_guidance):
-		objective_scent_guidance.call("register_site", site, "mission", "objective", 7.0)
-
-
-func _update_field_missions(delta: float) -> void:
-	if field_mission_result_timer > 0.0:
-		field_mission_result_timer = maxf(0.0, field_mission_result_timer - delta)
-		if field_mission_result_timer <= 0.0 and not is_instance_valid(active_field_mission):
-			field_objective_title = ""
-			field_objective_detail = ""
-			_refresh_objective_panel()
-	if not is_instance_valid(active_field_mission):
-		return
-
-	var distance_to_site := player.global_position.distance_to(active_field_mission.global_position)
-	if distance_to_site > _get_field_mission_fail_radius():
-		_fail_field_mission("작전 구역을 너무 멀리 이탈했습니다.")
-		return
-
-	if field_mission_phase == "preparing":
-		field_mission_prepare_timer = maxf(0.0, field_mission_prepare_timer - delta)
-		_set_field_mission_objective(
-			"작전 준비 · %s" % str(active_field_mission.get_meta("title", "현장 임무")),
-			"시작까지 %.1f초 · 주변을 확인하고 엄폐하십시오." % field_mission_prepare_timer,
-			Color("#f0c96d")
-		)
-		if field_mission_prepare_timer <= 0.0:
-			_activate_field_mission()
-		return
-
-	field_mission_runtime += delta
-	_update_field_mission_waves(delta)
-	var mission_type := str(active_field_mission.get_meta("type", "defense"))
-	match mission_type:
-		"defense":
-			_update_defense_mission(delta, distance_to_site)
-		"eliminate":
-			_update_eliminate_mission()
-		"collect":
-			_update_collect_mission()
-		"stealth":
-			_update_stealth_mission(delta, distance_to_site)
-		"investigate":
-			_update_investigation_mission(delta)
-		"stealth_reach":
-			_update_stealth_reach_mission(delta)
-
-
-func _start_field_mission(site: Node3D) -> void:
-	active_field_mission = site
-	site.set_meta("status", "active")
-	field_mission_elapsed = 0.0
-	field_mission_wave_timer = FIELD_MISSION_FIRST_WAVE_DELAY
-	field_mission_prepare_timer = FIELD_MISSION_PREPARE_DURATION
-	field_mission_phase = "preparing"
-	field_mission_spawned_enemies = 0
-	field_mission_kills = 0
-	field_mission_collected = 0
-	field_mission_result_timer = 0.0
-	field_mission_runtime = 0.0
-	field_mission_detection_time = 0.0
-	field_mission_investigation_hold = 0.0
-	field_mission_investigation_target = null
-	field_mission_noise_breached = false
-	_clear_active_mission_collectibles()
-	_set_field_mission_site_state(site, "preparing")
-	_set_field_mission_objective(
-		"작전 준비 · %s" % str(site.get_meta("title", "현장 임무")),
-		"시작까지 %.1f초 · 준비가 끝나기 전에는 적이 투입되지 않습니다." % field_mission_prepare_timer,
-		Color("#f0c96d")
-	)
-	_show_field_notice("작전 수락 · %d초 후 시작" % ceili(FIELD_MISSION_PREPARE_DURATION))
-
-
-func _activate_field_mission() -> void:
-	if not is_instance_valid(active_field_mission):
-		return
-	field_mission_phase = "active"
-	field_mission_prepare_timer = 0.0
-	field_mission_wave_timer = FIELD_MISSION_FIRST_WAVE_DELAY
-	field_mission_runtime = 0.0
-	_set_field_mission_site_state(active_field_mission, "active")
-	var mission_type := str(active_field_mission.get_meta("type", "defense"))
-	match mission_type:
-		"collect":
-			_spawn_field_mission_collectibles(int(active_field_mission.get_meta("target_count", 3)))
-		"investigate":
-			_spawn_field_mission_investigation_points(int(active_field_mission.get_meta("target_count", 3)))
-		"stealth_reach":
-			_spawn_field_mission_reach_target(float(active_field_mission.get_meta("target_distance", 13.5)))
-	_set_field_mission_objective(
-		str(active_field_mission.get_meta("title", "현장 임무")),
-		str(active_field_mission.get_meta("description", "현장 목표를 수행하십시오.")),
-		Color("#efd06f")
-	)
-	_show_field_notice("현장 임무 시작 · 첫 위협 접근 %.1f초" % FIELD_MISSION_FIRST_WAVE_DELAY)
-
-
-func _get_field_mission_enemy_total() -> int:
-	if not is_instance_valid(active_field_mission):
-		return 0
-	var mission_type := str(active_field_mission.get_meta("type", "defense"))
-	if mission_type in ["stealth", "investigate", "stealth_reach"]:
-		return int(active_field_mission.get_meta("guard_count", 0))
-	return int(active_field_mission.get_meta("enemy_count", 0))
-
-
-func _update_field_mission_waves(delta: float) -> void:
-	if field_mission_phase != "active" or not is_instance_valid(active_field_mission):
-		return
-	var total_enemies := _get_field_mission_enemy_total()
-	if total_enemies <= 0 or field_mission_spawned_enemies >= total_enemies:
-		return
-	field_mission_wave_timer = maxf(0.0, field_mission_wave_timer - delta)
-	if field_mission_wave_timer > 0.0:
-		return
-	var progress := float(field_mission_spawned_enemies) / float(maxi(1, total_enemies))
-	var wave_size := 3 if progress >= 0.55 else 2
-	wave_size = mini(wave_size, total_enemies - field_mission_spawned_enemies)
-	var mission_type := str(active_field_mission.get_meta("type", "defense"))
-	if mission_type in ["stealth", "investigate", "stealth_reach"]:
-		_spawn_field_mission_patrols(wave_size, progress)
-	else:
-		_spawn_field_mission_enemies(wave_size, progress)
-	field_mission_wave_timer = lerpf(4.2, 2.2, progress)
-
-
-func _get_field_mission_wave_status() -> String:
-	var total_enemies := _get_field_mission_enemy_total()
-	if total_enemies <= 0:
-		return ""
-	var stage := clampi(
-		1 + floori(3.0 * float(field_mission_spawned_enemies) / float(maxi(1, total_enemies))),
-		1,
-		3
-	)
-	if field_mission_spawned_enemies < total_enemies:
-		return "다음 접근 %.1f초 · 위협 %d단계" % [field_mission_wave_timer, stage]
-	return "현장 투입 완료 · 위협 %d단계" % stage
-
-
 func _update_defense_mission(delta: float, distance_to_site: float) -> void:
-	var hold_radius := _get_field_mission_active_radius()
+	var hold_radius := field_missions._get_field_mission_active_radius()
 	var inside_hold_area := distance_to_site <= hold_radius
 	if inside_hold_area:
 		field_mission_elapsed += delta
@@ -8572,24 +7259,24 @@ func _update_defense_mission(delta: float, distance_to_site: float) -> void:
 		else "방어 구역으로 복귀하십시오 · 이탈 %.0fm"
 		% distance_to_site
 	)
-	_set_field_mission_objective(
+	field_missions._set_field_mission_objective(
 		str(active_field_mission.get_meta("title", "구역 방어")),
 		detail,
 		Color("#efd06f") if inside_hold_area else Color("#ff9b77")
 	)
 	if field_mission_elapsed >= duration and field_mission_spawned_enemies >= enemy_count:
-		_complete_field_mission()
+		field_missions._complete_field_mission()
 
 
 func _update_eliminate_mission() -> void:
 	var target_count := int(active_field_mission.get_meta("target_count", 5))
-	_set_field_mission_objective(
+	field_missions._set_field_mission_objective(
 		str(active_field_mission.get_meta("title", "적 소탕")),
 		"임무 대상 제거  %d / %d" % [mini(field_mission_kills, target_count), target_count],
 		Color("#efd06f")
 	)
 	if field_mission_kills >= target_count:
-		_complete_field_mission()
+		field_missions._complete_field_mission()
 
 
 func _update_collect_mission() -> void:
@@ -8603,23 +7290,23 @@ func _update_collect_mission() -> void:
 			collectible.queue_free()
 			_show_field_notice("임무 물자 회수 · %d개" % field_mission_collected)
 	var target_count := int(active_field_mission.get_meta("target_count", 3))
-	_set_field_mission_objective(
+	field_missions._set_field_mission_objective(
 		str(active_field_mission.get_meta("title", "물자 회수")),
 		"현장 목표물 회수  %d / %d" % [mini(field_mission_collected, target_count), target_count],
 		Color("#efd06f")
 	)
 	if field_mission_collected >= target_count:
-		_complete_field_mission()
+		field_missions._complete_field_mission()
 
 
 func _update_stealth_mission(delta: float, distance_to_site: float) -> void:
 	if field_mission_noise_breached:
-		_fail_field_mission("총성이 울려 잠복 위치가 노출됐습니다.")
+		field_missions._fail_field_mission("총성이 울려 잠복 위치가 노출됐습니다.")
 		return
-	var detected := _update_field_mission_detection(delta)
+	var detected := field_missions._update_field_mission_detection(delta)
 	var detection_grace := float(active_field_mission.get_meta("detection_grace", 1.25))
 	if field_mission_detection_time >= detection_grace:
-		_fail_field_mission("수색대에게 위치를 들켰습니다.")
+		field_missions._fail_field_mission("수색대에게 위치를 들켰습니다.")
 		return
 	var hold_radius := FIELD_MISSION_STEALTH_HOLD_RADIUS
 	var inside_hide_area := distance_to_site <= hold_radius
@@ -8638,24 +7325,24 @@ func _update_stealth_mission(delta: float, distance_to_site: float) -> void:
 	elif not inside_hide_area:
 		detail = "은신 지점으로 복귀하십시오 · 거리 %.0fm" % distance_to_site
 		color = Color("#d7bd72")
-	_set_field_mission_objective(
+	field_missions._set_field_mission_objective(
 		str(active_field_mission.get_meta("title", "은밀 잠복")),
 		detail,
 		color
 	)
 	if field_mission_elapsed >= duration:
-		_complete_field_mission()
+		field_missions._complete_field_mission()
 
 
 func _update_investigation_mission(delta: float) -> void:
 	var silence_required := bool(active_field_mission.get_meta("silence_required", false))
 	if silence_required and field_mission_noise_breached:
-		_fail_field_mission("총성으로 조사 현장이 노출됐습니다.")
+		field_missions._fail_field_mission("총성으로 조사 현장이 노출됐습니다.")
 		return
-	var detected := _update_field_mission_detection(delta)
+	var detected := field_missions._update_field_mission_detection(delta)
 	var detection_grace := float(active_field_mission.get_meta("detection_grace", 1.25))
 	if silence_required and field_mission_detection_time >= detection_grace:
-		_fail_field_mission("감시망에 발각되어 기록을 확보하지 못했습니다.")
+		field_missions._fail_field_mission("감시망에 발각되어 기록을 확보하지 못했습니다.")
 		return
 	var nearest: Node3D
 	var nearest_distance := INF
@@ -8698,27 +7385,27 @@ func _update_investigation_mission(delta: float) -> void:
 			field_mission_collected,
 			target_count,
 		]
-	_set_field_mission_objective(
+	field_missions._set_field_mission_objective(
 		str(active_field_mission.get_meta("title", "현장 조사")),
 		detail,
 		color
 	)
 	if field_mission_collected >= target_count:
-		_complete_field_mission()
+		field_missions._complete_field_mission()
 
 
 func _update_stealth_reach_mission(delta: float) -> void:
 	if field_mission_noise_breached:
-		_fail_field_mission("총성이 울려 우회 경로가 차단됐습니다.")
+		field_missions._fail_field_mission("총성이 울려 우회 경로가 차단됐습니다.")
 		return
-	var detected := _update_field_mission_detection(delta)
+	var detected := field_missions._update_field_mission_detection(delta)
 	var detection_grace := float(active_field_mission.get_meta("detection_grace", 1.0))
 	if field_mission_detection_time >= detection_grace:
-		_fail_field_mission("순찰대에게 우회 이동을 들켰습니다.")
+		field_missions._fail_field_mission("순찰대에게 우회 이동을 들켰습니다.")
 		return
 	var target := active_mission_collectibles[0] if not active_mission_collectibles.is_empty() else null
 	if not is_instance_valid(target):
-		_fail_field_mission("안전 지점 신호를 찾을 수 없습니다.")
+		field_missions._fail_field_mission("안전 지점 신호를 찾을 수 없습니다.")
 		return
 	var target_distance := player.global_position.distance_to((target as Node3D).global_position)
 	var detail := "안전 지점까지 %.1fm · 시야에 들지 마십시오." % target_distance
@@ -8729,489 +7416,13 @@ func _update_stealth_reach_mission(delta: float) -> void:
 			detection_grace,
 		]
 		color = Color("#ff9b77")
-	_set_field_mission_objective(
+	field_missions._set_field_mission_objective(
 		str(active_field_mission.get_meta("title", "감시망 우회")),
 		detail,
 		color
 	)
 	if target_distance <= 1.55:
-		_complete_field_mission()
-
-
-func _update_field_mission_detection(delta: float) -> bool:
-	if field_mission_runtime < 1.0:
-		field_mission_detection_time = 0.0
-		return false
-	var detected := _is_player_detected_for_field_mission()
-	if detected:
-		field_mission_detection_time += delta
-	else:
-		field_mission_detection_time = maxf(0.0, field_mission_detection_time - delta * 1.8)
-	return detected
-
-
-func _is_player_detected_for_field_mission() -> bool:
-	if not is_instance_valid(active_field_mission):
-		return false
-	var mission_id := int(active_field_mission.get_meta("mission_id", -1))
-	for enemy in enemies:
-		if not is_instance_valid(enemy) or bool(enemy.get("dying")):
-			continue
-		if int(enemy.get_meta("field_mission_id", -2)) != mission_id:
-			continue
-		if bool(enemy.get("alerted")) and bool(enemy.get("has_current_line_of_sight")):
-			return true
-	return false
-
-
-func _active_field_mission_requires_silence() -> bool:
-	return (
-		is_instance_valid(active_field_mission)
-		and bool(active_field_mission.get_meta("silence_required", false))
-	)
-
-
-func _spawn_field_mission_enemies(count: int, escalation: float = 0.0) -> void:
-	if not is_instance_valid(active_field_mission):
-		return
-	var world := $World as ProceduralCityMap
-	var mission_id := int(active_field_mission.get_meta("mission_id", 0))
-	for squad_size in _build_enemy_squad_sizes(count):
-		var squad_anchor := _find_field_mission_enemy_position(
-			world,
-			active_field_mission.global_position
-		)
-		var kinds: Array[String] = []
-		for member_index in squad_size:
-			var loadout_roll := posmod(
-				field_mission_spawned_enemies + member_index + mission_id,
-				7
-			)
-			kinds.append(
-				"grenadier"
-					if loadout_roll == 6
-					else ("melee" if loadout_roll == 4 else "pistol")
-			)
-		var threat := maxf(
-			night_intensity,
-			float(raid_zone_data.get("threat", 0.0)) + 0.16 + escalation * 0.34
-		)
-		var spawned := _spawn_enemy_squad(
-			world,
-			squad_anchor,
-			kinds,
-			threat,
-			active_field_mission.global_position,
-			{"field_mission_id": mission_id}
-		)
-		field_mission_spawned_enemies += spawned.size()
-
-
-func _spawn_field_mission_patrols(count: int, escalation: float = 0.0) -> void:
-	if not is_instance_valid(active_field_mission):
-		return
-	var world := $World as ProceduralCityMap
-	var mission_id := int(active_field_mission.get_meta("mission_id", 0))
-	var patrol_index := 0
-	for squad_size in _build_enemy_squad_sizes(count):
-		var squad_anchor := _find_field_mission_enemy_position(
-			world,
-			active_field_mission.global_position
-		)
-		var kinds: Array[String] = []
-		for member_index in squad_size:
-			kinds.append("melee" if (patrol_index + member_index) % 4 == 3 else "pistol")
-		var threat := maxf(
-			night_intensity,
-			float(raid_zone_data.get("threat", 0.0)) + 0.08 + escalation * 0.26
-		)
-		var spawned := _spawn_enemy_squad(
-			world,
-			squad_anchor,
-			kinds,
-			threat,
-			Vector3.INF,
-			{
-				"field_mission_id": mission_id,
-				"stealth_mission_guard": true,
-			}
-		)
-		field_mission_spawned_enemies += spawned.size()
-		patrol_index += squad_size
-
-
-func _find_field_mission_enemy_position(
-	world: ProceduralCityMap,
-	mission_position: Vector3
-) -> Vector3:
-	var fallback := world.find_nearest_physically_open_position(
-		mission_position + Vector3(FIELD_MISSION_ENEMY_MAX_SITE_DISTANCE, 0.0, 0.0),
-		0.72,
-		[player.get_rid()]
-	)
-	fallback.y = 0.08
-	for attempt in 32:
-		var angle := spawn_random.randf_range(0.0, TAU)
-		var distance := spawn_random.randf_range(
-			FIELD_MISSION_ENEMY_MIN_SITE_DISTANCE,
-			FIELD_MISSION_ENEMY_MAX_SITE_DISTANCE
-		)
-		var candidate := world.find_nearest_physically_open_position(
-			mission_position + Vector3(cos(angle), 0.0, sin(angle)) * distance,
-			0.72,
-			[player.get_rid()]
-		)
-		candidate.y = 0.08
-		fallback = candidate
-		if (
-			candidate.distance_to(player.global_position) >= FIELD_MISSION_ENEMY_MIN_PLAYER_DISTANCE
-			and not world.is_position_in_safe_zone(candidate)
-		):
-			return candidate
-	if fallback.distance_to(player.global_position) < FIELD_MISSION_ENEMY_MIN_PLAYER_DISTANCE:
-		var reinforcement_position := _find_reinforcement_position()
-		if reinforcement_position != Vector3.INF:
-			return reinforcement_position
-	return fallback
-
-
-func _spawn_field_mission_investigation_points(count: int) -> void:
-	if not is_instance_valid(active_field_mission):
-		return
-	var world := $World as ProceduralCityMap
-	for index in count:
-		var angle := (
-			TAU * float(index) / float(maxi(1, count))
-			+ spawn_random.randf_range(-0.42, 0.42)
-		)
-		var distance := spawn_random.randf_range(12.0, 24.0)
-		var requested := (
-			active_field_mission.global_position
-			+ Vector3(cos(angle), 0.0, sin(angle)) * distance
-		)
-		var position := world.find_nearest_physically_open_position(
-			requested,
-			0.52,
-			[player.get_rid()]
-		)
-		var clue := Node3D.new()
-		clue.name = "MissionClue_%02d" % (index + 1)
-		add_child(clue)
-		clue.global_position = Vector3(position.x, 0.08, position.z)
-		_build_field_mission_investigation_point(clue)
-		active_mission_collectibles.append(clue)
-
-
-func _build_field_mission_investigation_point(clue: Node3D) -> void:
-	var case_material := StandardMaterial3D.new()
-	case_material.albedo_color = Color("#39443f")
-	case_material.metallic = 0.38
-	case_material.roughness = 0.72
-	var case_mesh := BoxMesh.new()
-	case_mesh.size = Vector3(0.52, 0.12, 0.38)
-	case_mesh.material = case_material
-	var case := MeshInstance3D.new()
-	case.name = "EvidenceCase"
-	case.position.y = 0.11
-	case.rotation.y = spawn_random.randf_range(-0.45, 0.45)
-	case.mesh = case_mesh
-	clue.add_child(case)
-	var signal_material := StandardMaterial3D.new()
-	signal_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	signal_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	signal_material.albedo_color = Color(0.92, 0.73, 0.32, 0.72)
-	signal_material.emission_enabled = true
-	signal_material.emission = Color("#d8b456")
-	signal_material.emission_energy_multiplier = 2.0
-	var signal_mesh := CylinderMesh.new()
-	signal_mesh.top_radius = 0.09
-	signal_mesh.bottom_radius = 0.12
-	signal_mesh.height = 0.06
-	signal_mesh.material = signal_material
-	var signal_marker := MeshInstance3D.new()
-	signal_marker.name = "EvidenceSignal"
-	signal_marker.position.y = 0.21
-	signal_marker.mesh = signal_mesh
-	clue.add_child(signal_marker)
-	_add_interaction_marker(clue, Color("#d8b456"), 0.58, false)
-	var label := Label3D.new()
-	label.name = "EvidenceLabel"
-	label.text = "조사"
-	label.position = Vector3(0.0, 0.86, 0.0)
-	label.font = FONT
-	label.font_size = 23
-	label.modulate = Color("#f0d994")
-	label.outline_size = 6
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	clue.add_child(label)
-	if is_instance_valid(objective_scent_guidance):
-		objective_scent_guidance.call("register_site", clue, "active_target", "objective", 6.0)
-
-
-func _spawn_field_mission_reach_target(target_distance: float) -> void:
-	if not is_instance_valid(active_field_mission):
-		return
-	var world := $World as ProceduralCityMap
-	var angle := spawn_random.randf_range(0.0, TAU)
-	var requested := (
-		active_field_mission.global_position
-		+ Vector3(cos(angle), 0.0, sin(angle)) * maxf(30.0, target_distance)
-	)
-	var position := world.find_nearest_physically_open_position(
-		requested,
-		0.62,
-		[player.get_rid()]
-	)
-	var target := Node3D.new()
-	target.name = "StealthReachTarget"
-	add_child(target)
-	target.global_position = Vector3(position.x, 0.08, position.z)
-	_build_field_mission_reach_target(target)
-	active_mission_collectibles.append(target)
-
-
-func _build_field_mission_reach_target(target: Node3D) -> void:
-	var material := StandardMaterial3D.new()
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = Color(0.34, 0.78, 0.58, 0.22)
-	material.emission_enabled = true
-	material.emission = Color("#67c898")
-	material.emission_energy_multiplier = 1.8
-	var ring_mesh := TorusMesh.new()
-	ring_mesh.inner_radius = 0.82
-	ring_mesh.outer_radius = 0.94
-	ring_mesh.rings = 28
-	ring_mesh.ring_segments = 10
-	ring_mesh.material = material
-	var ring := MeshInstance3D.new()
-	ring.name = "SafeRouteRing"
-	ring.mesh = ring_mesh
-	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	target.add_child(ring)
-	var label := Label3D.new()
-	label.name = "ReachTargetLabel"
-	label.text = "안전 지점"
-	label.position = Vector3(0.0, 1.02, 0.0)
-	label.font = FONT
-	label.font_size = 25
-	label.modulate = Color("#9be0bb")
-	label.outline_size = 7
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	target.add_child(label)
-	if is_instance_valid(objective_scent_guidance):
-		objective_scent_guidance.call("register_site", target, "active_target", "objective", 6.5)
-
-
-func _spawn_field_mission_collectibles(count: int) -> void:
-	if not is_instance_valid(active_field_mission):
-		return
-	var world := $World as ProceduralCityMap
-	for index in count:
-		var angle := TAU * float(index) / float(maxi(1, count)) + spawn_random.randf_range(-0.35, 0.35)
-		var requested := (
-			active_field_mission.global_position
-			+ Vector3(cos(angle), 0.0, sin(angle))
-			* spawn_random.randf_range(11.0, 22.0)
-		)
-		var position := world.find_nearest_physically_open_position(
-			requested,
-			0.52,
-			[player.get_rid()]
-		)
-		var collectible := Node3D.new()
-		collectible.name = "MissionCollectible_%02d" % (index + 1)
-		add_child(collectible)
-		collectible.global_position = Vector3(position.x, 0.08, position.z)
-		_build_field_mission_collectible(collectible)
-		active_mission_collectibles.append(collectible)
-
-
-func _build_field_mission_collectible(collectible: Node3D) -> void:
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = Color("#e2c56a")
-	material.emission_enabled = true
-	material.emission = Color("#f2cf69")
-	material.emission_energy_multiplier = 2.2
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = 0.22
-	mesh.bottom_radius = 0.28
-	mesh.height = 0.42
-	mesh.radial_segments = 12
-	mesh.material = material
-	var prop := MeshInstance3D.new()
-	prop.name = "MissionCollectibleSignal"
-	prop.position.y = 0.24
-	prop.mesh = mesh
-	collectible.add_child(prop)
-	_add_interaction_marker(collectible, Color("#efd06f"), 0.68, false)
-	var label := Label3D.new()
-	label.name = "MissionCollectibleLabel"
-	label.text = "회수"
-	label.position = Vector3(0.0, 0.94, 0.0)
-	label.font = FONT
-	label.font_size = 24
-	label.modulate = Color("#ffe79a")
-	label.outline_size = 6
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	collectible.add_child(label)
-	if is_instance_valid(objective_scent_guidance):
-		objective_scent_guidance.call("register_site", collectible, "active_target", "objective", 6.0)
-
-
-func _complete_field_mission() -> void:
-	if not is_instance_valid(active_field_mission):
-		return
-	var completed_site := active_field_mission
-	completed_site.set_meta("status", "completed")
-	var reward_text := _grant_field_mission_reward(
-		completed_site.get_meta("reward", {}) as Dictionary
-	)
-	var mission_title := str(completed_site.get_meta("title", "현장 임무"))
-	if not completed_mission_titles.has(mission_title):
-		completed_mission_titles.append(mission_title)
-		completed_mission_xp += 70
-	_set_field_mission_site_state(completed_site, "completed")
-	_set_field_mission_objective(
-		"임무 완료 · %s" % mission_title,
-		"보상  %s · 경험치 +70" % reward_text,
-		Color("#7de0a8")
-	)
-	_show_field_notice("임무 완료 · %s" % reward_text)
-	_advance_contract_progress("field_mission")
-	field_mission_result_timer = FIELD_MISSION_RESULT_DURATION
-	field_mission_phase = "idle"
-	field_mission_prepare_timer = 0.0
-	active_field_mission = null
-	_clear_active_mission_collectibles()
-
-
-func _fail_field_mission(reason: String) -> void:
-	if not is_instance_valid(active_field_mission):
-		return
-	var failed_site := active_field_mission
-	failed_site.set_meta("status", "failed")
-	_set_field_mission_site_state(failed_site, "failed")
-	_set_field_mission_objective(
-		"임무 실패 · %s" % str(failed_site.get_meta("title", "현장 임무")),
-		reason,
-		Color("#ef796f")
-	)
-	_show_field_notice("임무 실패 · %s" % reason)
-	field_mission_result_timer = FIELD_MISSION_RESULT_DURATION
-	field_mission_phase = "idle"
-	field_mission_prepare_timer = 0.0
-	active_field_mission = null
-	_clear_active_mission_collectibles()
-
-
-func _grant_field_mission_reward(reward: Dictionary) -> String:
-	var reward_parts: Array[String] = []
-	var canned_food_reward := int(reward.get("canned_food", 0))
-	var medkit_reward := int(reward.get("medkits", 0))
-	var ammo_reward := int(reward.get("ammo", 0))
-	if canned_food_reward > 0:
-		GameState.canned_food += canned_food_reward
-		reward_parts.append("통조림 %d" % canned_food_reward)
-	if medkit_reward > 0:
-		GameState.medkits += medkit_reward
-		reward_parts.append("구급약 %d" % medkit_reward)
-	if ammo_reward > 0:
-		var ammo_id := GameState.get_mission_reward_ammo_id()
-		GameState.set_ammo_count(ammo_id, GameState.get_ammo_count(ammo_id) + ammo_reward)
-		if ammo_id == GameState.equipped_ammo_id:
-			reserve_ammo = GameState.get_ammo_count(ammo_id)
-			GameState.reserve_ammo = reserve_ammo
-		reward_parts.append("%s %d발" % [
-			str(WEAPON_SYSTEM.get_ammo(ammo_id).get("display_name", "탄환")),
-			ammo_reward,
-		])
-	var component_reward := maxi(0, int(reward.get("component", 0)))
-	if component_reward > 0:
-		var component_ids := ["rubber_gasket", "scope_lens", "magazine_spring"]
-		var component_names := ["고무 패킹", "스코프 렌즈", "탄창 스프링"]
-		var rewarded_components: Array[String] = []
-		for _reward_index in component_reward:
-			var component_index := spawn_random.randi_range(0, component_ids.size() - 1)
-			GameState.add_mod_component(component_ids[component_index], 1)
-			rewarded_components.append(component_names[component_index])
-		reward_parts.append("부품 %d개 · %s" % [
-			component_reward,
-			", ".join(rewarded_components),
-		])
-	GameState.save_persistent_state()
-	_update_equipment_ui()
-	return ", ".join(reward_parts) if not reward_parts.is_empty() else "현장 보급품"
-
-
-func _set_field_mission_site_state(site: Node3D, state: String) -> void:
-	var color := Color("#5eb9ad")
-	var label_text := str(site.get_meta("title", "현장 임무"))
-	match state:
-		"preparing":
-			color = Color("#e0b957")
-			label_text = "작전 준비 중"
-		"active":
-			color = Color("#e7c765")
-			label_text = "작전 진행 중"
-		"completed":
-			color = Color("#69d89c")
-			label_text = "완료"
-		"failed":
-			color = Color("#d35f5f")
-			label_text = "실패"
-	var marker_material := site.get_meta("marker_material", null) as StandardMaterial3D
-	if marker_material:
-		marker_material.albedo_color = Color(color.r, color.g, color.b, 0.24)
-		marker_material.emission = color
-	var marker_label := site.get_node_or_null("MissionMarkerLabel") as Label3D
-	if marker_label:
-		marker_label.text = label_text
-		marker_label.modulate = color
-	var active_boundary := site.get_node_or_null("MissionPlayArea") as MeshInstance3D
-	if active_boundary:
-		active_boundary.visible = state in ["preparing", "active"]
-	var active_boundary_material := (
-		site.get_meta("active_boundary_material", null) as StandardMaterial3D
-	)
-	if active_boundary_material:
-		active_boundary_material.albedo_color = Color(color.r, color.g, color.b, 0.10)
-		active_boundary_material.emission = color
-
-
-func _set_field_mission_objective(title: String, detail: String, color: Color) -> void:
-	var objective_detail := detail
-	var objective_title := title
-	if is_instance_valid(active_field_mission):
-		var category := _get_field_mission_category(
-			str(active_field_mission.get_meta("type", "defense"))
-		)
-		if not objective_title.begins_with("["):
-			objective_title = "[%s 작전] %s" % [category, objective_title]
-		if (
-			str(active_field_mission.get_meta("status", "")) == "active"
-			and field_mission_phase == "active"
-		):
-			var wave_status := _get_field_mission_wave_status()
-			if not wave_status.is_empty():
-				var compact_detail_lines := objective_detail.split("\n", false)
-				var compact_detail := (
-					compact_detail_lines[0]
-					if not compact_detail_lines.is_empty()
-					else "현장 목표 수행 중"
-				)
-				objective_detail = "%s · %s" % [
-					compact_detail,
-					wave_status,
-				]
-	field_objective_title = objective_title
-	field_objective_detail = objective_detail
-	field_objective_color = color
-	_refresh_objective_panel()
+		field_missions._complete_field_mission()
 
 
 func _clear_active_mission_collectibles() -> void:
@@ -9616,46 +7827,6 @@ func _get_cowering_resident_texture(direction_name: String) -> Texture2D:
 	return texture
 
 
-func _update_extraction_prompt() -> void:
-	_update_field_interactions(0.0)
-
-
-func _update_extraction_discovery() -> void:
-	for site in extraction_sites:
-		if not is_instance_valid(site) or bool(site.get_meta("map_discovered", false)):
-			continue
-		if not _is_extraction_in_player_sight(site):
-			continue
-		var index := int(site.get_meta("extraction_index", -1))
-		if index < 0:
-			continue
-		site.set_meta("map_discovered", true)
-		discovered_extraction_indices[index] = true
-		if is_instance_valid(tactical_map):
-			tactical_map.call("discover_extraction", index)
-		_show_field_notice("탈출구 발견 · 전술 지도에 하수구 위치가 기록되었습니다.")
-
-
-func _is_extraction_in_player_sight(site: Node3D) -> bool:
-	var offset := site.global_position - player.global_position
-	offset.y = 0.0
-	var distance := offset.length()
-	var in_visibility_shape := distance <= 10.5
-	if not in_visibility_shape and laser_aim_held and distance <= 32.0:
-		var aim_direction := _get_perception_aim_direction()
-		aim_direction.y = 0.0
-		in_visibility_shape = aim_direction.normalized().dot(offset.normalized()) >= cos(deg_to_rad(58.0))
-	if not in_visibility_shape:
-		return false
-	var query := PhysicsRayQueryParameters3D.create(
-		player.global_position + Vector3(0, 0.55, 0),
-		site.global_position + Vector3(0, 0.55, 0),
-		COLLISION_PROFILES.WORLD_ONLY_SIGHT_MASK
-	)
-	query.exclude = [player.get_rid()]
-	return player.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
-
-
 func _update_field_interactions(delta: float) -> void:
 	var previous_interaction := nearby_field_interaction
 	var eligible_candidates: Array[Node3D] = []
@@ -9863,7 +8034,7 @@ func _complete_field_interaction(point: Node3D) -> void:
 			hud.field_interaction_touch_held = false
 			if hud.field_interaction_panel:
 				hud.field_interaction_panel.visible = false
-			_start_field_mission(point)
+			field_missions._start_field_mission(point)
 		return
 	if interaction_type == "lore_clue":
 		field_interaction_hold_time = 0.0
@@ -9875,7 +8046,7 @@ func _complete_field_interaction(point: Node3D) -> void:
 		field_interaction_hold_time = 0.0
 		field_interaction_keyboard_held = false
 		hud.field_interaction_touch_held = false
-		_attempt_take_jackpot_cargo(point)
+		jackpot._attempt_take_jackpot_cargo(point)
 		return
 	if interaction_type == "rescue":
 		var occupied_after_escort: int = GameState.rescued_workers + rescued_followers.size()
@@ -9886,9 +8057,9 @@ func _complete_field_interaction(point: Node3D) -> void:
 	point.set_meta("completed", true)
 	match interaction_type:
 		"jackpot_clue":
-			_handle_jackpot_clue()
+			jackpot._handle_jackpot_clue()
 		"jackpot_power":
-			_handle_jackpot_power()
+			jackpot._handle_jackpot_power()
 		"loot_container":
 			_open_field_loot_container(point)
 		"high_value_cache", "dynamic_incident_cache":
@@ -10042,7 +8213,7 @@ func _recover_previous_corpse() -> void:
 	var recovered_cargo := loot.get("raid_special_cargo", {}) as Dictionary
 	if not recovered_cargo.is_empty():
 		GameState.raid_special_cargo = recovered_cargo.duplicate(true)
-		_restore_jackpot_cargo_presentation()
+		jackpot._restore_jackpot_cargo_presentation()
 	var recovered_weapon_id := str(loot.get("equipped_weapon_id", ""))
 	if (
 		not recovered_weapon_id.is_empty()
@@ -10194,52 +8365,6 @@ func _commit_rescued_followers() -> int:
 	if accepted > 0:
 		_advance_contract_progress("rescue", accepted)
 	return accepted
-
-
-func _begin_extraction() -> void:
-	if extraction_transition_active or player_death_sequence_active or player_health <= 0:
-		return
-	if is_instance_valid(nearby_field_interaction):
-		selected_extraction_index = int(
-			nearby_field_interaction.get_meta("extraction_index", 0)
-		)
-		selected_extraction_multiplier = float(
-			nearby_field_interaction.get_meta("reward_multiplier", 1.0)
-		)
-		selected_extraction_title = str(
-			nearby_field_interaction.get_meta("route_title", "안전 귀환로")
-		)
-	else:
-		selected_extraction_index = 0
-		selected_extraction_multiplier = 1.0
-		selected_extraction_title = "안전 귀환로"
-	extraction_transition_active = true
-	_refresh_pointer_mode()
-	_update_combat_overlay_visibility()
-	extraction_prompt.visible = false
-	fire_button_held = false
-	mouse_fire_held = false
-	laser_aim_held = false
-	field_interaction_keyboard_held = false
-	hud.field_interaction_touch_held = false
-	pickup_touch_held = false
-	touch_vector = Vector2.ZERO
-	player.velocity = Vector3.ZERO
-	recoil_velocity = Vector3.ZERO
-	if is_instance_valid(extraction_fade):
-		extraction_fade.mouse_filter = Control.MOUSE_FILTER_STOP
-	var rescued_count := _commit_rescued_followers()
-	extraction_success_label.text = "탈출 성공 · %s" % selected_extraction_title
-	GameState.finish_corpse_recovery_attempt()
-	_save_run_state()
-	get_tree().paused = true
-	var tween := create_tween()
-	tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
-	tween.tween_property(extraction_fade, "color:a", 1.0, 0.65)
-	tween.tween_property(extraction_success_label, "modulate:a", 1.0, 0.32)
-	tween.tween_interval(0.55)
-	tween.tween_property(extraction_success_label, "modulate:a", 0.0, 0.2)
-	tween.tween_callback(_show_extraction_result.bind(rescued_count))
 
 
 func _setup_weather_effects() -> void:
@@ -10454,7 +8579,7 @@ func _input(event: InputEvent) -> void:
 			if is_instance_valid(nearby_field_interaction):
 				var interaction_type := str(nearby_field_interaction.get_meta("interaction_type", ""))
 				if interaction_type == "extraction" and key_event.pressed:
-					_begin_extraction()
+					extraction._begin_extraction()
 					field_interaction_keyboard_held = false
 				else:
 					field_interaction_keyboard_held = key_event.pressed
@@ -10617,3 +8742,51 @@ func _exit_tree() -> void:
 		bgm_player.stop()
 	if not DisplayServer.is_touchscreen_available():
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+
+# ── 모듈 위임 스텁 ─────────────────────────────────────────────
+# 함수 본문은 scripts/raid/* 모듈로 옮겨졌다. 하지만 적 스크립트와
+# 테스트가 call()로 main을 통해 부르는 계약이 있어, 이름을 유지한다.
+
+
+func _begin_extraction() -> void:
+	extraction._begin_extraction()
+
+
+func _show_extraction_result(rescued_count: int) -> void:
+	extraction._show_extraction_result(rescued_count)
+
+
+func _grant_extraction_route_bonus() -> Dictionary:
+	return extraction._grant_extraction_route_bonus()
+
+
+func _update_field_missions(delta: float) -> void:
+	field_missions._update_field_missions(delta)
+
+
+func _fail_field_mission(reason: String) -> void:
+	field_missions._fail_field_mission(reason)
+
+
+func _grant_field_mission_reward(reward: Dictionary) -> String:
+	return field_missions._grant_field_mission_reward(reward)
+
+
+func _is_player_detected_for_field_mission() -> bool:
+	return field_missions._is_player_detected_for_field_mission()
+
+
+func _update_jackpot_event(delta: float) -> void:
+	jackpot._update_jackpot_event(delta)
+
+
+func _settle_jackpot_cargo() -> Dictionary:
+	return jackpot._settle_jackpot_cargo()
+
+
+func _update_faction_conflicts(delta: float) -> void:
+	incidents._update_faction_conflicts(delta)
+
+
+func _spawn_dynamic_convoy_incident(world: ProceduralCityMap) -> void:
+	incidents._spawn_dynamic_convoy_incident(world)

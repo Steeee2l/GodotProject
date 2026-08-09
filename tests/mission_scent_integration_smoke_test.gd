@@ -26,7 +26,7 @@ func _run() -> void:
 
 	var player := main_scene.get("player") as Node3D
 	var found_hidden_distant_marker := false
-	for site_value in main_scene.get("field_mission_sites"):
+	for site_value in main_scene.get("field_missions").field_mission_sites:
 		var site := site_value as Node3D
 		if player.global_position.distance_to(site.global_position) <= 8.0:
 			continue

@@ -60,7 +60,7 @@ func _run() -> void:
 	assert((tactical_map.get("extraction_profiles") as Array).size() == 3)
 	assert((tactical_map.get("raid_markers") as Array).size() >= 4)
 
-	var jackpot_clue := main_scene.get("jackpot_clue_site") as Node3D
+	var jackpot_clue := main_scene.get("jackpot").jackpot_clue_site as Node3D
 	assert(is_instance_valid(jackpot_clue))
 	assert(jackpot_clue.get_node_or_null("JackpotPropSprite") is Sprite3D)
 	var jackpot_hud := main_scene.get("hud").jackpot_hud as PanelContainer
@@ -68,21 +68,21 @@ func _run() -> void:
 	assert(jackpot_hud.size.y <= 70.0)
 	assert((main_scene.get("hud").jackpot_detail_label as Label).text.contains("TAB"))
 	main_scene.call("_complete_field_interaction", jackpot_clue)
-	assert(str(main_scene.get("jackpot_state")) == "power")
-	var jackpot_power := main_scene.get("jackpot_power_site") as Node3D
+	assert(str(main_scene.get("jackpot").jackpot_state) == "power")
+	var jackpot_power := main_scene.get("jackpot").jackpot_power_site as Node3D
 	assert(is_instance_valid(jackpot_power))
 	main_scene.call("_complete_field_interaction", jackpot_power)
-	assert(str(main_scene.get("jackpot_state")) == "alarm")
+	assert(str(main_scene.get("jackpot").jackpot_state) == "alarm")
 	var jackpot_enemy_count := (main_scene.get("enemies") as Array).size()
 	main_scene.call("_update_jackpot_event", 1.0)
 	assert((main_scene.get("enemies") as Array).size() > jackpot_enemy_count)
-	var jackpot_cargo := main_scene.get("jackpot_cargo_site") as Node3D
+	var jackpot_cargo := main_scene.get("jackpot").jackpot_cargo_site as Node3D
 	assert(is_instance_valid(jackpot_cargo))
 	main_scene.call("_complete_field_interaction", jackpot_cargo)
-	assert(str(main_scene.get("jackpot_state")) == "carried")
+	assert(str(main_scene.get("jackpot").jackpot_state) == "carried")
 	assert(not (game_state.get("raid_special_cargo") as Dictionary).is_empty())
 	assert(int(game_state.call("get_raid_bag_used_slots")) <= 15)
-	assert(is_instance_valid(main_scene.get("jackpot_carried_sprite") as Sprite3D))
+	assert(is_instance_valid(main_scene.get("jackpot").jackpot_carried_sprite as Sprite3D))
 	var cargo_result := main_scene.call("_settle_jackpot_cargo") as Dictionary
 	assert(str(cargo_result.get("summary", "")).contains("3번 보급 코어"))
 	assert(str(cargo_result.get("summary", "")).contains("세계 기록"))
@@ -131,8 +131,8 @@ func _run() -> void:
 	assert(str(main_scene.get("dynamic_incident_state")) == "claimed")
 	assert(not (main_scene.get("hud").dynamic_incident_hud as PanelContainer).visible)
 
-	main_scene.set("selected_extraction_index", 2)
-	main_scene.set("selected_extraction_multiplier", 1.4)
+	main_scene.get("extraction").set("selected_extraction_index", 2)
+	main_scene.get("extraction").set("selected_extraction_multiplier", 1.4)
 	main_scene.set("raid_hotspots_opened", 2)
 	var food_before := int(game_state.get("canned_food"))
 	var bonus := main_scene.call("_grant_extraction_route_bonus") as Dictionary

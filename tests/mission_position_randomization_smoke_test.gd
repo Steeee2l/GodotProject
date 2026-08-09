@@ -54,7 +54,7 @@ func _capture_mission_positions(game_state: Node, raid_serial: int) -> Array[Vec
     main_scene.process_mode = Node.PROCESS_MODE_DISABLED
 
     var positions: Array[Vector3] = []
-    for site_value in main_scene.get("field_mission_sites"):
+    for site_value in main_scene.get("field_missions").field_mission_sites:
         var site := site_value as Node3D
         positions.append(site.global_position)
 
