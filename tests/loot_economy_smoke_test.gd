@@ -139,6 +139,7 @@ func _run() -> void:
 
 	var common_enemy_drop_count := 0
 	var any_enemy_drop_count := 0
+	var armor_enemy_drop_count := 0
 	var common_enemy_sample_count := 5000
 	for _sample in common_enemy_sample_count:
 		var common_drop := LOOT_ECONOMY.roll_enemy_drop(
@@ -152,10 +153,17 @@ func _run() -> void:
 		any_enemy_drop_count += 1
 		if str(common_drop.get("type", "")) in ["canned_food", "mod_component"]:
 			common_enemy_drop_count += 1
+		if str(common_drop.get("type", "")) == "armor":
+			armor_enemy_drop_count += 1
 	var any_enemy_drop_rate := float(any_enemy_drop_count) / float(common_enemy_sample_count)
 	var common_enemy_drop_rate := float(common_enemy_drop_count) / float(common_enemy_sample_count)
-	assert(any_enemy_drop_rate >= 0.61 and any_enemy_drop_rate <= 0.67)
-	assert(common_enemy_drop_rate >= 0.36 and common_enemy_drop_rate <= 0.44)
+	var armor_enemy_drop_rate := float(armor_enemy_drop_count) / float(common_enemy_sample_count)
+	# 방어구 드랍을 파밍 루프의 심장으로 끌어올렸다. 처치할 때마다 갈아 끼울
+	# 기회가 규칙적으로 돌아오도록 전용 판정을 둔 결과, 전체 드랍률과 방어구
+	# 비중이 함께 올라간다.
+	assert(any_enemy_drop_rate >= 0.67 and any_enemy_drop_rate <= 0.74)
+	assert(common_enemy_drop_rate >= 0.27 and common_enemy_drop_rate <= 0.35)
+	assert(armor_enemy_drop_rate >= 0.17 and armor_enemy_drop_rate <= 0.25)
 
 	var game_state := root.get_node("GameState")
 	game_state.call("reset_raid_supply_counters")

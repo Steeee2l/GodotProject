@@ -839,6 +839,11 @@ static func roll_enemy_drop(
 		var weapon_definition := _find_weapon_definition(enemy_weapon_id)
 		if not weapon_definition.is_empty() and _item_allowed(weapon_definition, stage):
 			return _materialize_item(enemy_weapon_id, stage, random)
+	# 방어구는 파밍의 심장이다. 처치할 때마다 "갈아 끼울 게 나왔나?" 기대하도록
+	# 무기 다음, 다른 소모품보다 앞에 전용 드랍 판정을 둔다. 초반 18% → 후반 30%.
+	var armor_drop_chance := 0.18 + float(stage - 1) * 0.03
+	if enemy_kind != "melee" and random.randf() < armor_drop_chance:
+		return _materialize_item(_roll_enemy_armor_id(stage, random), stage, random)
 	var ordinary_drop_chance := 0.62 + float(stage - 1) * 0.03
 	if random.randf() > ordinary_drop_chance:
 		return {}
@@ -876,6 +881,20 @@ static func roll_enemy_drop(
 		stage,
 		random
 	)
+
+
+static func _roll_enemy_armor_id(stage: int, random: RandomNumberGenerator) -> String:
+	# 후반일수록 상위 티어가 섞여 나온다. 슬롯(몸·머리·발)은 고르게 굴려서
+	# 어느 칸이든 갈아 끼울 기회가 돌아오게 한다.
+	var high_tier_chance := 0.0
+	if stage >= 3:
+		high_tier_chance = 0.30 + float(stage - 3) * 0.12
+	var pool := (
+		["riot_vest", "tactical_helmet", "tactical_boots"]
+		if random.randf() < high_tier_chance
+		else ["scav_vest", "patched_helmet", "patched_sneakers"]
+	)
+	return pool[random.randi_range(0, pool.size() - 1)]
 
 
 static func get_enemy_weapon_drop_chance(stage_tier: int) -> float:

@@ -71,7 +71,12 @@ func _run() -> void:
 	assert(int(game_state.call("get_weapon_count", "mp5")) == mp5_before + 1)
 	assert(int(game_state.call("remove_raid_bag_item", "weapon", "mp5", 1)) == 1)
 
-	var armor_before := int(game_state.call("get_equipment_count", "scav_vest"))
+	# 빈 몸통 슬롯에 방탄 조끼를 주우면, 파밍 손맛을 위해 그 자리에서 장착된다.
+	# 가방에 쌓이는 대신 바로 몸에 걸쳐지므로 소유 수(가방+착용)로 확인한다.
+	var owned_scav_before := (
+		int(game_state.call("get_equipment_count", "scav_vest"))
+		+ (1 if str(game_state.get("equipped_body_armor_id")) == "scav_vest" else 0)
+	)
 	var armor_pickup: Node3D = main_scene.call(
 		"_create_loot_pickup",
 		"armor",
@@ -80,7 +85,12 @@ func _run() -> void:
 	)
 	main_scene.set("nearby_ammo_pickup", armor_pickup)
 	main_scene.call("_collect_nearby_ammo")
-	assert(int(game_state.call("get_equipment_count", "scav_vest")) == armor_before + 1)
+	assert(str(game_state.get("equipped_body_armor_id")) == "scav_vest")
+	var owned_scav_after := (
+		int(game_state.call("get_equipment_count", "scav_vest"))
+		+ (1 if str(game_state.get("equipped_body_armor_id")) == "scav_vest" else 0)
+	)
+	assert(owned_scav_after == owned_scav_before + 1)
 	var churu_before := int(game_state.get("churu"))
 	var churu_pickup: Node3D = main_scene.call(
 		"_create_loot_pickup",

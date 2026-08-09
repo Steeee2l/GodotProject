@@ -353,8 +353,7 @@ func _collect_nearby_ammo() -> void:
 		"armor":
 			var equipment_id := str(host.nearby_ammo_pickup.get_meta("equipment_id", "scav_vest"))
 			if GameState.add_equipment(equipment_id, amount):
-				var definition := GameState.get_equipment_definition(equipment_id)
-				host.hud.ammo_notice.text = "%s 획득 · 가방에서 장착" % str(definition.get("display_name", "방어구"))
+				host.hud.ammo_notice.text = _armor_pickup_notice(equipment_id)
 			else:
 				host.hud.ammo_notice.text = "장비 정보를 확인할 수 없습니다."
 		_:
@@ -381,6 +380,24 @@ func _collect_nearby_ammo() -> void:
 	host.nearby_ammo_pickup.queue_free()
 	host.nearby_ammo_pickup = null
 	host.hud.ammo_prompt_panel.visible = false
+
+
+func _armor_pickup_notice(equipment_id: String) -> String:
+	# 파밍의 결정적 순간. 주운 방어구가 더 좋으면 즉시 갈아 끼우고, 무엇이
+	# 얼마나 좋아졌는지 그 자리에서 보여 준다. 이 피드백이 곧 손맛이다.
+	var result := GameState.equip_if_upgrade(equipment_id)
+	var display_name := str(result.get("display_name", "방어구"))
+	var slot := str(result.get("slot", "body"))
+	if not bool(result.get("equipped", false)):
+		return "%s 획득 · 지금 장비가 더 낫다 (가방 보관)" % display_name
+	if slot == "feet":
+		return "▲ %s 장착! 발이 더 가벼워졌다" % display_name
+	var new_pct := roundi(float(result.get("new_score", 0.0)))
+	var previous_id := str(result.get("previous_id", ""))
+	if previous_id.is_empty():
+		return "▲ %s 장착! 방어 +%d%%" % [display_name, new_pct]
+	var previous_pct := roundi(float(result.get("previous_score", 0.0)))
+	return "▲ %s 장착! 방어 %d%% → %d%%" % [display_name, previous_pct, new_pct]
 
 
 func _maybe_teach_raw_material(loot_type: String) -> void:

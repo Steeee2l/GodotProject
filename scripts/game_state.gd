@@ -1853,6 +1853,50 @@ func unequip_equipment(slot: String) -> bool:
 	return true
 
 
+func get_equipment_score(equipment_id: String) -> float:
+	# 슬롯마다 "좋다"의 기준이 다르다. 방어구는 피해 감소, 신발은 이동/스태미나.
+	# 이 점수 하나로 어떤 장비가 더 나은지 한 번에 비교한다.
+	var definition := get_equipment_definition(equipment_id)
+	if definition.is_empty():
+		return -1.0
+	var slot := str(definition.get("slot", "body"))
+	if slot == "feet":
+		return (
+			float(definition.get("move_speed_bonus", 0.0)) * 100.0
+			+ (1.0 - float(definition.get("stamina_cost_multiplier", 1.0))) * 60.0
+		)
+	return float(definition.get("damage_reduction", 0.0)) * 100.0
+
+
+func equip_if_upgrade(equipment_id: String) -> Dictionary:
+	# 파밍의 손맛: 주운 장비가 지금 낀 것보다 나으면 그 자리에서 갈아 끼운다.
+	# 낡은 건 가방으로 돌아가 팔거나 버릴 거리가 된다. 나쁘면 가방에만 넣는다.
+	var definition := get_equipment_definition(equipment_id)
+	if definition.is_empty():
+		return {"ok": false}
+	var slot := str(definition.get("slot", "body"))
+	var current_id := get_equipped_equipment(slot)
+	var new_score := get_equipment_score(equipment_id)
+	var current_score := get_equipment_score(current_id) if not current_id.is_empty() else -1.0
+	var result := {
+		"ok": true,
+		"slot": slot,
+		"equipment_id": equipment_id,
+		"display_name": str(definition.get("display_name", "장비")),
+		"previous_id": current_id,
+		"new_score": new_score,
+		"previous_score": maxf(0.0, current_score),
+	}
+	if new_score > current_score:
+		# equip_equipment은 인벤토리에서 한 장 소비하므로, 방금 주운 것을 반영하기
+		# 위해 먼저 인벤토리에 넣어 두고 장착한다.
+		var equipped := equip_equipment(equipment_id)
+		result["equipped"] = equipped
+	else:
+		result["equipped"] = false
+	return result
+
+
 func get_equipment_damage_multiplier() -> float:
 	var reduction := 0.0
 	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
