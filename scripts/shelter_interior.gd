@@ -26,6 +26,7 @@ const ROLL_COOLDOWN_INDICATOR_SCRIPT := preload("res://scripts/roll_cooldown_ind
 const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
+const BGM_DIRECTOR := preload("res://scripts/audio/bgm_director.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
 const AMMO_TEXTURE := preload("res://assets/items/ammo_762.png")
@@ -116,6 +117,7 @@ var shelter_currency_labels: Dictionary = {}
 var shelter_runtime_label: Label
 var shelter_runtime_bar: ProgressBar
 var churu_buff_buttons: Dictionary = {}
+var shelter_bgm := BGM_DIRECTOR.new()
 var raid_zone_emergency_button: Button
 var stats_collapse_button: Button
 var stats_summary_label: Label
@@ -303,6 +305,9 @@ func _ready() -> void:
 	_setup_iron_trainer()
 	_setup_juhong_story_character()
 	_build_roll_audio()
+	# 쉘터는 안식처다 — 필드와 다른 소리가 나야 '돌아왔다'가 된다.
+	shelter_bgm.attach(self)
+	shelter_bgm.set_state("shelter")
 	_build_interface()
 	if not get_viewport().size_changed.is_connected(_apply_shelter_safe_layout):
 		get_viewport().size_changed.connect(_apply_shelter_safe_layout)

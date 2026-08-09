@@ -80,6 +80,7 @@ const FieldIncidents := preload("res://scripts/raid/field_incidents.gd")
 const ExtractionFlow := preload("res://scripts/raid/extraction_flow.gd")
 const EnemyDirector := preload("res://scripts/raid/enemy_director.gd")
 const LootPickupSystem := preload("res://scripts/raid/loot_pickup_system.gd")
+const BgmDirector := preload("res://scripts/audio/bgm_director.gd")
 const StealthSystem := preload("res://scripts/raid/stealth_system.gd")
 const WeaponCombat := preload("res://scripts/raid/weapon_combat.gd")
 const RAID_LOSS_MANAGER := preload("res://scripts/raid_loss_manager.gd")
@@ -204,7 +205,6 @@ var magazine_ammo := 30
 var reserve_ammo := 90
 var gunshot_players: Array[AudioStreamPlayer3D] = []
 var roll_audio_player: AudioStreamPlayer3D
-var bgm_player: AudioStreamPlayer
 var building_canvas: CanvasLayer
 var building_overlays := {}
 var vehicle_overlays := {}
@@ -321,6 +321,7 @@ var incidents := FieldIncidents.new()
 var extraction := ExtractionFlow.new()
 var enemy_director := EnemyDirector.new()
 var loot_system := LootPickupSystem.new()
+var bgm := BgmDirector.new()
 var stealth := StealthSystem.new()
 var weapon_combat := WeaponCombat.new()
 var raid_zone_data: Dictionary = {}
@@ -3557,46 +3558,12 @@ func _play_roll_sound() -> void:
 
 
 func _build_bgm_audio() -> void:
-	bgm_player = AudioStreamPlayer.new()
-	bgm_player.name = "ApocalypseSeoulBGM"
-	bgm_player.stream = _create_apocalypse_bgm_stream()
-	bgm_player.volume_db = -21.0
-	bgm_player.bus = "Master"
-	add_child(bgm_player)
-	bgm_player.play()
+	# 상태별 배경음은 BgmDirector가 맡는다. 필드는 "불안"에서 시작한다.
+	bgm.attach(self)
+	bgm.set_state("field")
 
 
-func _create_apocalypse_bgm_stream() -> AudioStreamWAV:
-	var mix_rate := 22050
-	var duration := 18.0
-	var sample_count := int(mix_rate * duration)
-	var data := PackedByteArray()
-	data.resize(sample_count * 2)
-	var random := RandomNumberGenerator.new()
-	random.seed = 130713
-	var noise_hold := 0.0
-	for index in sample_count:
-		var time := float(index) / mix_rate
-		if index % 300 == 0:
-			noise_hold = random.randf_range(-1.0, 1.0)
-		var fade_in := clampf(time / 2.0, 0.0, 1.0)
-		var fade_out := clampf((duration - time) / 2.0, 0.0, 1.0)
-		var loop_fade := minf(fade_in, fade_out)
-		var drone := sin(TAU * 43.65 * time) * 0.26
-		drone += sin(TAU * 65.41 * time + 1.7) * 0.12
-		drone += sin(TAU * 98.0 * time + 0.4) * 0.06
-		var distant_alarm := sin(TAU * 0.075 * time) * sin(TAU * 392.0 * time) * 0.045
-		var rain_static := noise_hold * 0.04
-		var pulse := 0.0
-		var pulse_phase := fmod(time, 6.0)
-		if pulse_phase < 0.55:
-			pulse = sin(TAU * 72.0 * time) * exp(-pulse_phase * 7.0) * 0.16
-		_write_wav_sample(data, index, clampf((drone + distant_alarm + rain_static + pulse) * loop_fade, -1.0, 1.0))
-	var stream := _make_wav_stream(data, mix_rate)
-	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
-	stream.loop_begin = 0
-	stream.loop_end = sample_count
-	return stream
+
 
 
 func _make_wav_stream(data: PackedByteArray, mix_rate: int) -> AudioStreamWAV:
@@ -3844,6 +3811,7 @@ func _install_perception_system() -> void:
 
 
 func take_damage(amount: int) -> void:
+	bgm.notify_combat()
 	if (
 		amount <= 0
 		or player_health <= 0
@@ -4304,6 +4272,7 @@ func _setup_raid_opportunities(world: ProceduralCityMap) -> void:
 	raid_pressure_points = 0.0
 	raid_seconds_since_noise = 99.0
 	raid_event_last_fired.clear()
+	extraction.reset_banked_level_watch()
 	raid_event_cooldown = 40.0
 	raid_curfew_active = false
 	raid_sealed_extraction_index = -1
@@ -4335,6 +4304,7 @@ func _update_raid_opportunities(delta: float) -> void:
 		return
 	raid_elapsed_seconds += delta
 	raid_seconds_since_noise += delta
+	bgm.tick(delta)
 	# 시간은 가장 약한 입력이다. 소란을 피우면 훨씬 빨리 오른다.
 	raid_pressure_points += RAID_EVENT_DIRECTOR.PRESSURE_PER_SECOND * delta
 	if not raid_curfew_active and RAID_EVENT_DIRECTOR.is_stealth_decay_allowed(raid_seconds_since_noise):
@@ -6810,8 +6780,7 @@ func _exit_tree() -> void:
 			audio_player.stop()
 	if is_instance_valid(roll_audio_player):
 		roll_audio_player.stop()
-	if is_instance_valid(bgm_player):
-		bgm_player.stop()
+	# 장면 전환 시 BGM 정리는 플레이어 노드가 함께 해제되며 자연히 멈춘다.
 	if not DisplayServer.is_touchscreen_available():
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 

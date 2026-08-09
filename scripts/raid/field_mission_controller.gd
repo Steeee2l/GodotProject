@@ -683,6 +683,7 @@ func _complete_field_mission() -> void:
 	if not host.completed_mission_titles.has(mission_title):
 		host.completed_mission_titles.append(mission_title)
 		host.completed_mission_xp += 70
+		host.extraction.update_banked_level_watch()
 	_set_field_mission_site_state(completed_site, "completed")
 	_set_field_mission_objective(
 		"임무 완료 · %s" % mission_title,

@@ -441,3 +441,36 @@ func _begin_extraction() -> void:
 	tween.tween_interval(0.55)
 	tween.tween_property(extraction_success_label, "modulate:a", 0.0, 0.2)
 	tween.tween_callback(_show_extraction_result.bind(rescued_count))
+
+# ── 판 중 레벨업 확보 예고 ─────────────────────────────────────
+# XP는 탈출해야 실제로 들어온다(죽으면 날아가는 판돈). 그 구조는 지키되,
+# 쌓아둔 XP가 다음 레벨을 넘는 "순간"을 판 중에 보여준다.
+# 도파민과 동시에 "지금 나갈까?"라는 압박을 만든다.
+var banked_levels_announced := 0
+
+
+func reset_banked_level_watch() -> void:
+	banked_levels_announced = 0
+
+
+func update_banked_level_watch() -> void:
+	var banked_xp: int = (
+		GameState.get_raid_experience_reward(host.run_kills, host.enemy_director.run_boss_kills)
+		+ host.completed_mission_xp
+	)
+	var projected_levels := 0
+	var simulated_xp: int = GameState.player_xp + banked_xp
+	var simulated_level: int = GameState.player_level
+	while simulated_xp >= GameState.get_xp_required(simulated_level):
+		simulated_xp -= GameState.get_xp_required(simulated_level)
+		simulated_level += 1
+		projected_levels += 1
+	if projected_levels > banked_levels_announced:
+		banked_levels_announced = projected_levels
+		host._show_field_notice(
+			"레벨업 확보 · 탈출하면 Lv.%d
+지금 죽으면 이 경험은 시체와 함께 남는다."
+			% simulated_level
+		)
+		if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
+			Input.vibrate_handheld(30)

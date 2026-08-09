@@ -353,6 +353,7 @@ func _on_enemy_died(enemy: CharacterBody3D) -> void:
 	# 죽인 만큼 도시가 반응한다. 조용히 지나갈수록 판이 길어진다.
 	host._add_raid_pressure(RAID_EVENT_DIRECTOR.PRESSURE_PER_KILL)
 	host._advance_contract_progress("kills")
+	host.extraction.update_banked_level_watch()
 	if (
 		is_instance_valid(host.active_field_mission)
 		and int(enemy.get_meta("field_mission_id", -1))

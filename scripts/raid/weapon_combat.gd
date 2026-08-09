@@ -155,6 +155,7 @@ func _fire_ak47() -> void:
 		)
 	)
 	_play_gunshot()
+	host.bgm.notify_combat()
 	_spawn_muzzle_light(aim_direction)
 	_spawn_launch_fx(aim_direction)
 	host._update_equipment_ui()
