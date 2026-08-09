@@ -6199,19 +6199,25 @@ func _open_field_loot_container(point: Node3D) -> void:
 		^ container_type.hash()
 		^ district.hash()
 	)
+	var unarmed_recovery := not GameState.has_any_weapon()
 	var definitions: Array[Dictionary] = LOOT_ECONOMY.roll_container(
 		container_type,
 		stage_tier,
 		district,
-		container_random
+		container_random,
+		unarmed_recovery
 	)
 	var spawned_count := 0
 	for definition in definitions:
+		# 맨손 회복용 무기는 스폰 상한을 무시하고 반드시 나오게 한다. 재무장을
+		# 막으면 판이 그대로 멈추기 때문이다.
+		var bypass_cap := unarmed_recovery and str(definition.get("type", "")) == "weapon"
 		if not LOOT_ECONOMY.try_register_loot(
 			GameState,
 			definition,
 			"field",
-			stage_tier
+			stage_tier,
+			bypass_cap
 		):
 			continue
 		var angle := TAU * float(spawned_count) / float(maxi(1, definitions.size()))

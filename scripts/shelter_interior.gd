@@ -119,7 +119,6 @@ var shelter_runtime_label: Label
 var shelter_runtime_bar: ProgressBar
 var churu_buff_buttons: Dictionary = {}
 var shelter_bgm := BGM_DIRECTOR.new()
-var raid_zone_emergency_button: Button
 var stats_collapse_button: Button
 var stats_summary_label: Label
 var stats_body_box: VBoxContainer
@@ -604,204 +603,10 @@ func _refresh_unlocked_facilities(module_root: Node3D = null, animate: bool = tr
 				Tween.TRANS_BACK
 			).set_ease(Tween.EASE_OUT)
 		created.append(facility_id)
-	_build_factory_infrastructure(module_root)
-	_build_production_lines(module_root)
 	if animate and not created.is_empty():
 		refresh_shelter_residents(true)
 	return created
 
-
-func _build_production_lines(module_root: Node3D) -> void:
-	if not _has_production_facility():
-		return
-	var station_root := module_root.get_node_or_null("FactoryWorkerStations") as Node3D
-	if station_root == null:
-		station_root = Node3D.new()
-		station_root.name = "FactoryWorkerStations"
-		module_root.add_child(station_root)
-	if GameState.is_shelter_facility_unlocked("scratcher_bank"):
-		var scratcher_slots: int = GameState.get_scratcher_worker_slots()
-		_build_factory_worker_lane(station_root, "ScratcherWorkerLane", scratcher_slots, "scratcher")
-		for index in scratcher_slots:
-			_build_production_slot(station_root, _scratcher_work_position(index), index, "scratcher")
-	if GameState.is_shelter_facility_unlocked("catnip_scraper"):
-		var catnip_slots: int = GameState.get_catnip_worker_slots()
-		_build_factory_worker_lane(station_root, "CatnipWorkerLane", catnip_slots, "catnip")
-		for index in catnip_slots:
-			_build_production_slot(station_root, _catnip_work_position(index), index, "catnip")
-
-
-func _build_factory_infrastructure(module_root: Node3D) -> void:
-	if module_root.get_node_or_null("FactoryInfrastructure") != null:
-		return
-	var factory_root := Node3D.new()
-	factory_root.name = "FactoryInfrastructure"
-	factory_root.set_meta("shelter_tier", GameState.shelter_tier)
-	module_root.add_child(factory_root)
-	var half := _room_half_extents()
-	if _has_production_facility():
-		# 생산 구역 데크: 북쪽 벽을 따라 창고~꾹꾹이 은행까지.
-		var span_min: float = _storage_position().x - 3.3
-		var span_max: float = _scratcher_bank_position().x + 3.3
-		var span_center: float = (span_min + span_max) * 0.5
-		var span_length: float = span_max - span_min
-		var deck_material := _material(Color("#131b1a"))
-		_add_plane(
-			"FactoryDeck",
-			Vector3(span_center, 0.012, -half.y + 2.7),
-			Vector2(span_length, 4.7),
-			deck_material,
-			factory_root
-		)
-		var edge_material := _emissive_material(Color("#46c7cc"), 1.7)
-		_add_visual_box(
-			"FactoryZoneRail",
-			Vector3(span_center, 0.035, -half.y + 5.15),
-			Vector3(span_length, 0.045, 0.07),
-			edge_material,
-			factory_root
-		)
-		_build_supply_rail(factory_root, span_min, span_max)
-	# facing = 플레이어가 서는 방향. 북쪽 벽은 남쪽(+z), 서쪽 벽은 동쪽(+x)에서 접근한다.
-	for facility_data in [
-		["catnip_scraper", _catnip_scraper_position(), Color("#75c86c"), Vector3(0.0, 0.0, 1.0)],
-		["scratcher_bank", _scratcher_bank_position(), Color("#d4ad55"), Vector3(0.0, 0.0, 1.0)],
-		["storage", _storage_position(), Color("#67b9bd"), Vector3(0.0, 0.0, 1.0)],
-		["workbench", _workbench_position(), Color("#d19b4e"), Vector3(1.0, 0.0, 0.0)],
-		["training", _training_position(), Color("#d97855"), Vector3(1.0, 0.0, 0.0)],
-	]:
-		var facility_id: String = str(facility_data[0])
-		if GameState.is_shelter_facility_unlocked(facility_id):
-			_build_facility_dock(
-				factory_root,
-				facility_id,
-				facility_data[1] as Vector3,
-				facility_data[2] as Color,
-				facility_data[3] as Vector3
-			)
-
-
-func _build_supply_rail(parent: Node3D, span_min: float, span_max: float) -> void:
-	# 기계 앞을 지나는 저상 보급 레일: 벽면 설비 사이로 물자가 흐르는 시각 연출.
-	var rail_z: float = _factory_line_z() + 1.6
-	var rail_material := _emissive_material(Color("#8a6f3c"), 1.15)
-	_add_visual_box(
-		"SupplyRail",
-		Vector3((span_min + span_max) * 0.5, 0.05, rail_z),
-		Vector3(span_max - span_min, 0.05, 0.34),
-		_material(Color("#1b2320")),
-		parent
-	)
-	for side in [-1.0, 1.0]:
-		_add_visual_box(
-			"SupplyRailEdge",
-			Vector3((span_min + span_max) * 0.5, 0.075, rail_z + side * 0.19),
-			Vector3(span_max - span_min, 0.03, 0.035),
-			rail_material,
-			parent
-		)
-
-
-func _build_facility_dock(
-	parent: Node3D, facility_id: String, station: Vector3, color: Color, facing: Vector3
-) -> void:
-	# 시설 앞 상호작용 도크: 플레이어가 서는 쪽에만 짧게 깐다.
-	var dock_center := station + facing * 2.05
-	var dock_root := Node3D.new()
-	dock_root.name = "%sDock" % facility_id.to_pascal_case()
-	parent.add_child(dock_root)
-	var along_x := absf(facing.z) > absf(facing.x)
-	var dock_size := Vector2(2.15, 0.86) if along_x else Vector2(0.86, 2.15)
-	_add_plane(
-		"OperatorDock",
-		Vector3(dock_center.x, 0.022, dock_center.z),
-		dock_size,
-		_material(Color(color, 0.24)),
-		dock_root
-	)
-	var line_material := _emissive_material(color, 1.55)
-	var edge_offset := facing * 0.55
-	_add_visual_box(
-		"DockEdge",
-		Vector3(dock_center.x + edge_offset.x, 0.038, dock_center.z + edge_offset.z),
-		Vector3(dock_size.x, 0.035, 0.05) if along_x else Vector3(0.05, 0.035, dock_size.y),
-		line_material,
-		dock_root
-	)
-
-
-func _build_factory_worker_lane(parent: Node3D, lane_name: String, slot_count: int, kind: String) -> void:
-	if slot_count <= 0 or parent.get_node_or_null(lane_name) != null:
-		return
-	var positions: Array[Vector3] = []
-	for index in slot_count:
-		positions.append(
-			_catnip_work_position(index) if kind == "catnip" else _scratcher_work_position(index)
-		)
-	var minimum_x: float = positions[0].x
-	var maximum_x: float = positions[0].x
-	var minimum_z: float = positions[0].z
-	var maximum_z: float = positions[0].z
-	for position in positions:
-		minimum_x = minf(minimum_x, position.x)
-		maximum_x = maxf(maximum_x, position.x)
-		minimum_z = minf(minimum_z, position.z)
-		maximum_z = maxf(maximum_z, position.z)
-	var lane_root := Node3D.new()
-	lane_root.name = lane_name
-	parent.add_child(lane_root)
-	var lane_color := Color("#2a4a35") if kind == "catnip" else Color("#4a3d28")
-	var edge_color := Color("#78cf76") if kind == "catnip" else Color("#dcad52")
-	var center := Vector3((minimum_x + maximum_x) * 0.5, 0.015, (minimum_z + maximum_z) * 0.5)
-	var lane_size := Vector2(maximum_x - minimum_x + 1.25, maximum_z - minimum_z + 1.05)
-	_add_plane("LaneDeck", center, lane_size, _material(lane_color), lane_root)
-	var edge_material := _emissive_material(edge_color, 1.35)
-	_add_visual_box(
-		"LaneFrontEdge",
-		Vector3(center.x, 0.035, maximum_z + 0.52),
-		Vector3(lane_size.x, 0.035, 0.05),
-		edge_material,
-		lane_root
-	)
-	_add_visual_box(
-		"LaneBackEdge",
-		Vector3(center.x, 0.035, minimum_z - 0.52),
-		Vector3(lane_size.x, 0.035, 0.05),
-		edge_material,
-		lane_root
-	)
-
-
-func _build_production_slot(parent: Node3D, slot_position: Vector3, index: int, kind: String) -> void:
-	var is_catnip := kind == "catnip"
-	var plate_color := Color("#173026") if is_catnip else Color("#30291b")
-	var edge_color := Color("#79b86b") if is_catnip else Color("#c2a358")
-	var slot_name := "CatnipLineSlot" if is_catnip else "ScratcherLineSlot"
-	var node_name := "%s%02d" % [slot_name, index + 1]
-	if parent.get_node_or_null(node_name) != null:
-		return
-	var slot_root := Node3D.new()
-	slot_root.name = node_name
-	slot_root.position = Vector3(slot_position.x, 0.022, slot_position.z)
-	slot_root.set_meta("production_kind", kind)
-	slot_root.set_meta("slot_index", index)
-	parent.add_child(slot_root)
-	_add_plane("Plate", Vector3.ZERO, Vector2(1.04, 0.82), _material(plate_color), slot_root)
-	var edge_material := _emissive_material(edge_color, 1.5)
-	_add_visual_box("NorthEdge", Vector3(0, 0.018, -0.41), Vector3(1.04, 0.025, 0.035), edge_material, slot_root)
-	_add_visual_box("SouthEdge", Vector3(0, 0.018, 0.41), Vector3(1.04, 0.025, 0.035), edge_material, slot_root)
-	_add_visual_box("WestEdge", Vector3(-0.52, 0.018, 0), Vector3(0.035, 0.025, 0.82), edge_material, slot_root)
-	_add_visual_box("EastEdge", Vector3(0.52, 0.018, 0), Vector3(0.035, 0.025, 0.82), edge_material, slot_root)
-	var number := Label3D.new()
-	number.text = "%02d" % (index + 1)
-	number.position = Vector3(0.0, 0.035, 0.0)
-	number.rotation_degrees.x = -90.0
-	number.font = FONT
-	number.font_size = 34
-	number.pixel_size = 0.006
-	number.modulate = Color(edge_color, 0.78)
-	number.no_depth_test = true
-	slot_root.add_child(number)
 
 
 func _build_player() -> void:
@@ -3526,14 +3331,8 @@ func _open_raid_zone_select() -> void:
 	raid_zone_resupply_button.tooltip_text = "장착 무기 탄약 90발과 구급약 2개까지 창고에서 꺼냅니다."
 	raid_zone_resupply_button.pressed.connect(_quick_resupply_for_raid, CONNECT_DEFERRED)
 	detail_column.add_child(raid_zone_resupply_button)
-	raid_zone_emergency_button = _merchant_button("사자에게 예비 권총 받기", false, "weapon")
-	raid_zone_emergency_button.name = "RaidZoneEmergencyButton"
-	raid_zone_emergency_button.custom_minimum_size.y = 42
-	raid_zone_emergency_button.tooltip_text = (
-		"무기를 전부 잃었을 때 사자가 창고 바닥을 긁어 권총 한 자루를 내어 줍니다."
-	)
-	raid_zone_emergency_button.pressed.connect(_claim_emergency_weapon, CONNECT_DEFERRED)
-	detail_column.add_child(raid_zone_emergency_button)
+	# 사자 예비 권총은 제거됐다. 무기를 다 잃어도 현장 보급품에서 기본 무기가
+	# 넉넉히 나오므로, 파밍으로 다시 무장하는 쪽이 손맛이 산다.
 	detail_column.add_child(_build_churu_buff_section())
 	raid_zone_launch_button = _merchant_button("선택 구역으로 출정", true, "raid")
 	raid_zone_launch_button.name = "RaidZoneLaunchButton"
@@ -3549,17 +3348,6 @@ func _open_raid_zone_select() -> void:
 	if initial_zone_id.is_empty() and not zone_ids.is_empty():
 		initial_zone_id = str(zone_ids[0])
 	_select_raid_zone_preview(initial_zone_id)
-
-
-func _claim_emergency_weapon() -> void:
-	var result: Dictionary = GameState.grant_emergency_weapon()
-	if not bool(result.get("ok", false)):
-		return
-	_show_status("사자가 예비 권총과 탄약 %d발을 건넸다." % int(result.get("ammo", 0)))
-	if is_instance_valid(raid_zone_emergency_button):
-		raid_zone_emergency_button.visible = false
-	_select_raid_zone_preview(raid_zone_selected_id)
-	_update_stats()
 
 
 func _build_churu_buff_section() -> Control:
@@ -3862,9 +3650,6 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 			or (medkit_count < 2 and stored_medkits > 0)
 		)
 		raid_zone_resupply_button.visible = true
-		if is_instance_valid(raid_zone_emergency_button):
-			# 맨손일 때만 보인다. 사망이 진행 정지로 이어지지 않게 하는 안전장치다.
-			raid_zone_emergency_button.visible = GameState.needs_emergency_weapon()
 		raid_zone_resupply_button.disabled = not can_resupply
 		raid_zone_resupply_button.text = (
 			"창고에서 보충 · 탄약 %d / 구급약 %d" % [stored_ammo, stored_medkits]
@@ -3878,8 +3663,6 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 			"봉쇄 구역 키카드 필요" if needs_keycard else "쉘터 Tier %d 필요" % required_tier
 		)
 		raid_zone_resupply_button.visible = false
-		if is_instance_valid(raid_zone_emergency_button):
-			raid_zone_emergency_button.visible = false
 	raid_zone_launch_button.disabled = not unlocked
 	raid_zone_launch_button.text = (
 		"선택 구역으로 출정"

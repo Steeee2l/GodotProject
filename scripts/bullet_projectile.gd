@@ -5,6 +5,10 @@ const SPEED := 46.0
 const MAX_LIFETIME := 1.15
 const PROJECTILE_COLLISION_RADIUS := 0.26
 const DEFAULT_TARGET_HIT_RADIUS := 0.62
+# 총알이 최소 이만큼 날아가기 전에는 피해를 주지 않는다. 총구에서 나오자마자
+# 같은 프레임에 명중 처리되면 "안 보이는 탄에 맞았다"는 인상을 준다. 이 거리
+# 만큼은 반드시 한 번은 렌더링되므로, 무엇에 맞았는지 눈으로 보게 된다.
+const ARM_DISTANCE := 0.85
 
 var direction := Vector3.FORWARD
 var source_body: Node3D
@@ -129,7 +133,8 @@ func _physics_process(delta: float) -> void:
 		var processed_body := instance_from_id(int(body_id))
 		if processed_body is CollisionObject3D:
 			exclusions.append((processed_body as CollisionObject3D).get_rid())
-	var hit := _find_swept_hit(global_position, next_position, exclusions)
+	var armed := spawn_position.distance_to(global_position) >= ARM_DISTANCE
+	var hit := _find_swept_hit(global_position, next_position, exclusions) if armed else {}
 	if not hit.is_empty():
 		var continues := _apply_hit(hit.get("collider"), global_position)
 		if continues:
@@ -143,6 +148,8 @@ func _physics_process(delta: float) -> void:
 
 func _on_body_entered(body: Node3D) -> void:
 	if body == source_body:
+		return
+	if spawn_position.distance_to(global_position) < ARM_DISTANCE:
 		return
 	_apply_hit(body, last_motion_origin)
 

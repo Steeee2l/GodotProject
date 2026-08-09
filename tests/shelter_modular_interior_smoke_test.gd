@@ -148,19 +148,10 @@ func _run() -> void:
 	assert(workbench.position.x < -18.0)
 	assert(training.position.x < -18.0)
 
-	var factory_root := module_root.get_node("FactoryInfrastructure") as Node3D
-	assert(int(factory_root.get_meta("shelter_tier")) == int(game_state.get("shelter_tier")))
-	# 방을 반으로 가르던 중앙 컨베이어는 벽면 설비 + 저상 보급 레일로 대체됐다.
-	assert(factory_root.get_node_or_null("SupplyRail") is MeshInstance3D)
-	assert(factory_root.get_node_or_null("FactoryConveyorCollision") == null)
-	assert(factory_root.get_node("FactoryDeck") is MeshInstance3D)
-	# 흐르는 화물 연출은 시선을 뺏기만 해서 걷어냈다. 설비는 정적인 채로 둔다.
-	assert(factory_root.find_children("MovingCargo*", "MeshInstance3D", true, false).is_empty())
-	var worker_stations := module_root.get_node("FactoryWorkerStations") as Node3D
-	assert(worker_stations.get_node_or_null("ScratcherWorkerLane") != null)
-	assert(worker_stations.get_node_or_null("CatnipWorkerLane") != null)
-	assert(worker_stations.get_node_or_null("ScratcherLineSlot01") != null)
-	assert(worker_stations.get_node_or_null("CatnipLineSlot01") != null)
+	# 바닥 배치선·데크·도크·레인 같은 바닥 장식은 전부 걷어냈다. 시선을 어지럽히고
+	# 원근이 이상해 보이기만 했다. 벽면 설비(위에서 확인)만 남긴다.
+	assert(module_root.get_node_or_null("FactoryInfrastructure") == null)
+	assert(module_root.get_node_or_null("FactoryWorkerStations") == null)
 
 	assert(shelter.get_node("ShelterPlayer") is CharacterBody3D)
 	assert(shelter.get("dash_button") is Button)

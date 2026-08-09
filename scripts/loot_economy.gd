@@ -754,11 +754,16 @@ static func roll_container(
 	container_type: String,
 	stage_tier: int,
 	district: String,
-	random: RandomNumberGenerator
+	random: RandomNumberGenerator,
+	unarmed_recovery: bool = false
 ) -> Array[Dictionary]:
 	var stage := clampi(stage_tier, 1, 5)
 	var container := CONTAINER_DEFINITIONS.get(container_type, {}) as Dictionary
 	if container.is_empty() or stage < int(container.get("minimum_stage", 1)):
+		# 맨손이면 빈 컨테이너라도 기본 권총 하나는 나올 수 있게 해준다. 무기를
+		# 다 잃어도 파밍으로 재무장하는 회복 루프가 사자 예비 권총을 대신한다.
+		if unarmed_recovery and random.randf() < 0.5:
+			return [_materialize_item("m1911", stage, random)]
 		return []
 	var profile := STAGE_PROFILES[stage] as Dictionary
 	var results: Array[Dictionary] = []
@@ -783,6 +788,16 @@ static func roll_container(
 		)
 		if not item_id.is_empty():
 			results.append(_materialize_item(item_id, stage, random))
+	# 맨손 회복: 이번 컨테이너에서 무기가 하나도 안 나왔다면 절반 확률로 기본
+	# 권총을 끼워 준다. 돌아다니며 상자만 몇 개 열어도 다시 무장하게 된다.
+	if unarmed_recovery:
+		var has_weapon := false
+		for entry in results:
+			if str(entry.get("type", "")) == "weapon":
+				has_weapon = true
+				break
+		if not has_weapon and random.randf() < 0.5:
+			results.append(_materialize_item("m1911", stage, random))
 	return results
 
 

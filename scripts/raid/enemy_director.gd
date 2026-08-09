@@ -193,6 +193,28 @@ func _ensure_initial_enemy_safe_anchor(
 			and world.get_risk_band(candidate) != "safe"
 		):
 			return candidate
+	# 32번 다 실패해도 플레이어 코앞에 떨구지는 않는다. 원래 요청 지점이 너무
+	# 가까우면 안전 반경까지 방사형으로 밀어내고, 그 근처의 열린 자리를 잡는다.
+	# 출정하자마자 옆에서 적이 튀어나오는 인상을 원천 차단한다.
+	if requested_anchor.distance_to(player.global_position) < entry_safe_radius:
+		var push_angle := (
+			spawn_random.randf_range(0.0, TAU)
+			if requested_anchor.distance_to(player.global_position) < 0.5
+			else atan2(
+				requested_anchor.z - player.global_position.z,
+				requested_anchor.x - player.global_position.x
+			)
+		)
+		var pushed := player.global_position + Vector3(
+			cos(push_angle), 0.0, sin(push_angle)
+		) * (entry_safe_radius + 4.0)
+		pushed.x = clampf(pushed.x, -map_limit, map_limit)
+		pushed.z = clampf(pushed.z, -map_limit, map_limit)
+		var safe_candidate := world.find_nearest_physically_open_position(
+			pushed, 0.62, [player.get_rid()]
+		)
+		safe_candidate.y = 0.78
+		return safe_candidate
 	return requested_anchor
 
 
