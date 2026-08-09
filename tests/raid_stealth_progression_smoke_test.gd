@@ -31,11 +31,11 @@ func _run() -> void:
 		assert(lore_point.global_position.distance_to(player.global_position) >= 24.0)
 		assert(lore_point.get_node_or_null("LoreNoticeBoard") is Sprite3D)
 	main_scene.call("_complete_field_interaction", lore_clues[0])
-	var lore_layer := main_scene.get("lore_ui_layer") as CanvasLayer
+	var lore_layer := main_scene.get("lore_reader").ui_layer as CanvasLayer
 	assert(is_instance_valid(lore_layer) and lore_layer.visible)
-	assert(not (main_scene.get("lore_title_label") as Label).text.is_empty())
-	assert(int(main_scene.get("lore_clues_discovered")) == 1)
-	main_scene.call("_close_lore_reader")
+	assert(not (main_scene.get("lore_reader").title_label as Label).text.is_empty())
+	assert(int(main_scene.get("lore_reader").clues_discovered) == 1)
+	main_scene.get("lore_reader").close()
 	assert(not lore_layer.visible)
 
 	main_scene.call("_advance_basic_mission", "parts", 2)
@@ -50,7 +50,7 @@ func _run() -> void:
 
 	main_scene.set("fatigue", 50.0)
 	main_scene.call("_trigger_fatigue_boss_event")
-	assert(bool(main_scene.get("fatigue_boss_event_triggered")))
+	assert(bool(main_scene.get("enemy_director").fatigue_boss_event_triggered))
 	var found_boss := false
 	for enemy in main_scene.get("enemies"):
 		if is_instance_valid(enemy) and bool(enemy.get_meta("raid_boss", false)):

@@ -289,7 +289,7 @@ func _run() -> void:
 	pistol_enemy.set("alerted", true)
 	assert(pistol_enemy.call("start_reinforcement_call", 0.05))
 	assert((pistol_enemy.get("reinforcement_call_indicator") as Sprite3D).visible)
-	main_scene.set("active_reinforcement_caller", pistol_enemy)
+	main_scene.get("enemy_director").set("active_reinforcement_caller", pistol_enemy)
 	var enemy_count_before_call := enemies.size()
 	pistol_enemy.call("_update_reinforcement_call", 1.1)
 	assert((main_scene.get("enemies") as Array).size() >= enemy_count_before_call + 6)

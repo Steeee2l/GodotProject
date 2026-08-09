@@ -1,0 +1,689 @@
+class_name LootPickupSystem
+extends RefCounted
+
+# 바닥 전리품 — 생성, 비주얼, 근접 수집, 가방 판정, 버리기.
+# main.gd에서 19개 함수를 옮겼다. 아이템의 이름/아이콘/설명도 여기가 안다.
+
+
+const AIM_REVEAL_BUILDING_ALPHA := 0.28
+const AK_DROP_TEXTURE := preload("res://assets/weapons/ak47_drop.png")
+const AK_PICKUP_POSITION := Vector3(1.15, 0.32, 0.7)
+const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
+const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
+const BASE_ENEMY_COUNT := 24
+const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
+const CHURU_TEXTURE := preload("res://assets/items/churu_rare.png")
+const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
+const DEEP_NIGHT_HOUR := 22.0
+const DIRECTION_VECTORS := {
+	"n": Vector2(0, -1),
+	"ne": Vector2(1, -1),
+	"e": Vector2(1, 0),
+	"se": Vector2(1, 1),
+	"s": Vector2(0, 1),
+	"sw": Vector2(-1, 1),
+	"w": Vector2(-1, 0),
+	"nw": Vector2(-1, -1),
+}
+const ENEMY_PAIR_SQUAD_CHANCE := 0.78
+const ENEMY_VISIBILITY_FADE_IN_SPEED := 10.0
+const ENEMY_VISIBILITY_FADE_OUT_SPEED := 3.2
+const ENEMY_VISIBILITY_HOLD_SECONDS := 0.32
+const FATIGUE_DAMAGE_PER_POINT := 0.045
+const FATIGUE_LOOT_GAIN := 0.85
+const FATIGUE_RELOAD_GAIN := 0.8
+const FATIGUE_SHOT_GAIN := 0.28
+const FIRST_STAGE_ZONE_ID := "jongno_outskirts"
+const INTERACTION_TARGETING := preload("res://scripts/interaction_targeting.gd")
+const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
+const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/magazine_spring.png")
+const MAP_CONTENT_SCALE := ProceduralCityMap.WORLD_SCALE
+const MAX_NIGHT_ENEMY_COUNT := 44
+const MOBILE_AIM_ASSIST_ANGLE_WEIGHT := 24.0
+const MOBILE_AIM_ASSIST_DISTANCE_WEIGHT := 0.32
+const MOBILE_AIM_ASSIST_HALF_ANGLE_DEG := 42.0
+const MOBILE_AIM_ASSIST_MAX_DISTANCE := 34.0
+const NIGHT_START_HOUR := 19.0
+const OBJECTIVE_SCENT_GUIDANCE_SCRIPT := preload("res://scripts/objective_scent_guidance.gd")
+const OCCLUSION_DEPTH_LIMIT := 14.0
+const OCCLUSION_LATERAL_LIMIT := 5.1
+const OVERLAY_DEPTH_SORT := preload("res://scripts/overlay_depth_sort.gd")
+const PERCEPTION_SYSTEM_SCRIPT := preload("res://scripts/perception_system.gd")
+const PICKUP_DISTANCE := 1.75
+const PICKUP_HOLD_DURATION := 0.9
+const RAID_EVENT_DIRECTOR := preload("res://scripts/raid_event_director.gd")
+const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
+const RAID_PRESSURE_REWARD_MULTIPLIERS := [1.0, 1.15, 1.35, 1.65]
+const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
+const SCENT_TRAIL_MANAGER_SCRIPT := preload("res://scripts/scent_trail_manager.gd")
+const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
+const SECONDS_PER_GAME_HOUR := 36.0
+const SILHOUETTE_COLOR := Color("#26343b")
+const STEALTH_TAKEDOWN_PROMPT_SIZE := Vector2(196.0, 54.0)
+const STRUCTURE_REVEAL_BUILDING_ALPHA := 0.46
+const STRUCTURE_REVEAL_HALF_ANGLE_DEG := 52.5
+const STRUCTURE_REVEAL_RADIUS := 9.5
+const STRUCTURE_REVEAL_VEHICLE_ALPHA := 0.58
+const SUBWAY_SEALED_CARGO_TEXTURE := preload("res://assets/events/subway_sealed_cargo_v2.png")
+const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+const UI_SAFE_AREA := preload("res://scripts/ui_safe_area.gd")
+const WEAPON_FLOAT_DISTANCE := 0.72
+const WEAPON_HUD_PRESENTER := preload("res://scripts/weapon_hud_presenter.gd")
+const WEAPON_MUZZLE_FORWARD_DISTANCE := 0.64
+const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
+const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
+
+var host: Node
+var spawn_random: RandomNumberGenerator
+var player: CharacterBody3D
+var ammo_pickups: Array[Node3D] = []
+var ammo_pickup_chain_total := 0
+var ammo_pickup_chain_time := 0.0
+var canned_food_texture: ImageTexture
+var weapon_loot_texture_cache: Dictionary = {}
+
+
+func attach(owner_node: Node) -> void:
+	host = owner_node
+	spawn_random = owner_node.spawn_random
+	player = owner_node.player
+
+
+func _create_loot_pickup(loot_type: String, world_position: Vector3, data: Dictionary = {}) -> Node3D:
+	var pickup := Node3D.new()
+	pickup.name = "Loot_%s_%d" % [loot_type, Time.get_ticks_usec()]
+	host.add_child(pickup)
+	pickup.global_position = Vector3(world_position.x, 0.34, world_position.z)
+	pickup.set_meta("base_y", pickup.position.y)
+	pickup.set_meta("loot_type", loot_type)
+	for key in data:
+		pickup.set_meta(str(key), data[key])
+
+	var sprite := Sprite3D.new()
+	sprite.name = "LootSprite"
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.shaded = false
+	sprite.transparent = true
+	sprite.no_depth_test = true
+	sprite.render_priority = 88
+	var highlight_color := Color("#f2d27a")
+	match loot_type:
+		"canned_food":
+			sprite.texture = _get_canned_food_texture()
+			sprite.pixel_size = 0.0062
+			highlight_color = Color("#83c99a")
+		"churu":
+			sprite.texture = CHURU_TEXTURE
+			sprite.pixel_size = 0.0011
+			highlight_color = Color("#f2bd55")
+		"raw_scrap":
+			sprite.texture = UI_ICONS.get_icon("scrap", 96, Color("#b9a68c"))
+			sprite.pixel_size = _pickup_pixel_size(sprite.texture, 0.62)
+			highlight_color = Color("#b9a68c")
+		"raw_catnip":
+			sprite.texture = UI_ICONS.get_icon("catnip", 96, Color("#8fd07a"))
+			sprite.pixel_size = _pickup_pixel_size(sprite.texture, 0.62)
+			highlight_color = Color("#8fd07a")
+		"valuable":
+			sprite.texture = UI_ICONS.get_icon("loot", 96, Color("#e6c979"))
+			sprite.pixel_size = _pickup_pixel_size(sprite.texture, 0.58)
+			highlight_color = Color("#e6c979")
+		"medkit":
+			sprite.texture = UI_ICONS.get_icon("medkit", 96, Color("#f4eee2"))
+			sprite.pixel_size = _pickup_pixel_size(sprite.texture, 0.62)
+			highlight_color = Color("#f2b16a")
+		"mod_component":
+			var component_id := str(data.get("component_id", "rubber_gasket"))
+			sprite.texture = _get_mod_component_texture(component_id)
+			sprite.pixel_size = 0.00105
+			highlight_color = _get_mod_component_color(component_id)
+		"weapon_mod":
+			sprite.texture = UI_ICONS.get_icon("mod", 96, Color("#dfc879"))
+			sprite.pixel_size = 0.0062
+			highlight_color = Color("#dfc879")
+		"progression_item":
+			var progression_item_id := str(data.get("progression_item_id", "rifle_blueprint"))
+			var icon_name := "secure" if progression_item_id == "sealed_zone_keycard" else "craft"
+			sprite.texture = UI_ICONS.get_icon(icon_name, 96, Color("#e7c96f"))
+			sprite.pixel_size = 0.0062
+			highlight_color = Color("#e7c96f")
+		"weapon":
+			var weapon_id := str(data.get("weapon_id", "ak47"))
+			sprite.texture = _get_loot_weapon_texture(weapon_id)
+			sprite.pixel_size = _loot_weapon_pixel_size(sprite.texture, weapon_id)
+			highlight_color = Color("#df8f55")
+		"armor":
+			var equipment_id := str(data.get("equipment_id", "scav_vest"))
+			var definition := GameState.get_equipment_definition(equipment_id)
+			var slot := str(definition.get("slot", "body"))
+			sprite.texture = _get_equipment_loot_texture(equipment_id)
+			var target_long_edge := 0.7 if slot == "head" else 0.84
+			var texture_long_edge := float(maxi(sprite.texture.get_width(), sprite.texture.get_height()))
+			sprite.pixel_size = target_long_edge / maxf(texture_long_edge, 1.0)
+			highlight_color = Color("#8bb9a4")
+		_:
+			sprite.texture = AMMO_762_TEXTURE
+			sprite.pixel_size = 0.0032
+	pickup.add_child(sprite)
+	_add_loot_highlight(pickup, highlight_color, 0.92)
+	ammo_pickups.append(pickup)
+	return pickup
+
+
+func _pickup_pixel_size(texture: Texture2D, target_world_size: float) -> float:
+	# UI_ICONS.get_icon()은 커런시/아이템 아이콘에 대해 size 인자를 무시하고
+	# 원본 해상도(예: 1254px)를 그대로 돌려준다. 고정 pixel_size를 쓰면
+	# 아트 해상도에 따라 픽업이 건물만 해진다. 목표 월드 크기로 역산한다.
+	if texture == null:
+		return 0.0062
+	var long_edge := float(maxi(texture.get_width(), texture.get_height()))
+	return target_world_size / maxf(long_edge, 1.0)
+
+
+func _loot_weapon_pixel_size(texture: Texture2D, weapon_id: String) -> float:
+	if texture == null:
+		return 0.001
+	var target_long_edge := 1.25
+	match weapon_id:
+		"m1911":
+			target_long_edge = 0.72
+		"mp5":
+			target_long_edge = 1.1
+		"double_barrel":
+			target_long_edge = 1.3
+	var texture_long_edge := float(maxi(texture.get_width(), texture.get_height()))
+	return target_long_edge / maxf(texture_long_edge, 1.0)
+
+
+func _get_canned_food_texture() -> ImageTexture:
+	if canned_food_texture != null:
+		return canned_food_texture
+	var image := Image.create(72, 88, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	image.fill_rect(Rect2i(18, 12, 36, 64), Color("#26302d"))
+	image.fill_rect(Rect2i(21, 15, 30, 58), Color("#71806d"))
+	image.fill_rect(Rect2i(17, 12, 38, 8), Color("#b8b8aa"))
+	image.fill_rect(Rect2i(17, 68, 38, 8), Color("#8b8d84"))
+	image.fill_rect(Rect2i(23, 31, 26, 28), Color("#8e3f32"))
+	image.fill_rect(Rect2i(27, 36, 18, 5), Color("#e0c77c"))
+	image.fill_rect(Rect2i(27, 46, 18, 8), Color("#d5a953"))
+	image.fill_rect(Rect2i(24, 18, 4, 47), Color(1.0, 1.0, 0.9, 0.2))
+	canned_food_texture = ImageTexture.create_from_image(image)
+	return canned_food_texture
+
+
+func _get_loot_weapon_texture(weapon_id: String) -> Texture2D:
+	var catalog_texture := WEAPON_VISUAL_CATALOG.get_weapon_texture(weapon_id)
+	if catalog_texture != null:
+		return catalog_texture
+	if weapon_loot_texture_cache.has(weapon_id):
+		return weapon_loot_texture_cache[weapon_id]
+	var image := Image.create(128, 64, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	var outline := Color("#171b1c")
+	match weapon_id:
+		"m1911":
+			image.fill_rect(Rect2i(26, 20, 77, 19), outline)
+			image.fill_rect(Rect2i(31, 24, 68, 11), Color("#8f9895"))
+			image.fill_rect(Rect2i(65, 35, 23, 25), outline)
+			image.fill_rect(Rect2i(69, 37, 15, 19), Color("#76503d"))
+		"mp5":
+			image.fill_rect(Rect2i(16, 24, 101, 17), outline)
+			image.fill_rect(Rect2i(22, 28, 88, 9), Color("#4d5654"))
+			image.fill_rect(Rect2i(62, 38, 18, 24), outline)
+			image.fill_rect(Rect2i(84, 38, 14, 17), outline)
+		"double_barrel":
+			image.fill_rect(Rect2i(47, 19, 75, 7), outline)
+			image.fill_rect(Rect2i(47, 29, 75, 7), outline)
+			image.fill_rect(Rect2i(51, 21, 68, 3), Color("#a3aaa4"))
+			image.fill_rect(Rect2i(51, 31, 68, 3), Color("#7d8580"))
+			image.fill_rect(Rect2i(10, 27, 43, 18), outline)
+			image.fill_rect(Rect2i(15, 30, 34, 11), Color("#7d4e35"))
+		_:
+			return AK_DROP_TEXTURE
+	var texture := ImageTexture.create_from_image(image)
+	weapon_loot_texture_cache[weapon_id] = texture
+	return texture
+
+
+func _get_equipment_loot_texture(equipment_id: String) -> Texture2D:
+	var definition := GameState.get_equipment_definition(equipment_id)
+	var texture_path := str(definition.get("texture_path", ""))
+	if not texture_path.is_empty() and ResourceLoader.exists(texture_path):
+		var texture := load(texture_path) as Texture2D
+		if texture != null:
+			return texture
+	var slot := str(definition.get("slot", "body"))
+	return UI_ICONS.get_icon(
+		"helmet" if slot == "head" else "armor",
+		96,
+		Color("#b7c8bd")
+	)
+
+
+func _update_ammo_pickups(delta: float) -> void:
+	host.ammo_notice_time = maxf(0.0, host.ammo_notice_time - delta)
+	ammo_pickup_chain_time = maxf(0.0, ammo_pickup_chain_time - delta)
+	if ammo_pickup_chain_time <= 0.0:
+		ammo_pickup_chain_total = 0
+	if host.hud.ammo_notice and host.ammo_notice_time <= 0.0:
+		host.hud.ammo_notice.visible = false
+	var player_ground := Vector2(player.position.x, player.position.z)
+	var nearest_distance := INF
+	host.nearby_ammo_pickup = null
+	for pickup in ammo_pickups.duplicate():
+		if not is_instance_valid(pickup):
+			ammo_pickups.erase(pickup)
+			continue
+		var base_y := float(pickup.get_meta("base_y", 0.3))
+		pickup.position.y = base_y + sin(Time.get_ticks_msec() * 0.004 + pickup.position.x) * 0.04
+		var pickup_ground := Vector2(pickup.position.x, pickup.position.z)
+		var distance := player_ground.distance_to(pickup_ground)
+		_update_loot_highlight(pickup, distance, delta)
+		if distance <= PICKUP_DISTANCE and distance < nearest_distance:
+			nearest_distance = distance
+			host.nearby_ammo_pickup = pickup
+	if host.hud.ammo_prompt_panel:
+		host.hud.ammo_prompt_panel.visible = (
+			is_instance_valid(host.nearby_ammo_pickup)
+			and not is_instance_valid(host.nearby_field_interaction)
+		)
+	if host.hud.ammo_pickup_button and is_instance_valid(host.nearby_ammo_pickup):
+		host.hud.ammo_pickup_button.text = "%s  [F]" % str(host.nearby_ammo_pickup.get_meta("display_name", "Ammo"))
+
+
+func _collect_nearby_ammo() -> void:
+	if not is_instance_valid(host.nearby_ammo_pickup):
+		return
+	var candidate := _build_pickup_candidate(host.nearby_ammo_pickup)
+	if not GameState.can_add_raid_item(
+		str(candidate.get("type", "")),
+		str(candidate.get("id", "")),
+		int(candidate.get("amount", 1))
+	):
+		_show_bag_full_notice()
+		return
+	host.hud.ammo_notice.add_theme_color_override("font_color", Color("#f2d27a"))
+	host._add_fatigue(FATIGUE_LOOT_GAIN)
+	var loot_type := str(host.nearby_ammo_pickup.get_meta("loot_type", "ammo"))
+	var amount := int(host.nearby_ammo_pickup.get_meta("amount", 1))
+	match loot_type:
+		"canned_food":
+			GameState.canned_food += amount
+			host.hud.ammo_notice.text = "통조림 +%d   보유 %d" % [amount, GameState.canned_food]
+		"churu":
+			GameState.churu += amount
+			host.hud.ammo_notice.text = "희귀 츄르 +%d   보유 %d" % [amount, GameState.churu]
+		"medkit":
+			GameState.medkits += amount
+			host.hud.ammo_notice.text = "구급약 +%d   보유 %d" % [amount, GameState.medkits]
+		"mod_component":
+			var component_id := str(host.nearby_ammo_pickup.get_meta("component_id", "rubber_gasket"))
+			GameState.add_mod_component(component_id, amount)
+			host._advance_basic_mission("parts", amount)
+			host._advance_contract_progress("parts", amount)
+			host.hud.ammo_notice.text = "%s +%d   보유 %d" % [
+				str(host.nearby_ammo_pickup.get_meta("display_name", "총기 부품")),
+				amount,
+				GameState.get_mod_component_count(component_id),
+			]
+		"weapon_mod":
+			var weapon_mod_id := str(host.nearby_ammo_pickup.get_meta("weapon_mod_id", "scope_2x"))
+			GameState.add_weapon_mod(weapon_mod_id, amount)
+			host.hud.ammo_notice.text = "%s +%d" % [
+				_raid_item_display_name("mod", weapon_mod_id),
+				amount,
+			]
+		"progression_item":
+			var progression_item_id := str(
+				host.nearby_ammo_pickup.get_meta("progression_item_id", "rifle_blueprint")
+			)
+			GameState.add_progression_item(progression_item_id, amount)
+			host.hud.ammo_notice.text = "%s 획득" % str(
+				host.nearby_ammo_pickup.get_meta("display_name", "진행도 아이템")
+			)
+		"weapon":
+			var weapon_id := str(host.nearby_ammo_pickup.get_meta("weapon_id", "ak47"))
+			GameState.add_weapon(weapon_id, amount)
+			host.hud.ammo_notice.text = "%s 보관 +%d" % [
+				str(host.nearby_ammo_pickup.get_meta("display_name", "무기")),
+				amount,
+			]
+		"armor":
+			var equipment_id := str(host.nearby_ammo_pickup.get_meta("equipment_id", "scav_vest"))
+			if GameState.add_equipment(equipment_id, amount):
+				var definition := GameState.get_equipment_definition(equipment_id)
+				host.hud.ammo_notice.text = "%s 획득 · 가방에서 장착" % str(definition.get("display_name", "방어구"))
+			else:
+				host.hud.ammo_notice.text = "장비 정보를 확인할 수 없습니다."
+		_:
+			var pickup_ammo_id := str(host.nearby_ammo_pickup.get_meta("ammo_id", "762_fmj"))
+			var updated_ammo_count: int = GameState.get_ammo_count(pickup_ammo_id) + amount
+			GameState.set_ammo_count(pickup_ammo_id, updated_ammo_count)
+			if GameState.equipped_ammo_id == pickup_ammo_id:
+				host.reserve_ammo = updated_ammo_count
+			GameState.reserve_ammo = host.reserve_ammo
+			if ammo_pickup_chain_time <= 0.0:
+				ammo_pickup_chain_total = 0
+			ammo_pickup_chain_total += amount
+			ammo_pickup_chain_time = 2.4
+			host.hud.ammo_notice.text = "+%d %s   보유 %d" % [
+				amount,
+				str(host.nearby_ammo_pickup.get_meta("display_name", "탄약")),
+				updated_ammo_count,
+			]
+	host.hud.ammo_notice.visible = true
+	host.ammo_notice_time = 2.2
+	host._update_equipment_ui()
+	host._update_medkit_button()
+	ammo_pickups.erase(host.nearby_ammo_pickup)
+	host.nearby_ammo_pickup.queue_free()
+	host.nearby_ammo_pickup = null
+	host.hud.ammo_prompt_panel.visible = false
+
+
+func _show_bag_full_notice() -> void:
+	if host.hud.ammo_notice:
+		host.hud.ammo_notice.text = "가방이 꽉 찼습니다."
+		host.hud.ammo_notice.add_theme_color_override("font_color", Color("#ffad8f"))
+		host.hud.ammo_notice.visible = true
+		host.ammo_notice_time = 2.0
+	# 처음 가방이 찬 순간이 이 게임의 핵심을 가르칠 유일한 자리다.
+	# 조작이 아니라 "무엇을 버릴 것인가"를 가르쳐야 한다.
+	if not GameState.bag_pressure_lesson_seen:
+		GameState.bag_pressure_lesson_seen = true
+		GameState.save_persistent_state()
+		host._show_field_notice(
+			"가방은 여기까지다.\n"
+			+ "이제부터는 줍는 게 아니라 고르는 일이다. "
+			+ "칸당 가치가 낮은 물건을 버리고 비싼 것을 실어라.\n"
+			+ "살아서 나가야 내 것이 된다."
+		)
+	host._update_equipment_ui()
+
+
+func _build_pickup_candidate(pickup: Node3D) -> Dictionary:
+	var loot_type := str(pickup.get_meta("loot_type", "ammo"))
+	var amount := maxi(1, int(pickup.get_meta("amount", 1)))
+	var item_type := "ammo"
+	var item_id := str(pickup.get_meta("ammo_id", "762_fmj"))
+	match loot_type:
+		"canned_food":
+			item_type = "food"
+			item_id = "canned_food"
+		"churu":
+			item_type = "churu"
+			item_id = "churu"
+		"raw_scrap":
+			item_type = "raw_scrap"
+			item_id = "raw_scrap"
+		"raw_catnip":
+			item_type = "raw_catnip"
+			item_id = "raw_catnip"
+		"valuable":
+			item_type = "valuable"
+			item_id = str(pickup.get_meta("item_id", "subway_token"))
+		"medkit":
+			item_type = "medkit"
+			item_id = "medkit"
+		"mod_component":
+			item_type = "component"
+			item_id = str(pickup.get_meta("component_id", "rubber_gasket"))
+		"weapon_mod":
+			item_type = "mod"
+			item_id = str(pickup.get_meta("weapon_mod_id", "scope_2x"))
+		"progression_item":
+			item_type = "progression"
+			item_id = str(pickup.get_meta("progression_item_id", "rifle_blueprint"))
+		"weapon":
+			item_type = "weapon"
+			item_id = str(pickup.get_meta("weapon_id", "ak47"))
+		"armor":
+			item_type = "equipment"
+			item_id = str(pickup.get_meta("equipment_id", "scav_vest"))
+	var required := GameState.get_raid_item_added_slot_delta(item_type, item_id, amount)
+	var display_slots := maxi(1, required)
+	var total_value := RAID_ITEM_ECONOMY.get_total_value(
+		item_type,
+		item_id,
+		amount,
+		GameState.raid_special_cargo
+	)
+	return {
+		"type": item_type,
+		"id": item_id,
+		"amount": amount,
+		"title": str(pickup.get_meta("display_name", _raid_item_display_name(item_type, item_id))),
+		"description": _raid_item_description(item_type, item_id),
+		"texture": _raid_item_texture(item_type, item_id),
+		"required_slots": required,
+		"display_slots": display_slots,
+		"total_value": total_value,
+		"value_per_slot": float(total_value) / float(display_slots),
+		"protected": RAID_ITEM_ECONOMY.is_protected(item_type, item_id),
+	}
+
+
+func _spawn_discarded_raid_item(item_type: String, item_id: String, amount: int) -> void:
+	var drop_position: Vector3 = player.global_position + host._get_current_facing_world_direction() * 1.25
+	var loot_type := "ammo"
+	var data := {
+		"amount": amount,
+		"display_name": _raid_item_display_name(item_type, item_id),
+	}
+	match item_type:
+		"weapon":
+			loot_type = "weapon"
+			data["weapon_id"] = item_id
+		"equipment":
+			loot_type = "armor"
+			data["equipment_id"] = item_id
+		"ammo":
+			data["ammo_id"] = item_id
+		"component":
+			loot_type = "mod_component"
+			data["component_id"] = item_id
+		"progression":
+			loot_type = "progression_item"
+			data["progression_item_id"] = item_id
+		"medkit":
+			loot_type = "medkit"
+		"food":
+			loot_type = "canned_food"
+		"churu":
+			loot_type = "churu"
+		"raw_scrap":
+			loot_type = "raw_scrap"
+		"raw_catnip":
+			loot_type = "raw_catnip"
+		"valuable":
+			loot_type = "valuable"
+			data["item_id"] = item_id
+		"mod":
+			loot_type = "weapon_mod"
+			data["weapon_mod_id"] = item_id
+	_create_loot_pickup(loot_type, drop_position, data)
+
+
+func _raid_item_display_name(item_type: String, item_id: String) -> String:
+	if item_type == "special_cargo":
+		return str(GameState.raid_special_cargo.get("title", "봉인된 지하철 화물"))
+	if item_type == "weapon":
+		return str(WEAPON_SYSTEM.get_weapon(item_id).get("display_name", item_id))
+	if item_type == "equipment":
+		return str(GameState.get_equipment_definition(item_id).get("display_name", item_id))
+	if item_type == "mod":
+		return str(WEAPON_SYSTEM.get_mod(item_id).get("display_name", item_id))
+	if item_type == "valuable":
+		# 귀중품은 종류가 많다. 이름은 카탈로그가 단일 진실 원천이다.
+		return str(
+			(LOOT_ECONOMY.ITEM_CATALOG.get(item_id, {}) as Dictionary).get("display_name", item_id)
+		)
+	var names := {
+		"9mm_fmj": "9mm FMJ 탄환",
+		"45_fmj": ".45 ACP FMJ 탄환",
+		"762_fmj": "7.62mm FMJ 탄환",
+		"12g_buckshot": "12게이지 벅샷",
+		"9mm_ap": "9mm AP 탄환",
+		"45_ap": ".45 ACP AP 탄환",
+		"762_ap": "7.62mm AP 탄환",
+		"12g_slug": "12게이지 슬러그",
+		"rubber_gasket": "소음기용 고무 패킹",
+		"scope_lens": "스코프 렌즈",
+		"magazine_spring": "탄창 스프링",
+		"canned_food": "통조림",
+		"medkit": "구급약",
+		"churu": "희귀 츄르",
+		"raw_scrap": "고철 조각",
+		"raw_catnip": "캣닢 잎",
+		"rifle_blueprint": "소총 제작 청사진",
+		"shotgun_blueprint": "산탄총 제작 청사진",
+		"sealed_zone_keycard": "봉인구역 키카드",
+	}
+	return str(names.get(item_id, item_id))
+
+
+func _raid_item_description(item_type: String, item_id: String) -> String:
+	match item_type:
+		"weapon":
+			return "주무기로 장착하거나 쉘터에서 보관·판매할 수 있습니다."
+		"equipment":
+			return str(GameState.get_equipment_definition(item_id).get("description", "방어 장비입니다."))
+		"ammo":
+			return "구경이 맞는 총기에 사용하는 실탄입니다."
+		"component", "mod":
+			return "작업대 제작과 총기 개조에 사용하는 부품입니다."
+		"progression":
+			return "상위 제작과 봉인구역 진입에 필요한 희귀 물품입니다."
+		"food":
+			return "주민이 일하려면 먹어야 합니다. 떨어지면 쉘터 생산이 멈춥니다."
+		"churu":
+			return "쉘터 확장에 쓰이는 희귀 재화입니다."
+		"raw_scrap":
+			return "꾹꾹이 라인의 원료입니다. 부피가 커서 10개마다 가방 한 칸을 차지합니다."
+		"raw_catnip":
+			return "캣닢 정제기의 원료입니다. 부피가 커서 10개마다 가방 한 칸을 차지합니다."
+		"valuable":
+			return "쓸 데는 없지만 값이 나갑니다. 쉘터에서 고철로 바꿉니다."
+		"medkit":
+			return "필드에서 체력을 회복하는 응급 치료품입니다."
+	return "레이드에서 확보한 휴대품입니다."
+
+
+func _raid_item_texture(item_type: String, item_id: String) -> Texture2D:
+	match item_type:
+		"weapon":
+			return WEAPON_VISUAL_CATALOG.get_weapon_texture(item_id)
+		"equipment":
+			return _get_equipment_loot_texture(item_id)
+		"component":
+			return _get_mod_component_texture(item_id)
+		"special_cargo":
+			return SUBWAY_SEALED_CARGO_TEXTURE
+		"food":
+			return _get_canned_food_texture()
+		"churu":
+			return CHURU_TEXTURE
+		"medkit":
+			return UI_ICONS.get_icon("medkit", 96, Color("#f4eee2"))
+		"raw_scrap":
+			return UI_ICONS.get_icon("scrap", 96, Color("#b9a68c"))
+		"raw_catnip":
+			return UI_ICONS.get_icon("catnip", 96, Color("#8fd07a"))
+		"valuable":
+			return UI_ICONS.get_icon("loot", 96, Color("#e6c979"))
+		"progression":
+			return UI_ICONS.get_icon("secure", 96, Color("#e7c96f"))
+		"mod":
+			return UI_ICONS.get_icon("parts", 96, Color("#d6bf82"))
+	return AMMO_762_TEXTURE
+
+
+func _get_mod_component_texture(component_id: String) -> Texture2D:
+	match component_id:
+		"scope_lens": return SCOPE_LENS_TEXTURE
+		"magazine_spring": return MAGAZINE_SPRING_TEXTURE
+		_: return RUBBER_GASKET_TEXTURE
+
+
+func _get_mod_component_color(component_id: String) -> Color:
+	match component_id:
+		"scope_lens": return Color("#65c5d7")
+		"magazine_spring": return Color("#b4b9ae")
+		_: return Color("#d1aa64")
+
+
+func _add_loot_highlight(pickup: Node3D, color: Color, radius: float) -> void:
+	var material := StandardMaterial3D.new()
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(color.r, color.g, color.b, 0.34)
+	material.emission_enabled = true
+	material.emission = color
+	material.emission_energy_multiplier = 1.6
+
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = radius * 0.88
+	ring_mesh.outer_radius = radius
+	ring_mesh.rings = 24
+	ring_mesh.ring_segments = 8
+	ring_mesh.material = material
+	var ring := MeshInstance3D.new()
+	ring.name = "LootRing"
+	ring.position.y = -0.26
+	ring.mesh = ring_mesh
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	pickup.add_child(ring)
+
+	var marker := Sprite3D.new()
+	marker.name = "LootMarker"
+	marker.texture = host._get_loot_glow_texture()
+	marker.position.y = 1.1
+	marker.pixel_size = 0.006
+	marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	marker.shaded = false
+	marker.transparent = true
+	marker.no_depth_test = true
+	marker.render_priority = 120
+	marker.modulate = color
+	pickup.add_child(marker)
+
+
+func _update_loot_highlight(pickup: Node3D, distance: float, _delta: float) -> void:
+	var ring := pickup.get_node_or_null("LootRing") as MeshInstance3D
+	var marker := pickup.get_node_or_null("LootMarker") as Sprite3D
+	var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006 + pickup.position.x)
+	var near_boost := 1.0 if distance > PICKUP_DISTANCE else 1.28
+	if ring:
+		var scale_value := near_boost * (1.0 + pulse * 0.16)
+		ring.scale = Vector3(scale_value, scale_value, scale_value)
+	if marker:
+		marker.position.y = 1.05 + pulse * 0.18
+		var color := marker.modulate
+		color.a = 0.58 + pulse * 0.36
+		marker.modulate = color
+
+
+func _spawn_onboarding_loot_cluster(world: ProceduralCityMap) -> void:
+	# 첫 판에서 가방 갈등을 반드시 한 번 겪게 한다. 부피가 큰 원자재와
+	# 값비싼 소형 물품을 같이 깔아, 무엇을 실을지 고르게 만든다.
+	var origin := player.global_position
+	# 한 자리에 몰아 두면 "왜 이렇게 많아?"가 된다. 수를 줄이고 넓게 흩뿌린다.
+	var plan := [
+		{"type": "raw_scrap", "amount": 8, "data": {}},
+		{"type": "raw_catnip", "amount": 6, "data": {}},
+		{"type": "medkit", "amount": 1, "data": {}},
+		{"type": "mod_component", "amount": 1, "data": {"component_id": "scope_lens"}},
+	]
+	for index in plan.size():
+		var entry := plan[index] as Dictionary
+		var angle := TAU * float(index) / float(plan.size()) + spawn_random.randf_range(-0.4, 0.4)
+		var radius := spawn_random.randf_range(9.0, 16.0)
+		var drop := origin + Vector3(cos(angle), 0.0, sin(angle)) * radius
+		var data := (entry["data"] as Dictionary).duplicate()
+		data["amount"] = int(entry["amount"])
+		_create_loot_pickup(
+			str(entry["type"]),
+			world.find_nearest_open_position(drop),
+			data
+		)

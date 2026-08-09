@@ -17,7 +17,7 @@ func _run() -> void:
 	assert(bool(main_scene.get("has_ak")))
 	assert(main_scene.get("ak_pickup") == null)
 	assert(bool(game_state.get("has_ak")))
-	var initial_pickups := main_scene.get("ammo_pickups") as Array
+	var initial_pickups := main_scene.get("loot_system").ammo_pickups as Array
 	# 첫 판 온보딩 전리품 뭉치가 섞여 있을 수 있다. 이 테스트가 검증하려는 것은
 	# "보장 통조림 보급 20개"이므로 그 집합만 골라 센다.
 	var guaranteed_pickups: Array = []
@@ -93,21 +93,21 @@ func _run() -> void:
 	assert(int(game_state.get("churu")) == churu_before + 1)
 
 	var enemies := main_scene.get("enemies") as Array
-	var pickup_count_before := (main_scene.get("ammo_pickups") as Array).size()
+	var pickup_count_before := (main_scene.get("loot_system").ammo_pickups as Array).size()
 	var random_drop: Node3D = null
 	for _attempt in 40:
 		random_drop = main_scene.call("_spawn_enemy_loot", enemies[0])
 		if is_instance_valid(random_drop):
 			break
 	assert(is_instance_valid(random_drop))
-	assert((main_scene.get("ammo_pickups") as Array).size() == pickup_count_before + 1)
+	assert((main_scene.get("loot_system").ammo_pickups as Array).size() == pickup_count_before + 1)
 	assert(["ammo", "canned_food", "churu", "medkit", "mod_component", "weapon", "armor"].has(str(random_drop.get_meta("loot_type"))))
 
-	var boss_pickup_count_before := (main_scene.get("ammo_pickups") as Array).size()
+	var boss_pickup_count_before := (main_scene.get("loot_system").ammo_pickups as Array).size()
 	enemies[0].set_meta("raid_boss", true)
 	main_scene.call("_spawn_enemy_loot", enemies[0])
 	enemies[0].set_meta("raid_boss", false)
-	var boss_pickups := (main_scene.get("ammo_pickups") as Array).slice(boss_pickup_count_before)
+	var boss_pickups := (main_scene.get("loot_system").ammo_pickups as Array).slice(boss_pickup_count_before)
 	assert(boss_pickups.size() == 2)
 	var boss_drop_types := boss_pickups.map(func(pickup: Node3D) -> String: return str(pickup.get_meta("loot_type")))
 	assert(boss_drop_types.has("churu"))

@@ -95,7 +95,7 @@ func _run() -> void:
 	if not is_instance_valid(call_indicator) or not call_indicator.visible:
 		_fail("enemy loudspeaker call indicator is not visible")
 		return
-	main.set("active_reinforcement_caller", ranged_enemy)
+	main.get("enemy_director").set("active_reinforcement_caller", ranged_enemy)
 	var enemy_count_before := (main.get("enemies") as Array).size()
 	ranged_enemy.call("_update_reinforcement_call", 1.1)
 	if (main.get("enemies") as Array).size() < enemy_count_before + 6:

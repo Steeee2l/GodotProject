@@ -194,7 +194,7 @@ func _setup_extraction_site(world: ProceduralCityMap) -> void:
 func _show_extraction_result(rescued_count: int) -> void:
 	host._refresh_pointer_mode()
 	host._update_combat_overlay_visibility()
-	var combat_xp := GameState.get_raid_experience_reward(host.run_kills, host.run_boss_kills)
+	var combat_xp := GameState.get_raid_experience_reward(host.run_kills, host.enemy_director.run_boss_kills)
 	var cargo_result: Dictionary = host.jackpot._settle_jackpot_cargo()
 	var cargo_xp := int(cargo_result.get("xp", 0))
 	var base_xp_reward: int = combat_xp + host.completed_mission_xp + cargo_xp
@@ -224,7 +224,7 @@ func _show_extraction_result(rescued_count: int) -> void:
 	var cargo_summary := str(cargo_result.get("summary", "특별 화물 없음"))
 	host.hud.extraction_result_summary.text = "처치 %d명 · 보스 %d명 · 주민 후송 %d명\n%s\n%s\n%s ×%.2f · 경로 XP +%d · 총 경험치 +%d\n%s\n획득품은 가방에 보존됩니다." % [
 		host.run_kills,
-		host.run_boss_kills,
+		host.enemy_director.run_boss_kills,
 		rescued_count,
 		mission_summary,
 		cargo_summary,
