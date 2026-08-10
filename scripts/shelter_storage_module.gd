@@ -65,7 +65,7 @@ func _ready() -> void:
 
 
 func get_interaction_prompt() -> String:
-	return "쉘터 창고 열기"
+	return "창고 · 전리품 보관/판매"
 
 
 func get_interaction_radius() -> float:

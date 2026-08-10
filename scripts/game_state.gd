@@ -153,6 +153,7 @@ var raw_material_tip_seen: bool = false
 # 첫 출정에서 한 번씩만 뜨는 코칭. 다리 위 튜토리얼은 동사(이동·조준·사격)만
 # 가르치고 끝나서, 정작 이 게임의 결정 구조는 아무도 설명하지 않았다.
 var raw_material_lesson_seen: bool = false
+var workbench_lesson_seen: bool = false
 var fatigue_lesson_seen: bool = false
 var extraction_choice_lesson_seen: bool = false
 var unlocked_milestones: Array[String] = []
@@ -1034,6 +1035,24 @@ func get_pending_shelter_story_event() -> Dictionary:
 				"내 계약을 하나씩 풀 때마다, 이 도시가 왜 이렇게 됐는지도 한 겹씩 벗겨질 거다.",
 			],
 		}
+	# 부품을 처음 들고 온 순간이 제작대를 가르칠 유일한 적기다. "스프링을 주웠는데
+	# 팔 것밖에 없다"는 인상이 생기기 전에, 부품→개조→강화 루프를 사자가 짚어 준다.
+	if (
+		not workbench_lesson_seen
+		and is_shelter_facility_unlocked("workbench")
+		and _count_total_mod_components() > 0
+	):
+		return {
+			"id": "saja_workbench",
+			"speaker": "사자",
+			"title": "쇳내 나는 가방",
+			"lines": [
+				"가방에서 쇳내가 난다. 스프링, 렌즈, 고무… 그거 행상인에게 팔 생각부터 하지 마라.",
+				"북쪽 벽의 제작대로 가져가. 부품 몇 개면 조준경이 되고, 스프링은 급탄 개조가 된다.",
+				"만든 개조품은 무기에 끼워라. 같은 총이라도 전혀 다른 물건이 된다.",
+				"고철이 남아돌면 제작대에서 무기 영구 강화도 된다. 도시에서 주워 온 모든 것에는 자리가 있어.",
+			],
+		}
 	if rescued_workers > saja_seen_resident_count:
 		return {
 			"id": "saja_resident_%d" % rescued_workers,
@@ -1086,6 +1105,8 @@ func mark_shelter_story_event_seen(event_id: String) -> void:
 		saja_intro_seen = true
 	elif event_id == "saja_second_run":
 		saja_second_run_intro_seen = true
+	elif event_id == "saja_workbench":
+		workbench_lesson_seen = true
 	elif event_id.begins_with("saja_resident_"):
 		saja_seen_resident_count = rescued_workers
 	elif event_id.begins_with("saja_boss_"):
@@ -1980,6 +2001,13 @@ func claim_workbench_starter_parts() -> bool:
 
 func get_mod_component_count(component_id: String) -> int:
 	return int(mod_component_inventory.get(component_id, 0))
+
+
+func _count_total_mod_components() -> int:
+	var total := 0
+	for amount in mod_component_inventory.values():
+		total += maxi(0, int(amount))
+	return total
 
 
 func add_weapon_mod(mod_id: String, amount: int = 1) -> void:
@@ -3400,6 +3428,7 @@ func save_persistent_state() -> bool:
 		"bag_pressure_lesson_seen": bag_pressure_lesson_seen,
 		"raw_material_tip_seen": raw_material_tip_seen,
 		"raw_material_lesson_seen": raw_material_lesson_seen,
+		"workbench_lesson_seen": workbench_lesson_seen,
 		"fatigue_lesson_seen": fatigue_lesson_seen,
 		"extraction_choice_lesson_seen": extraction_choice_lesson_seen,
 		"unlocked_milestones": unlocked_milestones,
@@ -3531,6 +3560,7 @@ func load_persistent_state() -> bool:
 	bag_pressure_lesson_seen = bool(data.get("bag_pressure_lesson_seen", bag_pressure_lesson_seen))
 	raw_material_tip_seen = bool(data.get("raw_material_tip_seen", raw_material_tip_seen))
 	raw_material_lesson_seen = bool(data.get("raw_material_lesson_seen", raw_material_lesson_seen))
+	workbench_lesson_seen = bool(data.get("workbench_lesson_seen", workbench_lesson_seen))
 	fatigue_lesson_seen = bool(data.get("fatigue_lesson_seen", fatigue_lesson_seen))
 	extraction_choice_lesson_seen = bool(data.get("extraction_choice_lesson_seen", extraction_choice_lesson_seen))
 	unlocked_milestones = _to_string_array(data.get("unlocked_milestones", []))

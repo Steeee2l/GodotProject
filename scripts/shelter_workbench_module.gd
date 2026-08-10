@@ -222,7 +222,8 @@ func _ready() -> void:
 
 
 func get_interaction_prompt() -> String:
-	return "무기 작업대"
+	# 이름만으로는 부품의 행선지를 모른다. 기능을 한 줄로 말한다.
+	return "제작대 · 부품→개조품 · 무기 강화"
 
 
 func get_interaction_radius() -> float:

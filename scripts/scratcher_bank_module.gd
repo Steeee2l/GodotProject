@@ -22,7 +22,7 @@ func _ready() -> void:
 
 
 func get_interaction_prompt() -> String:
-	return "꾹꾹이 고철 생산기"
+	return "꾹꾹이 생산기 · 고철 조각→고철 (주민 배치)"
 
 
 func get_interaction_radius() -> float:

@@ -323,10 +323,18 @@ func _collect_nearby_ammo() -> void:
 			GameState.add_mod_component(component_id, amount)
 			host._advance_basic_mission("parts", amount)
 			host._advance_contract_progress("parts", amount)
-			host.hud.ammo_notice.text = "%s +%d   보유 %d" % [
+			# 처음 주운 부품에는 행선지를 붙인다. "팔 것"이 아니라 "개조 재료"라는
+			# 걸 여기서 심어야 파밍이 계획이 된다. 본편 레슨은 쉘터의 사자가 잇는다.
+			var component_hint := (
+				""
+				if GameState.workbench_lesson_seen or GameState.get_mod_component_count(component_id) > amount
+				else "   → 쉘터 제작대에서 개조에 쓴다"
+			)
+			host.hud.ammo_notice.text = "%s +%d   보유 %d%s" % [
 				str(host.nearby_ammo_pickup.get_meta("display_name", "총기 부품")),
 				amount,
 				GameState.get_mod_component_count(component_id),
+				component_hint,
 			]
 		"weapon_mod":
 			var weapon_mod_id := str(host.nearby_ammo_pickup.get_meta("weapon_mod_id", "scope_2x"))
