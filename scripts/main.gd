@@ -3276,6 +3276,13 @@ func _update_equipment_ui() -> void:
 		hud.equipment_weapon_image.tooltip_text = (
 			"%s +%d" % [weapon_name, enhancement_level] if has_ak else "무기 없음"
 		)
+	if hud.equipment_name_label:
+		hud.equipment_name_label.text = (
+			"%s +%d" % [weapon_name, enhancement_level]
+			if has_ak and enhancement_level > 0
+			else (weapon_name if has_ak else "무기 없음")
+		)
+		hud.equipment_name_label.visible = has_ak
 	if hud.equipment_ammo_label:
 		hud.equipment_ammo_label.text = str(hud_state.get("ammo_combined_text", "-- / --"))
 		var hud_ammo_color: Color = hud_state.get("ammo_color", Color("#f1ce70"))

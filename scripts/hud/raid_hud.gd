@@ -67,6 +67,7 @@ var ammo_pickup_button: Button
 var ammo_prompt_panel: PanelContainer
 var dash_button: Button
 var equipment_ammo_label: Label
+var equipment_name_label: Label
 var equipment_condition_label: Label
 var equipment_panel: PanelContainer
 var equipment_reload_bar: ProgressBar
@@ -327,7 +328,7 @@ func build(owner_node: Node) -> void:
 	var fatigue_icon := TextureRect.new()
 	fatigue_icon.name = "FatigueIcon"
 	fatigue_icon.custom_minimum_size = Vector2(34, 34)
-	fatigue_icon.texture = UI_ICONS.get_icon("fitness", 40, Color("#b7c8bd"))
+	fatigue_icon.texture = UI_ICONS.get_icon("stamina", 40, Color("#e3c069"))
 	fatigue_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	fatigue_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	fatigue_row.add_child(fatigue_icon)
@@ -359,51 +360,61 @@ func build(owner_node: Node) -> void:
 	equipment_panel = PanelContainer.new()
 	equipment_panel.name = "EquipmentPanel"
 	equipment_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	equipment_panel.offset_left = -342
-	equipment_panel.offset_top = -236
+	# 컴팩트하게: 그림 + 이름 + 잔탄/예비탄만. 높이를 크게 낮췄다(112 -> 66).
+	equipment_panel.offset_left = -258
+	equipment_panel.offset_top = -190
 	equipment_panel.offset_right = -22
 	equipment_panel.offset_bottom = -124
 	equipment_panel.add_theme_stylebox_override("panel", HudStyle.panel(Color(0.012, 0.018, 0.019, 0.96), Color("#8da997"), 8))
 	equipment_panel.visible = false
 	host.get_node("HUD").add_child(equipment_panel)
 	var equipment_margin := MarginContainer.new()
-	equipment_margin.add_theme_constant_override("margin_left", 14)
-	equipment_margin.add_theme_constant_override("margin_top", 12)
-	equipment_margin.add_theme_constant_override("margin_right", 14)
-	equipment_margin.add_theme_constant_override("margin_bottom", 12)
+	equipment_margin.add_theme_constant_override("margin_left", 12)
+	equipment_margin.add_theme_constant_override("margin_top", 8)
+	equipment_margin.add_theme_constant_override("margin_right", 12)
+	equipment_margin.add_theme_constant_override("margin_bottom", 8)
 	equipment_panel.add_child(equipment_margin)
 	var equipment_row := HBoxContainer.new()
-	equipment_row.add_theme_constant_override("separation", 13)
+	equipment_row.add_theme_constant_override("separation", 12)
+	equipment_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	equipment_margin.add_child(equipment_row)
-	# 무기 그림은 출정 중 총이 바뀌는 이 게임에서 유일한 즉시 식별 수단이라
-	# 남긴다. 대신 이름 라벨(그림과 중복)과 예비탄 라벨(탄약줄과 중복)은 걷어냈고,
-	# 그림이 정보를 더 지도록 내구도를 색으로 얹는다.
+	# 총 그림. 출정 중 무기가 바뀌므로 즉시 식별 수단으로 남긴다. 내구도는 색으로.
 	equipment_weapon_image = TextureRect.new()
-	equipment_weapon_image.custom_minimum_size = Vector2(76, 54)
+	equipment_weapon_image.custom_minimum_size = Vector2(64, 44)
 	equipment_weapon_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	equipment_weapon_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	equipment_weapon_image.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	equipment_row.add_child(equipment_weapon_image)
 	var weapon_text_box := VBoxContainer.new()
 	weapon_text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	weapon_text_box.add_theme_constant_override("separation", 2)
+	weapon_text_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	weapon_text_box.add_theme_constant_override("separation", 1)
 	equipment_row.add_child(weapon_text_box)
+	# 총 이름 — 작게, 한 줄. 그림 옆에서 지금 든 총을 분명히 말해 준다.
+	equipment_name_label = Label.new()
+	equipment_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	equipment_name_label.clip_text = true
+	equipment_name_label.add_theme_font_override("font", font)
+	equipment_name_label.add_theme_font_size_override("font_size", 13)
+	equipment_name_label.add_theme_color_override("font_color", Color("#c6d4cb"))
+	weapon_text_box.add_child(equipment_name_label)
+	# 잔탄 / 탄창 · 예비탄 — 한 줄로 깔끔하게.
 	equipment_ammo_label = Label.new()
 	equipment_ammo_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	equipment_ammo_label.add_theme_font_override("font", font)
-	equipment_ammo_label.add_theme_font_size_override("font_size", 22)
+	equipment_ammo_label.add_theme_font_size_override("font_size", 21)
 	equipment_ammo_label.add_theme_color_override("font_color", Color("#f1ce70"))
 	weapon_text_box.add_child(equipment_ammo_label)
+	# 내구도 경고는 낮을 때만 뜬다(평소 숨김). 예비탄/이름과 자리를 다투지 않게 짧게.
 	equipment_condition_label = Label.new()
-	equipment_condition_label.custom_minimum_size = Vector2(0, 22)
 	equipment_condition_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	equipment_condition_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	equipment_condition_label.clip_text = true
 	equipment_condition_label.add_theme_font_override("font", font)
-	equipment_condition_label.add_theme_font_size_override("font_size", 12)
+	equipment_condition_label.add_theme_font_size_override("font_size", 11)
 	equipment_condition_label.add_theme_color_override("font_color", Color("#9fb0a7"))
 	weapon_text_box.add_child(equipment_condition_label)
 	equipment_reload_bar = ProgressBar.new()
-	equipment_reload_bar.custom_minimum_size = Vector2(0, 7)
+	equipment_reload_bar.custom_minimum_size = Vector2(0, 6)
 	equipment_reload_bar.max_value = 1.0
 	equipment_reload_bar.show_percentage = false
 	equipment_reload_bar.add_theme_stylebox_override("background", HudStyle.panel(Color("#171d1b"), Color("#3e4944"), 4))
