@@ -114,7 +114,7 @@ const EVENT_DEFINITIONS := {
 	},
 	"convoy_wreck": {
 		"title": "수송대 추락",
-		"body": "보급을 실은 수송대가 떨어졌다. 다른 것들도 그리로 간다.",
+		"body": "보급을 실은 수송대가 떨어졌다. 두 약탈 세력이 잔해를 두고 맞붙는다 — 승자가 굳기 전에 끼어들어라.",
 		"min_level": LEVEL_QUIET,
 		"weight": 3.0,
 		"min_delay": 55.0,

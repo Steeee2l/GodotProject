@@ -377,7 +377,8 @@ func _spawn_dynamic_convoy_incident(world: ProceduralCityMap) -> void:
 			"추락 수송대",
 			true
 		)
-	host._show_field_notice("돌발 사건 · 두 약탈 세력이 추락 수송품을 두고 교전합니다.")
+	# 시작 배너는 raid_event_director가 이미 띄운다(같은 프레임에 또 띄우면 덮어써서
+	# 원래 문구가 안 보였다). 여기서는 지도 마커만 남기고 알림은 중복 발화하지 않는다.
 
 
 func _update_faction_conflicts(delta: float) -> void:

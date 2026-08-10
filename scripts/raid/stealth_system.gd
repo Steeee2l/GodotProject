@@ -531,7 +531,12 @@ func _update_stealth_mission(delta: float, distance_to_site: float) -> void:
 	if host.field_mission_detection_time >= detection_grace:
 		host.field_missions._fail_field_mission("수색대에게 위치를 들켰습니다.")
 		return
-	var hold_radius := FIELD_MISSION_STEALTH_HOLD_RADIUS
+	# 은신 유지 반경도 존 작전 반경에 비례한다. 고정 14m는 넓은 후반 구역에서
+	# 지나치게 답답했다. 반경의 60%(약 15~24m)를 엄폐 구역으로 준다.
+	var hold_radius := maxf(
+		FIELD_MISSION_STEALTH_HOLD_RADIUS,
+		host.field_missions._get_field_mission_active_radius() * 0.6
+	)
 	var inside_hide_area := distance_to_site <= hold_radius
 	if inside_hide_area and not detected:
 		host.field_mission_elapsed += delta

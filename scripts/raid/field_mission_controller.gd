@@ -271,12 +271,13 @@ func _start_field_mission(site: Node3D) -> void:
 	host.field_mission_noise_breached = false
 	host._clear_active_mission_collectibles()
 	_set_field_mission_site_state(site, "preparing")
+	# 시작 문구는 좌상단 목표 패널 한 곳에서만 말한다. 예전에는 여기(패널)+알림
+	# +활성화 알림까지 세 번 같은 말을 해서 두세 곳에서 뜨는 것처럼 보였다.
 	_set_field_mission_objective(
 		"작전 준비 · %s" % str(site.get_meta("title", "현장 임무")),
 		"시작까지 %.1f초 · 준비가 끝나기 전에는 적이 투입되지 않습니다." % field_mission_prepare_timer,
 		Color("#f0c96d")
 	)
-	host._show_field_notice("작전 수락 · %d초 후 시작" % ceili(FIELD_MISSION_PREPARE_DURATION))
 
 
 func _activate_field_mission() -> void:
@@ -300,7 +301,8 @@ func _activate_field_mission() -> void:
 		str(host.active_field_mission.get_meta("description", "현장 목표를 수행하십시오.")),
 		Color("#efd06f")
 	)
-	host._show_field_notice("현장 임무 시작 · 첫 위협 접근 %.1f초" % FIELD_MISSION_FIRST_WAVE_DELAY)
+	# 개시 순간에만 짧게 번쩍이는 신호. 세부 목표는 목표 패널이 계속 추적한다.
+	host._show_field_notice("▶ 현장 임무 개시")
 
 
 func _get_field_mission_enemy_total() -> int:
@@ -412,7 +414,9 @@ func _spawn_field_mission_enemies(count: int, escalation: float = 0.0) -> void:
 			host.active_field_mission.global_position,
 			{"field_mission_id": mission_id}
 		)
-		host.field_mission_spawned_enemies += spawned.size()
+		# 의도한 분대 수를 센다. 스폰 위치를 못 찾아 0마리가 나와도 웨이브 카운터가
+		# 멈추지 않게 해, 방어 임무가 "마지막 웨이브 미투입"으로 영원히 안 끝나는 걸 막는다.
+		host.field_mission_spawned_enemies += maxi(squad_size, spawned.size())
 
 
 func _spawn_field_mission_patrols(count: int, escalation: float = 0.0) -> void:
@@ -444,7 +448,9 @@ func _spawn_field_mission_patrols(count: int, escalation: float = 0.0) -> void:
 				"stealth_mission_guard": true,
 			}
 		)
-		host.field_mission_spawned_enemies += spawned.size()
+		# 의도한 분대 수를 센다. 스폰 위치를 못 찾아 0마리가 나와도 웨이브 카운터가
+		# 멈추지 않게 해, 방어 임무가 "마지막 웨이브 미투입"으로 영원히 안 끝나는 걸 막는다.
+		host.field_mission_spawned_enemies += maxi(squad_size, spawned.size())
 		patrol_index += squad_size
 
 
@@ -452,18 +458,21 @@ func _find_field_mission_enemy_position(
 	world: ProceduralCityMap,
 	mission_position: Vector3
 ) -> Vector3:
+	# 적은 작전 반경(그려진 링) 언저리에서 나타나 중심으로 좁혀 온다. 예전엔
+	# 고정 23~34m라 링(존별 25~40m)과 어긋나 "전장이 표시 구역 밖"이었다.
+	# 이제 반경에 비례해 링 가장자리~바깥에서 스폰돼 범위가 넓고 읽힌다.
+	var active_radius := _get_field_mission_active_radius()
+	var min_site := maxf(FIELD_MISSION_ENEMY_MIN_SITE_DISTANCE, active_radius * 0.82)
+	var max_site := maxf(active_radius * 1.5, min_site + 9.0)
 	var fallback := world.find_nearest_physically_open_position(
-		mission_position + Vector3(FIELD_MISSION_ENEMY_MAX_SITE_DISTANCE, 0.0, 0.0),
+		mission_position + Vector3(max_site, 0.0, 0.0),
 		0.72,
 		[player.get_rid()]
 	)
 	fallback.y = 0.08
 	for attempt in 32:
 		var angle := spawn_random.randf_range(0.0, TAU)
-		var distance := spawn_random.randf_range(
-			FIELD_MISSION_ENEMY_MIN_SITE_DISTANCE,
-			FIELD_MISSION_ENEMY_MAX_SITE_DISTANCE
-		)
+		var distance := spawn_random.randf_range(min_site, max_site)
 		var candidate := world.find_nearest_physically_open_position(
 			mission_position + Vector3(cos(angle), 0.0, sin(angle)) * distance,
 			0.72,
