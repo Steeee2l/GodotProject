@@ -186,6 +186,7 @@ var raid_zone_detail_title: Label
 var raid_zone_detail_description: Label
 var raid_zone_detail_rule: Label
 var raid_zone_detail_reward: Label
+var raid_zone_detail_loadout: Label
 var raid_zone_detail_requirement: Label
 var raid_zone_launch_button: Button
 var raid_zone_resupply_button: Button
@@ -3293,6 +3294,11 @@ func _open_raid_zone_select() -> void:
 	raid_zone_detail_reward = Label.new()
 	raid_zone_detail_reward.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	detail_box.add_child(_build_raid_zone_detail_entry("loot", "주요 전리품", raid_zone_detail_reward))
+	# 출정 준비 — 지금 몸에 걸친 것. 가방 여유·탄약·구급약을 한눈에. 위협도 숫자
+	# 대신 "내가 준비됐나"를 말하는, 실제로 결정에 쓰이는 정보다.
+	raid_zone_detail_loadout = Label.new()
+	raid_zone_detail_loadout.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	detail_box.add_child(_build_raid_zone_detail_entry("backpack", "출정 준비", raid_zone_detail_loadout))
 	# 잠긴 구역일 때만 뜨는 상태 문구(키카드/티어 필요). 평상시엔 숨긴다.
 	raid_zone_detail_requirement = Label.new()
 	raid_zone_detail_requirement.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -3524,6 +3530,24 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 		var manifest := GameState.build_raid_loadout_manifest(zone_id)
 		var ammo_count := int(manifest.get("ammo_count", 0))
 		var medkit_count := int(manifest.get("medkits", 0))
+		if is_instance_valid(raid_zone_detail_loadout):
+			var manifest_weapon_id := str(manifest.get("weapon_id", ""))
+			var weapon_display := (
+				str(WEAPON_SYSTEM.get_weapon(manifest_weapon_id).get("display_name", manifest_weapon_id))
+				if not manifest_weapon_id.is_empty()
+				else "맨손 · 현장 조달"
+			)
+			raid_zone_detail_loadout.text = "%s\n가방 %d/%d칸 · 탄약 %d발 · 구급약 %d개" % [
+				weapon_display,
+				GameState.get_raid_bag_used_slots(),
+				GameState.get_raid_bag_capacity(),
+				ammo_count,
+				medkit_count,
+			]
+			var loadout_short := ammo_count < 60 or medkit_count <= 0
+			raid_zone_detail_loadout.add_theme_color_override(
+				"font_color", Color("#e0b06a") if loadout_short else Color("#b7c7bf")
+			)
 		var weapon_id := str(manifest.get("weapon_id", ""))
 		var ammo_id := str(GameState.equipped_ammo_id) if not weapon_id.is_empty() else ""
 		var stored_ammo := (
@@ -3811,6 +3835,7 @@ func _close_raid_zone_select() -> void:
 	raid_zone_detail_title = null
 	raid_zone_detail_description = null
 	raid_zone_detail_reward = null
+	raid_zone_detail_loadout = null
 	raid_zone_detail_requirement = null
 	raid_zone_resupply_button = null
 	raid_zone_launch_button = null

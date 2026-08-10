@@ -68,6 +68,7 @@ var ammo_prompt_panel: PanelContainer
 var dash_button: Button
 var equipment_ammo_label: Label
 var equipment_name_label: Label
+var equipment_ammo_type_label: Label
 var equipment_condition_label: Label
 var equipment_panel: PanelContainer
 var equipment_reload_bar: ProgressBar
@@ -324,32 +325,42 @@ func build(owner_node: Node) -> void:
 	fatigue_panel.add_child(fatigue_margin)
 	var fatigue_row := HBoxContainer.new()
 	fatigue_row.add_theme_constant_override("separation", 9)
+	fatigue_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	fatigue_margin.add_child(fatigue_row)
 	var fatigue_icon := TextureRect.new()
 	fatigue_icon.name = "FatigueIcon"
-	fatigue_icon.custom_minimum_size = Vector2(34, 34)
-	fatigue_icon.texture = UI_ICONS.get_icon("stamina", 40, Color("#e3c069"))
+	fatigue_icon.custom_minimum_size = Vector2(28, 28)
+	fatigue_icon.texture = UI_ICONS.get_icon("stamina", 32, Color("#e3c069"))
 	fatigue_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	fatigue_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	fatigue_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	fatigue_row.add_child(fatigue_icon)
 	var fatigue_box := VBoxContainer.new()
 	fatigue_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	fatigue_box.add_theme_constant_override("separation", 2)
+	fatigue_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	fatigue_box.add_theme_constant_override("separation", 3)
 	fatigue_row.add_child(fatigue_box)
-	# "피로도"라는 고정 라벨은 아이콘과 같은 말을 두 번 하는 자리였다. 지우고
-	# 상태 문구만 남긴다. 그 문구도 임계치를 넘을 때만 나온다.
+	# 유저가 이게 뭔지 모른다는 피드백. "피로도" 라벨을 왼쪽에, 상태/퍼센트를
+	# 오른쪽에 두고 그 아래 바를 붙인다. 정렬이 분명해진다.
 	var fatigue_header := HBoxContainer.new()
+	fatigue_header.add_theme_constant_override("separation", 6)
 	fatigue_box.add_child(fatigue_header)
+	var fatigue_name := Label.new()
+	fatigue_name.text = "피로도"
+	fatigue_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fatigue_name.add_theme_font_override("font", font)
+	fatigue_name.add_theme_font_size_override("font_size", 12)
+	fatigue_name.add_theme_color_override("font_color", Color("#9fb4a9"))
+	fatigue_header.add_child(fatigue_name)
 	fatigue_status_label = Label.new()
-	fatigue_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	fatigue_status_label.text = "0% · 안정"
+	fatigue_status_label.text = "0%"
 	fatigue_status_label.add_theme_font_override("font", font)
 	fatigue_status_label.add_theme_font_size_override("font_size", 12)
 	fatigue_status_label.add_theme_color_override("font_color", Color("#8fc7a8"))
 	fatigue_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	fatigue_header.add_child(fatigue_status_label)
 	fatigue_bar = ProgressBar.new()
-	fatigue_bar.custom_minimum_size = Vector2(190, 8)
+	fatigue_bar.custom_minimum_size = Vector2(190, 7)
 	fatigue_bar.max_value = FATIGUE_MAX
 	fatigue_bar.show_percentage = false
 	fatigue_bar.add_theme_stylebox_override("background", HudStyle.panel(Color("#17201d"), Color("#32443c"), 4))
@@ -360,27 +371,27 @@ func build(owner_node: Node) -> void:
 	equipment_panel = PanelContainer.new()
 	equipment_panel.name = "EquipmentPanel"
 	equipment_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	# 컴팩트하게: 그림 + 이름 + 잔탄/예비탄만. 높이를 크게 낮췄다(112 -> 66).
-	equipment_panel.offset_left = -258
-	equipment_panel.offset_top = -190
-	equipment_panel.offset_right = -22
+	# 아주 컴팩트하게: 작은 총 그림 + [이름·탄약명 / 잔탄] 2줄. 높이 56px.
+	equipment_panel.offset_left = -224
+	equipment_panel.offset_top = -180
+	equipment_panel.offset_right = -20
 	equipment_panel.offset_bottom = -124
 	equipment_panel.add_theme_stylebox_override("panel", HudStyle.panel(Color(0.012, 0.018, 0.019, 0.96), Color("#8da997"), 8))
 	equipment_panel.visible = false
 	host.get_node("HUD").add_child(equipment_panel)
 	var equipment_margin := MarginContainer.new()
-	equipment_margin.add_theme_constant_override("margin_left", 12)
-	equipment_margin.add_theme_constant_override("margin_top", 8)
+	equipment_margin.add_theme_constant_override("margin_left", 10)
+	equipment_margin.add_theme_constant_override("margin_top", 6)
 	equipment_margin.add_theme_constant_override("margin_right", 12)
-	equipment_margin.add_theme_constant_override("margin_bottom", 8)
+	equipment_margin.add_theme_constant_override("margin_bottom", 6)
 	equipment_panel.add_child(equipment_margin)
 	var equipment_row := HBoxContainer.new()
-	equipment_row.add_theme_constant_override("separation", 12)
+	equipment_row.add_theme_constant_override("separation", 10)
 	equipment_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	equipment_margin.add_child(equipment_row)
 	# 총 그림. 출정 중 무기가 바뀌므로 즉시 식별 수단으로 남긴다. 내구도는 색으로.
 	equipment_weapon_image = TextureRect.new()
-	equipment_weapon_image.custom_minimum_size = Vector2(64, 44)
+	equipment_weapon_image.custom_minimum_size = Vector2(52, 36)
 	equipment_weapon_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	equipment_weapon_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	equipment_weapon_image.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -390,31 +401,32 @@ func build(owner_node: Node) -> void:
 	weapon_text_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	weapon_text_box.add_theme_constant_override("separation", 1)
 	equipment_row.add_child(weapon_text_box)
-	# 총 이름 — 작게, 한 줄. 그림 옆에서 지금 든 총을 분명히 말해 준다.
+	# 1줄: 총 이름(왼쪽) + 탄약명(오른쪽, 흐리게).
+	var weapon_header := HBoxContainer.new()
+	weapon_header.add_theme_constant_override("separation", 6)
+	weapon_text_box.add_child(weapon_header)
 	equipment_name_label = Label.new()
 	equipment_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	equipment_name_label.clip_text = true
 	equipment_name_label.add_theme_font_override("font", font)
-	equipment_name_label.add_theme_font_size_override("font_size", 13)
+	equipment_name_label.add_theme_font_size_override("font_size", 12)
 	equipment_name_label.add_theme_color_override("font_color", Color("#c6d4cb"))
-	weapon_text_box.add_child(equipment_name_label)
-	# 잔탄 / 탄창 · 예비탄 — 한 줄로 깔끔하게.
+	weapon_header.add_child(equipment_name_label)
+	equipment_ammo_type_label = Label.new()
+	equipment_ammo_type_label.add_theme_font_override("font", font)
+	equipment_ammo_type_label.add_theme_font_size_override("font_size", 11)
+	equipment_ammo_type_label.add_theme_color_override("font_color", Color("#8fa39a"))
+	equipment_ammo_type_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	weapon_header.add_child(equipment_ammo_type_label)
+	# 2줄: 잔탄 / 탄창 · 예비탄.
 	equipment_ammo_label = Label.new()
 	equipment_ammo_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	equipment_ammo_label.add_theme_font_override("font", font)
-	equipment_ammo_label.add_theme_font_size_override("font_size", 21)
+	equipment_ammo_label.add_theme_font_size_override("font_size", 19)
 	equipment_ammo_label.add_theme_color_override("font_color", Color("#f1ce70"))
 	weapon_text_box.add_child(equipment_ammo_label)
-	# 내구도 경고는 낮을 때만 뜬다(평소 숨김). 예비탄/이름과 자리를 다투지 않게 짧게.
-	equipment_condition_label = Label.new()
-	equipment_condition_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	equipment_condition_label.clip_text = true
-	equipment_condition_label.add_theme_font_override("font", font)
-	equipment_condition_label.add_theme_font_size_override("font_size", 11)
-	equipment_condition_label.add_theme_color_override("font_color", Color("#9fb0a7"))
-	weapon_text_box.add_child(equipment_condition_label)
 	equipment_reload_bar = ProgressBar.new()
-	equipment_reload_bar.custom_minimum_size = Vector2(0, 6)
+	equipment_reload_bar.custom_minimum_size = Vector2(0, 5)
 	equipment_reload_bar.max_value = 1.0
 	equipment_reload_bar.show_percentage = false
 	equipment_reload_bar.add_theme_stylebox_override("background", HudStyle.panel(Color("#171d1b"), Color("#3e4944"), 4))

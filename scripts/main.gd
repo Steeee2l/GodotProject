@@ -2559,9 +2559,9 @@ func _apply_hud_layout() -> void:
 		# 좌상단 체력 바로 아래, 얇은 띠로 붙인다.
 		var fatigue_w := minf(300.0, maxf(190.0, safe_left_width))
 		var fatigue_compact := viewport_size.y < 430.0
-		var fatigue_h := 40.0 if fatigue_compact else 56.0
-		if fatigue < 35.0:
-			fatigue_h = 28.0 if fatigue_compact else 38.0
+		# 라벨("피로도")+퍼센트+바를 항상 보여주므로 높이는 일정하게. 세로 중앙 정렬은
+		# 패널 내부(row/box의 SHRINK_CENTER)가 맡는다.
+		var fatigue_h := 46.0 if fatigue_compact else 54.0
 		hud.fatigue_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		hud.fatigue_panel.offset_left = side_margin
 		hud.fatigue_panel.offset_right = side_margin + fatigue_w
@@ -2703,16 +2703,18 @@ func _apply_hud_layout() -> void:
 			right_stack += utility_size + clampf(13.0 * ui_scale, 8.0, 16.0)
 		# 폰에서는 무기 정보가 화면을 크게 먹을 이유가 없다. 탄약 한 줄과
 		# 무기 그림이면 충분하고, 상태줄은 할 말이 있을 때만 나온다.
+		# 무기 정보는 그림 + [이름·탄약명 / 잔탄] 2줄이면 끝이다. PC·모바일 모두
+		# 낮고 좁게. 예전엔 데스크톱에서 108~190px까지 키워 화면을 크게 먹었다.
 		var compact := viewport_size.y < 520.0
 		var eq_width := (
-			clampf(viewport_size.x * 0.22, 186.0, 260.0)
+			clampf(viewport_size.x * 0.20, 176.0, 224.0)
 			if compact
-			else minf(360.0, maxf(250.0, viewport_size.x * 0.28))
+			else clampf(viewport_size.x * 0.15, 208.0, 248.0)
 		)
 		var eq_height := (
-			clampf(viewport_size.y * 0.17, 62.0, 88.0)
+			clampf(viewport_size.y * 0.12, 50.0, 62.0)
 			if compact
-			else clampf(viewport_size.y * 0.21, 108.0, 190.0)
+			else clampf(viewport_size.y * 0.10, 56.0, 68.0)
 		)
 		hud.equipment_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 		hud.equipment_panel.offset_right = -side_margin
@@ -3287,6 +3289,9 @@ func _update_equipment_ui() -> void:
 			else (weapon_name if has_ak else "무기 없음")
 		)
 		hud.equipment_name_label.visible = has_ak
+	if hud.equipment_ammo_type_label:
+		hud.equipment_ammo_type_label.text = ammo_name if has_ak else ""
+		hud.equipment_ammo_type_label.visible = has_ak
 	if hud.equipment_ammo_label:
 		hud.equipment_ammo_label.text = str(hud_state.get("ammo_combined_text", "-- / --"))
 		var hud_ammo_color: Color = hud_state.get("ammo_color", Color("#f1ce70"))
@@ -6462,8 +6467,13 @@ func _refresh_fatigue_hud() -> void:
 	# 정보가 있는 쪽은 바다. 예전에는 35 미만에서 바를 숨기고 "안정"이라는
 	# 글자만 남겨서, 정작 배워야 할 게이지가 안 보였다. 뒤집는다.
 	if hud.fatigue_status_label:
-		hud.fatigue_status_label.text = "%d%% · %s" % [roundi(fatigue), status]
-		hud.fatigue_status_label.visible = next_warning_band > 0
+		# 퍼센트는 늘 보이고(라벨 옆 정렬이 살아난다), 경고 단어는 임계치부터 붙는다.
+		hud.fatigue_status_label.text = (
+			"%d%%" % roundi(fatigue)
+			if next_warning_band <= 0
+			else "%d%% · %s" % [roundi(fatigue), status]
+		)
+		hud.fatigue_status_label.visible = true
 		hud.fatigue_status_label.add_theme_color_override("font_color", color)
 	if hud.fatigue_fill_style:
 		hud.fatigue_fill_style.bg_color = color
