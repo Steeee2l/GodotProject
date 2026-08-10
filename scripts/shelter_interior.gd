@@ -117,7 +117,6 @@ var production_meter_rows: Dictionary = {}
 var shelter_currency_labels: Dictionary = {}
 var shelter_runtime_label: Label
 var shelter_runtime_bar: ProgressBar
-var churu_buff_buttons: Dictionary = {}
 var shelter_bgm := BGM_DIRECTOR.new()
 var stats_collapse_button: Button
 var stats_summary_label: Label
@@ -186,8 +185,6 @@ var raid_zone_detail_state: Label
 var raid_zone_detail_title: Label
 var raid_zone_detail_description: Label
 var raid_zone_detail_rule: Label
-var raid_zone_detail_threat: Label
-var raid_zone_detail_threat_bar: ProgressBar
 var raid_zone_detail_reward: Label
 var raid_zone_detail_requirement: Label
 var raid_zone_launch_button: Button
@@ -3291,49 +3288,25 @@ func _open_raid_zone_select() -> void:
 	raid_zone_detail_rule.add_theme_color_override("font_color", Color("#d8bd72"))
 	raid_zone_detail_rule.visible = false
 	detail_box.add_child(raid_zone_detail_rule)
-	var separator := HSeparator.new()
-	separator.add_theme_constant_override("separation", 4)
-	detail_box.add_child(separator)
-	var threat_title := Label.new()
-	threat_title.text = "지역 위협도"
-	threat_title.add_theme_font_override("font", FONT)
-	threat_title.add_theme_font_size_override("font_size", 12)
-	threat_title.add_theme_color_override("font_color", Color("#879b91"))
-	detail_box.add_child(threat_title)
-	var threat_row := HBoxContainer.new()
-	threat_row.add_theme_constant_override("separation", 10)
-	detail_box.add_child(threat_row)
-	raid_zone_detail_threat_bar = ProgressBar.new()
-	raid_zone_detail_threat_bar.custom_minimum_size = Vector2(0, 18)
-	raid_zone_detail_threat_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	raid_zone_detail_threat_bar.max_value = 100
-	raid_zone_detail_threat_bar.show_percentage = false
-	raid_zone_detail_threat_bar.add_theme_stylebox_override(
-		"background",
-		_rounded_panel_style(Color("#111a18"), Color("#354941"), 7)
-	)
-	threat_row.add_child(raid_zone_detail_threat_bar)
-	raid_zone_detail_threat = Label.new()
-	raid_zone_detail_threat.custom_minimum_size.x = 48
-	raid_zone_detail_threat.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	raid_zone_detail_threat.add_theme_font_override("font", FONT)
-	raid_zone_detail_threat.add_theme_font_size_override("font_size", 14)
-	threat_row.add_child(raid_zone_detail_threat)
+	# 위협도는 헤더 오른쪽의 등급 칩으로만 말한다(막대·퍼센트 제거). 작전 규모/
+	# 예상 시간/보급 수치는 화면만 채워서 걷어냈다. 츄르 보급 버프도 제거.
 	raid_zone_detail_reward = Label.new()
 	raid_zone_detail_reward.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	detail_box.add_child(_build_raid_zone_detail_entry("loot", "주요 전리품", raid_zone_detail_reward))
+	# 잠긴 구역일 때만 뜨는 상태 문구(키카드/티어 필요). 평상시엔 숨긴다.
 	raid_zone_detail_requirement = Label.new()
 	raid_zone_detail_requirement.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	detail_box.add_child(_build_raid_zone_detail_entry("secure", "작전 규모 · 보급", raid_zone_detail_requirement))
+	raid_zone_detail_requirement.add_theme_font_override("font", FONT)
+	raid_zone_detail_requirement.add_theme_font_size_override("font_size", 14)
+	raid_zone_detail_requirement.add_theme_color_override("font_color", Color("#d78371"))
+	raid_zone_detail_requirement.visible = false
+	detail_box.add_child(raid_zone_detail_requirement)
 	raid_zone_resupply_button = _merchant_button("창고에서 빠른 보충", false, "backpack")
 	raid_zone_resupply_button.name = "RaidZoneResupplyButton"
 	raid_zone_resupply_button.custom_minimum_size.y = 44
 	raid_zone_resupply_button.tooltip_text = "장착 무기 탄약 90발과 구급약 2개까지 창고에서 꺼냅니다."
 	raid_zone_resupply_button.pressed.connect(_quick_resupply_for_raid, CONNECT_DEFERRED)
 	detail_column.add_child(raid_zone_resupply_button)
-	# 사자 예비 권총은 제거됐다. 무기를 다 잃어도 현장 보급품에서 기본 무기가
-	# 넉넉히 나오므로, 파밍으로 다시 무장하는 쪽이 손맛이 산다.
-	detail_column.add_child(_build_churu_buff_section())
 	raid_zone_launch_button = _merchant_button("선택 구역으로 출정", true, "raid")
 	raid_zone_launch_button.name = "RaidZoneLaunchButton"
 	raid_zone_launch_button.custom_minimum_size.y = 52
@@ -3348,75 +3321,6 @@ func _open_raid_zone_select() -> void:
 	if initial_zone_id.is_empty() and not zone_ids.is_empty():
 		initial_zone_id = str(zone_ids[0])
 	_select_raid_zone_preview(initial_zone_id)
-
-
-func _build_churu_buff_section() -> Control:
-	# 나가기 직전에 츄르를 태울지 결정하게 만든다. 아껴두면 죽은 재화가 된다.
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 6)
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 8)
-	box.add_child(header)
-	var icon := TextureRect.new()
-	icon.custom_minimum_size = Vector2(18, 18)
-	icon.texture = UI_ICONS.get_icon("churu", 18, Color("#e0a86c"))
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	header.add_child(icon)
-	var title := Label.new()
-	title.text = "츄르 보급 · 이번 출정 한정"
-	title.add_theme_font_override("font", FONT)
-	title.add_theme_font_size_override("font_size", 12)
-	title.add_theme_color_override("font_color", Color("#a9bcb2"))
-	header.add_child(title)
-	# 세로로 쌓으면 브리핑이 넘친다. 아이콘 + 비용만 남긴 가로 3칸으로 압축한다.
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	box.add_child(row)
-	churu_buff_buttons.clear()
-	for buff_id in GameState.CHURU_BUFFS.keys():
-		var definition: Dictionary = GameState.get_churu_buff_definition(str(buff_id))
-		var button := Button.new()
-		button.add_theme_font_override("font", FONT)
-		button.add_theme_font_size_override("font_size", 11)
-		button.custom_minimum_size.y = 34
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.clip_text = true
-		button.tooltip_text = "%s\n%s" % [
-			definition.get("title", buff_id),
-			definition.get("description", ""),
-		]
-		button.pressed.connect(_activate_churu_buff.bind(str(buff_id)), CONNECT_DEFERRED)
-		row.add_child(button)
-		churu_buff_buttons[str(buff_id)] = button
-	_refresh_churu_buff_buttons()
-	return box
-
-
-func _refresh_churu_buff_buttons() -> void:
-	for buff_id in churu_buff_buttons.keys():
-		var button := churu_buff_buttons[buff_id] as Button
-		if not is_instance_valid(button):
-			continue
-		var definition: Dictionary = GameState.get_churu_buff_definition(str(buff_id))
-		var cost := maxi(1, int(definition.get("cost", 1)))
-		var active: bool = GameState.is_churu_buff_active(str(buff_id))
-		var affordable: bool = GameState.churu >= cost
-		var short_title := str(definition.get("short_title", definition.get("title", buff_id)))
-		button.text = "✓ %s" % short_title if active else "%s ·%d" % [short_title, cost]
-		button.disabled = active or not affordable
-		button.add_theme_color_override(
-			"font_color",
-			Color("#8fd6a8") if active else (Color("#e0c07a") if affordable else Color("#6b7a74"))
-		)
-
-
-func _activate_churu_buff(buff_id: String) -> void:
-	if GameState.try_activate_churu_buff(buff_id):
-		var definition: Dictionary = GameState.get_churu_buff_definition(buff_id)
-		_show_status("%s 적용 · %s" % [definition.get("title", buff_id), definition.get("description", "")])
-		_refresh_churu_buff_buttons()
-		_update_stats()
 
 
 func _build_raid_zone_row(zone_id: String) -> Control:
@@ -3582,9 +3486,12 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 		raid_zone_detail_description.text += "\n전술 · %s" % tactical_rule
 	# 존 고유 규칙 — 이 구역이 다른 구역과 어떻게 다르게 굴러가는지. 위협도
 	# 숫자가 아니라, 준비물이 달라지는 정보라 눈에 띄게 노란색으로 붙인다.
+	# 특수 규칙이 있는 구역에서만 노란 줄로 알린다. 규칙 없는 초반 구역에서
+	# "특수 규칙 없음"을 띄우는 건 소음이라 아예 감춘다.
 	var rule_brief := str(zone.get("rule_brief", ""))
+	var has_special_rule := not str(zone.get("zone_rule", "")).is_empty()
 	if is_instance_valid(raid_zone_detail_rule):
-		if rule_brief.is_empty():
+		if rule_brief.is_empty() or not has_special_rule:
 			raid_zone_detail_rule.visible = false
 		else:
 			raid_zone_detail_rule.visible = true
@@ -3595,48 +3502,28 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 	if not growth.is_empty():
 		raid_zone_detail_description.text += "\n\n지난 출정 이후 ·  %s" % "    ".join(growth)
 	raid_zone_detail_description.tooltip_text = base_description
-	var threat_percent := roundi(float(zone.get("threat", 0.0)) * 100.0)
-	raid_zone_detail_threat.text = "%d%%" % threat_percent
-	raid_zone_detail_threat_bar.value = threat_percent
-	var threat_color := Color("#73c994").lerp(Color("#e36f55"), float(threat_percent) / 100.0)
-	raid_zone_detail_threat.add_theme_color_override("font_color", threat_color)
-	raid_zone_detail_threat_bar.add_theme_stylebox_override(
-		"fill",
-		_rounded_panel_style(threat_color, threat_color.lightened(0.12), 7)
-	)
 	raid_zone_detail_reward.text = str(zone.get("loot_focus", zone.get("reward", "-")))
+	var threat_percent := roundi(float(zone.get("threat", 0.0)) * 100.0)
 	if unlocked:
+		# 위협도는 헤더 칩에 등급으로만. 낮음/보통/높음/극심.
+		var tier_label := "위협 낮음"
+		var tier_color := Color("#72d6a0")
+		if threat_percent >= 75:
+			tier_label = "위협 극심"
+			tier_color = Color("#e36f55")
+		elif threat_percent >= 50:
+			tier_label = "위협 높음"
+			tier_color = Color("#e39b55")
+		elif threat_percent >= 25:
+			tier_label = "위협 보통"
+			tier_color = Color("#e3cf67")
+		raid_zone_detail_state.text = "◆ %s" % tier_label
+		raid_zone_detail_state.add_theme_color_override("font_color", tier_color)
+		raid_zone_detail_state.tooltip_text = ""
+		raid_zone_detail_requirement.visible = false
 		var manifest := GameState.build_raid_loadout_manifest(zone_id)
-		var duration := int(zone.get("recommended_duration_minutes", 25))
-		var enemy_count := int(zone.get("target_enemy_count", 24))
 		var ammo_count := int(manifest.get("ammo_count", 0))
 		var medkit_count := int(manifest.get("medkits", 0))
-		var preparation := "가방 %d/%d칸 · 탄약 %d발 · 구급약 %d개" % [
-			GameState.get_raid_bag_used_slots(),
-			GameState.get_raid_bag_capacity(),
-			ammo_count,
-			medkit_count,
-		]
-		var readiness_warnings: Array[String] = []
-		if ammo_count < 60:
-			readiness_warnings.append("탄약 약 2회 교전 미만")
-		if medkit_count <= 0:
-			readiness_warnings.append("구급약 없음")
-		if readiness_warnings.is_empty():
-			raid_zone_detail_state.text = "● 준비 완료"
-			raid_zone_detail_state.add_theme_color_override("font_color", Color("#72d6a0"))
-		else:
-			raid_zone_detail_state.text = "▲ 준비 확인"
-			raid_zone_detail_state.add_theme_color_override("font_color", Color("#e3bd67"))
-		# 경고는 헤더의 준비 상태 칩이 이미 말한다. 본문엔 수치만 남긴다.
-		raid_zone_detail_state.tooltip_text = (
-			" · ".join(readiness_warnings) if not readiness_warnings.is_empty() else "보급 충분"
-		)
-		raid_zone_detail_requirement.text = "예상 %d분 · 적 약 %d명\n%s" % [
-			duration,
-			enemy_count,
-			preparation,
-		]
 		var weapon_id := str(manifest.get("weapon_id", ""))
 		var ammo_id := str(GameState.equipped_ammo_id) if not weapon_id.is_empty() else ""
 		var stored_ammo := (
@@ -3649,16 +3536,17 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 			(ammo_count < 90 and stored_ammo > 0)
 			or (medkit_count < 2 and stored_medkits > 0)
 		)
-		raid_zone_resupply_button.visible = true
+		# 보충할 게 있을 때만 버튼을 띄운다. "보충 가능한 물품 없음"은 소음이라 숨긴다.
+		raid_zone_resupply_button.visible = can_resupply
 		raid_zone_resupply_button.disabled = not can_resupply
-		raid_zone_resupply_button.text = (
-			"창고에서 보충 · 탄약 %d / 구급약 %d" % [stored_ammo, stored_medkits]
-			if can_resupply
-			else "창고에 보충 가능한 물품 없음"
-		)
+		if can_resupply:
+			raid_zone_resupply_button.text = "창고에서 보충 · 탄약 %d / 구급약 %d" % [
+				stored_ammo, stored_medkits
+			]
 	else:
 		raid_zone_detail_state.text = "■ 봉쇄 구역"
 		raid_zone_detail_state.add_theme_color_override("font_color", Color("#d78371"))
+		raid_zone_detail_requirement.visible = true
 		raid_zone_detail_requirement.text = (
 			"봉쇄 구역 키카드 필요" if needs_keycard else "쉘터 Tier %d 필요" % required_tier
 		)
@@ -3922,8 +3810,6 @@ func _close_raid_zone_select() -> void:
 	raid_zone_detail_state = null
 	raid_zone_detail_title = null
 	raid_zone_detail_description = null
-	raid_zone_detail_threat = null
-	raid_zone_detail_threat_bar = null
 	raid_zone_detail_reward = null
 	raid_zone_detail_requirement = null
 	raid_zone_resupply_button = null
