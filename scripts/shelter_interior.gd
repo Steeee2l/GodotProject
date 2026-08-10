@@ -173,6 +173,7 @@ var contract_story_index := 0
 var contract_story_open := false
 var contract_story_speaker_name := "사자"
 var contract_story_portrait: Texture2D
+var contract_story_typewriter: Typewriter
 var contract_story_completion_owner := ""
 var contract_story_completion_id := ""
 var shelter_stats_refresh_time := 0.0
@@ -948,6 +949,10 @@ func _open_contract_story(
 	contract_story_body_label.add_theme_font_size_override("font_size", 17 if compact_layout else 20)
 	contract_story_body_label.add_theme_color_override("font_color", Color("#e5ece7"))
 	text_box.add_child(contract_story_body_label)
+	# 대사는 한 글자씩 소리와 함께 흘러나온다. 레이어에 붙여 함께 정리된다.
+	contract_story_typewriter = Typewriter.new()
+	contract_story_layer.add_child(contract_story_typewriter)
+	contract_story_typewriter.attach(contract_story_body_label)
 	var actions := HBoxContainer.new()
 	actions.alignment = BoxContainer.ALIGNMENT_END
 	text_box.add_child(actions)
@@ -961,7 +966,10 @@ func _open_contract_story(
 func _refresh_contract_story() -> void:
 	if not is_instance_valid(contract_story_body_label):
 		return
-	contract_story_body_label.text = contract_story_lines[contract_story_index]
+	if is_instance_valid(contract_story_typewriter):
+		contract_story_typewriter.start(contract_story_lines[contract_story_index])
+	else:
+		contract_story_body_label.text = contract_story_lines[contract_story_index]
 	contract_story_progress_label.text = "%d / %d" % [
 		contract_story_index + 1,
 		contract_story_lines.size(),
@@ -975,6 +983,10 @@ func _refresh_contract_story() -> void:
 
 func _advance_contract_story() -> void:
 	if not contract_story_open:
+		return
+	# 아직 타이핑 중이면 첫 입력은 "전부 즉시 표시"로 쓴다. 그 다음 입력에서 넘어간다.
+	if is_instance_valid(contract_story_typewriter) and contract_story_typewriter.is_typing():
+		contract_story_typewriter.skip()
 		return
 	contract_story_index += 1
 	if contract_story_index < contract_story_lines.size():
@@ -991,6 +1003,7 @@ func _advance_contract_story() -> void:
 	if is_instance_valid(contract_story_layer):
 		contract_story_layer.queue_free()
 	contract_story_layer = null
+	contract_story_typewriter = null
 	contract_story_title_label = null
 	contract_story_body_label = null
 	contract_story_progress_label = null

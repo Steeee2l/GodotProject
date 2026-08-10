@@ -117,6 +117,7 @@ var objective_detail: Label
 var objective_progress: Label
 var dialogue_panel: PanelContainer
 var dialogue_text: Label
+var dialogue_typewriter: Typewriter
 var continue_label: Label
 var ammo_label: Label
 var magazine_label: Label
@@ -1011,6 +1012,10 @@ func _build_dialogue_ui(hud: CanvasLayer) -> void:
 	dialogue_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	dialogue_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.add_child(dialogue_text)
+	# 나비의 독백도 한 글자씩 소리와 함께 흐른다.
+	dialogue_typewriter = Typewriter.new()
+	add_child(dialogue_typewriter)
+	dialogue_typewriter.attach(dialogue_text)
 	continue_label = Label.new()
 	continue_label.text = "화면 터치" if touch_enabled else "클릭 또는 SPACE"
 	continue_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -1457,11 +1462,14 @@ func _update_intro_walk(delta: float) -> void:
 
 
 func _show_dialogue() -> void:
-	dialogue_text.text = DIALOGUE_LINES[dialogue_index]
 	dialogue_panel.visible = true
 	dialogue_panel.modulate.a = 0.0
 	var tween := create_tween()
 	tween.tween_property(dialogue_panel, "modulate:a", 1.0, 0.18)
+	if dialogue_typewriter != null:
+		dialogue_typewriter.start(DIALOGUE_LINES[dialogue_index])
+	else:
+		dialogue_text.text = DIALOGUE_LINES[dialogue_index]
 
 
 func _advance_dialogue() -> void:
@@ -1472,6 +1480,10 @@ func _advance_dialogue() -> void:
 	if now - dialogue_advance_msec < 260:
 		return
 	dialogue_advance_msec = now
+	# 타이핑 중이면 첫 입력은 전부 즉시 표시. 다음 입력에서 다음 줄로.
+	if dialogue_typewriter != null and dialogue_typewriter.is_typing():
+		dialogue_typewriter.skip()
+		return
 	if phase == "intro_dialogue":
 		dialogue_index += 1
 		if dialogue_index < 3:
