@@ -345,6 +345,9 @@ var completed_mission_xp := 0
 var field_objective_title := ""
 var field_objective_detail := ""
 var field_objective_color := Color("#8fd0c1")
+var objective_reveal_alpha := 0.0
+const OBJECTIVE_REVEAL_RADIUS := 24.0
+const OBJECTIVE_REVEAL_TYPES := ["basic_mission_subway", "mission_start"]
 var boss_alert_panel: PanelContainer
 var boss_alert_title: Label
 var boss_alert_subtitle: Label
@@ -686,6 +689,7 @@ func _physics_process(delta: float) -> void:
 	if mobile_reload_button:
 		mobile_reload_button.disabled = weapon_reloading or loafing or not has_ak or reserve_ammo <= 0
 	_update_field_interactions(delta)
+	_update_objective_reveal(delta)
 	extraction._update_extraction_discovery()
 	_update_combat_overlay_visibility()
 	stealth._update_stealth_takedown_prompt()
@@ -5383,8 +5387,30 @@ func _refresh_objective_panel() -> void:
 		"font_color",
 		field_objective_color if not field_objective_title.is_empty() else Color("#d9cfab")
 	)
+	# 상시 표시하지 않는다. 내용이 있어도 목표 스팟 근처에 왔을 때만 스윽 드러난다.
+	# 실제 노출은 _update_objective_reveal이 근접도로 페이드한다.
 	objective_panel.visible = not lines.is_empty()
 	_apply_hud_layout()
+
+
+func _update_objective_reveal(delta: float) -> void:
+	# 목표는 항상 떠 있지 않는다. 미션 스팟 근처에 진입하면 스윽 드러나고, 멀어지면
+	# 사라진다. 진행 중인 현장 미션이 있을 땐 계속 보인다. 상시 목표 UI가 화면을
+	# 덮던 문제와 시작 문구 중복을 함께 줄인다.
+	if objective_panel == null or not objective_panel.visible:
+		return
+	var reveal := is_instance_valid(active_field_mission)
+	if not reveal:
+		for point in field_interactions:
+			if not is_instance_valid(point):
+				continue
+			if str(point.get_meta("interaction_type", "")) in OBJECTIVE_REVEAL_TYPES:
+				if player.global_position.distance_to(point.global_position) <= OBJECTIVE_REVEAL_RADIUS:
+					reveal = true
+					break
+	var target_alpha := 1.0 if reveal else 0.0
+	objective_reveal_alpha = move_toward(objective_reveal_alpha, target_alpha, delta * 3.5)
+	objective_panel.modulate.a = objective_reveal_alpha
 
 
 func _update_defense_mission(delta: float, distance_to_site: float) -> void:
