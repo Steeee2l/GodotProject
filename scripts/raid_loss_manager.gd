@@ -46,7 +46,9 @@ static func build_death_corpse_loot() -> Dictionary:
 
 static func store_death_corpse(player_position: Vector3) -> Dictionary:
 	var loot := build_death_corpse_loot()
-	GameState.secure_dog_items.clear()
+	# 시큐어 슬롯 몫을 시체 전리품에서 빼내 확보한다. 츄르 > 개조 부품 > 구급약
+	# 순으로 슬롯 수만큼. 죽어도 "그것만은 남는" 최소한의 보험이다.
+	fill_secure_slots_from_loot(loot)
 	if get_item_count(loot) <= 0:
 		GameState.clear_pending_corpse_recovery()
 		return loot

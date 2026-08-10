@@ -108,6 +108,8 @@ func _run() -> void:
 	assert(not bool(main_scene.get("mouse_fire_held")))
 	main_scene.set("laser_aim_held", true)
 	main_scene.set("magazine_ammo", 0)
+	# 근접 폴백은 예비탄까지 없을 때만 나온다(예비탄이 있으면 재장전이 우선).
+	main_scene.set("reserve_ammo", 0)
 	main_scene.set("melee_attack_cooldown", 0.0)
 	main_scene.call("_input", left_press)
 	assert(float(main_scene.get("melee_attack_cooldown")) > 0.0)

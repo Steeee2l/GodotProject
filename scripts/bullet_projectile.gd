@@ -49,6 +49,10 @@ func _ready() -> void:
 	collision.shape = shape
 	add_child(collision)
 
+	# 방향이 0이면 look_at이 "같은 위치" 오류를 뿜는다(보스 처치 직후 적이 자기
+	# 자리를 향해 쏘는 프레임에 발생, 오류 스팸으로 프레임이 멈춘 사례). 정면으로 보정.
+	if direction.length_squared() < 0.0001:
+		direction = Vector3.FORWARD
 	look_at(global_position + direction, Vector3.UP)
 
 

@@ -115,7 +115,8 @@ func _run() -> void:
 	var close_enemy_position := (main_scene.get("player") as Node3D).global_position + Vector3(3.5, 0.0, 0.0)
 	(enemy as Node3D).global_position = close_enemy_position
 	var cover_blocker := StaticBody3D.new()
-	cover_blocker.collision_layer = 1
+	# 적 시야 레이는 WORLD_ONLY_SIGHT_MASK(64)만 본다. 레이어 1(플레이어)은 통과.
+	cover_blocker.collision_layer = 64
 	cover_blocker.position = (main_scene.get("player") as Node3D).global_position + Vector3(1.75, 0.0, 0.0)
 	var cover_collision := CollisionShape3D.new()
 	var cover_shape := BoxShape3D.new()

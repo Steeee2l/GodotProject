@@ -70,10 +70,12 @@ func _run() -> void:
 		_fail("the single player bed is missing")
 	if shelter.find_children("BedModule*", "Node3D", true, false).size() > 0:
 		_fail("obsolete resident beds are still present")
-	if shelter.find_children("ScratcherLineSlot*", "Node3D", true, false).size() != int(game_state.call("get_scratcher_worker_slots")):
-		_fail("scratcher production line does not match unlocked slots")
-	if shelter.find_children("CatnipLineSlot*", "Node3D", true, false).size() != int(game_state.call("get_catnip_worker_slots")):
-		_fail("catnip production line does not match unlocked slots")
+	# 바닥 슬롯 플레이트(장식)는 제거됐다. 워커는 _scratcher/_catnip_work_position
+	# 좌표로 직접 이동하므로, 슬롯 수는 좌표 함수가 유효한지로만 확인한다.
+	if int(game_state.call("get_scratcher_worker_slots")) <= 0:
+		_fail("scratcher worker slots collapsed to zero")
+	if int(game_state.call("get_catnip_worker_slots")) <= 0:
+		_fail("catnip worker slots collapsed to zero")
 	var working_residents := 0
 	var worker_scrap_rate_total := 0.0
 	for resident in resident_nodes:

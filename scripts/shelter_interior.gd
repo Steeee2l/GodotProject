@@ -1231,15 +1231,8 @@ func _build_interface() -> void:
 	stats_label.add_theme_font_size_override("font_size", 15)
 	stats_label.add_theme_color_override("font_color", Color("#8fa79c"))
 	header_row.add_child(stats_label)
-	stats_collapse_button = Button.new()
-	stats_collapse_button.name = "StatsCollapseButton"
-	stats_collapse_button.custom_minimum_size = Vector2(34, 26)
-	stats_collapse_button.focus_mode = Control.FOCUS_NONE
-	stats_collapse_button.add_theme_font_override("font", FONT)
-	stats_collapse_button.add_theme_font_size_override("font_size", 13)
-	stats_collapse_button.add_theme_color_override("font_color", Color("#9db3a9"))
-	stats_collapse_button.pressed.connect(_toggle_stats_panel)
-	header_row.add_child(stats_collapse_button)
+	# 접기(더보기) 버튼은 제거했다. 패널 자체를 4재화+가동연료의 컴팩트한 형태로
+	# 줄였으므로, 항상 펼쳐 두는 쪽이 정보도 더 잘 전달되고 탭 낭비도 없다.
 	outer_box.add_child(_build_health_row())
 	# 접혔을 때도 이 한 줄은 남는다. 나갈 이유를 늘 보여주기 위해서.
 	stats_summary_label = Label.new()
@@ -1274,13 +1267,13 @@ func _build_interface() -> void:
 	resource_grid.add_theme_constant_override("h_separation", 14)
 	resource_grid.add_theme_constant_override("v_separation", 4)
 	stats_box.add_child(resource_grid)
+	# 재화는 4종만 상시 표시한다. 원자재(고철 조각·캣닢 잎)는 가동 연료 줄이
+	# 담당한다 — 여섯 줄은 읽는 게 아니라 스쳐 지나가게 된다.
 	for resource_data in [
 		["scrap", "고철", Color("#c7d1ce")],
-		["catnip", "캣닢", Color("#a9db78")],
 		["food", "통조림", Color("#e5b55b")],
+		["catnip", "캣닢", Color("#a9db78")],
 		["churu", "츄르", Color("#d99b67")],
-		["raw_scrap", "고철 조각", Color("#b9a68c")],
-		["raw_catnip", "캣닢 잎", Color("#8fd07a")],
 	]:
 		var chip := _currency_chip(str(resource_data[0]), str(resource_data[1]), resource_data[2], 20, 150)
 		resource_grid.add_child(chip)
@@ -2675,12 +2668,11 @@ func _apply_shelter_safe_layout() -> void:
 	var stats_panel := get_node_or_null("ShelterHUD/ShelterStatsPanel") as Control
 	if stats_panel:
 		stats_panel.position = Vector2(24.0 + safe.x, 22.0 + safe.y)
-		# 낮은 화면에서 전개 상태로 두면 패널이 세로 절반을 먹는다.
-		# 처음 한 번만 화면에 맞춰 기본값을 정하고, 이후엔 플레이어 선택을 존중한다.
+		# 접기 버튼을 없앴으므로 항상 펼친다. 내용 자체를 4재화+연료로 줄여
+		# 모바일에서도 패널이 화면을 잠식하지 않는다.
 		if not stats_panel_default_applied:
 			stats_panel_default_applied = true
-			var roomy := viewport_size.y >= 760.0 and not DisplayServer.is_touchscreen_available()
-			_set_stats_panel_expanded(roomy)
+			_set_stats_panel_expanded(true)
 		stats_panel.custom_minimum_size.x = (
 			clampf(viewport_size.x * 0.42, 240.0, 370.0)
 			if DisplayServer.is_touchscreen_available()
@@ -2899,8 +2891,6 @@ func _update_stats() -> void:
 		(shelter_currency_labels["catnip"] as Label).text = "캣닢  %s" % GameState.format_compact_number(GameState.catnip)
 		(shelter_currency_labels["food"] as Label).text = "통조림  %s" % GameState.format_compact_number(GameState.canned_food)
 		(shelter_currency_labels["churu"] as Label).text = "츄르  %s" % GameState.format_compact_number(GameState.churu)
-		(shelter_currency_labels["raw_scrap"] as Label).text = "고철 조각  %s" % GameState.format_compact_number(GameState.raw_scrap)
-		(shelter_currency_labels["raw_catnip"] as Label).text = "캣닢 잎  %s" % GameState.format_compact_number(GameState.raw_catnip)
 	_update_runtime_row()
 	_update_stats_summary()
 	if shelter_upgrade_button:
@@ -2911,8 +2901,20 @@ func _update_stats() -> void:
 		else:
 			var scrap_cost := int(cost.get("scrap", 0))
 			var churu_cost := int(cost.get("churu", 0))
-			shelter_upgrade_button.text = "Tier %d 확장  ·  고철 %s + 츄르 %s" % [
-				GameState.shelter_tier + 1,
+			var next_tier := GameState.shelter_tier + 1
+			# 확장이 뭘 바꾸는지 버튼이 직접 말한다. 다음 티어로 열리는 출정 구역이
+			# 있으면 그것부터 — 구역 해금이 확장의 가장 큰 이유다.
+			var unlock_hint := ""
+			for zone_id in GameState.get_raid_zone_ids():
+				var zone: Dictionary = GameState.get_raid_zone(str(zone_id))
+				if int(zone.get("required_tier", 1)) == next_tier:
+					unlock_hint = "%s 해금" % str(zone.get("name", ""))
+					break
+			if unlock_hint.is_empty():
+				unlock_hint = "수용·생산 슬롯 확장"
+			shelter_upgrade_button.text = "Tier %d 확장 → %s  ·  고철 %s + 츄르 %s" % [
+				next_tier,
+				unlock_hint,
 				GameState.format_compact_number(scrap_cost),
 				GameState.format_compact_number(churu_cost),
 			]

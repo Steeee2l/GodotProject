@@ -32,9 +32,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	var key_event := event as InputEventKey
 	if is_full_reset_shortcut(key_event):
+		# 키 하나로 확인 없이 세이브를 지우면 안 된다. 모바일 버튼과 같은
+		# 확인 다이얼로그를 거친다.
 		get_viewport().set_input_as_handled()
-		GameState.reset_all_progress_for_opening()
-		get_tree().call_deferred("change_scene_to_file", OPENING_SCENE_PATH)
+		_show_reset_confirmation()
 		return
 	if not is_shelter_shortcut(key_event):
 		return

@@ -257,9 +257,12 @@ func _show_extraction_result(rescued_count: int) -> void:
 	if GameState.pending_level_choices > 0:
 		host._show_level_reward_choices()
 	else:
+		# 정산은 이번 판의 보상 순간이다. 예전 1.25초 자동 닫힘은 7줄짜리 요약을
+		# 읽기도 전에 지워 버렸다. 충분히 보여주고 닫는다 — 첫 탈출일수록
+		# "내가 뭘 벌었는지"가 다음 판의 동기가 된다.
 		var wait_tween := host.create_tween()
 		wait_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
-		wait_tween.tween_interval(1.25)
+		wait_tween.tween_interval(4.5)
 		wait_tween.tween_callback(_finish_extraction_to_shelter)
 
 

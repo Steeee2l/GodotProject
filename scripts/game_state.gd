@@ -101,11 +101,10 @@ var equipped_weapon_mods: Array[String] = []
 var weapon_mod_loadouts: Dictionary = {"ak47": []}
 var equipped_magazine_id: String = "ak_30rnd"
 var equipped_ammo_id: String = "762_fmj"
+# 시작 탄약은 장착 무기(AK) 것만. 예전엔 권총/샷건 탄까지 들려 줘서, 쓸 무기도
+# 없는 탄약이 가방 15칸 중 3칸을 처음부터 좀먹었다(탄종당 1칸).
 var ammo_inventory: Dictionary = {
-	"9mm_fmj": 60,
-	"45_fmj": 28,
 	"762_fmj": 90,
-	"12g_buckshot": 12,
 }
 var secure_dog_slots: int = 1
 var secure_dog_items: Array[Dictionary] = []
@@ -160,6 +159,9 @@ var unlocked_milestones: Array[String] = []
 var pending_milestone_unlocks: Array[Dictionary] = []
 var resident_reroll_counts: Dictionary = {}
 var shelter_return_serial: int = 0
+# 살아서 돌아온 횟수. shelter_return_serial은 사망 귀환도 세므로(시체 부패·행상인
+# 주기 등이 쓴다), "살아 돌아온 자에게만" 열리는 서사는 이 값으로 판정한다.
+var survived_return_count: int = 0
 var merchant_last_roll_serial: int = -1
 var merchant_status: String = "away"
 var merchant_decline_count: int = 0
@@ -910,7 +912,8 @@ func clear_carried_raid_inventory_after_death() -> void:
 	equipped_body_armor_id = ""
 	equipped_head_armor_id = ""
 	equipped_footwear_id = ""
-	secure_dog_items.clear()
+	# secure_dog_items는 여기서 지우지 않는다 — 사망 정산이 끝난 뒤
+	# restore_secure_items_after_death가 돌려주고 스스로 비운다.
 	raid_special_cargo.clear()
 	save_persistent_state()
 
@@ -920,8 +923,10 @@ func finish_corpse_recovery_attempt() -> void:
 		clear_pending_corpse_recovery()
 
 
-func register_shelter_return() -> void:
+func register_shelter_return(survived: bool = true) -> void:
 	shelter_return_serial += 1
+	if survived:
+		survived_return_count += 1
 	clear_confirmed_raid_manifest()
 	# 츄르 버프는 한 판짜리다. 복귀와 동시에 사라진다.
 	clear_churu_buffs()
@@ -1015,7 +1020,7 @@ func get_pending_shelter_story_event() -> Dictionary:
 				"우선 쉬어. 네가 가져오는 조각들이, 이 침묵이 무엇을 숨겼는지 한 겹씩 말해 줄 거다.",
 			],
 		}
-	if shelter_return_serial >= 1 and not saja_second_run_intro_seen:
+	if survived_return_count >= 1 and not saja_second_run_intro_seen:
 		return {
 			"id": "saja_second_run",
 			"speaker": "사자",
@@ -3449,6 +3454,7 @@ func save_persistent_state() -> bool:
 		"shelter_raw_scrap_fraction": shelter_raw_scrap_fraction,
 		"shelter_raw_catnip_fraction": shelter_raw_catnip_fraction,
 		"shelter_return_serial": shelter_return_serial,
+		"survived_return_count": survived_return_count,
 		"merchant_last_roll_serial": merchant_last_roll_serial,
 		"merchant_status": merchant_status,
 		"merchant_decline_count": merchant_decline_count,
@@ -3599,6 +3605,8 @@ func load_persistent_state() -> bool:
 	shelter_raw_scrap_fraction = float(data.get("shelter_raw_scrap_fraction", shelter_raw_scrap_fraction))
 	shelter_raw_catnip_fraction = float(data.get("shelter_raw_catnip_fraction", shelter_raw_catnip_fraction))
 	shelter_return_serial = int(data.get("shelter_return_serial", shelter_return_serial))
+	# 구 세이브 호환: 값이 없으면 기존 귀환 수를 생환 수로 간주한다.
+	survived_return_count = int(data.get("survived_return_count", shelter_return_serial))
 	merchant_last_roll_serial = int(data.get("merchant_last_roll_serial", merchant_last_roll_serial))
 	merchant_status = str(data.get("merchant_status", merchant_status))
 	merchant_decline_count = int(data.get("merchant_decline_count", merchant_decline_count))
@@ -3764,10 +3772,7 @@ func reset_run() -> void:
 	equipped_magazine_id = "ak_30rnd"
 	equipped_ammo_id = "762_fmj"
 	ammo_inventory = {
-		"9mm_fmj": 60,
-		"45_fmj": 28,
 		"762_fmj": 90,
-		"12g_buckshot": 12,
 	}
 	secure_dog_slots = 1
 	secure_dog_items.clear()
@@ -3800,6 +3805,7 @@ func reset_run() -> void:
 	shelter_raw_catnip_fraction = 0.0
 	workbench_starter_parts_claimed = false
 	shelter_return_serial = 0
+	survived_return_count = 0
 	merchant_last_roll_serial = -1
 	merchant_status = "away"
 	merchant_decline_count = 0

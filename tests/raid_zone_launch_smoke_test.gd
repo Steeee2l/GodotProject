@@ -27,11 +27,14 @@ func _run() -> void:
 	assert(not launch_button.disabled)
 	launch_button.pressed.emit()
 
-	await process_frame
-	await process_frame
-	await process_frame
+	# 씬 전환은 0.3초 페이드 트윈 뒤에 일어난다. 3프레임으로는 못 기다린다.
+	for _frame in 45:
+		await process_frame
+		if is_instance_valid(current_scene) and current_scene.scene_file_path == "res://scenes/main.tscn":
+			break
 	assert(is_instance_valid(current_scene))
 	assert(current_scene.scene_file_path == "res://scenes/main.tscn")
+	# main._ready가 진입 직후 플래그를 소비해 false로 되돌린다.
 	assert(bool(game_state.get("returning_from_shelter")) == false)
 
 	print("RAID_ZONE_LAUNCH_OK")

@@ -283,6 +283,7 @@ var player_last_frame_position := Vector3.ZERO
 var player_stuck_time := 0.0
 var roll_active := false
 var roll_elapsed := 0.0
+var roll_iframe_until_msec := 0
 var roll_stamina := ROLL_STAMINA_MAX
 var roll_afterimage_timer := 0.0
 var roll_direction := Vector3.ZERO
@@ -977,6 +978,9 @@ func _finish_roll() -> void:
 		return
 	roll_active = false
 	roll_elapsed = 0.0
+	# 착지 직후 120ms 유예 — 오프닝 튜토리얼과 같은 감각. 굴림이 끝나는
+	# 프레임에 맞는 억울함을 막는다.
+	roll_iframe_until_msec = Time.get_ticks_msec() + 120
 	player.velocity = roll_direction * ROLL_END_SPEED
 	_set_motion_state("idle")
 	state_label.text = "경계 중"
@@ -1958,7 +1962,9 @@ func _clear_carried_inventory_after_death() -> void:
 	GameState.clear_carried_raid_inventory_after_death()
 	if not GameState.is_raid_zone_unlocked(GameState.selected_raid_zone):
 		GameState.selected_raid_zone = FIRST_STAGE_ZONE_ID
-	GameState.secure_dog_items.clear()
+	# 시큐어 슬롯이 지킨 것을 돌려준다. 이 호출이 빠져 있어서 슬롯 시스템 전체가
+	# 죽은 코드였고, 사망은 예외 없는 100% 손실이었다.
+	RAID_LOSS_MANAGER.restore_secure_items_after_death()
 	GameState.fatigue = minf(fatigue + 18.0, FATIGUE_MAX)
 	GameState.player_health = mini(82, GameState.get_max_health())
 	GameState.returning_from_shelter = false
@@ -2040,7 +2046,8 @@ func _continue_after_death() -> void:
 	tween.tween_callback(func() -> void:
 		Engine.time_scale = 1.0
 		_clear_carried_inventory_after_death()
-		GameState.register_shelter_return()
+		# 사망 귀환은 "살아 돌아온" 게 아니다 — 생환 전용 서사가 열리지 않게 한다.
+		GameState.register_shelter_return(false)
 		SceneTransition.transition_to("res://scenes/shelter_interior.tscn")
 	)
 
@@ -3850,9 +3857,9 @@ func take_damage(amount: int) -> void:
 		or boss_defeat_sequence_active
 	):
 		return
-	# 구르는 동안은 무적. 오프닝 튜토리얼이 "구르는 동안은 총알이 몸을 스치지
-	# 못한다"고 가르치는데, 정작 필드에서 안 지키면 배운 회피가 거짓말이 된다.
-	if roll_active:
+	# 구르는 동안 + 착지 유예까지 무적. 오프닝 튜토리얼이 "구르는 동안은 총알이
+	# 몸을 스치지 못한다"고 가르치는데, 정작 필드에서 안 지키면 거짓말이 된다.
+	if roll_active or Time.get_ticks_msec() < roll_iframe_until_msec:
 		return
 	if loafing:
 		space_hold_active = false
@@ -4342,8 +4349,12 @@ func _update_raid_opportunities(delta: float) -> void:
 	# 시간은 가장 약한 입력이다. 소란을 피우면 훨씬 빨리 오른다.
 	raid_pressure_points += RAID_EVENT_DIRECTOR.PRESSURE_PER_SECOND * delta
 	if not raid_curfew_active and RAID_EVENT_DIRECTOR.is_stealth_decay_allowed(raid_seconds_since_noise):
+		# 감쇠는 현재 단계의 진입점까지만. 예전엔 감쇠(1.35/s)가 시간 가산(0.62/s)을
+		# 이겨서 조용한 플레이는 압박이 0에 고정 — 단계 상승 사건 8종이 영원히
+		# 잠겼다. 이제 소란으로 얻은 단계는 유지되고, 그 안에서만 식는다.
+		var level_floor := float(RAID_EVENT_DIRECTOR.LEVEL_THRESHOLDS[raid_pressure_level])
 		raid_pressure_points = maxf(
-			0.0,
+			level_floor,
 			raid_pressure_points - RAID_EVENT_DIRECTOR.PRESSURE_DECAY_PER_SECOND * delta
 		)
 	var next_pressure_level: int = RAID_EVENT_DIRECTOR.resolve_level(raid_pressure_points)
@@ -4376,9 +4387,13 @@ func _tick_raid_event_director(delta: float) -> void:
 		and not raid_event_last_fired.has("convoy_wreck")
 	):
 		event_id = "convoy_wreck"
-	raid_event_cooldown = RAID_EVENT_DIRECTOR.get_event_interval(raid_pressure_level)
+	# 빈 추첨은 전체 간격(95초)을 태우지 않는다. 예전에는 t=40에 후보가 없으면
+	# 다음 평가가 t=135라, 첫 출정의 첫 2분이 완전히 비어 있었다. 짧게 재시도해서
+	# 후보가 자격을 갖추는 순간(수송대 55초 등) 놓치지 않고 잡는다.
 	if event_id.is_empty():
+		raid_event_cooldown = 12.0
 		return
+	raid_event_cooldown = RAID_EVENT_DIRECTOR.get_event_interval(raid_pressure_level)
 	raid_event_last_fired[event_id] = raid_elapsed_seconds
 	var definition: Dictionary = RAID_EVENT_DIRECTOR.get_event(event_id)
 	_show_field_notice(

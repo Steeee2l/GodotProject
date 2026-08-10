@@ -23,7 +23,9 @@ func _run() -> void:
 	await physics_frame
 	assert(get_nodes_in_group("shelter_contract_agent").size() == 1)
 	var trainer := get_nodes_in_group("shelter_contract_agent")[0] as Node3D
-	var trainer_sprite := trainer.get_node("TrainerSprite") as AnimatedSprite3D
+	# 계약 에이전트(사자)의 스프라이트 노드명은 CharacterSprite다. TrainerSprite는
+	# 별개 NPC(철근)의 것이라 null 접근으로 죽었다.
+	var trainer_sprite := trainer.get_node("CharacterSprite") as AnimatedSprite3D
 	assert(trainer_sprite.sprite_frames.get_frame_count("idle_down_left") == 4)
 	var shelter_player := shelter.get_node("ShelterPlayer") as CharacterBody3D
 	shelter_player.global_position = trainer.global_position

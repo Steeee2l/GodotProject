@@ -2121,6 +2121,10 @@ func _fire_weapon(direction: Vector3) -> void:
 	if magazine_ammo <= 0:
 		_start_reload()
 		return
+	# 방향이 0인 사격은 버린다. 표적과 같은 좌표에 서는 프레임(보스 사망 연출 등)에
+	# 0벡터가 내려오면 총알 look_at이 오류를 뿜으며 프레임을 세운다.
+	if direction.length_squared() < 0.0001:
+		return
 	magazine_ammo -= 1
 	_play_enemy_gunshot()
 	var pellet_count := 6 if weapon_id == "double_barrel" else 1
