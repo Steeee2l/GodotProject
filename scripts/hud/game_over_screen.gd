@@ -47,7 +47,9 @@ func build(host: Node) -> void:
 	canvas.add_child(center)
 	panel = PanelContainer.new()
 	panel.name = "GameOverPanel"
-	panel.custom_minimum_size = Vector2(720, 500)
+	# 세로 화면(캔버스 폭 720)에서 딱 맞아 떨어지면 테두리가 잘린다. 여백을 남긴다.
+	var over_viewport: Vector2 = canvas.get_viewport().get_visible_rect().size
+	panel.custom_minimum_size = Vector2(minf(720.0, over_viewport.x - 24.0), 500)
 	panel.modulate.a = 0.0
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var panel_style := StyleBoxFlat.new()

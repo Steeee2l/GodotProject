@@ -949,8 +949,9 @@ func _build_title_card(hud: CanvasLayer) -> void:
 	# 텍스트를 가운데 정렬한다.
 	title_card.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	title_card.offset_top = 96
-	title_card.offset_left = -400
-	title_card.offset_right = 400
+	var title_half := minf(400.0, (get_viewport().get_visible_rect().size.x - 24.0) * 0.5)
+	title_card.offset_left = -title_half
+	title_card.offset_right = title_half
 	hud.add_child(title_card)
 
 	var title_label := Label.new()
@@ -986,8 +987,10 @@ func _build_dialogue_ui(hud: CanvasLayer) -> void:
 	dialogue_panel = PanelContainer.new()
 	dialogue_panel.name = "DialoguePanel"
 	dialogue_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	dialogue_panel.position = Vector2(-450, -192)
-	dialogue_panel.size = Vector2(900, 126)
+	# 세로 화면(캔버스 폭 720)에서는 고정 900이 양옆으로 삐져나간다.
+	var dialogue_width := minf(900.0, get_viewport().get_visible_rect().size.x - 24.0)
+	dialogue_panel.position = Vector2(-dialogue_width * 0.5, -192)
+	dialogue_panel.size = Vector2(dialogue_width, 126)
 	dialogue_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.018, 0.024, 0.025, 0.94), Color("#9fc7b8"), 2, 6))
 	hud.add_child(dialogue_panel)
 	var margin := MarginContainer.new()
@@ -1277,9 +1280,19 @@ func _build_mobile_controls(hud: CanvasLayer) -> void:
 
 
 func _apply_mobile_safe_layout() -> void:
+	# 회전(가로↔세로)에도 대사·타이틀이 화면 안에 머물게 한다. 이 둘은 터치
+	# 여부와 무관하게 폭을 다시 맞춰야 하므로 조기 반환 앞에서 처리한다.
+	var viewport_size := get_viewport().get_visible_rect().size
+	if is_instance_valid(dialogue_panel):
+		var dialogue_width := minf(900.0, viewport_size.x - 24.0)
+		dialogue_panel.position.x = -dialogue_width * 0.5
+		dialogue_panel.size.x = dialogue_width
+	if is_instance_valid(title_card):
+		var title_half := minf(400.0, (viewport_size.x - 24.0) * 0.5)
+		title_card.offset_left = -title_half
+		title_card.offset_right = title_half
 	if not touch_enabled or mobile_controls_root == null:
 		return
-	var viewport_size := get_viewport().get_visible_rect().size
 	var safe := UISafeArea.get_margins(viewport_size)
 	if mobile_joystick:
 		mobile_joystick.offset_left = 24.0 + safe.x

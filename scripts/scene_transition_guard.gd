@@ -19,6 +19,22 @@ func _ready() -> void:
 	# 웹 모바일: 브라우저 주소창을 접고 화면을 꽉 쓰려면 사용자 제스처가
 	# 필요하다. 첫 탭에서 한 번만 전체화면을 요청한다.
 	set_process_unhandled_input(OS.has_feature("web"))
+	# 세로모드 지원의 뿌리: 기준 해상도(1280×720)가 가로 고정이면 세로 화면에서
+	# 스케일이 가로폭 기준으로 잡혀 UI 전체가 깨알이 된다. 방향이 바뀔 때마다
+	# 기준을 720×1280으로 스왑해, 어느 방향이든 짧은 축이 720으로 유지되게 한다.
+	get_viewport().size_changed.connect(_apply_orientation_scale)
+	_apply_orientation_scale()
+
+
+func _apply_orientation_scale() -> void:
+	var window := get_window()
+	if window == null:
+		return
+	var window_size := window.size
+	var portrait := window_size.y > window_size.x
+	var wanted := Vector2i(720, 1280) if portrait else Vector2i(1280, 720)
+	if window.content_scale_size != wanted:
+		window.content_scale_size = wanted
 	fade = ColorRect.new()
 	fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	fade.color = Color(0, 0, 0, 0)

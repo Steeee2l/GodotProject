@@ -3145,7 +3145,9 @@ func _open_raid_zone_select() -> void:
 	panel.name = "RaidZoneSelectPanel"
 	var viewport_size := get_viewport().get_visible_rect().size
 	var panel_width := minf(1120.0, maxf(0.0, viewport_size.x - 24.0))
-	var panel_height := minf(700.0, maxf(0.0, viewport_size.y - 24.0))
+	# 세로 화면은 세로로 길게 쓴다. 700 상한을 그대로 두면 위아래에 죽은 여백만 남는다.
+	var panel_height_cap := 1180.0 if viewport_size.y > viewport_size.x else 700.0
+	var panel_height := minf(panel_height_cap, maxf(0.0, viewport_size.y - 24.0))
 	panel.custom_minimum_size = Vector2(panel_width, panel_height)
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.018, 0.024, 0.023, 0.99), Color("#8f7950")))
 	center.add_child(panel)
@@ -3182,7 +3184,10 @@ func _open_raid_zone_select() -> void:
 	subtitle.add_theme_font_size_override("font_size", 14)
 	subtitle.add_theme_color_override("font_color", Color("#aebdb5"))
 	box.add_child(subtitle)
-	var body := HBoxContainer.new()
+	# 세로 화면에서는 지도(위)·브리핑(아래)로 쌓는다. 가로 2열을 세로에 우겨넣으면
+	# 지도가 우표만 해지고 브리핑은 한 줄에 몇 글자씩 흐른다.
+	var portrait_layout := viewport_size.y > viewport_size.x
+	var body: BoxContainer = VBoxContainer.new() if portrait_layout else HBoxContainer.new()
 	body.name = "RaidZoneMapBody"
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 14)
@@ -3190,9 +3195,14 @@ func _open_raid_zone_select() -> void:
 
 	var map_frame := PanelContainer.new()
 	map_frame.name = "SeoulMapFrame"
-	map_frame.custom_minimum_size.x = maxf(310.0, panel_width - 390.0)
+	if portrait_layout:
+		# 지도는 위쪽 40%. 마커 5개를 만질 수 있을 만큼은 크고, 브리핑과 출정
+		# 버튼(엄지 권역)이 아래 60%를 가져간다.
+		map_frame.custom_minimum_size = Vector2(0.0, panel_height * 0.40)
+	else:
+		map_frame.custom_minimum_size.x = maxf(310.0, panel_width - 390.0)
+		map_frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	map_frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	map_frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	map_frame.clip_contents = true
 	map_frame.add_theme_stylebox_override(
 		"panel",

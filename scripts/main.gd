@@ -2386,7 +2386,7 @@ func _layout_mobile_utility_row() -> float:
 	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
 		return 0.0
 	var ui_scale := clampf(
-		minf(viewport_size.x / 1360.0, viewport_size.y / 780.0)
+		(minf(viewport_size.x / 780.0, viewport_size.y / 1360.0) if viewport_size.y > viewport_size.x else minf(viewport_size.x / 1360.0, viewport_size.y / 780.0))
 		* float(AccessibilitySettings.ui_scale),
 		0.62,
 		1.5
@@ -2445,7 +2445,7 @@ func _layout_center_top_banners() -> void:
 	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
 		return
 	var ui_scale := clampf(
-		minf(viewport_size.x / 1360.0, viewport_size.y / 780.0)
+		(minf(viewport_size.x / 780.0, viewport_size.y / 1360.0) if viewport_size.y > viewport_size.x else minf(viewport_size.x / 1360.0, viewport_size.y / 780.0))
 		* float(AccessibilitySettings.ui_scale),
 		0.62,
 		1.5
@@ -2459,7 +2459,10 @@ func _layout_center_top_banners() -> void:
 	# 수를 제한하고, 넘치면 우선순위가 낮은 쪽을 접는다.
 	var banner_limit := 2 if viewport_size.y < 520.0 else 3
 	var banner_gap := clampf(8.0 * ui_scale, 6.0, 12.0)
-	var banner_cursor := top_margin
+	# 세로 화면(폭 720)에서는 중앙 배너가 좌상단 상태 컬럼과 반드시 겹친다.
+	# 세로는 아래 공간이 남아도니, 배너 스택을 상태 패널 높이만큼 내려서 시작한다.
+	var portrait := viewport_size.y > viewport_size.x
+	var banner_cursor := top_margin + (186.0 if portrait else 0.0)
 	var banner_shown := 0
 	for entry in [
 		[
@@ -2514,7 +2517,7 @@ func _apply_hud_layout() -> void:
 	var touch_available := DisplayServer.is_touchscreen_available()
 	var safe_margins := UI_SAFE_AREA.get_margins(viewport_size)
 	var ui_scale := clampf(
-		minf(viewport_size.x / 1360.0, viewport_size.y / 780.0)
+		(minf(viewport_size.x / 780.0, viewport_size.y / 1360.0) if viewport_size.y > viewport_size.x else minf(viewport_size.x / 1360.0, viewport_size.y / 780.0))
 		* float(AccessibilitySettings.ui_scale),
 		0.62,
 		1.5

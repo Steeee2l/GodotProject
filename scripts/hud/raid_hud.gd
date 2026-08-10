@@ -676,9 +676,12 @@ func build_extraction_progress_ui() -> void:
 	extraction_result_panel = PanelContainer.new()
 	extraction_result_panel.name = "ExtractionResultPanel"
 	extraction_result_panel.set_anchors_preset(Control.PRESET_CENTER)
-	extraction_result_panel.offset_left = -450
+	# 세로 화면(폭 720)에서는 고정 900이 잘린다. 화면에 맞춰 줄인다.
+	var result_viewport := host.get_viewport().get_visible_rect().size
+	var result_half_w := minf(450.0, (result_viewport.x - 24.0) * 0.5)
+	extraction_result_panel.offset_left = -result_half_w
 	extraction_result_panel.offset_top = -255
-	extraction_result_panel.offset_right = 450
+	extraction_result_panel.offset_right = result_half_w
 	extraction_result_panel.offset_bottom = 255
 	extraction_result_panel.add_theme_stylebox_override(
 		"panel",

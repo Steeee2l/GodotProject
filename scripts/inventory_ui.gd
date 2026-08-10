@@ -1682,7 +1682,7 @@ func _apply_responsive_layout() -> void:
 		return
 	var safe := UISafeArea.get_margins(viewport_size)
 
-	var ui_scale := clampf(minf(viewport_size.x / 1360.0, viewport_size.y / 780.0), 0.65, 1.25)
+	var ui_scale := clampf((minf(viewport_size.x / 780.0, viewport_size.y / 1360.0) if viewport_size.y > viewport_size.x else minf(viewport_size.x / 1360.0, viewport_size.y / 780.0)), 0.65, 1.25)
 	responsive_compact = viewport_size.x < 1100.0
 
 	if open_button:
