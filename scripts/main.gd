@@ -3700,7 +3700,11 @@ func _get_random_armor_drop(seed_hint: int = 0) -> Dictionary:
 
 
 func _update_enemy_pressure(delta: float) -> void:
-	var effective_threat := clampf(night_intensity, 0.0, 1.0)
+	# 존 위협도가 바닥이다. 예전엔 night_intensity만 봐서, 낮 출정에서는 남산도
+	# 종로도 전부 threat 0으로 굴렀다 — 공격력·명중률·연사 곡선이 전부 죽어
+	# 존 난이도가 HP 말고는 작동하지 않았다. 밤은 그 위에 얹히는 가산 요소다.
+	var zone_threat := float(raid_zone_data.get("threat", 0.0))
+	var effective_threat := clampf(maxf(night_intensity, zone_threat), 0.0, 1.0)
 	for index in range(enemies.size() - 1, -1, -1):
 		var enemy := enemies[index]
 		if not is_instance_valid(enemy):
@@ -3845,6 +3849,10 @@ func take_damage(amount: int) -> void:
 		or player_death_sequence_active
 		or boss_defeat_sequence_active
 	):
+		return
+	# 구르는 동안은 무적. 오프닝 튜토리얼이 "구르는 동안은 총알이 몸을 스치지
+	# 못한다"고 가르치는데, 정작 필드에서 안 지키면 배운 회피가 거짓말이 된다.
+	if roll_active:
 		return
 	if loafing:
 		space_hold_active = false
@@ -4650,9 +4658,12 @@ func _refresh_raid_pressure_hud() -> void:
 	else:
 		hud.raid_pressure_detail.text = "최고 경계 · 전리품 ×%.2f" % raid_reward_multiplier
 	hud.raid_pressure_icon.texture = UI_ICONS.get_icon("alert", 44, color)
+	# 게이지는 실제 압박 점수를 보여준다. 예전에는 경과 시간(구식 시스템 잔재)을
+	# 넣어서 막대·단계 라벨·퍼센트가 서로 다른 값을 말했고, 압박을 낮추는
+	# 사건이 터져도 막대는 꿈쩍하지 않았다.
 	hud.raid_pressure_bar.value = minf(
-		raid_elapsed_seconds,
-		float(RAID_PRESSURE_THRESHOLDS.back())
+		raid_pressure_points,
+		float(RAID_EVENT_DIRECTOR.LEVEL_THRESHOLDS.back())
 	)
 	hud.raid_pressure_bar.add_theme_stylebox_override(
 		"fill",

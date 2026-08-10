@@ -1859,7 +1859,10 @@ func _start_pistol_burst(direction: Vector3) -> void:
 		_start_reload()
 		return
 	combat_state = "ranged_windup"
-	state_timer = RANGED_WINDUP_TIME
+	# 예비동작은 위협도에 반비례한다. 초반 존(0.15)은 0.4초 남짓으로 사람이
+	# 반응할 수 있게, 심층 존은 0.18초로 날카롭게. 예전 고정 0.18초 + 인지 0.12초
+	# = 0.3초는 게임에서 가장 치명적인 공격이 가장 안 읽히는 상태였다.
+	state_timer = lerpf(0.44, RANGED_WINDUP_TIME, clampf(threat_level, 0.0, 1.0))
 	pending_attack_direction = direction
 	velocity = Vector3.ZERO
 	_set_motion_state("attack")
@@ -2072,9 +2075,12 @@ func _target_is_in_safe_zone() -> bool:
 
 
 func _get_weapon_burst_size() -> int:
+	# 자동화기도 점사로 끊는다. 탄창 전체(12~14발)를 한 번에 쏟으면 AK 하나가
+	# 무중단 1.4초 동안 최대 144 피해를 밀어넣어 — 100 체력 상한을 넘는 —
+	# 초반 최대의 억울한 죽음 원인이었다. 위협도가 높을수록 점사가 길어진다.
 	match weapon_id:
-		"mp5": return magazine_size
-		"ak47": return magazine_size
+		"mp5": return mini(magazine_size, 4 + roundi(4.0 * threat_level))
+		"ak47": return mini(magazine_size, 3 + roundi(4.0 * threat_level))
 		"m1911": return mini(magazine_size, 3 + roundi(3.0 * threat_level))
 		"double_barrel": return 1
 	return 1
@@ -2466,9 +2472,10 @@ func take_projectile_hit(
 	attacker = null
 ) -> void:
 	_alert_to_projectile_attacker(attacker)
-	var critical := is_critical or hit_zone == "head"
-	var final_damage := roundi(float(amount) * critical_multiplier) if critical else amount
-	take_hit(final_damage, hit_direction, critical)
+	# hit_zone은 탄도의 명중 등급("center"/"normal"/"graze")이다. 예전 "head" 비교는
+	# 어떤 경로로도 올 수 없는 값이라 죽은 분기였다.
+	var final_damage := roundi(float(amount) * critical_multiplier) if is_critical else amount
+	take_hit(final_damage, hit_direction, is_critical, hit_zone)
 
 
 func _alert_to_projectile_attacker(attacker = null) -> void:
@@ -2491,7 +2498,7 @@ func _alert_to_projectile_attacker(attacker = null) -> void:
 	alert_marker_time = maxf(alert_marker_time, 0.38)
 
 
-func take_hit(amount: int, hit_direction: Vector3, is_critical: bool = false) -> void:
+func take_hit(amount: int, hit_direction: Vector3, is_critical: bool = false, hit_grade: String = "normal") -> void:
 	if dying or backstab_stunned:
 		return
 	if reinforcement_call_active:
@@ -2505,7 +2512,7 @@ func take_hit(amount: int, hit_direction: Vector3, is_critical: bool = false) ->
 	health -= amount
 	damaged.emit(self, amount)
 	_register_health_damage()
-	_spawn_damage_number(amount, is_critical or lethal, hit_direction)
+	_spawn_damage_number(amount, is_critical or lethal, hit_direction, hit_grade)
 	threat_marker.visible = false
 	var knockback_direction := hit_direction
 	knockback_direction.y = 0.0
@@ -2523,7 +2530,9 @@ func take_hit(amount: int, hit_direction: Vector3, is_critical: bool = false) ->
 	_set_motion_state("hit")
 
 
-func _spawn_damage_number(amount: int, is_critical: bool, hit_direction: Vector3) -> void:
+func _spawn_damage_number(
+	amount: int, is_critical: bool, hit_direction: Vector3, hit_grade: String = "normal"
+) -> void:
 	var number := DAMAGE_NUMBER_SCRIPT.new() as Label3D
 	get_parent().add_child(number)
 	number.call(
@@ -2533,7 +2542,8 @@ func _spawn_damage_number(amount: int, is_critical: bool, hit_direction: Vector3
 		DAMAGE_FONT,
 		global_position + Vector3(0, 1.62, 0),
 		hit_direction,
-		weapon_random.randf_range(-0.28, 0.28)
+		weapon_random.randf_range(-0.28, 0.28),
+		hit_grade
 	)
 
 

@@ -261,6 +261,9 @@ func _update_weapon_ballistics(delta: float, is_moving: bool) -> void:
 		target_spread *= float(host.weapon_stats.get("injured_spread_multiplier", 1.0))
 	if host.loafing:
 		target_spread *= float(host.weapon_stats.get("loaf_spread_multiplier", 1.0))
+	# 피로 60% 이상부터 탄이 퍼지기 시작한다. 정산 화면이 "탄이 퍼진 상태였다"고
+	# 말해 왔는데 정작 탄도에는 피로가 없던 것을 실제로 구현한다.
+	target_spread *= lerpf(1.0, 1.35, clampf(inverse_lerp(60.0, 100.0, host.fatigue), 0.0, 1.0))
 	var durability_penalty := 1.0 + clampf((50.0 - host.weapon_durability) / 50.0, 0.0, 1.0) * 0.7
 	target_spread *= durability_penalty
 	var recovery := float(host.weapon_stats.get("spread_recovery_deg", 5.0))

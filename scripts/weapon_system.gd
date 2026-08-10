@@ -65,7 +65,10 @@ const WEAPONS := {
 		"magazine_id": "ak_30rnd",
 		"default_ammo_id": "762_fmj",
 		"magazine_size": 30,
-		"damage": 24,
+		# 30으로 상향(24였다). MP5가 DPS·반동·명중·재장전 전부에서 앞서 시작 무기가
+		# 하위호환이었다. AK는 "적은 발수, 묵직한 한 방 + 사거리/관통" 정체성으로 간다.
+		# 존1 중심 명중 기준 4발 → 3발 킬.
+		"damage": 30,
 		"pellet_count": 1,
 		"fire_interval": 0.12,
 		"automatic": true,

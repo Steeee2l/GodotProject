@@ -17,15 +17,27 @@ func setup(
 	damage_font: Font,
 	world_position: Vector3,
 	hit_direction: Vector3,
-	side_amount: float
+	side_amount: float,
+	hit_grade: String = "normal"
 ) -> void:
 	name = "DamageNumber"
 	text = str(maxi(0, damage))
 	font = damage_font
 	var text_scale := clampf(float(AccessibilitySettings.combat_text_scale), 0.8, 1.4)
-	font_size = roundi(float(78 if is_critical else 58) * text_scale)
+	# 명중 등급은 1.94배 데미지 차이인데 여태 아무 표시가 없었다. 정조준(center)은
+	# 호박색으로 크게, 스침(graze)은 회청색으로 작게 — 조준 실력이 눈에 보이게 한다.
+	var grade_size := 58
+	base_color = Color("#f2f0e8")
+	if hit_grade == "center":
+		grade_size = 66
+		base_color = Color("#ffb347")
+	elif hit_grade == "graze":
+		grade_size = 46
+		base_color = Color("#9fb2c4")
+	font_size = roundi(float(78 if is_critical else grade_size) * text_scale)
 	outline_size = roundi(float(18 if is_critical else 14) * text_scale)
-	base_color = Color("#ffd84a") if is_critical else Color("#f2f0e8")
+	if is_critical:
+		base_color = Color("#ffd84a")
 	modulate = base_color
 	outline_modulate = Color(0.16, 0.08, 0.01, 0.96) if is_critical else Color(0.02, 0.025, 0.025, 0.94)
 	billboard = BaseMaterial3D.BILLBOARD_ENABLED

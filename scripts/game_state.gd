@@ -19,7 +19,9 @@ const RAID_STACK_LIMITS := {
 
 var map_seed: int = 47291
 var raid_serial: int = 0
-var player_health: int = 82
+# 첫 출정은 만전 상태로. 82로 시작하면 새 유저가 이유도 모른 채 깎인 체력으로
+# 첫 교전을 치른다.
+var player_health: int = 100
 var player_level: int = 1
 var player_xp: int = 0
 var pending_level_choices: int = 0
@@ -43,7 +45,9 @@ var reserve_ammo: int = 90
 var has_ak: bool = true
 var scrap: int = 80
 var weapon_level: int = 1
-var medkits: int = 0
+# 구급약 1개를 쥐여 주고 시작한다. 0개로 첫 출정을 보내면 회복 수단이 운빨
+# 루팅(사실상 동전 던지기)이 되고, 사망 화면은 있지도 않던 구급약을 논한다.
+var medkits: int = 1
 var canned_food: int = 0
 var catnip: int = 0
 var churu: int = 0
@@ -3674,7 +3678,7 @@ func _notification(what: int) -> void:
 
 
 func reset_run() -> void:
-	player_health = 82
+	player_health = 100
 	player_level = 1
 	player_xp = 0
 	pending_level_choices = 0
@@ -3700,7 +3704,7 @@ func reset_run() -> void:
 	has_ak = true
 	scrap = 80
 	weapon_level = 1
-	medkits = 0
+	medkits = 1
 	canned_food = 0
 	catnip = 0
 	churu = 0

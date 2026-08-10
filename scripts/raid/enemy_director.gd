@@ -408,8 +408,11 @@ func _on_enemy_damaged(_enemy: CharacterBody3D, amount: int) -> void:
 	# 걸리지 않아서, 한 방에 144를 넣는 샷건이 가장 밋밋했다. 같은 프레임에
 	# 들어간 피해를 합산해서 본다.
 	host.hit_stop_damage_accumulator += maxi(0, amount)
-	if host.hit_stop_damage_accumulator >= 20 and host.combat_hit_stop_cooldown <= 0.0:
-		host.combat_hit_stop_cooldown = 0.12
+	# 문턱 45 / 쿨다운 0.35초. 예전 20/0.12는 AK 연사 거의 매 발에 걸려서,
+	# 강조 연출이 아니라 프레임 드랍처럼 읽혔다. 히트스톱은 문장 부호다 —
+	# 큰 한 방(샷건 일제사, 크리티컬 뭉치)에만 찍혀야 무게가 산다.
+	if host.hit_stop_damage_accumulator >= 45 and host.combat_hit_stop_cooldown <= 0.0:
+		host.combat_hit_stop_cooldown = 0.35
 		host._trigger_hit_stop(0.06)
 
 

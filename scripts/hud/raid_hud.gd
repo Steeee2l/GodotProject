@@ -22,7 +22,6 @@ const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_len
 var host: Node
 const AIM_RETICLE_SCRIPT := preload("res://scripts/aim_reticle.gd")
 const DYNAMIC_INCIDENT_DURATION := 150.0
-const RAID_PRESSURE_THRESHOLDS := [120.0, 300.0, 540.0]
 const ROLL_COOLDOWN_INDICATOR_SCRIPT := preload("res://scripts/roll_cooldown_indicator.gd")
 var raid_pressure_panel: PanelContainer
 var raid_pressure_icon: TextureRect
@@ -593,7 +592,9 @@ func build_raid_opportunity_hud() -> void:
 	raid_pressure_bar.name = "PressureProgress"
 	raid_pressure_bar.custom_minimum_size = Vector2(126, 14)
 	raid_pressure_bar.min_value = 0.0
-	raid_pressure_bar.max_value = RAID_PRESSURE_THRESHOLDS.back()
+	# 단계 판정과 같은 표(레이드 이벤트 디렉터)를 쓴다. 예전 로컬 사본(540)은
+	# 디렉터의 560과 어긋나 게이지 끝과 최고 단계 진입점이 달랐다.
+	raid_pressure_bar.max_value = RaidEventDirector.LEVEL_THRESHOLDS.back()
 	raid_pressure_bar.show_percentage = false
 	raid_pressure_bar.add_theme_stylebox_override(
 		"background",
