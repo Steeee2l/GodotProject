@@ -325,6 +325,7 @@ var loot_system := LootPickupSystem.new()
 var bgm := BgmDirector.new()
 var stealth := StealthSystem.new()
 var weapon_combat := WeaponCombat.new()
+var monologue := FieldMonologue.new()
 var raid_zone_data: Dictionary = {}
 var active_zone_rule := ""
 var toxic_zone_tick := 0.0
@@ -462,6 +463,7 @@ func _ready() -> void:
 	_setup_weapon_layer()
 	_setup_melee_weapon()
 	hud.attach(self)
+	monologue.attach(self)
 	jackpot.attach(self)
 	field_missions.attach(self)
 	incidents.attach(self)

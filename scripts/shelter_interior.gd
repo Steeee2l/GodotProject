@@ -28,6 +28,10 @@ const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const BGM_DIRECTOR := preload("res://scripts/audio/bgm_director.gd")
 const TOUCH_JOYSTICK := preload("res://scripts/hud/touch_joystick.gd")
+# 사자의 보급 구매 단가 — 초반 고철의 첫 소비처. 위험 정산금(판당 1~2K)과
+# 맞물려 "벌어서 다음 판을 준비한다"는 순환을 만든다.
+const SCRAP_AMMO_BUNDLE_COST := 350
+const SCRAP_MEDKIT_COST := 700
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
 const AMMO_TEXTURE := preload("res://assets/items/ammo_762.png")
@@ -324,6 +328,13 @@ func _ready() -> void:
 	if not unlocks.is_empty():
 		call_deferred("_show_milestone_unlock_banner", unlocks)
 	call_deferred("_open_pending_shelter_story")
+	# 주홍 이벤트가 대기 중이고 사자 이벤트가 없다면, 복귀 직후 등장 시네마틱으로
+	# 이어 준다(암전 → 레터박스 → 접근 → 대화).
+	if (
+		is_instance_valid(juhong_character)
+		and GameState.get_pending_shelter_story_event().is_empty()
+	):
+		call_deferred("_play_juhong_entrance_cinematic")
 
 
 func _physics_process(delta: float) -> void:
@@ -769,6 +780,85 @@ func _interact_with_saja() -> void:
 		_show_status("사자 · 첫 출정에서 살아 돌아오면 쉘터 재건 계획을 맡기겠다.")
 		return
 	_open_contract_ui()
+
+
+func _play_juhong_entrance_cinematic() -> void:
+	# 주홍의 등장을 내러티브 이벤트로 연출한다: 암전 속에 이미 와 있고, 상하
+	# 레터박스가 내려오며 화면이 밝아지면, 몇 걸음 다가와 말을 건다.
+	# 예전에는 그냥 구석에 서 있는 NPC라 "뜬금없이 나타나 대사만 하고 사라지는"
+	# 인상이었다.
+	if not is_instance_valid(juhong_character) or not is_instance_valid(player):
+		return
+	var cine := CanvasLayer.new()
+	cine.name = "JuhongCinematicLayer"
+	cine.layer = 92
+	cine.add_to_group("shelter_modal_ui")
+	add_child(cine)
+	var black := ColorRect.new()
+	black.name = "CineBlack"
+	black.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	black.color = Color(0, 0, 0, 1.0)
+	black.mouse_filter = Control.MOUSE_FILTER_STOP
+	cine.add_child(black)
+	var bar_top := ColorRect.new()
+	bar_top.name = "CineBarTop"
+	bar_top.color = Color.BLACK
+	bar_top.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	bar_top.offset_bottom = 0.0
+	bar_top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cine.add_child(bar_top)
+	var bar_bottom := ColorRect.new()
+	bar_bottom.name = "CineBarBottom"
+	bar_bottom.color = Color.BLACK
+	bar_bottom.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	bar_bottom.offset_top = 0.0
+	bar_bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cine.add_child(bar_bottom)
+	# 이미 와 있던 것처럼: 플레이어에게서 5.5m 떨어진 자리에 세워 두고,
+	# 밝아진 뒤 2.2m까지 걸어오게 한다.
+	var away := juhong_character.global_position - player.global_position
+	away.y = 0.0
+	if away.length_squared() < 0.01:
+		away = Vector3(1.0, 0.0, 1.0)
+	away = away.normalized()
+	juhong_character.global_position = player.global_position + away * 5.5
+	var approach_target := player.global_position + away * 2.2
+	var tween := create_tween()
+	tween.tween_property(black, "color:a", 0.0, 1.0).set_trans(Tween.TRANS_SINE)
+	tween.parallel().tween_property(bar_top, "offset_bottom", 62.0, 0.8).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(bar_bottom, "offset_top", -62.0, 0.8).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_callback(func() -> void:
+		black.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if is_instance_valid(juhong_character):
+			juhong_character.call("_play_animation", "walk")
+	)
+	tween.tween_interval(0.2)
+	tween.tween_property(juhong_character, "global_position", approach_target, 1.4).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_callback(func() -> void:
+		if is_instance_valid(juhong_character):
+			juhong_character.call("_play_animation", "idle")
+		_open_juhong_story()
+		_finish_juhong_cinematic(cine)
+	)
+
+
+func _finish_juhong_cinematic(cine: CanvasLayer) -> void:
+	# 대화가 닫힐 때까지 기다렸다가 레터박스를 걷는다.
+	if not is_instance_valid(cine):
+		return
+	if contract_story_open:
+		get_tree().create_timer(0.25).timeout.connect(_finish_juhong_cinematic.bind(cine))
+		return
+	var bar_top := cine.get_node_or_null("CineBarTop") as ColorRect
+	var bar_bottom := cine.get_node_or_null("CineBarBottom") as ColorRect
+	# 조작 잠금을 먼저 푼다 — 레터박스가 걷히는 동안 이미 움직일 수 있어야 답답하지 않다.
+	cine.remove_from_group("shelter_modal_ui")
+	var tween := create_tween()
+	if bar_top != null:
+		tween.tween_property(bar_top, "offset_bottom", 0.0, 0.4)
+	if bar_bottom != null:
+		tween.parallel().tween_property(bar_bottom, "offset_top", 0.0, 0.4)
+	tween.tween_callback(cine.queue_free)
 
 
 func _open_juhong_story() -> void:
@@ -3587,16 +3677,24 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 			else 0
 		)
 		var stored_medkits := GameState.get_stored_storage_count("medkit", "medkit")
-		var can_resupply := (
+		var needs_supply := ammo_count < 90 or medkit_count < 2
+		var has_storage_supply := (
 			(ammo_count < 90 and stored_ammo > 0)
 			or (medkit_count < 2 and stored_medkits > 0)
 		)
-		# 보충할 게 있을 때만 버튼을 띄운다. "보충 가능한 물품 없음"은 소음이라 숨긴다.
+		var can_buy_supply := needs_supply and GameState.scrap >= SCRAP_AMMO_BUNDLE_COST
+		var can_resupply := has_storage_supply or can_buy_supply
+		# 부족할 때만 버튼을 띄운다. 창고가 비어도 고철로 산다(초반 고철의 소비처).
 		raid_zone_resupply_button.visible = can_resupply
 		raid_zone_resupply_button.disabled = not can_resupply
-		if can_resupply:
+		if has_storage_supply:
 			raid_zone_resupply_button.text = "창고에서 보충 · 탄약 %d / 구급약 %d" % [
 				stored_ammo, stored_medkits
+			]
+		elif can_buy_supply:
+			raid_zone_resupply_button.text = "사자에게 보급 구매 · 탄 30발 %s / 구급약 %s" % [
+				GameState.format_compact_number(SCRAP_AMMO_BUNDLE_COST),
+				GameState.format_compact_number(SCRAP_MEDKIT_COST),
 			]
 	else:
 		raid_zone_detail_state.text = "■ 봉쇄 구역"
@@ -3679,10 +3777,42 @@ func _quick_resupply_for_raid() -> void:
 		moved_medkits = int(medkit_result.get("moved", 0))
 		if moved_medkits <= 0 and failure_reason.is_empty():
 			failure_reason = str(medkit_result.get("reason", ""))
-	if moved_ammo > 0 or moved_medkits > 0:
-		_show_status("출정 보급 완료 · 탄약 +%d · 구급약 +%d" % [moved_ammo, moved_medkits])
+	# 창고가 비어도 고철로 산다. 초반에 쌓이기만 하던 고철의 첫 소비처 —
+	# "다음 판 준비"에 돈을 쓰는 감각이 파밍의 이유를 만든다.
+	var bought_ammo := 0
+	var bought_medkits := 0
+	var scrap_spent := 0
+	if not ammo_id.is_empty():
+		var still_needed_ammo := maxi(0, 90 - int(manifest.get("ammo_count", 0)) - moved_ammo)
+		if still_needed_ammo > 0:
+			var ammo_bundles := ceili(float(still_needed_ammo) / 30.0)
+			for _bundle in ammo_bundles:
+				if GameState.scrap < SCRAP_AMMO_BUNDLE_COST:
+					break
+				GameState.scrap -= SCRAP_AMMO_BUNDLE_COST
+				scrap_spent += SCRAP_AMMO_BUNDLE_COST
+				GameState.set_ammo_count(ammo_id, GameState.get_ammo_count(ammo_id) + 30)
+				bought_ammo += 30
+	var still_needed_medkits := maxi(0, medkits_needed - moved_medkits)
+	for _kit in still_needed_medkits:
+		if GameState.scrap < SCRAP_MEDKIT_COST:
+			break
+		GameState.scrap -= SCRAP_MEDKIT_COST
+		scrap_spent += SCRAP_MEDKIT_COST
+		GameState.medkits += 1
+		bought_medkits += 1
+	if scrap_spent > 0:
+		GameState.save_persistent_state()
+	if moved_ammo + bought_ammo > 0 or moved_medkits + bought_medkits > 0:
+		var summary := "출정 보급 완료 · 탄약 +%d · 구급약 +%d" % [
+			moved_ammo + bought_ammo, moved_medkits + bought_medkits
+		]
+		if scrap_spent > 0:
+			summary += " · 고철 -%s" % GameState.format_compact_number(scrap_spent)
+		_show_status(summary)
 	else:
 		_show_status(failure_reason if not failure_reason.is_empty() else "추가로 보충할 물품이 없습니다.")
+	_update_stats()
 	_select_raid_zone_preview(raid_zone_selected_id)
 
 

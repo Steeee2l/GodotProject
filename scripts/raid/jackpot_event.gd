@@ -178,6 +178,11 @@ func _handle_jackpot_clue() -> void:
 		1
 	)
 	host._show_field_notice("격리 기록 복원 · 지하선 3번 화물의 비상 전력 좌표가 지도에 표시됩니다.")
+	# 메인 미션의 발견 순간마다 나비가 한마디씩. 수수께끼가 한 겹씩 벗겨진다.
+	host.monologue.play([
+		"단말이 아직 살아 있다… 이 격리 기록, 사람이 지워지던 그 밤의 것이다.",
+		"지하선 3번 화물. 누군가, 이게 발견되지 않기를 바랐어.",
+	])
 
 
 func _handle_jackpot_power() -> void:
@@ -212,6 +217,10 @@ func _handle_jackpot_power() -> void:
 	)
 	_show_jackpot_alarm_flash()
 	host._show_field_notice("경보 발생 · 봉인 화물 좌표 노출 · 접근하는 대응대를 경계하십시오.")
+	host.monologue.play([
+		"전력이 돌아왔다. 삼백 밤 만에, 도시의 일부가 눈을 떴다.",
+		"…도시가 눈을 뜨면 다른 것들도 함께 깨어난다. 서둘러야 해.",
+	])
 
 
 func _show_jackpot_alarm_flash() -> void:
@@ -309,6 +318,10 @@ func _claim_jackpot_cargo(point: Node3D) -> void:
 		4
 	)
 	host._show_field_notice("특수 화물 확보 · 탈출 시 특별 보상과 기록 해금")
+	host.monologue.play([
+		"무겁다. 그리고 봉인 너머에서… 희미하게 심장 소리 같은 게 난다.",
+		"묻는 건 나중이다. 지금은 산 채로 들고 나간다.",
+	])
 
 
 func _attach_jackpot_cargo_visual() -> void:

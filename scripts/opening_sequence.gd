@@ -118,6 +118,7 @@ var objective_progress: Label
 var dialogue_panel: PanelContainer
 var dialogue_text: Label
 var dialogue_typewriter: Typewriter
+var aim_laser: MeshInstance3D
 var continue_label: Label
 var ammo_label: Label
 var magazine_label: Label
@@ -159,6 +160,7 @@ func _ready() -> void:
 	_apply_mobile_safe_layout()
 	_build_visibility_fog()
 	_spawn_cinematic_enemies()
+	_build_aim_laser()
 	_set_facing_from_world_direction(INTRO_WALK_DIRECTION)
 	_set_player_animation("walk", current_facing)
 	_fade_from_black()
@@ -1444,6 +1446,44 @@ func _panel_style(color: Color, border: Color, width: int, radius: int) -> Style
 	return style
 
 
+func _build_aim_laser() -> void:
+	# 필드와 같은 감각의 조준선. 오프닝에만 없어서 "조준했는데 아무 표시가 없다"는
+	# 첫인상을 남겼다. 얇은 붉은 막대를 조준 방향으로 눕혀서 쓴다.
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.albedo_color = Color(1.0, 0.22, 0.14, 0.55)
+	material.emission_enabled = true
+	material.emission = Color("#ff3d2a")
+	material.emission_energy_multiplier = 2.4
+	material.no_depth_test = true
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(0.045, 0.02, 11.0)
+	mesh.material = material
+	aim_laser = MeshInstance3D.new()
+	aim_laser.name = "OpeningAimLaser"
+	aim_laser.mesh = mesh
+	aim_laser.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	aim_laser.visible = false
+	add_child(aim_laser)
+
+
+func _update_aim_laser() -> void:
+	if aim_laser == null:
+		return
+	aim_laser.visible = aim_held and phase in ["tutorial_aim", "tutorial_combat", "tutorial_extract"]
+	if not aim_laser.visible:
+		return
+	var direction := current_aim_direction
+	direction.y = 0.0
+	if direction.length_squared() < 0.001:
+		direction = _get_facing_world_direction()
+	direction = direction.normalized()
+	var origin := player.global_position + Vector3(0, 0.32, 0) + direction * 0.6
+	var mid := origin + direction * 5.5
+	aim_laser.look_at_from_position(mid, mid + direction, Vector3.UP)
+
+
 func _spawn_cinematic_enemies() -> void:
 	var setups := [
 		{"position": Vector3(-2.3, 0.78, -3.0), "weapon": "m1911", "facing": "e"},
@@ -1592,6 +1632,7 @@ func _update_player_gameplay(delta: float) -> void:
 		_set_player_animation("idle", current_facing)
 	if aim_held:
 		_set_facing_from_world_direction(current_aim_direction)
+	_update_aim_laser()
 	player.move_and_slide()
 	player.position.x = clampf(player.position.x, -BRIDGE_HALF_WIDTH + 0.55, BRIDGE_HALF_WIDTH - 0.55)
 	player.position.z = clampf(player.position.z, -BRIDGE_HALF_LENGTH + 1.0, BRIDGE_HALF_LENGTH - 1.0)
