@@ -161,119 +161,130 @@ func _rebuild_ui() -> void:
 		compact
 	))
 
-	var body: BoxContainer = VBoxContainer.new() if narrow else HBoxContainer.new()
+	# ── 좌석 + 벤치 구조 (꾹꾹이 생산기와 동일한 문법) ─────────────────
+	var body := VBoxContainer.new()
 	body.name = "CatnipScraperBody"
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 16)
+	body.add_theme_constant_override("separation", 10)
 	content.add_child(body)
-	var resident_panel := PanelContainer.new()
-	resident_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	resident_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	resident_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.024, 0.036, 0.027, 0.92), Color("#45614a")))
-	body.add_child(resident_panel)
-	var resident_margin := MarginContainer.new()
-	resident_margin.add_theme_constant_override("margin_left", 12)
-	resident_margin.add_theme_constant_override("margin_top", 10)
-	resident_margin.add_theme_constant_override("margin_right", 12)
-	resident_margin.add_theme_constant_override("margin_bottom", 10)
-	resident_panel.add_child(resident_margin)
-	var resident_box := VBoxContainer.new()
-	resident_box.add_theme_constant_override("separation", 8)
-	resident_margin.add_child(resident_box)
-	resident_box.add_child(_label("주민 배치", 16, Color("#dfe8dc")))
+
+	var catnip_slots: int = GameState.get_catnip_worker_slots()
+	body.add_child(_label("작업 좌석 · 앉은 고양이가 캣닢을 만듭니다", 15, Color("#dfe8dc")))
+	var seat_row := HFlowContainer.new()
+	seat_row.add_theme_constant_override("h_separation", 8)
+	seat_row.add_theme_constant_override("v_separation", 8)
+	body.add_child(seat_row)
+	var assigned_ids: Array[String] = []
+	for worker_id in GameState.assigned_catnip_worker_ids:
+		assigned_ids.append(str(worker_id))
+	for seat_index in catnip_slots:
+		var seat_id := assigned_ids[seat_index] if seat_index < assigned_ids.size() else ""
+		seat_row.add_child(_portrait_card(seat_id, true, catnip_slots))
+
+	body.add_child(_label("대기 주민 · 눌러서 좌석에 앉히기", 13, Color("#94aa98")))
 	if GameState.resident_cat_ids.is_empty():
-		resident_box.add_child(_empty_resident_state(
+		body.add_child(_empty_resident_state(
 			"구출한 주민이 없습니다.",
 			"캣닢 생산에 배치할 주민을 도시에서 구출하세요.",
 			compact
 		))
 	else:
-		var scroll := ScrollContainer.new()
-		scroll.custom_minimum_size = Vector2(0, 152 if compact and not narrow else 220)
-		scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		resident_box.add_child(scroll)
-		var grid := GridContainer.new()
-		grid.columns = 1 if narrow else 2
-		grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		grid.add_theme_constant_override("h_separation", 9)
-		grid.add_theme_constant_override("v_separation", 9)
-		scroll.add_child(grid)
-		for resident_index in GameState.resident_cat_ids.size():
-			grid.add_child(_resident_button(str(GameState.resident_cat_ids[resident_index])))
+		var bench_scroll := ScrollContainer.new()
+		bench_scroll.custom_minimum_size = Vector2(0, 150)
+		bench_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bench_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		bench_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		body.add_child(bench_scroll)
+		var bench := HFlowContainer.new()
+		bench.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bench.add_theme_constant_override("h_separation", 8)
+		bench.add_theme_constant_override("v_separation", 8)
+		bench_scroll.add_child(bench)
+		for resident_variant in GameState.resident_cat_ids:
+			var resident_id := str(resident_variant)
+			if assigned_ids.has(resident_id):
+				continue
+			bench.add_child(_portrait_card(resident_id, false, catnip_slots))
 
-	var operations := PanelContainer.new()
-	operations.custom_minimum_size = Vector2(0 if narrow else (230 if compact else 246), 0)
-	operations.add_theme_stylebox_override("panel", _panel_style(Color(0.028, 0.041, 0.03, 0.94), Color("#50664f")))
-	body.add_child(operations)
-	var operations_margin := MarginContainer.new()
-	operations_margin.add_theme_constant_override("margin_left", 14)
-	operations_margin.add_theme_constant_override("margin_top", 12)
-	operations_margin.add_theme_constant_override("margin_right", 14)
-	operations_margin.add_theme_constant_override("margin_bottom", 12)
-	operations.add_child(operations_margin)
-	var footer := VBoxContainer.new()
-	footer.add_theme_constant_override("separation", 10)
-	operations_margin.add_child(footer)
-	footer.add_child(_label("생산 설정", 16, Color("#d9efb0")))
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 8)
+	body.add_child(actions)
 	var upgrade_cost := int(GameState.CATNIP_SCRAPER_UPGRADE_COSTS.get(GameState.catnip_scraper_level + 1, 0))
 	var upgrade := _button(
 		"최고 레벨"
-		if upgrade_cost == 0 else "x%s  ·  Lv.%d 확장" % [
+		if upgrade_cost == 0 else "고철 x%s · Lv.%d 확장(좌석+1)" % [
 			GameState.format_compact_number(upgrade_cost),
 			GameState.catnip_scraper_level + 1,
 		],
 		"upgrade" if upgrade_cost == 0 else "scrap"
 	)
-	upgrade.custom_minimum_size = Vector2(0, 38)
+	upgrade.custom_minimum_size = Vector2(0, 40)
+	upgrade.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	upgrade.disabled = upgrade_cost == 0 or GameState.scrap < upgrade_cost
 	upgrade.pressed.connect(_upgrade)
-	footer.add_child(upgrade)
-	var conversion := HBoxContainer.new()
-	conversion.name = "CatnipBoosterRelation"
-	conversion.add_theme_constant_override("separation", 8)
-	footer.add_child(conversion)
-	conversion.add_child(SHELTER_UI.make_currency_chip("catnip", "25", compact, false))
-	var boost_text := _label("고철 x10 · 10분", 13, Color("#cde79e"))
-	boost_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	boost_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	conversion.add_child(boost_text)
+	actions.add_child(upgrade)
 	var remaining: int = GameState.get_catnip_boost_remaining()
-	if remaining > 0:
-		footer.add_child(_label("가동 중  %02d:%02d" % [remaining / 60, remaining % 60], 14, Color("#cde79e")))
-	var spacer := Control.new()
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	footer.add_child(spacer)
-	var action_hint := _label("주민 카드를 눌러 배치하거나 해제", 11, Color("#789080"))
-	action_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	footer.add_child(action_hint)
+	var boost_note := _label(
+		"부스터 가동 중  %02d:%02d" % [remaining / 60, remaining % 60]
+		if remaining > 0
+		else "캣닢 25 = 생산 x10 부스터 (꾹꾹이 생산기에서 가동)",
+		12,
+		Color("#cde79e")
+	)
+	boost_note.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	actions.add_child(boost_note)
 
 
-func _resident_button(resident_id: String) -> Button:
+func _portrait_card(resident_id: String, is_seat: bool, slots: int) -> Button:
+	# 초상화가 주인공인 세로 카드. 꾹꾹이 생산기와 같은 문법 — 배우면 어디서든 통한다.
 	var button := Button.new()
-	button.name = "ResidentCard_%s" % resident_id
-	button.custom_minimum_size = Vector2(260, 82)
-	var active := GameState.assigned_catnip_worker_ids.has(resident_id)
-	var available := active or GameState.assigned_catnip_worker_ids.size() < GameState.get_catnip_worker_slots()
-	var trait_data: Dictionary = GameState.get_resident_trait(resident_id)
-	var border := Color("#7fc779") if active else (Color("#60735c") if available else Color("#343a35"))
-	button.add_theme_stylebox_override("normal", _panel_style(Color(0.03, 0.045, 0.034, 0.96), border))
-	button.add_theme_stylebox_override("hover", _panel_style(Color(0.05, 0.075, 0.052, 0.98), Color("#b8dc83")))
+	button.custom_minimum_size = Vector2(104, 128)
 	button.add_theme_font_override("font", FONT)
-	button.add_theme_font_size_override("font_size", 14)
-	button.icon = RESIDENT_PORTRAITS.get_portrait(int(trait_data.get("portrait_index", 0)))
+	button.add_theme_font_size_override("font_size", 12)
 	button.expand_icon = true
-	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	button.disabled = not available
-	button.text = "%s · %s\n%s  ·  캣닢 x%.2f  식비 x%.2f" % [
-		trait_data.get("display_name", "이름 없는 주민"),
-		trait_data.get("name", "평범한 주민"),
-		"스크래핑 중" if active else "대기",
-		trait_data.get("catnip", 1.0),
-		trait_data.get("appetite", 1.0),
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+	var bg := Color(0.03, 0.045, 0.034, 0.96)
+	if resident_id.is_empty():
+		button.name = "SeatEmpty"
+		button.icon = UI_ICONS.get_icon("resident", 56, Color("#4c554f"))
+		button.text = "빈 좌석"
+		button.disabled = true
+		button.add_theme_stylebox_override("normal", _panel_style(bg, Color("#3c463f")))
+		button.add_theme_stylebox_override("disabled", _panel_style(bg, Color("#3c463f")))
+		button.add_theme_color_override("font_disabled_color", Color("#6d7a72"))
+		return button
+	var trait_data: Dictionary = GameState.get_resident_trait(resident_id)
+	var display_name := str(trait_data.get("display_name", "이름 없는 주민"))
+	var busy_elsewhere := not is_seat and GameState.assigned_worker_ids.has(resident_id)
+	var seats_free := GameState.assigned_catnip_worker_ids.size() < slots
+	button.name = "ResidentCard_%s" % resident_id
+	button.icon = RESIDENT_PORTRAITS.get_portrait(int(trait_data.get("portrait_index", 0)))
+	var border := Color("#7fc779") if is_seat else (
+		Color("#5b789c") if busy_elsewhere else (Color("#c9ac5e") if seats_free else Color("#343a35"))
+	)
+	button.add_theme_stylebox_override("normal", _panel_style(bg, border))
+	button.add_theme_stylebox_override("hover", _panel_style(bg.lightened(0.08), border.lightened(0.15)))
+	button.add_theme_stylebox_override("pressed", _panel_style(bg.darkened(0.05), Color("#cef08b")))
+	button.add_theme_stylebox_override("disabled", _panel_style(bg.darkened(0.08), border.darkened(0.2)))
+	if is_seat:
+		button.text = "%s\n캣닢 x%.2f" % [display_name, float(trait_data.get("catnip", 1.0))]
+	elif busy_elsewhere:
+		button.text = "%s\n꾹꾹이 작업 중" % display_name
+		button.disabled = true
+	else:
+		button.text = "%s\n캣닢 x%.2f" % [display_name, float(trait_data.get("catnip", 1.0))]
+		button.disabled = not seats_free
+	if not button.disabled:
+		button.pressed.connect(func(): _toggle_worker(resident_id))
+	button.tooltip_text = "%s · %s\n꾹꾹이 x%.2f · 캣닢 x%.2f · 식비 x%.2f\n%s" % [
+		display_name,
+		str(trait_data.get("name", "")),
+		float(trait_data.get("kneading", 1.0)),
+		float(trait_data.get("catnip", 1.0)),
+		float(trait_data.get("appetite", 1.0)),
+		"좌클릭: 좌석에서 일으키기" if is_seat else "좌클릭: 좌석에 앉히기",
 	]
-	button.pressed.connect(func(): _toggle_worker(resident_id))
 	return button
 
 

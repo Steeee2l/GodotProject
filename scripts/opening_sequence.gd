@@ -31,15 +31,15 @@ const GAMEPLAY_PHASES := [
 	"tutorial_extract",
 ]
 const DIALOGUE_LINES := [
-	# 화자는 고양이 '나비'. 사람이 사라진 서울에서 홀로 살아남았다. 1인칭,
-	# 건조하지만 체온이 남은 목소리. 강 건너 신호가 유일한 이유.
-	"사람이 사라지고 삼백 밤. 밥을 주던 손도, 문을 열어 주던 소리도 없다.",
-	"고양이는 원래 혼자 살아남는 법을 안다. 나 나비는, 아직 여기 있다.",
-	"사흘 전부터 강 건너에서 같은 빛이 깜빡인다. 세 번, 쉬고, 다시 세 번.",
-	"저건 짐승의 눈이 아니야. 아직 신호를 보낼 줄 아는 무언가가 남았다는 뜻.",
-	"가방엔 통조림 두 개, 탄창은 하나. 돌아가 몸 누일 온기는 아직 없다.",
-	"다리 위엔 먼저 자리 잡은 것들이 있다. 저들을 지나야 북쪽이다.",
-	"…꼬리 세우고. 숨 고르고. 건너자.",
+	# 화자는 고양이 '나비'. 하드보일드하게, 감상 대신 수수께끼를 문다.
+	# 앞 3줄 = 사라진 밤의 미스터리 제시, 카메라 리빌 후 4줄 = 신호와 출발.
+	"삼백 밤째. 사람의 도시는 대답이 없다.",
+	"도망친 게 아니다. 저녁상은 그대로였고, 문은 전부 안에서 잠겨 있었다.",
+	"무언가가 사람만을, 단 하룻밤에 지워 버렸다.",
+	"사흘 전부터 강 건너에서 빛이 깜빡인다. 세 번, 침묵, 다시 세 번.",
+	"기계는 저 혼자 신호를 만들지 않는다. 누군가 — 아직 보내고 있다.",
+	"가방엔 통조림 두 개, 탄창 하나. 다리 위엔 먼저 온 것들.",
+	"좋아. 발톱 세우고, 답을 가지러 가자.",
 ]
 
 const PLAYER_SPEED := 5.2
@@ -987,10 +987,13 @@ func _build_dialogue_ui(hud: CanvasLayer) -> void:
 	dialogue_panel = PanelContainer.new()
 	dialogue_panel.name = "DialoguePanel"
 	dialogue_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	# 세로 화면(캔버스 폭 720)에서는 고정 900이 양옆으로 삐져나간다.
+	# 앵커 기준 오프셋으로만 잡는다. position 세터는 앵커가 걸린 컨트롤에서 부모
+	# 좌표로 해석돼 패널이 화면 왼쪽 밖으로 반쯤 나가는 사고가 났다.
 	var dialogue_width := minf(900.0, get_viewport().get_visible_rect().size.x - 24.0)
-	dialogue_panel.position = Vector2(-dialogue_width * 0.5, -192)
-	dialogue_panel.size = Vector2(dialogue_width, 126)
+	dialogue_panel.offset_left = -dialogue_width * 0.5
+	dialogue_panel.offset_right = dialogue_width * 0.5
+	dialogue_panel.offset_top = -318
+	dialogue_panel.offset_bottom = -192
 	dialogue_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.018, 0.024, 0.025, 0.94), Color("#9fc7b8"), 2, 6))
 	hud.add_child(dialogue_panel)
 	var margin := MarginContainer.new()
@@ -1285,8 +1288,8 @@ func _apply_mobile_safe_layout() -> void:
 	var viewport_size := get_viewport().get_visible_rect().size
 	if is_instance_valid(dialogue_panel):
 		var dialogue_width := minf(900.0, viewport_size.x - 24.0)
-		dialogue_panel.position.x = -dialogue_width * 0.5
-		dialogue_panel.size.x = dialogue_width
+		dialogue_panel.offset_left = -dialogue_width * 0.5
+		dialogue_panel.offset_right = dialogue_width * 0.5
 	if is_instance_valid(title_card):
 		var title_half := minf(400.0, (viewport_size.x - 24.0) * 0.5)
 		title_card.offset_left = -title_half

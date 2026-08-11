@@ -161,89 +161,83 @@ func _rebuild_ui() -> void:
 	summary.add_child(_summary_card("작업자", "%d / %d명" % [workers, slots], "resident", compact))
 	summary.add_child(_summary_card("생산 배율", "x%.0f" % GameState.get_production_multiplier(), "catnip", compact))
 
-	var body: BoxContainer = VBoxContainer.new() if narrow else HBoxContainer.new()
+	# ── 좌석 + 벤치 구조 ─────────────────────────────────────────
+	# "기계에 고양이를 앉힌다"가 한눈에 읽히게: 위에는 기계의 작업 좌석(슬롯 수만큼,
+	# 앉은 고양이 초상화), 아래에는 대기 주민 벤치. 벤치의 고양이를 누르면 좌석에
+	# 앉고, 좌석의 고양이를 누르면 일어난다. 두 열 텍스트 카드보다 훨씬 직관적이다.
+	var body := VBoxContainer.new()
 	body.name = "ScratcherBankBody"
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 16)
+	body.add_theme_constant_override("separation", 10)
 	content.add_child(body)
-	var resident_panel := PanelContainer.new()
-	resident_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	resident_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	resident_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.026, 0.032, 0.028, 0.9), Color("#4c6254")))
-	body.add_child(resident_panel)
-	var resident_margin := MarginContainer.new()
-	resident_margin.add_theme_constant_override("margin_left", 12)
-	resident_margin.add_theme_constant_override("margin_top", 10)
-	resident_margin.add_theme_constant_override("margin_right", 12)
-	resident_margin.add_theme_constant_override("margin_bottom", 10)
-	resident_panel.add_child(resident_margin)
-	var resident_box := VBoxContainer.new()
-	resident_box.add_theme_constant_override("separation", 8)
-	resident_margin.add_child(resident_box)
-	resident_box.add_child(_label("주민 배치", 16, Color("#e3decf")))
+
+	body.add_child(_label("작업 좌석 · 앉은 고양이가 고철을 만듭니다", 15, Color("#e3decf")))
+	var seat_row := HFlowContainer.new()
+	seat_row.add_theme_constant_override("h_separation", 8)
+	seat_row.add_theme_constant_override("v_separation", 8)
+	body.add_child(seat_row)
+	var assigned_ids: Array[String] = []
+	for worker_id in GameState.assigned_worker_ids:
+		assigned_ids.append(str(worker_id))
+	for seat_index in slots:
+		var seat_id := assigned_ids[seat_index] if seat_index < assigned_ids.size() else ""
+		seat_row.add_child(_portrait_card(seat_id, true, slots))
+
+	body.add_child(_label("대기 주민 · 눌러서 좌석에 앉히기 (우클릭: 특성 재굴림)", 13, Color("#9eaa9f")))
 	if GameState.resident_cat_ids.is_empty():
-		resident_box.add_child(_empty_resident_state(
+		body.add_child(_empty_resident_state(
 			"구출한 주민이 없습니다.",
 			"도시에서 주민을 구출해 함께 탈출하면 배치할 수 있습니다.",
 			compact
 		))
 	else:
-		var scroll := ScrollContainer.new()
-		scroll.custom_minimum_size = Vector2(0, 152 if compact and not narrow else 230)
-		scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		resident_box.add_child(scroll)
-		var grid := GridContainer.new()
-		grid.columns = 1 if narrow else (2 if compact else 3)
-		grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		grid.add_theme_constant_override("h_separation", 8)
-		grid.add_theme_constant_override("v_separation", 8)
-		scroll.add_child(grid)
-		for index in range(GameState.resident_cat_ids.size()):
-			grid.add_child(_worker_slot_button(index, slots))
+		var bench_scroll := ScrollContainer.new()
+		bench_scroll.custom_minimum_size = Vector2(0, 150)
+		bench_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bench_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		bench_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		body.add_child(bench_scroll)
+		var bench := HFlowContainer.new()
+		bench.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bench.add_theme_constant_override("h_separation", 8)
+		bench.add_theme_constant_override("v_separation", 8)
+		bench_scroll.add_child(bench)
+		for resident_variant in GameState.resident_cat_ids:
+			var resident_id := str(resident_variant)
+			if assigned_ids.has(resident_id):
+				continue  # 이미 좌석에 앉아 있다.
+			bench.add_child(_portrait_card(resident_id, false, slots))
 
-	var operations := PanelContainer.new()
-	operations.custom_minimum_size = Vector2(0 if narrow else (230 if compact else 252), 0)
-	operations.add_theme_stylebox_override("panel", _panel_style(Color(0.03, 0.034, 0.028, 0.92), Color("#66563a")))
-	body.add_child(operations)
-	var operations_margin := MarginContainer.new()
-	operations_margin.add_theme_constant_override("margin_left", 14)
-	operations_margin.add_theme_constant_override("margin_top", 12)
-	operations_margin.add_theme_constant_override("margin_right", 14)
-	operations_margin.add_theme_constant_override("margin_bottom", 12)
-	operations.add_child(operations_margin)
-	var actions := VBoxContainer.new()
-	actions.add_theme_constant_override("separation", 10)
-	operations_margin.add_child(actions)
-	actions.add_child(_label("생산 설정", 16, Color("#ead7ad")))
+	# 생산 설정은 아래 한 줄로. 별도 열을 차지할 만큼의 내용이 아니다.
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 8)
+	body.add_child(actions)
 	var boost_remaining: int = GameState.get_catnip_boost_remaining()
 	var boost := _button(
 		"가동 중  %02d:%02d" % [boost_remaining / 60, boost_remaining % 60]
 		if boost_remaining > 0
-		else "x25  ·  10분 동안 x10",
+		else "캣닢 x25 · 10분 생산 x10",
 		"catnip"
 	)
 	boost.disabled = boost_remaining > 0 or GameState.catnip < GameState.CATNIP_BOOST_COST
-	boost.custom_minimum_size = Vector2(0, 38)
+	boost.custom_minimum_size = Vector2(0, 40)
+	boost.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	boost.pressed.connect(_activate_boost)
 	actions.add_child(boost)
 	var upgrade_cost := int(GameState.SCRATCHER_UPGRADE_COSTS.get(GameState.scratcher_bank_level + 1, 0))
 	var upgrade := _button(
 		"최고 레벨"
-		if upgrade_cost == 0 else "x%s  ·  Lv.%d 확장" % [
+		if upgrade_cost == 0 else "고철 x%s · Lv.%d 확장(좌석+1)" % [
 			GameState.format_compact_number(upgrade_cost),
 			GameState.scratcher_bank_level + 1,
 		],
 		"upgrade" if upgrade_cost == 0 else "scrap"
 	)
 	upgrade.disabled = upgrade_cost == 0 or GameState.scrap < upgrade_cost
-	upgrade.custom_minimum_size = Vector2(0, 38)
+	upgrade.custom_minimum_size = Vector2(0, 40)
+	upgrade.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	upgrade.pressed.connect(_upgrade)
 	actions.add_child(upgrade)
-	var action_hint := _label("주민 카드를 눌러 배치하거나 해제", 11, Color("#788a80"))
-	action_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	actions.add_child(action_hint)
 
 
 func _worker_slot(index: int, active_workers: int, slots: int) -> PanelContainer:
@@ -265,66 +259,68 @@ func _worker_slot(index: int, active_workers: int, slots: int) -> PanelContainer
 	return panel
 
 
-func _worker_slot_button(index: int, slots: int) -> Button:
+func _portrait_card(resident_id: String, is_seat: bool, slots: int) -> Button:
+	# 초상화가 주인공인 세로 카드. 좌석(위)과 벤치(아래)가 같은 카드를 쓰므로
+	# "고양이를 옮겨 앉힌다"는 감각이 유지된다.
 	var button := Button.new()
-	button.custom_minimum_size = Vector2(176, 76)
-	var resident_id := ""
-	if index < GameState.resident_cat_ids.size():
-		resident_id = str(GameState.resident_cat_ids[index])
-	button.name = "ResidentCard_%s" % (resident_id if not resident_id.is_empty() else "Empty")
-	var active := not resident_id.is_empty() and GameState.assigned_worker_ids.has(resident_id)
-	var available := active or GameState.assigned_worker_ids.size() < slots
-	var trait_data: Dictionary = GameState.get_resident_trait(resident_id) if not resident_id.is_empty() else {}
-	var bg := Color(0.035, 0.04, 0.033, 0.92)
-	var border := Color("#80b887") if active else (Color("#635847") if available else Color("#333333"))
-	button.add_theme_stylebox_override("normal", _panel_style(bg, border))
-	button.add_theme_stylebox_override("hover", _panel_style(bg.lightened(0.08), Color("#d1c27a") if available else border))
-	button.add_theme_stylebox_override("pressed", _panel_style(bg.darkened(0.05), Color("#f0d16f") if available else border))
+	button.custom_minimum_size = Vector2(104, 128)
 	button.add_theme_font_override("font", FONT)
-	button.add_theme_font_size_override("font_size", 13)
-	button.icon = (
-		RESIDENT_PORTRAITS.get_portrait(int(trait_data.get("portrait_index", 0)))
-		if not resident_id.is_empty()
-		else UI_ICONS.get_icon("resident", 42, Color("#625f56"))
-	)
+	button.add_theme_font_size_override("font_size", 12)
 	button.expand_icon = true
-	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	button.disabled = not available or resident_id.is_empty()
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+	var bg := Color(0.035, 0.04, 0.033, 0.92)
+	if resident_id.is_empty():
+		# 빈 좌석: 여기 앉힐 수 있다는 자리 표시.
+		button.name = "SeatEmpty"
+		button.icon = UI_ICONS.get_icon("resident", 56, Color("#4c554f"))
+		button.text = "빈 좌석"
+		button.disabled = true
+		button.add_theme_stylebox_override("normal", _panel_style(bg, Color("#3c463f")))
+		button.add_theme_stylebox_override("disabled", _panel_style(bg, Color("#3c463f")))
+		button.add_theme_color_override("font_disabled_color", Color("#6d7a72"))
+		return button
+	var trait_data: Dictionary = GameState.get_resident_trait(resident_id)
 	var display_name := str(trait_data.get("display_name", "이름 없는 주민"))
-	if active:
-		button.text = "%s · %s\n작업 중 · 꾹꾹이 x%.2f · 식비 x%.2f" % [
-			display_name,
-			trait_data.get("name", ""),
-			trait_data.get("kneading", 1.0),
-			trait_data.get("appetite", 1.0),
-		]
-	elif resident_id.is_empty():
-		button.text = "빈 주민 슬롯"
+	var busy_elsewhere := not is_seat and GameState.assigned_catnip_worker_ids.has(resident_id)
+	var seats_free := GameState.assigned_worker_ids.size() < slots
+	button.name = "ResidentCard_%s" % resident_id
+	button.icon = RESIDENT_PORTRAITS.get_portrait(int(trait_data.get("portrait_index", 0)))
+	var border := Color("#80b887") if is_seat else (
+		Color("#5b789c") if busy_elsewhere else (Color("#c9ac5e") if seats_free else Color("#635847"))
+	)
+	button.add_theme_stylebox_override("normal", _panel_style(bg, border))
+	button.add_theme_stylebox_override("hover", _panel_style(bg.lightened(0.08), border.lightened(0.15)))
+	button.add_theme_stylebox_override("pressed", _panel_style(bg.darkened(0.05), Color("#f0d16f")))
+	button.add_theme_stylebox_override("disabled", _panel_style(bg.darkened(0.08), border.darkened(0.2)))
+	if is_seat:
+		button.text = "%s\n꾹꾹이 x%.2f" % [display_name, float(trait_data.get("kneading", 1.0))]
+	elif busy_elsewhere:
+		button.text = "%s\n캣닢 작업 중" % display_name
+		button.disabled = true
 	else:
-		button.text = "%s · %s\n꾹꾹이 x%.2f  캣닢 x%.2f\n식비 x%.2f" % [
-			display_name,
-			trait_data.get("name", ""),
-			trait_data.get("kneading", 1.0),
-			trait_data.get("catnip", 1.0),
-			trait_data.get("appetite", 1.0),
-		]
-	if not resident_id.is_empty():
+		button.text = "%s\n꾹꾹이 x%.2f" % [display_name, float(trait_data.get("kneading", 1.0))]
+		button.disabled = not seats_free
+	if not button.disabled:
 		button.pressed.connect(func(): _toggle_worker(resident_id))
-		# 특성이 트레이드오프가 된 이상, 안 맞는 조합을 바꿀 길이 필요하다.
-		# 우클릭 = 캣닢으로 재굴림.
-		button.gui_input.connect(func(event: InputEvent) -> void:
-			if (
-				event is InputEventMouseButton
-				and (event as InputEventMouseButton).pressed
-				and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_RIGHT
-			):
-				_reroll_worker(resident_id)
-		)
-		var reroll_cost := GameState.get_resident_reroll_cost(resident_id)
-		button.tooltip_text = "%s\n좌클릭: 배치/해제\n우클릭: 특성 재굴림 · 캣닢 %s" % [
-			display_name,
-			GameState.format_compact_number(reroll_cost),
-		]
+	# 우클릭 = 캣닢으로 특성 재굴림. 상세 수치는 툴팁이 전부 말한다.
+	button.gui_input.connect(func(event: InputEvent) -> void:
+		if (
+			event is InputEventMouseButton
+			and (event as InputEventMouseButton).pressed
+			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_RIGHT
+		):
+			_reroll_worker(resident_id)
+	)
+	button.tooltip_text = "%s · %s\n꾹꾹이 x%.2f · 캣닢 x%.2f · 식비 x%.2f\n%s\n우클릭: 특성 재굴림 · 캣닢 %s" % [
+		display_name,
+		str(trait_data.get("name", "")),
+		float(trait_data.get("kneading", 1.0)),
+		float(trait_data.get("catnip", 1.0)),
+		float(trait_data.get("appetite", 1.0)),
+		"좌클릭: 좌석에서 일으키기" if is_seat else "좌클릭: 좌석에 앉히기",
+		GameState.format_compact_number(GameState.get_resident_reroll_cost(resident_id)),
+	]
 	return button
 
 

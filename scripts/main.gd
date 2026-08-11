@@ -2654,7 +2654,9 @@ func _apply_hud_layout() -> void:
 	if hud.field_interaction_panel:
 		hud.field_interaction_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 		var field_panel_w := clampf(viewport_size.x * 0.54, 320.0, 410.0)
-		var field_panel_h := clampf(124.0 * ui_scale, 118.0, 134.0)
+		# 내용(액션 카드 52 + 진행바 6 + 여백)에 맞는 높이. 예전 118~134는 절반이
+		# 빈 바닥이라 카드가 위로 쏠려 미완성처럼 보였다.
+		var field_panel_h := clampf(88.0 * ui_scale, 84.0, 94.0)
 		hud.field_interaction_panel.offset_left = -field_panel_w * 0.5
 		hud.field_interaction_panel.offset_right = field_panel_w * 0.5
 		hud.field_interaction_panel.offset_bottom = -maxf(bottom_margin + 154.0, viewport_size.y * 0.24)
@@ -4486,7 +4488,13 @@ func _spawn_raid_event_squad(level: int) -> void:
 	if world == null:
 		return
 	var spawn_position := enemy_director._find_event_position_near_player(world, 26.0, 38.0)
-	var kinds: Array[String] = ["pistol", "melee"] if level < 2 else ["pistol", "pistol", "grenadier"]
+	# 삼항으로 고른 배열 리터럴은 무타입 Array가 돼 Array[String] 대입에서 런타임
+	# 오류를 낸다(전투 중 실제 발생). 분기로 명시해 타입을 지킨다.
+	var kinds: Array[String] = []
+	if level < 2:
+		kinds.assign(["pistol", "melee"])
+	else:
+		kinds.assign(["pistol", "pistol", "grenadier"])
 	enemy_director._spawn_enemy_squad(
 		world,
 		spawn_position,
