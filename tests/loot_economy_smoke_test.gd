@@ -121,7 +121,8 @@ func _run() -> void:
 			assert(ammo_amount >= 3 and ammo_amount <= 8)
 	assert(melee_weapon_count == 0)
 	var ranged_weapon_rate := float(ranged_weapon_count) / float(ranged_sample_count)
-	assert(ranged_weapon_rate >= 0.065 and ranged_weapon_rate <= 0.095)
+	# stage 4 표본: 0.10 + 3x0.02 = 0.16 기대.
+	assert(ranged_weapon_rate >= 0.14 and ranged_weapon_rate <= 0.19)
 	var recovery_weapon_count := 0
 	var recovery_sample_count := 2000
 	for _sample in recovery_sample_count:
@@ -161,9 +162,9 @@ func _run() -> void:
 	# 방어구 드랍을 파밍 루프의 심장으로 끌어올렸다. 처치할 때마다 갈아 끼울
 	# 기회가 규칙적으로 돌아오도록 전용 판정을 둔 결과, 전체 드랍률과 방어구
 	# 비중이 함께 올라간다.
-	assert(any_enemy_drop_rate >= 0.67 and any_enemy_drop_rate <= 0.74)
-	assert(common_enemy_drop_rate >= 0.27 and common_enemy_drop_rate <= 0.35)
-	assert(armor_enemy_drop_rate >= 0.17 and armor_enemy_drop_rate <= 0.25)
+	assert(any_enemy_drop_rate >= 0.71 and any_enemy_drop_rate <= 0.79)
+	assert(common_enemy_drop_rate >= 0.22 and common_enemy_drop_rate <= 0.30)
+	assert(armor_enemy_drop_rate >= 0.20 and armor_enemy_drop_rate <= 0.27)
 
 	var game_state := root.get_node("GameState")
 	game_state.call("reset_raid_supply_counters")

@@ -250,8 +250,19 @@ func _show_extraction_result(rescued_count: int) -> void:
 	lines.append("획득품은 가방에 보존됩니다.")
 	host.hud.extraction_result_summary.text = "\n".join(lines)
 	var new_xp := int(pending_extraction_xp_result.get("new_xp", GameState.player_xp))
+	var old_xp := int(pending_extraction_xp_result.get("old_xp", new_xp))
 	var required := maxi(1, int(pending_extraction_xp_result.get("new_required", GameState.get_xp_required())))
-	host.hud.extraction_xp_bar.value = float(new_xp) / float(required) * 100.0
+	# 보상의 절반은 연출이다. 바가 이전 값에서 새 값으로 차오르는 걸 보여준다.
+	host.hud.extraction_xp_bar.value = clampf(float(old_xp) / float(required) * 100.0, 0.0, 100.0)
+	var xp_tween := host.create_tween()
+	xp_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	xp_tween.tween_interval(0.45)
+	xp_tween.tween_property(
+		host.hud.extraction_xp_bar,
+		"value",
+		float(new_xp) / float(required) * 100.0,
+		0.9
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	host.hud.extraction_xp_label.text = "Lv.%d   %d / %d XP" % [GameState.player_level, new_xp, required]
 	host.hud.extraction_result_panel.visible = true
 	if GameState.pending_level_choices > 0:

@@ -979,37 +979,33 @@ func _refresh_contents() -> void:
 	for weapon_id_variant in weapon_ids:
 		var weapon_id := str(weapon_id_variant)
 		var count: int = int(game_state.get_weapon_count(weapon_id))
-		if count <= 0:
-			continue
-		var definition := WEAPON_SYSTEM.get_weapon(weapon_id)
 		var weapon_equipped: bool = (
 			has_weapon_state and weapon_id == str(game_state.equipped_weapon_id)
 		)
+		# 장착 중인 1정은 위의 장비 슬롯이 이미 보여준다. 가방 목록에 또 나오면
+		# 자리를 차지하는 것처럼 읽히므로 뺀다. 같은 무기 2정째부터는 가방 몫이다.
+		if weapon_equipped:
+			count -= 1
+		if count <= 0:
+			continue
+		var definition := WEAPON_SYSTEM.get_weapon(weapon_id)
 		_add_bag_item({
 			"id": weapon_id,
 			"type": "weapon",
 			"title": str(definition.get("display_name", weapon_id)),
-			"description": (
-				"현재 장착 중인 주무기입니다."
-				if weapon_equipped
-				else "가방에 보관 중인 무기입니다. 선택 후 장착하면 현재 주무기와 교체됩니다."
-			),
+			"description": "가방에 보관 중인 무기입니다. 선택 후 장착하면 현재 주무기와 교체됩니다.",
 			"quantity": count,
-			"equipped": weapon_equipped,
+			"equipped": false,
 			"texture": weapon_textures.get(weapon_id) as Texture2D,
 		})
 
+	# 장착 중인 방어구는 위의 장비 슬롯이 보여준다. 가방 목록에는 예비(미장착)
+	# 수량만 나온다 — 장착품이 가방 자리를 차지하는 것처럼 보이던 혼선을 없앤다.
 	var equipment_ids: Array = game_state.equipment_inventory.keys()
-	for equipped_id in [body_id, head_id, footwear_id]:
-		if not equipped_id.is_empty() and not equipment_ids.has(equipped_id):
-			equipment_ids.append(equipped_id)
 	equipment_ids.sort()
 	for equipment_id_variant in equipment_ids:
 		var equipment_id := str(equipment_id_variant)
 		var equipment_count := int(game_state.get_equipment_count(equipment_id))
-		var equipment_equipped: bool = equipment_id in [body_id, head_id, footwear_id]
-		if equipment_equipped:
-			equipment_count += 1
 		if equipment_count <= 0:
 			continue
 		var equipment_definition: Dictionary = game_state.get_equipment_definition(equipment_id)
@@ -1019,7 +1015,7 @@ func _refresh_contents() -> void:
 			"title": str(equipment_definition.get("display_name", equipment_id)),
 			"description": str(equipment_definition.get("description", "")),
 			"quantity": equipment_count,
-			"equipped": equipment_equipped,
+			"equipped": false,
 			"texture": _equipment_texture(equipment_id, 64),
 		})
 
@@ -1458,8 +1454,10 @@ func _on_selected_item_action() -> void:
 		var definition: Dictionary = game_state.get_equipment_definition(item_id)
 		var slot := str(definition.get("slot", "body"))
 		if str(game_state.get_equipped_equipment(slot)) == item_id:
-			game_state.unequip_equipment(slot)
-			_show_inventory_feedback("%s 해제" % str(definition.get("display_name", item_id)), Color("#d9c579"))
+			if game_state.unequip_equipment(slot):
+				_show_inventory_feedback("%s 해제" % str(definition.get("display_name", item_id)), Color("#d9c579"))
+			else:
+				_show_inventory_feedback("가방이 가득 찼습니다 · 가방을 비운 뒤 해제하세요", Color("#ee806c"))
 		else:
 			game_state.equip_equipment(item_id)
 			_show_inventory_feedback("%s 장착" % str(definition.get("display_name", item_id)), Color("#a3ff92"))
@@ -1539,6 +1537,9 @@ func _request_weapon_unequip() -> void:
 		selected_item = {}
 		_show_inventory_feedback("주무기를 가방에 보관했습니다.", Color("#d9c579"))
 		_refresh_contents()
+	else:
+		# unequip이 거부됐다 = 가방에 그 1정이 들어갈 자리가 없다.
+		_show_inventory_feedback("가방이 가득 찼습니다 · 가방을 비운 뒤 해제하세요", Color("#ee806c"))
 
 
 func _build_mod_slot_button(slot: String) -> Button:
@@ -1745,6 +1746,22 @@ func _apply_responsive_layout() -> void:
 			content.add_theme_constant_override("margin_right", 12 if not responsive_compact else 10)
 			content.add_theme_constant_override("margin_bottom", 10 if not responsive_compact else 8)
 
+	if bag_scroll:
+		# 이중 스크롤 함정: 바깥 패널 스크롤 안에서는 EXPAND_FILL이 무력해서
+		# 가방 영역이 최소 110px(1.5줄)로 잘리고 패널 아래엔 죽은 여백이 남았다.
+		# 가방을 제외한 섹션들의 자연 높이를 재고, 남는 공간을 전부 가방에 준다.
+		var sections_box := bag_scroll.get_parent() as Control
+		if sections_box:
+			var other_content_height := (
+				sections_box.get_combined_minimum_size().y
+				- bag_scroll.custom_minimum_size.y
+			)
+			var inner_available := panel_height - 28.0 - 24.0
+			bag_scroll.custom_minimum_size.y = clampf(
+				inner_available - other_content_height,
+				110.0,
+				640.0
+			)
 	if bag_grid:
 		var slot_min := 82.0
 		var gap := 6.0

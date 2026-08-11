@@ -676,13 +676,14 @@ func build_extraction_progress_ui() -> void:
 	extraction_result_panel = PanelContainer.new()
 	extraction_result_panel.name = "ExtractionResultPanel"
 	extraction_result_panel.set_anchors_preset(Control.PRESET_CENTER)
-	# 세로 화면(폭 720)에서는 고정 900이 잘린다. 화면에 맞춰 줄인다.
+	# 내용(요약 ~9줄 + 경로 카드 + XP 바)에 맞는 크기. 예전 900×510은 절반이
+	# 빈 여백이었다. 세로 화면에서는 폭이 자동으로 더 줄어든다.
 	var result_viewport := host.get_viewport().get_visible_rect().size
-	var result_half_w := minf(450.0, (result_viewport.x - 24.0) * 0.5)
+	var result_half_w := minf(390.0, (result_viewport.x - 24.0) * 0.5)
 	extraction_result_panel.offset_left = -result_half_w
-	extraction_result_panel.offset_top = -255
+	extraction_result_panel.offset_top = -196
 	extraction_result_panel.offset_right = result_half_w
-	extraction_result_panel.offset_bottom = 255
+	extraction_result_panel.offset_bottom = 196
 	extraction_result_panel.add_theme_stylebox_override(
 		"panel",
 		HudStyle.panel(Color(0.018, 0.024, 0.025, 0.98), Color("#d0b35d"), 8)

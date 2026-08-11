@@ -511,7 +511,10 @@ func _on_inventory_weapon_unequipped() -> void:
 	host.reserve_ammo = GameState.get_ammo_count(GameState.equipped_ammo_id)
 	GameState.magazine_ammo = host.magazine_ammo
 	GameState.reserve_ammo = host.reserve_ammo
-	GameState.unequip_weapon()
+	# 가방이 꽉 차면 해제가 거부된다(벗은 무기가 들어갈 자리가 없다). 그 경우
+	# 장착 상태를 그대로 유지해야 GameState와 어긋나지 않는다.
+	if not GameState.unequip_weapon():
+		return
 	host.has_ak = false
 	host.weapon_reloading = false
 	host.laser_aim_held = false

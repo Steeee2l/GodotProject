@@ -839,10 +839,11 @@ static func roll_enemy_drop(
 		var weapon_definition := _find_weapon_definition(enemy_weapon_id)
 		if not weapon_definition.is_empty() and _item_allowed(weapon_definition, stage):
 			return _materialize_item(enemy_weapon_id, stage, random)
-	# 방어구는 파밍의 심장이다. 처치할 때마다 "갈아 끼울 게 나왔나?" 기대하도록
-	# 무기 다음, 다른 소모품보다 앞에 전용 드랍 판정을 둔다. 초반 18% → 후반 30%.
-	var armor_drop_chance := 0.18 + float(stage - 1) * 0.03
-	if enemy_kind != "melee" and random.randf() < armor_drop_chance:
+	# 방어구는 파밍의 심장이다. 힘들게 죽인 적은 확실히 뭔가를 내놓아야, 한 판
+	# 안에서 장비를 갈아타며 강해지는(도망자→청소부) 파워 커브가 산다.
+	# 초반 26% → 후반 42%. 근접적도 몸에 두른 방어구를 떨군다.
+	var armor_drop_chance := 0.26 + float(stage - 1) * 0.04
+	if random.randf() < armor_drop_chance:
 		return _materialize_item(_roll_enemy_armor_id(stage, random), stage, random)
 	var ordinary_drop_chance := 0.62 + float(stage - 1) * 0.03
 	if random.randf() > ordinary_drop_chance:
@@ -898,7 +899,9 @@ static func _roll_enemy_armor_id(stage: int, random: RandomNumberGenerator) -> S
 
 
 static func get_enemy_weapon_drop_chance(stage_tier: int) -> float:
-	return 0.05 + float(clampi(stage_tier, 1, 5) - 1) * 0.01
+	# 총 든 적을 죽이면 그 총이 나올 수 있어야 한다(타르코프의 손맛). 5%는
+	# 사실상 안 나오는 확률이라 판 내 재무장 파워커브가 죽어 있었다.
+	return 0.10 + float(clampi(stage_tier, 1, 5) - 1) * 0.02
 
 
 static func get_definition_value(definition: Dictionary) -> int:

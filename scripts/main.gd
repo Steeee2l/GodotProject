@@ -4330,8 +4330,9 @@ func _setup_raid_opportunities(world: ProceduralCityMap) -> void:
 	dynamic_incident_winning_faction = ""
 	dynamic_incident_timer = 0.0
 	hud.build_raid_opportunity_hud()
-	if not GameState.bag_pressure_lesson_seen:
-		loot_system._spawn_onboarding_loot_cluster(world)
+	# 시작 지점 옆 온보딩 루팅 무더기는 제거했다. 출정 직후 발밑에 아이템이
+	# 깔려 있으면 "찾아서 줍는" 파밍의 첫인상이 죽는다. 가방 압박 학습은
+	# 일반 루팅 과정에서 자연히 온다.
 	incidents._spawn_high_value_hotspots(world)
 	jackpot._setup_jackpot_event(world)
 	_refresh_raid_pressure_hud()
@@ -4917,6 +4918,10 @@ func _on_tactical_map_open_state_changed(is_open: bool) -> void:
 		_release_mobile_held_actions()
 		mouse_fire_held = false
 		laser_aim_held = false
+	else:
+		# 우클릭을 물리적으로 유지한 채 TAB을 눌렀다 떼면 조준이 끊겼다.
+		# 닫힐 때 실제 버튼 상태로 되살린다. 발사는 오발 위험이 있어 복원하지 않는다.
+		laser_aim_held = Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
 	_refresh_pointer_mode()
 	_apply_hud_layout()
 	_update_combat_overlay_visibility()

@@ -1383,11 +1383,11 @@ func get_raid_bag_used_slots() -> int:
 			get_weapon_mod_count(str(mod_id))
 		)
 	for weapon_id in weapon_inventory.keys():
-		used += get_raid_item_slot_cost(
-			"weapon",
-			str(weapon_id),
-			get_backpack_storage_count("weapon", str(weapon_id))
-		)
+		var weapon_count := get_backpack_storage_count("weapon", str(weapon_id))
+		# 장착 중인 1정은 몸에 있는 것이지 가방에 있는 게 아니다. 슬롯을 먹지 않는다.
+		if has_ak and str(weapon_id) == equipped_weapon_id:
+			weapon_count = maxi(0, weapon_count - 1)
+		used += get_raid_item_slot_cost("weapon", str(weapon_id), weapon_count)
 	for equipment_id in equipment_inventory.keys():
 		used += get_raid_item_slot_cost(
 			"equipment",
@@ -1872,6 +1872,9 @@ func unequip_equipment(slot: String) -> bool:
 	var equipped_id := get_equipped_equipment(slot)
 	if equipped_id.is_empty():
 		return false
+	# 몸에서 벗으면 가방으로 들어간다 — 가방에 그 자리가 있어야 벗을 수 있다.
+	if not can_add_raid_item("equipment", equipped_id, 1):
+		return false
 	equipment_inventory[equipped_id] = get_equipment_count(equipped_id) + 1
 	match slot:
 		"head":
@@ -1963,6 +1966,9 @@ func equip_weapon(weapon_id: String) -> bool:
 
 func unequip_weapon() -> bool:
 	if not has_ak:
+		return false
+	# 장착 해제하면 그 1정이 다시 가방 슬롯을 차지한다. 자리가 없으면 못 벗는다.
+	if not can_add_raid_item("weapon", equipped_weapon_id, 1):
 		return false
 	save_equipped_weapon_loadout()
 	has_ak = false

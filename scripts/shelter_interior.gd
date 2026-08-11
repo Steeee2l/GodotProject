@@ -1246,14 +1246,19 @@ func _build_interface() -> void:
 	stats_box.add_theme_constant_override("separation", 7)
 	outer_box.add_child(stats_box)
 	stats_body_box = stats_box
-	resident_meter_label = _build_meter_row(stats_box, "resident", "주민", Color("#9fc9d8"))
+	# 주민·꾹꾹이·스크래핑은 전부 "인원/슬롯" 정보다. 세 줄 대신 한 줄에 세그먼트로
+	# 나란히 둔다. 각 세그먼트가 자기 HBox를 가지므로 기존 숨김 로직이 그대로 돈다.
+	var population_row := HBoxContainer.new()
+	population_row.add_theme_constant_override("separation", 16)
+	stats_box.add_child(population_row)
+	resident_meter_label = _build_meter_row(population_row, "resident", "주민", Color("#9fc9d8"))
 	for production_data in [
 		["scratcher", "꾹꾹이", Color("#d4ad55")],
 		["catnip", "스크래핑", Color("#8fcf7a")],
 	]:
 		var production_id := str(production_data[0])
 		var row_label := _build_meter_row(
-			stats_box,
+			population_row,
 			"scrap" if production_id == "scratcher" else "catnip",
 			str(production_data[1]),
 			production_data[2] as Color
@@ -1263,19 +1268,20 @@ func _build_interface() -> void:
 	divider.add_theme_constant_override("separation", 6)
 	stats_box.add_child(divider)
 	var resource_grid := GridContainer.new()
-	resource_grid.columns = 2
-	resource_grid.add_theme_constant_override("h_separation", 14)
+	# 재화 4종을 아이콘+숫자만으로 한 줄에. 이름 텍스트는 아이콘이 대신한다.
+	# 툴팁에 이름을 남겨 무엇인지 확인은 가능하게 둔다.
+	resource_grid.columns = 4
+	resource_grid.add_theme_constant_override("h_separation", 12)
 	resource_grid.add_theme_constant_override("v_separation", 4)
 	stats_box.add_child(resource_grid)
-	# 재화는 4종만 상시 표시한다. 원자재(고철 조각·캣닢 잎)는 가동 연료 줄이
-	# 담당한다 — 여섯 줄은 읽는 게 아니라 스쳐 지나가게 된다.
 	for resource_data in [
 		["scrap", "고철", Color("#c7d1ce")],
 		["food", "통조림", Color("#e5b55b")],
 		["catnip", "캣닢", Color("#a9db78")],
 		["churu", "츄르", Color("#d99b67")],
 	]:
-		var chip := _currency_chip(str(resource_data[0]), str(resource_data[1]), resource_data[2], 20, 150)
+		var chip := _currency_chip(str(resource_data[0]), str(resource_data[1]), resource_data[2], 20, 62)
+		chip.tooltip_text = str(resource_data[1])
 		resource_grid.add_child(chip)
 		shelter_currency_labels[str(resource_data[0])] = chip.get_meta("value_label")
 	stats_box.add_child(_build_runtime_row())
@@ -2430,9 +2436,8 @@ func _build_meter_row(parent: Node, icon_name: String, title: String, color: Col
 	row.add_child(icon)
 	var title_label := Label.new()
 	title_label.text = title
-	title_label.custom_minimum_size.x = 74
 	title_label.add_theme_font_override("font", FONT)
-	title_label.add_theme_font_size_override("font_size", 14)
+	title_label.add_theme_font_size_override("font_size", 13)
 	title_label.add_theme_color_override("font_color", Color("#9db3a9"))
 	row.add_child(title_label)
 	var value_label := Label.new()
@@ -2887,10 +2892,11 @@ func _update_stats() -> void:
 	_update_production_meter("catnip", "catnip_scraper",
 		GameState.get_active_catnip_workers(), GameState.get_catnip_worker_slots())
 	if shelter_currency_labels.has("scrap"):
-		(shelter_currency_labels["scrap"] as Label).text = "고철  %s" % GameState.format_compact_number(GameState.scrap)
-		(shelter_currency_labels["catnip"] as Label).text = "캣닢  %s" % GameState.format_compact_number(GameState.catnip)
-		(shelter_currency_labels["food"] as Label).text = "통조림  %s" % GameState.format_compact_number(GameState.canned_food)
-		(shelter_currency_labels["churu"] as Label).text = "츄르  %s" % GameState.format_compact_number(GameState.churu)
+		# 아이콘이 이름을 대신한다. 숫자만 크게 — 4열 한 줄 컴팩트 표기의 핵심.
+		(shelter_currency_labels["scrap"] as Label).text = GameState.format_compact_number(GameState.scrap)
+		(shelter_currency_labels["catnip"] as Label).text = GameState.format_compact_number(GameState.catnip)
+		(shelter_currency_labels["food"] as Label).text = GameState.format_compact_number(GameState.canned_food)
+		(shelter_currency_labels["churu"] as Label).text = GameState.format_compact_number(GameState.churu)
 	_update_runtime_row()
 	_update_stats_summary()
 	if shelter_upgrade_button:
