@@ -238,6 +238,15 @@ func _show_extraction_result(rescued_count: int) -> void:
 		"경로 XP +%d · 총 경험치 +%d" % [route_xp_bonus, xp_reward],
 		"위험 정산금  고철 +%s" % GameState.format_compact_number(risk_payout),
 	]
+	# 도시 의뢰(계약 완주 후 반복 목표) 달성 시 즉시 지급 + 정산 줄로 보여준다.
+	var commission_payout: Dictionary = GameState.settle_city_commission(host.run_kills)
+	if not commission_payout.is_empty():
+		var commission_line := "사자의 의뢰 완수  고철 +%s" % GameState.format_compact_number(
+			int(commission_payout.get("scrap", 0))
+		)
+		if int(commission_payout.get("churu", 0)) > 0:
+			commission_line += " · 츄르 +%d" % int(commission_payout.get("churu", 0))
+		lines.append(commission_line)
 	# 가방을 "시간"으로 환산한다. 원자재 12개는 아무 느낌도 없지만
 	# "쉘터 가동 3시간 12분"은 다음 출정의 이유가 된다.
 	var runtime_seconds := GameState.get_raw_material_runtime_seconds()

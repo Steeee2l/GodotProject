@@ -935,6 +935,8 @@ func register_shelter_return(survived: bool = true) -> void:
 	last_corpse_decay_notice = apply_corpse_decay()
 	pending_milestone_unlocks = check_milestone_unlocks()
 	sync_shelter_progression_milestones()
+	# 계약을 완주했다면 복귀마다 새 도시 의뢰를 내건다(후반 반복 목표).
+	roll_city_commission()
 	save_persistent_state()
 
 
@@ -3227,6 +3229,55 @@ func get_current_contract_definition() -> Dictionary:
 	return get_quest_definition("saja", contract_chain_index)
 
 
+# ── 도시 의뢰: 계약 완주 후의 반복 목표 ────────────────────────────
+# 사자의 시설 계약이 끝나면 서사가 끊기던 공백을 메운다. 복귀할 때마다 사자가
+# 새 의뢰(이번 출정 처치 목표)를 내걸고, 탈출 정산에서 달성 시 즉시 지급한다.
+var city_commission: Dictionary = {}
+
+
+func is_contract_chain_finished() -> bool:
+	return str(get_contract_state().get("status", "")) == "finished"
+
+
+func roll_city_commission() -> void:
+	if not is_contract_chain_finished():
+		city_commission = {}
+		return
+	# 결정론: 같은 복귀 차수에는 같은 의뢰. 최고 해금 존 티어로 난이도를 잡는다.
+	var highest_tier := 1
+	for zone_id in get_raid_zone_ids():
+		if is_raid_zone_unlocked(str(zone_id)):
+			highest_tier = maxi(highest_tier, int(get_raid_zone(str(zone_id)).get("required_tier", 1)))
+	var random := RandomNumberGenerator.new()
+	random.seed = int(map_seed) ^ (shelter_return_serial * 2654435761) ^ 0x434F4D4D
+	var kills_target := 5 + highest_tier * 2 + random.randi_range(0, 3)
+	city_commission = {
+		"kills_target": kills_target,
+		"reward_scrap": kills_target * (280 + highest_tier * 130),
+		"reward_churu": 1 if shelter_return_serial % 3 == 0 else 0,
+		"serial": shelter_return_serial,
+		"completed": false,
+	}
+
+
+func get_city_commission() -> Dictionary:
+	return city_commission.duplicate(true)
+
+
+func settle_city_commission(run_kills: int) -> Dictionary:
+	# 탈출 정산에서 호출. 달성했으면 즉시 지급하고 완료 표시(다음 복귀 때 새 의뢰).
+	if city_commission.is_empty() or bool(city_commission.get("completed", false)):
+		return {}
+	if run_kills < int(city_commission.get("kills_target", 999)):
+		return {}
+	var reward_scrap := int(city_commission.get("reward_scrap", 0))
+	var reward_churu := int(city_commission.get("reward_churu", 0))
+	scrap += reward_scrap
+	churu += reward_churu
+	city_commission["completed"] = true
+	return {"scrap": reward_scrap, "churu": reward_churu}
+
+
 func get_contract_state() -> Dictionary:
 	return _build_quest_state(
 		"saja", contract_chain_index, contract_status, contract_progress, completed_contract_ids
@@ -3490,6 +3541,7 @@ func save_persistent_state() -> bool:
 		"shelter_raw_catnip_fraction": shelter_raw_catnip_fraction,
 		"shelter_return_serial": shelter_return_serial,
 		"survived_return_count": survived_return_count,
+		"city_commission": city_commission,
 		"merchant_last_roll_serial": merchant_last_roll_serial,
 		"merchant_status": merchant_status,
 		"merchant_decline_count": merchant_decline_count,
@@ -3643,6 +3695,7 @@ func load_persistent_state() -> bool:
 	shelter_return_serial = int(data.get("shelter_return_serial", shelter_return_serial))
 	# 구 세이브 호환: 값이 없으면 기존 귀환 수를 생환 수로 간주한다.
 	survived_return_count = int(data.get("survived_return_count", shelter_return_serial))
+	city_commission = (data.get("city_commission", {}) as Dictionary).duplicate(true)
 	merchant_last_roll_serial = int(data.get("merchant_last_roll_serial", merchant_last_roll_serial))
 	merchant_status = str(data.get("merchant_status", merchant_status))
 	merchant_decline_count = int(data.get("merchant_decline_count", merchant_decline_count))

@@ -28,7 +28,9 @@ func attach(owner_node: Node) -> void:
 	host = owner_node
 
 
-func play(lines: Array[String], speaker := "나비") -> void:
+func play(lines: Array, speaker := "나비") -> void:
+	# host(Variant) 경유 호출은 Array[String] 리터럴을 무타입 Array로 만든다.
+	# 무타입으로 받아 내부에서 문자열화한다 — 모듈화 규약의 그 함정.
 	for line in lines:
 		queue.append(str(line))
 	_ensure_panel()

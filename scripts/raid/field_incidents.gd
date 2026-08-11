@@ -208,6 +208,12 @@ func _build_dynamic_incident_guard_route(center: Vector3) -> Array[Vector3]:
 			0.62,
 			[player.get_rid()]
 		)
+		# 지형 스냅이 경로점을 화물에서 멀리 밀어낼 수 있다. 경비는 화물 곁을
+		# 지키는 게 목적이므로 반경 7m 안으로 되당긴다(맵에 따라 간헐 실패하던 원인).
+		var from_center := position - center
+		from_center.y = 0.0
+		if from_center.length() > 7.0:
+			position = center + from_center.normalized() * 6.0
 		position.y = 0.78
 		route.append(position)
 	return route

@@ -1689,7 +1689,19 @@ func _refresh_contract_ui() -> void:
 		finished_title.add_theme_color_override("font_color", Color("#82d5aa"))
 		contract_box.add_child(finished_title)
 		var finished_body := Label.new()
-		finished_body.text = "사자가 약속한 시설은 모두 가동되었습니다.\n이제 주민 배치와 업그레이드로 쉘터를 거대한 생존 공장으로 키우세요."
+		# 계약 완주 후에도 사자는 매 복귀마다 도시 의뢰를 내건다. 완성 화면이
+		# 막다른 벽이 아니라 다음 목표 게시판이 된다.
+		var commission: Dictionary = GameState.get_city_commission()
+		if not commission.is_empty() and not bool(commission.get("completed", false)):
+			finished_body.text = "생산망은 완성됐다. 이제 도시를 되찾을 차례.\n\n이번 의뢰 · 출정에서 %d명 처치 → 고철 %s%s" % [
+				int(commission.get("kills_target", 0)),
+				GameState.format_compact_number(int(commission.get("reward_scrap", 0))),
+				" + 츄르 %d" % int(commission.get("reward_churu", 0)) if int(commission.get("reward_churu", 0)) > 0 else "",
+			]
+		elif not commission.is_empty():
+			finished_body.text = "이번 의뢰는 완수했다. 다음 복귀 때 새 의뢰를 준비해 두지."
+		else:
+			finished_body.text = "사자가 약속한 시설은 모두 가동되었습니다.\n이제 주민 배치와 업그레이드로 쉘터를 거대한 생존 공장으로 키우세요."
 		finished_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		finished_body.add_theme_font_override("font", FONT)
 		finished_body.add_theme_font_size_override("font_size", 16)

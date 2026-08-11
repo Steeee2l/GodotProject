@@ -302,6 +302,7 @@ func _rebuild_ui() -> void:
 	margin.add_child(main)
 
 	main.add_child(_build_header())
+	main.add_child(_build_flow_strip())
 	main.add_child(_build_tabs())
 
 	var body: BoxContainer = VBoxContainer.new() if stacked else HBoxContainer.new()
@@ -315,6 +316,35 @@ func _rebuild_ui() -> void:
 	body.add_child(_build_detail_panel())
 	_refresh_recipe_list()
 	_refresh_detail_panel()
+
+
+func _build_flow_strip() -> Control:
+	# 제작대의 한 문장 요약: 재료 → 부품 → 개조품 → 무기. 탭 구조만으로는
+	# "스프링을 주워서 뭘 하는가"의 순서가 안 보였다. 현재 탭 단계를 밝게 켠다.
+	var strip := HBoxContainer.new()
+	strip.name = "WorkbenchFlowStrip"
+	strip.add_theme_constant_override("separation", 6)
+	strip.alignment = BoxContainer.ALIGNMENT_CENTER
+	var steps := [
+		["고철·재료", "parts"],
+		["→", ""],
+		["부품", "parts"],
+		["→", ""],
+		["개조품·무기", "weapons"],
+		["→", ""],
+		["장착 후 +99 강화", "enhance"],
+	]
+	for step in steps:
+		var text := str(step[0])
+		var step_tab := str(step[1])
+		var lit: bool = not step_tab.is_empty() and step_tab == selected_category
+		var label := _label(
+			text,
+			12,
+			Color("#f0d98e") if lit else (Color("#57675f") if text == "→" else Color("#8fa398"))
+		)
+		strip.add_child(label)
+	return strip
 
 
 func _build_header() -> Control:
