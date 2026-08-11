@@ -472,6 +472,13 @@ func _ready() -> void:
 	loot_system.attach(self)
 	stealth.attach(self)
 	weapon_combat.attach(self)
+	# 발각 방향 인디케이터 — 화면 밖(또는 안개에 가려진) 경계 상태 적의 방향을
+	# 화면 가장자리에 느낌표로 띄운다. 시야가 좁은 모바일에서 "어디서 걸렸는지"를
+	# 보고 도망칠 수 있게 하는 장치인데, 클래스만 있고 어디서도 생성되지 않았다.
+	var alert_overlay := EnemyAlertOverlay.new()
+	alert_overlay.name = "EnemyAlertOverlay"
+	$HUD.add_child(alert_overlay)
+	alert_overlay.setup(player, camera)
 	hud.setup_aim_feedback()
 	hud.setup_player_combat_feedback()
 	game_over_screen.build(self)
@@ -1519,6 +1526,12 @@ func _update_scope_camera(delta: float) -> void:
 	)
 	var target_offset := Vector3.ZERO
 	var target_camera_size := BASE_CAMERA_SIZE
+	# 세로 화면 보정은 매 프레임 강제한다. 신호(size_changed) 타이밍에 맡겼더니
+	# 실기기에서 적용이 누락되는 사례가 있었다. KEEP_WIDTH로 가로 시야를
+	# 가로모드와 맞추고, 추가 계수로 한 번 더 물러난다.
+	var camera_viewport := get_viewport().get_visible_rect().size
+	var camera_portrait := camera_viewport.y > camera_viewport.x
+	camera.keep_aspect = Camera3D.KEEP_WIDTH if camera_portrait else Camera3D.KEEP_HEIGHT
 	if boss_defeat_sequence_active:
 		target_camera_size = BOSS_DEFEAT_CAMERA_SIZE
 	elif scope_active:
@@ -1526,6 +1539,10 @@ func _update_scope_camera(delta: float) -> void:
 		var aim_direction := locked_aim_direction if locked_aim_direction.length_squared() > 0.01 else fallback_direction
 		target_offset = aim_direction.normalized() * float(weapon_stats.get("scope_shift", 0.0))
 		target_camera_size = BASE_CAMERA_SIZE - minf(4.5, (scope_zoom - 1.0) * 1.5)
+	if camera_portrait:
+		# KEEP_WIDTH만으로는 가로모드의 가로 시야와 같아질 뿐이다. 세로에서는
+		# 한 걸음 더 물러나야 교전 거리가 보인다.
+		target_camera_size *= 1.25
 	var camera_delta := (
 		delta / maxf(Engine.time_scale, 0.05)
 		if boss_defeat_sequence_active
