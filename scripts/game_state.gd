@@ -4,7 +4,8 @@ const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
 const RAID_REGION_CATALOG := preload("res://scripts/raid_region_catalog.gd")
 
-const RAID_BAG_CAPACITY := 15
+# 기본 12칸 — 확장 사다리(고철)로 늘려 간다. 처음부터 넉넉하면 성장 재미가 없다.
+const RAID_BAG_CAPACITY := 12
 # Stack limits control discard batches only. Bag capacity uses one slot per
 # stackable type-and-ID pair and one slot per individual weapon or equipment item.
 const RAID_STACK_LIMITS := {
@@ -1244,13 +1245,6 @@ func store_secure_item(item: Dictionary) -> bool:
 	return true
 
 
-func upgrade_secure_dog() -> bool:
-	if secure_dog_slots >= 6:
-		return false
-	secure_dog_slots += 1
-	return true
-
-
 func get_storage_grid_size() -> Vector2i:
 	return STORAGE_GRID_BY_LEVEL.get(storage_level, STORAGE_GRID_BY_LEVEL[1])
 
@@ -1307,8 +1301,82 @@ func get_backpack_storage_count(item_type: String, item_id: String) -> int:
 	return 0
 
 
+# ── 인크리멘탈 사다리 ────────────────────────────────────────────
+# 인크리멘탈 게임의 핵심 문법: 화폐마다 "다음에 살 것"이 항상 보이고, 비용은
+# 점증하며, 생산 건물은 자기 강화를 판다(복리). 고철=가방·오버클럭,
+# 캣닢=농축, 츄르=시큐어·티어.
+var bag_capacity_level: int = 0
+var scratcher_overclock_level: int = 0
+var catnip_infusion_level: int = 0
+
+const BAG_UPGRADE_MAX_LEVEL := 12
+const OVERCLOCK_BONUS_PER_LEVEL := 0.08
+const INFUSION_BONUS_PER_LEVEL := 0.08
+
+
+func get_bag_upgrade_cost() -> int:
+	if bag_capacity_level >= BAG_UPGRADE_MAX_LEVEL:
+		return 0
+	return roundi(400.0 * pow(1.6, bag_capacity_level) / 10.0) * 10
+
+
+func try_upgrade_bag_capacity() -> bool:
+	var cost := get_bag_upgrade_cost()
+	if cost <= 0 or scrap < cost:
+		return false
+	scrap -= cost
+	bag_capacity_level += 1
+	save_persistent_state()
+	return true
+
+
+func get_overclock_cost() -> int:
+	return roundi(900.0 * pow(1.55, scratcher_overclock_level) / 10.0) * 10
+
+
+func try_upgrade_scratcher_overclock() -> bool:
+	var cost := get_overclock_cost()
+	if scrap < cost:
+		return false
+	scrap -= cost
+	scratcher_overclock_level += 1
+	save_persistent_state()
+	return true
+
+
+func get_infusion_cost() -> int:
+	return roundi(20.0 * pow(1.7, catnip_infusion_level))
+
+
+func try_upgrade_catnip_infusion() -> bool:
+	var cost := get_infusion_cost()
+	if catnip < cost:
+		return false
+	catnip -= cost
+	catnip_infusion_level += 1
+	save_persistent_state()
+	return true
+
+
+func get_secure_upgrade_cost() -> int:
+	# 시큐어 슬롯: 죽어도 지키는 칸. 츄르(프리미엄)로만, 최대 3칸.
+	if secure_dog_slots >= 3:
+		return 0
+	return 2 * secure_dog_slots
+
+
+func try_upgrade_secure_dog() -> bool:
+	var cost := get_secure_upgrade_cost()
+	if cost <= 0 or churu < cost:
+		return false
+	churu -= cost
+	secure_dog_slots += 1
+	save_persistent_state()
+	return true
+
+
 func get_raid_bag_capacity() -> int:
-	return RAID_BAG_CAPACITY + get_churu_bag_bonus_slots()
+	return RAID_BAG_CAPACITY + bag_capacity_level + get_churu_bag_bonus_slots()
 
 
 func get_raid_item_stack_limit(item_type: String) -> int:
@@ -2158,7 +2226,11 @@ func activate_catnip_boost() -> bool:
 
 
 func get_scrap_per_hour() -> float:
-	return get_base_scrap_per_hour() * get_production_multiplier()
+	return (
+		get_base_scrap_per_hour()
+		* get_production_multiplier()
+		* (1.0 + OVERCLOCK_BONUS_PER_LEVEL * scratcher_overclock_level)
+	)
 
 
 func get_base_scrap_per_hour() -> float:
@@ -2188,7 +2260,7 @@ func get_catnip_per_second() -> float:
 	var total := 0.0
 	for worker_id in assigned_catnip_worker_ids:
 		total += get_worker_production_per_second(worker_id, "catnip")
-	return total
+	return total * (1.0 + INFUSION_BONUS_PER_LEVEL * catnip_infusion_level)
 
 
 func tick_shelter_live(delta: float) -> int:
@@ -3542,6 +3614,10 @@ func save_persistent_state() -> bool:
 		"shelter_return_serial": shelter_return_serial,
 		"survived_return_count": survived_return_count,
 		"city_commission": city_commission,
+		"bag_capacity_level": bag_capacity_level,
+		"scratcher_overclock_level": scratcher_overclock_level,
+		"catnip_infusion_level": catnip_infusion_level,
+		"secure_dog_slots": secure_dog_slots,
 		"merchant_last_roll_serial": merchant_last_roll_serial,
 		"merchant_status": merchant_status,
 		"merchant_decline_count": merchant_decline_count,
@@ -3696,6 +3772,10 @@ func load_persistent_state() -> bool:
 	# 구 세이브 호환: 값이 없으면 기존 귀환 수를 생환 수로 간주한다.
 	survived_return_count = int(data.get("survived_return_count", shelter_return_serial))
 	city_commission = (data.get("city_commission", {}) as Dictionary).duplicate(true)
+	bag_capacity_level = int(data.get("bag_capacity_level", bag_capacity_level))
+	scratcher_overclock_level = int(data.get("scratcher_overclock_level", scratcher_overclock_level))
+	catnip_infusion_level = int(data.get("catnip_infusion_level", catnip_infusion_level))
+	secure_dog_slots = clampi(int(data.get("secure_dog_slots", secure_dog_slots)), 1, 3)
 	merchant_last_roll_serial = int(data.get("merchant_last_roll_serial", merchant_last_roll_serial))
 	merchant_status = str(data.get("merchant_status", merchant_status))
 	merchant_decline_count = int(data.get("merchant_decline_count", merchant_decline_count))
@@ -3864,6 +3944,9 @@ func reset_run() -> void:
 		"762_fmj": 90,
 	}
 	secure_dog_slots = 1
+	bag_capacity_level = 0
+	scratcher_overclock_level = 0
+	catnip_infusion_level = 0
 	secure_dog_items.clear()
 	pending_corpse_recovery.clear()
 	corpse_recovery_attempt_active = false

@@ -22,7 +22,18 @@ func _run() -> void:
     state.canned_food = 0
     state.churu = 0
 
-    assert(int(state.get_raid_bag_capacity()) == 15)
+    # 기본 12칸 + 확장 사다리. 레벨을 0으로 고정해 기준을 검증한다.
+    state.bag_capacity_level = 0
+    assert(int(state.get_raid_bag_capacity()) == 12)
+    # 인크리멘탈 사다리: 고철로 +1칸, 비용은 점증한다.
+    state.scrap = 100000
+    var first_cost: int = state.get_bag_upgrade_cost()
+    assert(first_cost > 0)
+    assert(state.try_upgrade_bag_capacity())
+    assert(int(state.get_raid_bag_capacity()) == 13)
+    assert(int(state.get_bag_upgrade_cost()) > first_cost)
+    state.bag_capacity_level = 0
+    state.scrap = 0
     state.set_ammo_count("762_fmj", 600)
     assert(int(state.get_raid_bag_used_slots()) == 1, "One ammo type must stay in one bag slot.")
     state.canned_food = 250
@@ -39,15 +50,15 @@ func _run() -> void:
     state.equipment_inventory.clear()
     state.canned_food = 0
     state.mod_component_inventory.clear()
-    state.add_weapon("mp5", 14)
+    state.add_weapon("mp5", 11)
     state.set_ammo_count("762_fmj", 600)
-    assert(int(state.get_raid_bag_used_slots()) == 15)
+    assert(int(state.get_raid_bag_used_slots()) == 12)
     assert(not state.can_add_raid_item("weapon", "m1911", 1), "A full bag must reject another weapon.")
     assert(state.can_add_raid_item("ammo", "762_fmj", 30), "An existing ammo stack must accept more rounds.")
     assert(not state.can_add_raid_item("ammo", "9mm_fmj", 1), "A new ammo type needs a free slot.")
 
     assert(int(state.remove_raid_bag_item("weapon", "mp5", 1)) == 1)
-    assert(int(state.get_raid_bag_used_slots()) == 14)
+    assert(int(state.get_raid_bag_used_slots()) == 11)
     assert(state.can_add_raid_item("ammo", "9mm_fmj", 1), "Freeing one slot must allow a new stack.")
     # can_add_raid_items takes Array[Dictionary]; an untyped literal is rejected.
     var same_stack_batch: Array[Dictionary] = [

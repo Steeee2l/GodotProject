@@ -223,6 +223,23 @@ func _rebuild_ui() -> void:
 	upgrade.disabled = upgrade_cost == 0 or GameState.scrap < upgrade_cost
 	upgrade.pressed.connect(_upgrade)
 	actions.add_child(upgrade)
+	# 농축: 캣닢을 다시 캣닢 생산에 넣는 복리 사다리.
+	var infusion_cost := GameState.get_infusion_cost()
+	var infusion := _button(
+		"농축 Lv.%d · 캣닢 %s → 생산 +8%%" % [
+			GameState.catnip_infusion_level,
+			GameState.format_compact_number(infusion_cost),
+		],
+		"catnip"
+	)
+	infusion.disabled = GameState.catnip < infusion_cost
+	infusion.custom_minimum_size = Vector2(0, 40)
+	infusion.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	infusion.pressed.connect(func() -> void:
+		if GameState.try_upgrade_catnip_infusion():
+			_rebuild_ui()
+	)
+	actions.add_child(infusion)
 	var remaining: int = GameState.get_catnip_boost_remaining()
 	var boost_note := _label(
 		"부스터 가동 중  %02d:%02d" % [remaining / 60, remaining % 60]

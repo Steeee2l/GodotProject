@@ -238,6 +238,23 @@ func _rebuild_ui() -> void:
 	upgrade.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	upgrade.pressed.connect(_upgrade)
 	actions.add_child(upgrade)
+	# 오버클럭: 고철을 다시 생산에 넣는 복리 사다리. "항상 다음에 살 것"을 만든다.
+	var overclock_cost := GameState.get_overclock_cost()
+	var overclock := _button(
+		"오버클럭 Lv.%d · 고철 %s → 시간당 +8%%" % [
+			GameState.scratcher_overclock_level,
+			GameState.format_compact_number(overclock_cost),
+		],
+		"upgrade"
+	)
+	overclock.disabled = GameState.scrap < overclock_cost
+	overclock.custom_minimum_size = Vector2(0, 40)
+	overclock.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	overclock.pressed.connect(func() -> void:
+		if GameState.try_upgrade_scratcher_overclock():
+			_rebuild_ui()
+	)
+	actions.add_child(overclock)
 
 
 func _worker_slot(index: int, active_workers: int, slots: int) -> PanelContainer:
