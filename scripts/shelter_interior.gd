@@ -782,6 +782,17 @@ func _interact_with_saja() -> void:
 	_open_contract_ui()
 
 
+func _apply_portrait_camera_aspect(target_camera: Camera3D) -> void:
+	# 세로 화면에서는 직교 카메라 size가 세로 기준(KEEP_HEIGHT)이라 가로 시야가
+	# 절반 이하로 좁아진다. KEEP_WIDTH로 뒤집으면 size가 가로 기준이 되어,
+	# 세로로 자동 줌아웃되고 가로 시야는 가로모드와 같아진다.
+	if target_camera == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	var portrait := viewport_size.y > viewport_size.x
+	target_camera.keep_aspect = Camera3D.KEEP_WIDTH if portrait else Camera3D.KEEP_HEIGHT
+
+
 func _play_juhong_entrance_cinematic() -> void:
 	# 주홍의 등장을 내러티브 이벤트로 연출한다: 암전 속에 이미 와 있고, 상하
 	# 레터박스가 내려오며 화면이 밝아지면, 몇 걸음 다가와 말을 건다.
@@ -2769,6 +2780,7 @@ func _layout_touch_stick() -> void:
 
 
 func _apply_shelter_safe_layout() -> void:
+	_apply_portrait_camera_aspect(shelter_camera)
 	var viewport_size := get_viewport().get_visible_rect().size
 	var safe := UISafeArea.get_margins(viewport_size)
 	_layout_touch_stick()

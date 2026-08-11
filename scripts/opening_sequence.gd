@@ -1288,6 +1288,7 @@ func _apply_mobile_safe_layout() -> void:
 	# 회전(가로↔세로)에도 대사·타이틀이 화면 안에 머물게 한다. 이 둘은 터치
 	# 여부와 무관하게 폭을 다시 맞춰야 하므로 조기 반환 앞에서 처리한다.
 	var viewport_size := get_viewport().get_visible_rect().size
+	_apply_portrait_camera_aspect(camera)
 	if is_instance_valid(dialogue_panel):
 		var dialogue_width := minf(900.0, viewport_size.x - 24.0)
 		dialogue_panel.offset_left = -dialogue_width * 0.5
@@ -1444,6 +1445,17 @@ func _panel_style(color: Color, border: Color, width: int, radius: int) -> Style
 	style.set_border_width_all(width)
 	style.set_corner_radius_all(radius)
 	return style
+
+
+func _apply_portrait_camera_aspect(target_camera: Camera3D) -> void:
+	# 세로 화면에서는 직교 카메라 size가 세로 기준(KEEP_HEIGHT)이라 가로 시야가
+	# 절반 이하로 좁아진다. KEEP_WIDTH로 뒤집으면 size가 가로 기준이 되어,
+	# 세로로 자동 줌아웃되고 가로 시야는 가로모드와 같아진다.
+	if target_camera == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	var portrait := viewport_size.y > viewport_size.x
+	target_camera.keep_aspect = Camera3D.KEEP_WIDTH if portrait else Camera3D.KEEP_HEIGHT
 
 
 func _build_aim_laser() -> void:

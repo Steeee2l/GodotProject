@@ -1533,6 +1533,17 @@ func _update_scope_camera(delta: float) -> void:
 	camera.size = lerpf(camera.size, target_camera_size, blend_speed)
 
 
+func _apply_portrait_camera_aspect(target_camera: Camera3D) -> void:
+	# 세로 화면에서는 직교 카메라 size가 세로 기준(KEEP_HEIGHT)이라 가로 시야가
+	# 절반 이하로 좁아진다. KEEP_WIDTH로 뒤집으면 size가 가로 기준이 되어,
+	# 세로로 자동 줌아웃되고 가로 시야는 가로모드와 같아진다.
+	if target_camera == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	var portrait := viewport_size.y > viewport_size.x
+	target_camera.keep_aspect = Camera3D.KEEP_WIDTH if portrait else Camera3D.KEEP_HEIGHT
+
+
 func _create_aim_ring_arrow_mesh() -> ImmediateMesh:
 	var mesh := ImmediateMesh.new()
 	var radius := 0.72
@@ -2515,6 +2526,7 @@ func _apply_hud_layout() -> void:
 	var viewport_size := get_viewport().get_visible_rect().size
 	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
 		return
+	_apply_portrait_camera_aspect(camera)
 
 	var touch_available := DisplayServer.is_touchscreen_available()
 	var safe_margins := UI_SAFE_AREA.get_margins(viewport_size)
