@@ -441,6 +441,8 @@ func _get_mobile_aim_assist_direction(facing_direction: Vector3) -> Vector3:
 			best_enemy = enemy
 	if best_enemy == null:
 		return facing_direction
+	# 새로 잡은 표적을 기억해 다음 프레임부터 스티키로 유지한다.
+	mobile_assist_target = best_enemy
 	var assisted_direction := best_enemy.global_position - player.global_position
 	assisted_direction.y = 0.0
 	return facing_direction.slerp(assisted_direction.normalized(), lerpf(0.25, 1.0, assist_strength)).normalized()
@@ -468,7 +470,19 @@ func _uses_mouse_aim() -> bool:
 	return not DisplayServer.is_touchscreen_available()
 
 
+var mobile_assist_target: CharacterBody3D
+
+
 func _update_mobile_aim_direction(movement_world_direction: Vector3) -> void:
+	# 스티키 타겟팅: 한 번 잡은 표적은 살아서 보이는 한 놓지 않는다.
+	# 예전에는 조준 기준이 이동 방향이라, 적에게서 후퇴하며 쏘면 총구가
+	# 등 뒤(도망가는 방향)로 끌려갔다 — 모바일 사용성 최악의 원인.
+	if _is_mobile_assist_target_valid():
+		var to_target: Vector3 = mobile_assist_target.global_position - player.global_position
+		to_target.y = 0.0
+		host._lock_aim_direction(to_target.normalized())
+		return
+	mobile_assist_target = null
 	var base_direction := movement_world_direction
 	base_direction.y = 0.0
 	if base_direction.length_squared() <= 0.01:
@@ -478,6 +492,17 @@ func _update_mobile_aim_direction(movement_world_direction: Vector3) -> void:
 			else host._get_current_facing_world_direction()
 		)
 	host._lock_aim_direction(_get_mobile_aim_assist_direction(base_direction.normalized()))
+
+
+func _is_mobile_assist_target_valid() -> bool:
+	if not is_instance_valid(mobile_assist_target) or bool(mobile_assist_target.get("dying")):
+		return false
+	if float(mobile_assist_target.get("player_visibility_factor")) < 0.2:
+		return false
+	var offset: Vector3 = mobile_assist_target.global_position - player.global_position
+	offset.y = 0.0
+	# 새 표적 탐색보다 후한 유지 반경 — 잠깐 멀어져도 표적이 튀지 않는다.
+	return offset.length() <= MOBILE_AIM_ASSIST_MAX_DISTANCE * 1.15
 
 
 func _on_inventory_weapon_equipped(weapon_id: String) -> void:

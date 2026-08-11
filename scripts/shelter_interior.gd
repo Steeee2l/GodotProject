@@ -982,26 +982,31 @@ func _open_contract_story(
 	panel.name = "ContractNarrativePanel"
 	var viewport_size := get_viewport().get_visible_rect().size
 	var compact_layout := viewport_size.x < 760.0
-	panel.anchor_left = 0.035 if compact_layout else 0.08
-	panel.anchor_top = 0.34 if compact_layout else 0.59
-	panel.anchor_right = 0.965 if compact_layout else 0.92
-	panel.anchor_bottom = 0.97 if compact_layout else 0.94
+	# 오프닝 대사창과 같은 문법: 하단 슬림 바. 화면 절반을 덮던 두꺼운 모달은
+	# 쉘터에서만 이질적이었다. 초상화는 작게 인라인으로 남긴다.
+	panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	var narrative_half := minf(450.0, (viewport_size.x - 24.0) * 0.5)
+	panel.offset_left = -narrative_half
+	panel.offset_right = narrative_half
+	panel.offset_bottom = -26.0
+	panel.offset_top = -26.0 - (196.0 if compact_layout else 178.0)
 	panel.add_theme_stylebox_override(
 		"panel",
 		_rounded_panel_style(Color(0.012, 0.019, 0.018, 0.985), Color("#b89545"), 8)
 	)
 	root.add_child(panel)
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 24)
-	margin.add_theme_constant_override("margin_top", 20)
-	margin.add_theme_constant_override("margin_right", 24)
-	margin.add_theme_constant_override("margin_bottom", 18)
+	margin.add_theme_constant_override("margin_left", 18)
+	margin.add_theme_constant_override("margin_top", 12)
+	margin.add_theme_constant_override("margin_right", 18)
+	margin.add_theme_constant_override("margin_bottom", 12)
 	panel.add_child(margin)
-	var row: BoxContainer = VBoxContainer.new() if compact_layout else HBoxContainer.new()
-	row.add_theme_constant_override("separation", 22)
+	# 슬림 바에서는 세로/가로 구분 없이 항상 초상화-왼쪽 가로 배치가 들어간다.
+	var row: BoxContainer = HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
 	margin.add_child(row)
 	var portrait_frame := PanelContainer.new()
-	var portrait_size := 88.0 if compact_layout else 136.0
+	var portrait_size := 64.0 if compact_layout else 72.0
 	portrait_frame.custom_minimum_size = Vector2(portrait_size, portrait_size)
 	portrait_frame.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	portrait_frame.add_theme_stylebox_override(
@@ -1040,14 +1045,15 @@ func _open_contract_story(
 	contract_story_title_label.text = title_text
 	contract_story_title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	contract_story_title_label.add_theme_font_override("font", FONT)
-	contract_story_title_label.add_theme_font_size_override("font_size", 20 if compact_layout else 24)
+	contract_story_title_label.add_theme_font_size_override("font_size", 14)
+	contract_story_title_label.add_theme_color_override("font_color", Color("#9cc7ae"))
 	contract_story_title_label.add_theme_color_override("font_color", Color("#e7d49a"))
 	text_box.add_child(contract_story_title_label)
 	contract_story_body_label = Label.new()
 	contract_story_body_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	contract_story_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	contract_story_body_label.add_theme_font_override("font", FONT)
-	contract_story_body_label.add_theme_font_size_override("font_size", 17 if compact_layout else 20)
+	contract_story_body_label.add_theme_font_size_override("font_size", 17)
 	contract_story_body_label.add_theme_color_override("font_color", Color("#e5ece7"))
 	text_box.add_child(contract_story_body_label)
 	# 대사는 한 글자씩 소리와 함께 흘러나온다. 레이어에 붙여 함께 정리된다.

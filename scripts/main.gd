@@ -730,6 +730,9 @@ func _physics_process(delta: float) -> void:
 		# 예전에는 has_ak 조건이 붙어 있어서, 무기를 잃으면 조준 중에
 		# 방향이 아예 갱신되지 않고 얼어붙었다.
 		weapon_combat._update_mobile_aim_direction(world_direction)
+	elif not weapon_combat._uses_mouse_aim():
+		# 손을 뗀 순간 스티키 표적을 놓는다 — 다음 교전은 새로 고른다.
+		weapon_combat.mobile_assist_target = null
 	var aim_is_locked := (
 		melee_attack_active
 		or laser_aim_held
