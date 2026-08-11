@@ -1028,7 +1028,7 @@ func _open_contract_story(
 	speaker.text = contract_story_speaker_name
 	speaker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	speaker.add_theme_font_override("font", FONT)
-	speaker.add_theme_font_size_override("font_size", 18)
+	speaker.add_theme_font_size_override("font_size", 16)
 	speaker.add_theme_color_override("font_color", Color("#f0ce70"))
 	speaker_row.add_child(speaker)
 	contract_story_progress_label = Label.new()
@@ -1329,7 +1329,7 @@ func _build_interface() -> void:
 	outer_box.add_child(header_row)
 	stats_label = Label.new()
 	stats_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	stats_label.add_theme_font_size_override("font_size", 15)
+	stats_label.add_theme_font_size_override("font_size", 14)
 	stats_label.add_theme_color_override("font_color", Color("#8fa79c"))
 	header_row.add_child(stats_label)
 	# 접기(더보기) 버튼은 제거했다. 패널 자체를 4재화+가동연료의 컴팩트한 형태로
@@ -1409,7 +1409,7 @@ func _build_interface() -> void:
 	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	prompt_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	prompt_label.add_theme_font_override("font", FONT)
-	prompt_label.add_theme_font_size_override("font_size", 18)
+	prompt_label.add_theme_font_size_override("font_size", 16)
 	prompt_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	prompt_label.add_theme_constant_override("outline_size", 6)
 	canvas.add_child(prompt_label)
@@ -1448,7 +1448,7 @@ func _build_interface() -> void:
 	interact_button.icon = UI_ICONS.get_icon("interact", 32, Color("#dce8e1"))
 	interact_button.expand_icon = true
 	interact_button.add_theme_font_override("font", FONT)
-	interact_button.add_theme_font_size_override("font_size", 17)
+	interact_button.add_theme_font_size_override("font_size", 16)
 	if not DisplayServer.is_touchscreen_available():
 		interact_button.pressed.connect(_interact)
 	canvas.add_child(interact_button)
@@ -1463,7 +1463,7 @@ func _build_interface() -> void:
 	dash_button.icon = UI_ICONS.get_icon("dash", 32, Color("#d8e5de"))
 	dash_button.expand_icon = true
 	dash_button.add_theme_font_override("font", FONT)
-	dash_button.add_theme_font_size_override("font_size", 17)
+	dash_button.add_theme_font_size_override("font_size", 16)
 	if not DisplayServer.is_touchscreen_available():
 		dash_button.pressed.connect(_try_start_roll)
 	dash_button.visible = DisplayServer.is_touchscreen_available()
@@ -1558,7 +1558,7 @@ func _build_merchant_arrival_notice(canvas: CanvasLayer) -> void:
 	var title := Label.new()
 	title.text = "하수구 방문자"
 	title.add_theme_font_override("font", FONT)
-	title.add_theme_font_size_override("font_size", 15)
+	title.add_theme_font_size_override("font_size", 14)
 	title.add_theme_color_override("font_color", Color("#efd58d"))
 	text_box.add_child(title)
 	var body := Label.new()
@@ -1660,7 +1660,7 @@ func _refresh_contract_ui() -> void:
 	var title := Label.new()
 	title.text = "사자의 쉘터 재건 계획"
 	title.add_theme_font_override("font", FONT)
-	title.add_theme_font_size_override("font_size", 26)
+	title.add_theme_font_size_override("font_size", 24)
 	title.add_theme_color_override("font_color", Color("#ead69c"))
 	title_box.add_child(title)
 	var chain_progress := Label.new()
@@ -1732,7 +1732,7 @@ func _refresh_contract_ui() -> void:
 		contract_title.text = str(definition.get("title", "현장 계약"))
 		contract_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		contract_title.add_theme_font_override("font", FONT)
-		contract_title.add_theme_font_size_override("font_size", 22)
+		contract_title.add_theme_font_size_override("font_size", 24)
 		contract_title.add_theme_color_override("font_color", Color("#f0d58d"))
 		contract_heading.add_child(contract_title)
 		var status_label_local := Label.new()
@@ -1999,7 +1999,7 @@ func _open_merchant_arrival_dialog() -> void:
 	var title := Label.new()
 	title.text = "낯선 방문자"
 	title.add_theme_font_override("font", FONT)
-	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_font_size_override("font_size", 24)
 	title.add_theme_color_override("font_color", Color("#ead69c"))
 	box.add_child(title)
 	var content := HBoxContainer.new()
@@ -2027,7 +2027,7 @@ func _open_merchant_arrival_dialog() -> void:
 	var line := Label.new()
 	line.text = "“문 좀 열어주실 수 있겠냥?”\n물건을 챙겨 온 행상인이 입장을 기다립니다."
 	line.add_theme_font_override("font", FONT)
-	line.add_theme_font_size_override("font_size", 17)
+	line.add_theme_font_size_override("font_size", 16)
 	line.add_theme_color_override("font_color", Color("#ebe5d4"))
 	line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	dialogue_box.add_child(line)
@@ -2124,7 +2124,7 @@ func _open_merchant_shop() -> void:
 	var title := Label.new()
 	title.text = "떠돌이 행상인의 교환 가방"
 	title.add_theme_font_override("font", FONT)
-	title.add_theme_font_size_override("font_size", 23)
+	title.add_theme_font_size_override("font_size", 24)
 	title.add_theme_color_override("font_color", Color("#ead69c"))
 	title_box.add_child(title)
 	var subtitle := Label.new()
@@ -2212,7 +2212,7 @@ func _refresh_merchant_shop() -> void:
 		empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		empty_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		empty_label.add_theme_font_override("font", FONT)
-		empty_label.add_theme_font_size_override("font_size", 18)
+		empty_label.add_theme_font_size_override("font_size", 16)
 		empty_label.add_theme_color_override("font_color", Color("#7f9088"))
 		merchant_shop_list.add_child(empty_label)
 
@@ -2424,7 +2424,7 @@ func _merchant_trade_chip(
 	var value_label := Label.new()
 	value_label.text = str(value)
 	value_label.add_theme_font_override("font", FONT)
-	value_label.add_theme_font_size_override("font_size", 17)
+	value_label.add_theme_font_size_override("font_size", 16)
 	value_label.add_theme_color_override("font_color", color)
 	value_row.add_child(value_label)
 	return chip
@@ -2699,7 +2699,7 @@ func _currency_chip(icon_name: String, title: String, color: Color, icon_size: i
 	value_label.text = title
 	value_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	value_label.add_theme_font_override("font", FONT)
-	value_label.add_theme_font_size_override("font_size", 15)
+	value_label.add_theme_font_size_override("font_size", 14)
 	value_label.add_theme_color_override("font_color", color)
 	chip.add_child(value_label)
 	chip.set_meta("value_label", value_label)
@@ -3283,7 +3283,7 @@ func _open_raid_zone_select() -> void:
 	title.text = "서울 작전 지도"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.add_theme_font_override("font", FONT)
-	title.add_theme_font_size_override("font_size", 27)
+	title.add_theme_font_size_override("font_size", 24)
 	title.add_theme_color_override("font_color", Color("#ead69c"))
 	header.add_child(title)
 	var close := _shelter_close_button()
@@ -3410,7 +3410,7 @@ func _open_raid_zone_select() -> void:
 	briefing_header.add_child(raid_zone_detail_state)
 	raid_zone_detail_title = Label.new()
 	raid_zone_detail_title.add_theme_font_override("font", FONT)
-	raid_zone_detail_title.add_theme_font_size_override("font_size", 25)
+	raid_zone_detail_title.add_theme_font_size_override("font_size", 24)
 	raid_zone_detail_title.add_theme_color_override("font_color", Color("#f0e3bc"))
 	detail_box.add_child(raid_zone_detail_title)
 	raid_zone_detail_description = Label.new()
@@ -3495,7 +3495,7 @@ func _build_raid_zone_row(zone_id: String) -> Control:
 	var name_label := Label.new()
 	name_label.text = "%s  ·  위협 %d%%" % [str(zone.get("name", zone_id)), roundi(float(zone.get("threat", 0.0)) * 100.0)]
 	name_label.add_theme_font_override("font", FONT)
-	name_label.add_theme_font_size_override("font_size", 19)
+	name_label.add_theme_font_size_override("font_size", 20)
 	name_label.add_theme_color_override("font_color", Color("#f0e6c8") if unlocked else Color("#737b77"))
 	info.add_child(name_label)
 	var description := Label.new()
@@ -3527,7 +3527,7 @@ func _build_raid_zone_row(zone_id: String) -> Control:
 	launch.expand_icon = true
 	launch.disabled = not unlocked
 	launch.add_theme_font_override("font", FONT)
-	launch.add_theme_font_size_override("font_size", 15)
+	launch.add_theme_font_size_override("font_size", 14)
 	launch.pressed.connect(func() -> void: _launch_raid_zone(zone_id))
 	content.add_child(launch)
 	return row
@@ -3555,7 +3555,7 @@ func _build_raid_zone_map_marker(zone_id: String, zone_index: int) -> Control:
 	marker.tooltip_text = str(zone.get("name", zone_id))
 	marker.focus_mode = Control.FOCUS_ALL
 	marker.add_theme_font_override("font", FONT)
-	marker.add_theme_font_size_override("font_size", 15)
+	marker.add_theme_font_size_override("font_size", 14)
 	marker.add_theme_color_override("font_color", Color("#f5e5b6"))
 	marker.add_theme_color_override("font_hover_color", Color.WHITE)
 	marker.pressed.connect(_select_raid_zone_preview.bind(zone_id))
@@ -3901,7 +3901,7 @@ func _open_raid_loadout_confirmation(zone_id: String) -> void:
 	var heading_box := VBoxContainer.new()
 	heading_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(heading_box)
-	heading_box.add_child(_raid_loadout_label("무기 없이 출정하시겠습니까?", 25, Color("#f0d3a3")))
+	heading_box.add_child(_raid_loadout_label("무기 없이 출정하시겠습니까?", 24, Color("#f0d3a3")))
 	var zone := GameState.get_raid_zone(zone_id)
 	heading_box.add_child(_raid_loadout_label(
 		str(zone.get("name", zone_id)),

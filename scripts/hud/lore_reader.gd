@@ -45,7 +45,7 @@ func build(host: Node) -> void:
 	ui_panel.name = "LoreReaderPanel"
 	ui_panel.add_theme_stylebox_override(
 		"panel",
-		HudStyle.panel(Color(0.025, 0.031, 0.03, 0.99), Color("#8f7a4b"), 6)
+		HudStyle.panel(HudStyle.INK_SOLID, Color("#8f7a4b"), 6)
 	)
 	center.add_child(ui_panel)
 

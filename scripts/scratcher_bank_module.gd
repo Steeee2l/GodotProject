@@ -128,7 +128,7 @@ func _rebuild_ui() -> void:
 	var title_box := VBoxContainer.new()
 	title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top_row.add_child(title_box)
-	title_box.add_child(_label("꾹꾹이 고철 생산기  Lv.%d" % GameState.scratcher_bank_level, 26, Color("#f4ddb2")))
+	title_box.add_child(_label("꾹꾹이 고철 생산기  Lv.%d" % GameState.scratcher_bank_level, 24, Color("#f4ddb2")))
 	title_box.add_child(_label("주민을 배치하면 고철이 자동 생산됩니다.", 13, Color("#9eaa9f")))
 	var close := _close_button()
 	close.pressed.connect(func(): ui_layer.queue_free())
@@ -173,7 +173,7 @@ func _rebuild_ui() -> void:
 	body.add_theme_constant_override("separation", 10)
 	content.add_child(body)
 
-	body.add_child(_label("작업 좌석 · 앉은 고양이가 고철을 만듭니다", 15, Color("#e3decf")))
+	body.add_child(_label("작업 좌석 · 앉은 고양이가 고철을 만듭니다", 14, Color("#e3decf")))
 	var seat_row := HFlowContainer.new()
 	seat_row.add_theme_constant_override("h_separation", 8)
 	seat_row.add_theme_constant_override("v_separation", 8)
@@ -411,7 +411,7 @@ func _empty_resident_state(title: String, description: String, compact: bool) ->
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	box.add_child(icon)
-	var title_label := _label(title, 15, Color("#b5c0ba"))
+	var title_label := _label(title, 14, Color("#b5c0ba"))
 	title_label.name = "EmptyStateTitle"
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title_label.autowrap_mode = TextServer.AUTOWRAP_OFF

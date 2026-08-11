@@ -112,7 +112,7 @@ func build(owner_node: Node) -> void:
 	pickup_panel.offset_top = -202
 	pickup_panel.offset_right = 170
 	pickup_panel.offset_bottom = -134
-	pickup_panel.add_theme_stylebox_override("panel", HudStyle.panel(Color(0.02, 0.025, 0.028, 0.94), Color("#d5b45b")))
+	pickup_panel.add_theme_stylebox_override("panel", HudStyle.panel(HudStyle.INK, Color("#d5b45b")))
 	pickup_panel.visible = false
 	host.get_node("HUD").add_child(pickup_panel)
 
@@ -145,7 +145,7 @@ func build(owner_node: Node) -> void:
 	ammo_prompt_panel.offset_top = -198
 	ammo_prompt_panel.offset_right = 170
 	ammo_prompt_panel.offset_bottom = -144
-	ammo_prompt_panel.add_theme_stylebox_override("panel", HudStyle.panel(Color(0.02, 0.025, 0.028, 0.94), Color("#b8a66d")))
+	ammo_prompt_panel.add_theme_stylebox_override("panel", HudStyle.panel(HudStyle.INK, Color("#b8a66d")))
 	ammo_prompt_panel.visible = false
 	host.get_node("HUD").add_child(ammo_prompt_panel)
 	ammo_pickup_button = Button.new()
@@ -168,7 +168,7 @@ func build(owner_node: Node) -> void:
 	field_interaction_panel.offset_right = 220
 	field_interaction_panel.offset_bottom = -210
 	var field_panel_style := HudStyle.panel(
-		Color(0.014, 0.021, 0.022, 0.97),
+		HudStyle.INK,
 		Color("#79a994"),
 		7
 	)
@@ -191,7 +191,7 @@ func build(owner_node: Node) -> void:
 	field_interaction_action_card.custom_minimum_size = Vector2(0.0, 52.0)
 	field_interaction_action_card.add_theme_stylebox_override(
 		"panel",
-		HudStyle.panel(Color(0.045, 0.061, 0.061, 0.96), Color("#38584b"), 6)
+		HudStyle.panel(HudStyle.INK_WELL, Color("#38584b"), 7)
 	)
 	field_box.add_child(field_interaction_action_card)
 	var action_row := HBoxContainer.new()
@@ -274,11 +274,11 @@ func build(owner_node: Node) -> void:
 	field_interaction_button.add_theme_stylebox_override("disabled", action_button_normal)
 	field_interaction_button.add_theme_stylebox_override(
 		"hover",
-		HudStyle.panel(Color(0.35, 0.68, 0.54, 0.08), Color(0.55, 0.78, 0.66, 0.45), 6)
+		HudStyle.panel(Color(0.35, 0.68, 0.54, 0.08), Color(0.55, 0.78, 0.66, 0.45), 7)
 	)
 	field_interaction_button.add_theme_stylebox_override(
 		"pressed",
-		HudStyle.panel(Color(0.35, 0.68, 0.54, 0.15), Color("#9cd0b4"), 6)
+		HudStyle.panel(Color(0.35, 0.68, 0.54, 0.15), Color("#9cd0b4"), 7)
 	)
 	field_interaction_button.button_down.connect(func() -> void:
 		field_interaction_touch_held = true
@@ -313,7 +313,7 @@ func build(owner_node: Node) -> void:
 	fatigue_panel.offset_bottom = 276
 	fatigue_panel.add_theme_stylebox_override(
 		"panel",
-		HudStyle.panel(Color(0.012, 0.019, 0.018, 0.94), Color("#60766a"), 8)
+		HudStyle.panel(HudStyle.INK, Color("#60766a"), 7)
 	)
 	host.get_node("HUD").add_child(fatigue_panel)
 	var fatigue_margin := MarginContainer.new()
@@ -375,7 +375,7 @@ func build(owner_node: Node) -> void:
 	equipment_panel.offset_top = -180
 	equipment_panel.offset_right = -20
 	equipment_panel.offset_bottom = -124
-	equipment_panel.add_theme_stylebox_override("panel", HudStyle.panel(Color(0.012, 0.018, 0.019, 0.96), Color("#8da997"), 8))
+	equipment_panel.add_theme_stylebox_override("panel", HudStyle.panel(HudStyle.INK, Color("#8da997"), 7))
 	equipment_panel.visible = false
 	host.get_node("HUD").add_child(equipment_panel)
 	var equipment_margin := MarginContainer.new()
@@ -422,7 +422,7 @@ func build(owner_node: Node) -> void:
 	equipment_ammo_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	equipment_ammo_label.add_theme_font_override("font", font)
 	equipment_ammo_label.add_theme_font_size_override("font_size", 19)
-	equipment_ammo_label.add_theme_color_override("font_color", Color("#f1ce70"))
+	equipment_ammo_label.add_theme_color_override("font_color", HudStyle.GOLD_TEXT)
 	weapon_text_box.add_child(equipment_ammo_label)
 	equipment_reload_bar = ProgressBar.new()
 	equipment_reload_bar.custom_minimum_size = Vector2(0, 5)
@@ -489,7 +489,7 @@ func build(owner_node: Node) -> void:
 	dash_button.offset_right = -208
 	dash_button.offset_bottom = -24
 	dash_button.text = "Dash"
-	dash_button.icon = UI_ICONS.get_icon("dash", 36, Color("#d8e5de"))
+	dash_button.icon = UI_ICONS.get_icon("dash", 36, HudStyle.TEXT)
 	dash_button.expand_icon = true
 	dash_button.tooltip_text = "Dash"
 	dash_button.focus_mode = Control.FOCUS_NONE
@@ -518,7 +518,7 @@ func build(owner_node: Node) -> void:
 	ammo_notice.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	ammo_notice.add_theme_font_override("font", font)
 	ammo_notice.add_theme_font_size_override("font_size", 16)
-	ammo_notice.add_theme_color_override("font_color", Color("#f2d27a"))
+	ammo_notice.add_theme_color_override("font_color", HudStyle.GOLD_TEXT)
 	ammo_notice.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	ammo_notice.add_theme_constant_override("outline_size", 5)
 	ammo_notice.visible = false
@@ -551,7 +551,7 @@ func build_raid_opportunity_hud() -> void:
 	raid_pressure_panel.offset_bottom = 92.0
 	raid_pressure_panel.add_theme_stylebox_override(
 		"panel",
-		HudStyle.panel(Color(0.018, 0.025, 0.025, 0.95), Color("#6f8179"), 6)
+		HudStyle.panel(HudStyle.INK, Color("#6f8179"), 7)
 	)
 	raid_pressure_panel.z_index = 82
 	raid_pressure_panel.visible = false
@@ -615,7 +615,7 @@ func build_raid_opportunity_hud() -> void:
 	dynamic_incident_hud.offset_bottom = 178.0
 	dynamic_incident_hud.add_theme_stylebox_override(
 		"panel",
-		HudStyle.panel(Color(0.035, 0.025, 0.022, 0.97), Color("#d56e4f"), 6)
+		HudStyle.panel(Color(0.035, 0.025, 0.022, 0.97), Color("#d56e4f"), 7)
 	)
 	dynamic_incident_hud.z_index = 83
 	dynamic_incident_hud.visible = false
@@ -686,7 +686,7 @@ func build_extraction_progress_ui() -> void:
 	extraction_result_panel.offset_bottom = 196
 	extraction_result_panel.add_theme_stylebox_override(
 		"panel",
-		HudStyle.panel(Color(0.018, 0.024, 0.025, 0.98), Color("#d0b35d"), 8)
+		HudStyle.panel(HudStyle.INK_SOLID, Color("#d0b35d"), 7)
 	)
 	extraction_result_panel.z_index = 502
 	extraction_result_panel.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
@@ -705,13 +705,13 @@ func build_extraction_progress_ui() -> void:
 	extraction_result_title.text = "탈출 성공"
 	extraction_result_title.add_theme_font_override("font", FONT)
 	extraction_result_title.add_theme_font_size_override("font_size", 34)
-	extraction_result_title.add_theme_color_override("font_color", Color("#f0d77d"))
+	extraction_result_title.add_theme_color_override("font_color", HudStyle.GOLD_TEXT)
 	content.add_child(extraction_result_title)
 	var route_card := PanelContainer.new()
 	route_card.name = "ExtractionRouteCard"
 	route_card.add_theme_stylebox_override(
 		"panel",
-		HudStyle.panel(Color("#0e1615"), Color("#52655e"), 6)
+		HudStyle.panel(Color("#0e1615"), Color("#52655e"), 7)
 	)
 	content.add_child(route_card)
 	var route_margin := MarginContainer.new()
@@ -748,8 +748,8 @@ func build_extraction_progress_ui() -> void:
 	extraction_xp_bar.min_value = 0
 	extraction_xp_bar.max_value = 100
 	extraction_xp_bar.show_percentage = false
-	extraction_xp_bar.add_theme_stylebox_override("background", HudStyle.panel(Color("#141a19"), Color("#53635e"), 8))
-	extraction_xp_bar.add_theme_stylebox_override("fill", HudStyle.panel(Color("#68c89b"), Color("#9ae2bd"), 8))
+	extraction_xp_bar.add_theme_stylebox_override("background", HudStyle.panel(Color("#141a19"), Color("#53635e"), 7))
+	extraction_xp_bar.add_theme_stylebox_override("fill", HudStyle.panel(Color("#68c89b"), Color("#9ae2bd"), 7))
 	content.add_child(extraction_xp_bar)
 	extraction_xp_label = Label.new()
 	extraction_xp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -782,7 +782,7 @@ func build_jackpot_hud() -> void:
 	jackpot_hud.offset_bottom = 80.0
 	jackpot_hud.add_theme_stylebox_override(
 		"panel",
-		HudStyle.panel(Color(0.025, 0.029, 0.028, 0.92), Color("#9c7842"), 6)
+		HudStyle.panel(HudStyle.INK, Color("#9c7842"), 7)
 	)
 	jackpot_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	jackpot_hud.z_index = 84

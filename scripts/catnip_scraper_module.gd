@@ -126,7 +126,7 @@ func _rebuild_ui() -> void:
 	var title_box := VBoxContainer.new()
 	title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top_row.add_child(title_box)
-	title_box.add_child(_label("스크래핑 캣닢 생산기  Lv.%d" % GameState.catnip_scraper_level, 26, Color("#d9efb0")))
+	title_box.add_child(_label("스크래핑 캣닢 생산기  Lv.%d" % GameState.catnip_scraper_level, 24, Color("#d9efb0")))
 	title_box.add_child(_label("캣닢 특화 주민이 부스터 자원을 생산합니다.", 13, Color("#94aa98")))
 	var close := _close_button()
 	close.pressed.connect(func(): ui_layer.queue_free())
@@ -171,7 +171,7 @@ func _rebuild_ui() -> void:
 	content.add_child(body)
 
 	var catnip_slots: int = GameState.get_catnip_worker_slots()
-	body.add_child(_label("작업 좌석 · 앉은 고양이가 캣닢을 만듭니다", 15, Color("#dfe8dc")))
+	body.add_child(_label("작업 좌석 · 앉은 고양이가 캣닢을 만듭니다", 14, Color("#dfe8dc")))
 	var seat_row := HFlowContainer.new()
 	seat_row.add_theme_constant_override("h_separation", 8)
 	seat_row.add_theme_constant_override("v_separation", 8)
@@ -362,7 +362,7 @@ func _empty_resident_state(title: String, description: String, compact: bool) ->
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	box.add_child(icon)
-	var title_label := _label(title, 15, Color("#b5c6b8"))
+	var title_label := _label(title, 14, Color("#b5c6b8"))
 	title_label.name = "EmptyStateTitle"
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title_label.autowrap_mode = TextServer.AUTOWRAP_OFF

@@ -507,7 +507,7 @@ func _refresh_detail_panel() -> void:
 	_clear(detail_box)
 	var recipe := _selected_recipe()
 	if recipe.is_empty():
-		detail_box.add_child(_label("선택된 설계도가 없습니다.", 18, Color("#dfe6de")))
+		detail_box.add_child(_label("선택된 설계도가 없습니다.", 16, Color("#dfe6de")))
 		return
 
 	var title := _label(str(recipe["name"]), 30, Color("#f0e6c8"))
@@ -545,14 +545,14 @@ func _refresh_detail_panel() -> void:
 		cost_box.add_child(_resource_row(str(key), owned, needed, color))
 	var required_tier := int(recipe.get("required_tier", 1))
 	if GameState.shelter_tier < required_tier:
-		cost_box.add_child(_label("쉘터 Tier %d에서 해금" % required_tier, 17, Color("#e68576")))
+		cost_box.add_child(_label("쉘터 Tier %d에서 해금" % required_tier, 16, Color("#e68576")))
 	if bool((recipe.get("result", {}) as Dictionary).get("artisan", false)):
 		cost_box.add_child(_label("확정 천장 %d / %d" % [GameState.artisan_pity, GameState.ARTISAN_PITY_LIMIT], 16, Color("#d9c579")))
 	if bool((recipe.get("result", {}) as Dictionary).get("enhance", false)):
 		var level := GameState.get_weapon_enhancement_level(GameState.equipped_weapon_id)
-		cost_box.add_child(_label("%s  +%d → +%d" % [GameState.equipped_weapon_id.to_upper(), level, mini(99, level + 1)], 17, Color("#d9c579")))
+		cost_box.add_child(_label("%s  +%d → +%d" % [GameState.equipped_weapon_id.to_upper(), level, mini(99, level + 1)], 16, Color("#d9c579")))
 
-	var result_label := _label("결과: %s" % _result_text(recipe), 17, Color("#d9c579"))
+	var result_label := _label("결과: %s" % _result_text(recipe), 16, Color("#d9c579"))
 	detail_box.add_child(result_label)
 
 	var craft := _button(_craft_action_text(recipe), _craft_action_icon(recipe))
@@ -882,7 +882,7 @@ func _resource_row(key: String, owned: int, needed: int, color: Color) -> Contro
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	row.add_child(icon)
-	var name_label := _label(_resource_name(key), 17, Color("#d9ded8"))
+	var name_label := _label(_resource_name(key), 16, Color("#d9ded8"))
 	name_label.name = "ResourceName"
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -968,7 +968,7 @@ func _label(text: String, size: int, color: Color) -> Label:
 
 
 func _section(text: String) -> Label:
-	var label := _label(text, 18, Color("#d9ded8"))
+	var label := _label(text, 16, Color("#d9ded8"))
 	label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.55))
 	label.add_theme_constant_override("outline_size", 3)

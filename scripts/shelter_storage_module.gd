@@ -258,7 +258,7 @@ func _build_backpack_panel(narrow: bool, compact: bool) -> Control:
 	margin.add_child(box)
 	var title_row := HBoxContainer.new()
 	box.add_child(title_row)
-	title_row.add_child(_label("가방", 17, Color("#d8e3df")))
+	title_row.add_child(_label("가방", 16, Color("#d8e3df")))
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_row.add_child(spacer)
@@ -308,7 +308,7 @@ func _build_storage_panel(narrow: bool, compact: bool) -> Control:
 
 	var title_row := HBoxContainer.new()
 	box.add_child(title_row)
-	title_row.add_child(_label("보관함", 17, Color("#e4d8b8")))
+	title_row.add_child(_label("보관함", 16, Color("#e4d8b8")))
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_row.add_child(spacer)

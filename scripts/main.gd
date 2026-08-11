@@ -1790,7 +1790,7 @@ func _setup_boss_defeat_ui() -> void:
 	boss_defeat_panel.offset_bottom = -104
 	boss_defeat_panel.add_theme_stylebox_override(
 		"panel",
-		_make_panel_style(Color(0.012, 0.016, 0.015, 0.96), Color("#d9a441"), 8)
+		_make_panel_style(HudStyle.INK, Color("#d9a441"), 8)
 	)
 	boss_defeat_overlay.add_child(boss_defeat_panel)
 	var margin := MarginContainer.new()
@@ -2866,7 +2866,7 @@ func _make_mobile_utility_button_left(
 	button.z_index = 90
 	button.add_theme_font_override("font", font)
 	button.add_theme_font_size_override("font_size", 12)
-	button.add_theme_stylebox_override("normal", _make_panel_style(Color(0.018, 0.025, 0.025, 0.94), Color("#718a7e"), 7))
+	button.add_theme_stylebox_override("normal", _make_panel_style(HudStyle.INK, Color("#718a7e"), 7))
 	button.add_theme_stylebox_override("hover", _make_panel_style(Color(0.055, 0.08, 0.07, 0.97), Color("#b9d1c4"), 7))
 	button.add_theme_stylebox_override("pressed", _make_panel_style(Color(0.11, 0.17, 0.13, 0.98), Color("#dff0e5"), 7))
 	$HUD.add_child(button)
@@ -3052,7 +3052,7 @@ func _refresh_field_interaction_visual(interaction_type: String, is_locked: bool
 	var border_color: Color = accent
 	border_color.a = 0.78
 	var panel_style: StyleBoxFlat = _make_panel_style(
-		Color(0.014, 0.021, 0.022, 0.97),
+		HudStyle.INK,
 		border_color,
 		7
 	)

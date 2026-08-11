@@ -58,7 +58,7 @@ func _ensure_panel() -> void:
 	panel.offset_bottom = -84.0
 	panel.offset_top = -160.0
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var style := HudStyle.panel(Color(0.012, 0.018, 0.019, 0.92), Color("#7f9c8f"), 7)
+	var style := HudStyle.panel(HudStyle.INK, Color("#7f9c8f"), 7)
 	style.content_margin_left = 14.0
 	style.content_margin_right = 14.0
 	style.content_margin_top = 8.0
