@@ -20,7 +20,7 @@ const TEMPLATES := [
 	{
 		"type": "defense",
 		"title": "교차로 봉쇄선 사수",
-		"description": "현장을 지키며 몰려오는 약탈대를 버티십시오.",
+		"description": "몰려오는 약탈대를 이 자리에서 버틴다.",
 		"duration": 14.0,
 		"enemy_count": 6,
 		"reward": {"canned_food": 2, "ammo": 24},
@@ -28,7 +28,7 @@ const TEMPLATES := [
 	{
 		"type": "defense",
 		"title": "비상 발전기 재가동",
-		"description": "발전기가 켜질 때까지 현장을 방어하십시오.",
+		"description": "발전기가 깨어날 때까지 이 자리를 지킨다.",
 		"duration": 12.0,
 		"enemy_count": 6,
 		"reward": {"medkits": 1, "ammo": 18},
@@ -36,7 +36,7 @@ const TEMPLATES := [
 	{
 		"type": "eliminate",
 		"title": "약탈대 거점 소탕",
-		"description": "구역을 장악한 적을 모두 제거하십시오.",
+		"description": "구역을 차지한 것들을 전부 지운다.",
 		"target_count": 3,
 		"enemy_count": 5,
 		"reward": {"canned_food": 2, "component": 1},
@@ -44,7 +44,7 @@ const TEMPLATES := [
 	{
 		"type": "eliminate",
 		"title": "무장 정찰조 차단",
-		"description": "지원 요청 전에 정찰조를 제압하십시오.",
+		"description": "무전이 닿기 전에 정찰조를 끊는다.",
 		"target_count": 2,
 		"enemy_count": 4,
 		"reward": {"ammo": 30, "component": 1},
@@ -52,7 +52,7 @@ const TEMPLATES := [
 	{
 		"type": "collect",
 		"title": "흩어진 보급 표식 회수",
-		"description": "구역 안의 보급 표식 2개를 회수하십시오.",
+		"description": "구역에 흩어진 보급 표식 2개를 회수한다.",
 		"target_count": 2,
 		"enemy_count": 4,
 		"reward": {"canned_food": 3, "ammo": 15},
@@ -60,7 +60,7 @@ const TEMPLATES := [
 	{
 		"type": "collect",
 		"title": "통신 기록 수집",
-		"description": "파손된 기록 장치 2개를 확보하십시오.",
+		"description": "부서진 기록 장치 2개를 확보한다.",
 		"target_count": 2,
 		"enemy_count": 4,
 		"reward": {"medkits": 1, "component": 1},
@@ -68,7 +68,7 @@ const TEMPLATES := [
 	{
 		"type": "stealth",
 		"title": "폐점포 잠복",
-		"description": "수색대의 시야를 피해 폐점포 주변에 몸을 숨기십시오.",
+		"description": "수색대의 시야를 피해 폐점포 그늘에 몸을 묻는다.",
 		"duration": 10.0,
 		"guard_count": 2,
 		"detection_grace": 1.8,
@@ -78,7 +78,7 @@ const TEMPLATES := [
 	{
 		"type": "stealth",
 		"title": "순찰대 통과 대기",
-		"description": "엄폐물 뒤에서 순찰대가 지나갈 때까지 발각되지 마십시오.",
+		"description": "엄폐물 뒤에서, 순찰대가 지나갈 때까지 숨을 죽인다.",
 		"duration": 12.0,
 		"guard_count": 2,
 		"detection_grace": 1.65,
@@ -88,7 +88,7 @@ const TEMPLATES := [
 	{
 		"type": "investigate",
 		"title": "실종자 흔적 조사",
-		"description": "주변의 흔적을 살피고 생존자의 이동 경로를 확인하십시오.",
+		"description": "흔적을 읽어 생존자가 어디로 갔는지 알아낸다.",
 		"target_count": 2,
 		"investigate_duration": 1.6,
 		"guard_count": 1,
@@ -98,7 +98,7 @@ const TEMPLATES := [
 	{
 		"type": "investigate",
 		"title": "감시 초소 기록 판독",
-		"description": "발각되지 않은 채 감시 기록을 차례로 판독하십시오.",
+		"description": "들키지 않고 감시 기록을 차례로 읽는다.",
 		"target_count": 2,
 		"investigate_duration": 1.8,
 		"guard_count": 2,
@@ -109,7 +109,7 @@ const TEMPLATES := [
 	{
 		"type": "stealth_reach",
 		"title": "감시망 우회",
-		"description": "총을 쏘지 말고 순찰의 시야를 피해 반대편 안전 지점에 도달하십시오.",
+		"description": "총성 없이, 순찰의 시야를 흘려 반대편 안전 지점까지 간다.",
 		"target_distance": 32.0,
 		"guard_count": 2,
 		"detection_grace": 1.6,
@@ -120,7 +120,7 @@ const TEMPLATES := [
 	{
 		"type": "defense",
 		"title": "옥상 신호기 사수",
-		"description": "구조 신호가 송출될 때까지 옥상 진입로를 틀어막으십시오.",
+		"description": "구조 신호가 다 나갈 때까지 옥상 진입로를 틀어막는다.",
 		"duration": 16.0,
 		"enemy_count": 7,
 		"reward": {"ammo": 30, "component": 1},
@@ -128,7 +128,7 @@ const TEMPLATES := [
 	{
 		"type": "eliminate",
 		"title": "약탈대 지휘관 사냥",
-		"description": "무리를 이끄는 지휘관과 호위대를 모두 쓰러뜨리십시오.",
+		"description": "무리를 이끄는 지휘관과 호위대를 전부 눕힌다.",
 		"target_count": 3,
 		"enemy_count": 6,
 		"reward": {"component": 2, "ammo": 18},
@@ -136,7 +136,7 @@ const TEMPLATES := [
 	{
 		"type": "collect",
 		"title": "의약품 상자 수거",
-		"description": "약탈되기 전에 흩어진 의약품 상자를 회수하십시오.",
+		"description": "약탈당하기 전에 의약품 상자를 거둔다.",
 		"target_count": 3,
 		"enemy_count": 5,
 		"reward": {"medkits": 2, "canned_food": 2},
@@ -144,7 +144,7 @@ const TEMPLATES := [
 	{
 		"type": "stealth",
 		"title": "경비 교대 틈 노리기",
-		"description": "교대 시간이 끝날 때까지 세 명의 경비 시야 밖에 머무르십시오.",
+		"description": "교대가 끝날 때까지 세 경비의 시야 밖에 머문다.",
 		"duration": 11.0,
 		"guard_count": 3,
 		"detection_grace": 1.7,
@@ -154,7 +154,7 @@ const TEMPLATES := [
 	{
 		"type": "investigate",
 		"title": "사라진 운송대의 흔적",
-		"description": "봉쇄선 안으로 사라진 운송대가 남긴 표식을 차례로 판독하십시오.",
+		"description": "봉쇄선 너머로 사라진 운송대의 표식을 차례로 읽는다.",
 		"target_count": 3,
 		"investigate_duration": 1.7,
 		"guard_count": 2,
@@ -165,7 +165,7 @@ const TEMPLATES := [
 	{
 		"type": "stealth_reach",
 		"title": "봉쇄선 침투",
-		"description": "총성 없이 순찰을 피해 봉쇄선 반대편 깊숙한 지점까지 도달하십시오.",
+		"description": "총성 없이 봉쇄선 깊숙한 곳까지 스며든다.",
 		"target_distance": 38.0,
 		"guard_count": 3,
 		"detection_grace": 1.7,

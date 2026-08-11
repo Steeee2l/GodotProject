@@ -290,6 +290,8 @@ func _rebuild_ui() -> void:
 	root.offset_bottom = panel_height * 0.5 + safe_center_offset.y
 	root.add_theme_stylebox_override("panel", _panel_style(Color(0.018, 0.023, 0.027, 0.95), Color("#8ac2a7"), 2, 10))
 	ui_layer.add_child(root)
+	# 모달 표준 등장.
+	HudStyle.enter_modal(root)
 
 	var inner_margin := 12 if compact else 22
 	var margin := _margin(inner_margin, inner_margin, inner_margin, inner_margin)
@@ -932,22 +934,15 @@ func _resource_name(key: String) -> String:
 
 
 func _button(text: String, icon_name := "") -> Button:
+	# 스타일은 디자인 시스템이 정한다. 여기서는 내용(텍스트·아이콘)만.
 	var button := Button.new()
 	button.text = text
 	if not icon_name.is_empty():
-		button.icon = UI_ICONS.get_icon(icon_name, 30, Color("#dce6df"))
+		button.icon = UI_ICONS.get_icon(icon_name, 30, HudStyle.TEXT)
 		button.expand_icon = true
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	button.add_theme_font_override("font", FONT)
-	button.add_theme_font_size_override("font_size", 15)
-	button.add_theme_color_override("font_color", Color("#e5ebe5"))
-	button.add_theme_color_override("font_disabled_color", Color(0.7, 0.74, 0.72, 0.42))
-	button.add_theme_stylebox_override("normal", _panel_style(Color(0.06, 0.07, 0.076, 0.72), Color(0.62, 0.74, 0.69, 0.28), 1, 7))
-	button.add_theme_stylebox_override("hover", _panel_style(Color(0.09, 0.11, 0.105, 0.86), Color("#d9c579"), 1, 7))
-	button.add_theme_stylebox_override("pressed", _panel_style(Color(0.13, 0.11, 0.065, 0.92), Color("#e0b75f"), 1, 7))
-	button.add_theme_stylebox_override("disabled", _panel_style(Color(0.035, 0.04, 0.044, 0.5), Color(0.45, 0.48, 0.48, 0.18), 1, 7))
-	return button
+	return HudStyle.style_button(button, HudStyle.LINE_FOCUS)
 
 
 func _close_button() -> Button:

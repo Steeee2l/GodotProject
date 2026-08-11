@@ -5406,10 +5406,10 @@ func _handle_basic_mission_chain_completion(mission_id: String) -> void:
 			_show_field_notice("연속 임무 해금 · 폐허의 포격수 묘르의 신호를 추적합니다.")
 		"subway_boss":
 			GameState.set_subway_story_stage(2)
-			_show_field_notice("묘르 처치 · 다음 탐사에서 지하 보급로를 봉쇄할 수 있습니다.")
+			_show_field_notice("묘르 처치 · 다음 탐사에서 지하 보급로 봉쇄 가능")
 		"subway_return":
 			GameState.set_subway_story_stage(3)
-			_show_field_notice("연속 임무 완료 · 종로 지하선 생존 통로를 확보했습니다.")
+			_show_field_notice("연속 임무 완료 · 종로 지하선 생존 통로 확보")
 
 
 func _get_basic_mission_lines() -> Array[String]:
@@ -5486,7 +5486,7 @@ func _update_defense_mission(delta: float, distance_to_site: float) -> void:
 		"구역 방어  %.1f초 · 접근 중인 적 %d명"
 		% [remaining, maxi(0, enemy_count - field_mission_spawned_enemies)]
 		if inside_hold_area
-		else "방어 구역으로 복귀하십시오 · 이탈 %.0fm"
+		else "방어 구역으로 복귀한다 · 이탈 %.0fm"
 		% distance_to_site
 	)
 	field_missions._set_field_mission_objective(
@@ -6225,7 +6225,7 @@ func _complete_field_interaction(point: Node3D) -> void:
 	if interaction_type == "rescue":
 		var occupied_after_escort: int = GameState.rescued_workers + rescued_followers.size()
 		if occupied_after_escort >= GameState.get_resident_capacity():
-			_show_field_notice("쉘터 수용량 부족 · 시설을 확장해야 구조할 수 있습니다.")
+			_show_field_notice("쉘터 수용량 부족 · 티어를 올려야 더 구조할 수 있다")
 			field_interaction_hold_time = 0.0
 			return
 	point.set_meta("completed", true)
@@ -6242,7 +6242,7 @@ func _complete_field_interaction(point: Node3D) -> void:
 			_add_fatigue(FATIGUE_SALVAGE_GAIN)
 			_spawn_salvage_rewards(point.global_position)
 			_advance_contract_progress("salvage")
-			_show_field_notice("분해 완료 · 총기 개조 부품이 떨어졌습니다.")
+			_show_field_notice("분해 완료 · 개조 부품 획득")
 		"basic_mission_subway":
 			var subway_mission_id := str(point.get_meta("basic_mission_id", "subway"))
 			_advance_basic_mission(subway_mission_id)
@@ -6336,7 +6336,7 @@ func _open_field_loot_container(point: Node3D) -> void:
 		spawned_count += 1
 	_add_fatigue(FATIGUE_LOOT_GAIN)
 	if spawned_count == 0:
-		_show_field_notice("%s · 비어 있습니다." % LOOT_ECONOMY.get_container_display_name(container_type))
+		_show_field_notice("%s · 비어 있다" % LOOT_ECONOMY.get_container_display_name(container_type))
 	elif (
 		container_type in ["scrap_pile", "catnip_planter"]
 		and not GameState.raw_material_tip_seen
@@ -6371,7 +6371,7 @@ func _recover_previous_corpse() -> void:
 	var recovered_count := RAID_LOSS_MANAGER.get_item_count(loot)
 	if recovered_count <= 0:
 		GameState.clear_pending_corpse_recovery()
-		_show_field_notice("회수할 장비가 남아 있지 않습니다.")
+		_show_field_notice("회수할 것이 남아 있지 않다")
 		return
 	_add_dictionary_loot(
 		GameState.ammo_inventory,
@@ -6420,7 +6420,7 @@ func _recover_previous_corpse() -> void:
 	GameState.save_persistent_state()
 	if is_instance_valid(tactical_map) and tactical_map.has_method("clear_corpse_recovery"):
 		tactical_map.call("clear_corpse_recovery")
-	_show_field_notice("분실 장비 회수 완료 · %d개 품목을 되찾았습니다." % recovered_count)
+	_show_field_notice("분실 장비 회수 · %d개 품목 되찾음" % recovered_count)
 	_update_medkit_button()
 
 
@@ -6467,8 +6467,15 @@ func _show_field_notice(message: String) -> void:
 		if repeated_field_notice_count <= 1
 		else "%s  ×%d" % [message, repeated_field_notice_count]
 	)
-	hud.ammo_notice.visible = true
-	ammo_notice_time = 2.4
+	# 툭 나타나지 않게 짧게 떠오르고, 여러 줄 레슨은 읽을 시간을 더 준다.
+	if not hud.ammo_notice.visible:
+		hud.ammo_notice.visible = true
+		hud.ammo_notice.modulate.a = 0.0
+		var notice_tween := create_tween()
+		notice_tween.tween_property(hud.ammo_notice, "modulate:a", 1.0, 0.14)
+	var notice_lines := message.count("
+") + 1
+	ammo_notice_time = 2.0 + 0.9 * float(notice_lines)
 
 
 func _update_fatigue(delta: float, is_moving: bool) -> void:
@@ -6541,7 +6548,7 @@ func _refresh_fatigue_hud() -> void:
 			var warning_text: String = str({
 				1: "피로 누적 · 조준과 전투 행동이 피로를 빠르게 높입니다.",
 				2: "피로 과부하 · 이동 성능이 곧 저하됩니다.",
-				3: "탈진 위험 · 즉시 탈출하거나 휴식하십시오.",
+				3: "탈진 직전 · 지금 나가거나, 숨을 곳을 찾는다.",
 			}.get(next_warning_band, ""))
 			if not warning_text.is_empty():
 				_show_field_notice(warning_text)

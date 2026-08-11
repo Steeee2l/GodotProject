@@ -551,7 +551,7 @@ func _update_stealth_mission(delta: float, distance_to_site: float) -> void:
 		]
 		color = Color("#ff9b77")
 	elif not inside_hide_area:
-		detail = "은신 지점으로 복귀하십시오 · 거리 %.0fm" % distance_to_site
+		detail = "은신 지점으로 돌아간다 · 거리 %.0fm" % distance_to_site
 		color = Color("#d7bd72")
 	host.field_missions._set_field_mission_objective(
 		str(host.active_field_mission.get_meta("title", "은밀 잠복")),
@@ -579,7 +579,7 @@ func _update_stealth_reach_mission(delta: float) -> void:
 	var detail := "안전 지점까지 %.1fm · 시야에 들지 마십시오." % target_distance
 	var color := Color("#8fd0c1")
 	if detected:
-		detail = "발각 위험 · 엄폐물 뒤로 이동하십시오  %.1f / %.1f초" % [
+		detail = "발각 직전 · 엄폐물 뒤로  %.1f / %.1f초" % [
 			host.field_mission_detection_time,
 			detection_grace,
 		]

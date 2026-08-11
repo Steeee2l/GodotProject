@@ -714,7 +714,7 @@ func _trigger_fatigue_boss_event() -> void:
 	fatigue_boss_event_triggered = true
 	host._show_boss_alert(FATIGUE_BOSS_NAME)
 	if GameState.subway_story_stage == 1:
-		host._show_field_notice("연속 임무 갱신 · 포격 신호의 주인을 처치하십시오.")
+		host._show_field_notice("연속 임무 갱신 · 포격 신호의 주인을 잡는다")
 
 
 func _find_event_position_near_player(

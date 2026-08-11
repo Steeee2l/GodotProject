@@ -136,6 +136,8 @@ func _open_ui() -> void:
 		_panel_style(Color(0.012, 0.019, 0.021, 0.98), Color("#6c8f89"), 2, 6)
 	)
 	center.add_child(panel)
+	# 모달 표준 등장 — 툭 나타나지 않는다.
+	HudStyle.enter_modal(panel)
 
 	var margin := MarginContainer.new()
 	var inner_margin := 10 if viewport_size.y < 640.0 else 18

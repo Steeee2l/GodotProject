@@ -266,8 +266,15 @@ func _update_ammo_pickups(delta: float) -> void:
 	ammo_pickup_chain_time = maxf(0.0, ammo_pickup_chain_time - delta)
 	if ammo_pickup_chain_time <= 0.0:
 		ammo_pickup_chain_total = 0
-	if host.hud.ammo_notice and host.ammo_notice_time <= 0.0:
-		host.hud.ammo_notice.visible = false
+	if host.hud.ammo_notice and host.ammo_notice_time <= 0.0 and host.hud.ammo_notice.visible:
+		# 같은 리듬의 퇴장. 사라질 때도 툭 꺼지지 않는다.
+		var fade := host.create_tween()
+		var notice: Label = host.hud.ammo_notice
+		fade.tween_property(notice, "modulate:a", 0.0, 0.18)
+		fade.tween_callback(func() -> void:
+			notice.visible = false
+			notice.modulate.a = 1.0
+		)
 	var player_ground := Vector2(player.position.x, player.position.z)
 	var nearest_distance := INF
 	host.nearby_ammo_pickup = null

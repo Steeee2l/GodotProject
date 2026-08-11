@@ -1745,7 +1745,7 @@ func _refresh_contract_ui() -> void:
 		)
 		contract_heading.add_child(status_label_local)
 		var brief := Label.new()
-		brief.text = str(definition.get("brief", "현장 목표를 수행하십시오."))
+		brief.text = str(definition.get("brief", "현장 목표를 따른다."))
 		brief.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		brief.add_theme_font_override("font", FONT)
 		brief.add_theme_font_size_override("font_size", 16)
@@ -2713,16 +2713,8 @@ func _merchant_button(text: String, accent: bool, icon_name := "") -> Button:
 		button.icon = UI_ICONS.get_icon(icon_name, 28, Color("#e8dfcb"))
 		button.expand_icon = true
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	button.focus_mode = Control.FOCUS_NONE
-	button.add_theme_font_override("font", FONT)
-	button.add_theme_font_size_override("font_size", 15)
-	button.add_theme_color_override("font_color", Color("#f0eadb"))
-	var background := Color(0.12, 0.1, 0.055, 0.98) if accent else Color(0.055, 0.064, 0.062, 0.96)
-	var border := Color("#d2ad5e") if accent else Color("#71857b")
-	button.add_theme_stylebox_override("normal", _rounded_panel_style(background, border, 6))
-	button.add_theme_stylebox_override("hover", _rounded_panel_style(Color(0.16, 0.13, 0.07, 1.0), Color("#f0cc77"), 6))
-	button.add_theme_stylebox_override("disabled", _rounded_panel_style(Color(0.03, 0.035, 0.034, 0.72), Color(0.35, 0.4, 0.38, 0.3), 6))
-	return button
+	# 주 행동(accent)은 골드 보더 + 큰 글씨, 보조는 표준. 4상태 전부 시스템이 정의.
+	return HudStyle.style_button(button, HudStyle.GOLD if accent else HudStyle.LINE_FOCUS, accent)
 
 
 func _shelter_close_button() -> Button:
@@ -3298,7 +3290,7 @@ func _open_raid_zone_select() -> void:
 	close.pressed.connect(_close_raid_zone_select)
 	header.add_child(close)
 	var subtitle := Label.new()
-	subtitle.text = "폐허가 된 서울의 진입 지점을 선택하십시오. 높은 위험도일수록 희귀한 전리품을 확보할 수 있습니다."
+	subtitle.text = "진입 지점을 고른다. 깊이 들어갈수록 위험하고, 그만큼 희귀한 것이 남아 있다."
 	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	subtitle.add_theme_font_override("font", FONT)
 	subtitle.add_theme_font_size_override("font_size", 14)

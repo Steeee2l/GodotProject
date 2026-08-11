@@ -1025,12 +1025,16 @@ func _build_dialogue_ui(hud: CanvasLayer) -> void:
 	add_child(dialogue_typewriter)
 	dialogue_typewriter.attach(dialogue_text)
 	continue_label = Label.new()
-	continue_label.text = "화면 터치" if touch_enabled else "클릭 또는 SPACE"
+	continue_label.text = "화면 터치 ▸" if touch_enabled else "클릭 또는 SPACE ▸"
 	continue_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	continue_label.add_theme_font_override("font", FONT)
 	continue_label.add_theme_font_size_override("font_size", 13)
 	continue_label.add_theme_color_override("font_color", Color("#91a49d"))
 	column.add_child(continue_label)
+	# 은은한 맥동 — "여기 눌러도 된다"를 시선 끌지 않게 말한다.
+	var pulse := continue_label.create_tween().set_loops()
+	pulse.tween_property(continue_label, "modulate:a", 0.45, 0.9).set_trans(Tween.TRANS_SINE)
+	pulse.tween_property(continue_label, "modulate:a", 1.0, 0.9).set_trans(Tween.TRANS_SINE)
 	dialogue_panel.visible = false
 
 
@@ -1038,9 +1042,13 @@ func _build_objective_ui(hud: CanvasLayer) -> void:
 	objective_panel = PanelContainer.new()
 	objective_panel.name = "TutorialObjective"
 	objective_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	objective_panel.position = Vector2(-270, 78)
-	objective_panel.size = Vector2(540, 116)
-	objective_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.015, 0.022, 0.023, 0.93), Color("#7ecbb0"), 2, 6))
+	# 앵커 컨트롤에 position을 쓰면 부모 좌표로 해석돼 어긋난다. 오프셋으로 고정.
+	var objective_half := minf(270.0, (get_viewport().get_visible_rect().size.x - 24.0) * 0.5)
+	objective_panel.offset_left = -objective_half
+	objective_panel.offset_right = objective_half
+	objective_panel.offset_top = 78
+	objective_panel.offset_bottom = 194
+	objective_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.014, 0.021, 0.022, 0.94), Color("#79a994"), 1, 7))
 	hud.add_child(objective_panel)
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 24)
@@ -1591,8 +1599,8 @@ func _start_tutorial_move() -> void:
 	camera_tween.tween_property(camera, "size", GAMEPLAY_CAMERA_SIZE, 0.6)
 	_show_objective(
 		"다시 걷기",
-		"왼쪽 조이스틱으로 이동합니다." if touch_enabled else "WASD로 이동합니다.",
-		"이동 거리 0 / 3m"
+		"왼쪽 스틱 — 발부터 깨운다." if touch_enabled else "W·A·S·D — 발부터 깨운다.",
+		"이동 0 / 3m"
 	)
 	_set_letterbox(false)
 
@@ -1650,7 +1658,7 @@ func _update_player_gameplay(delta: float) -> void:
 	player.position.z = clampf(player.position.z, -BRIDGE_HALF_LENGTH + 1.0, BRIDGE_HALF_LENGTH - 1.0)
 	if phase == "tutorial_move" and not tutorial_transitioning:
 		movement_distance += previous_position.distance_to(player.position)
-		objective_progress.text = "이동 거리 %.1f / 3m" % minf(movement_distance, 3.0)
+		objective_progress.text = "이동 %.1f / 3m" % minf(movement_distance, 3.0)
 		if movement_distance >= 3.0:
 			_complete_tutorial_step("이동 완료", Callable(self, "_start_tutorial_dash"))
 	if phase == "tutorial_combat":
@@ -1737,7 +1745,7 @@ func _start_tutorial_aim() -> void:
 	tutorial_transitioning = false
 	_show_objective(
 		"어둠 너머를 보다",
-		"조준 버튼을 켜면 시야가 열립니다." if touch_enabled else "마우스 오른쪽 버튼을 누른 채 조준합니다.",
+		"조준을 누른 채 — 시야가 열리고, 총구가 따라온다." if touch_enabled else "우클릭을 누른 채 — 시야가 열리고, 총구가 따라온다.",
 		"조준 유지 0.5초"
 	)
 
@@ -1749,8 +1757,8 @@ func _start_tutorial_combat() -> void:
 	tutorial_enemies_activated = false
 	_show_objective(
 		"다리를 건너다",
-		"전진한 뒤 조준과 발사 버튼으로 적들을 소탕하세요." if touch_enabled else "전진한 뒤 오른쪽 버튼으로 조준하고 왼쪽 버튼으로 사격하세요.",
-		"경계병에게 접근하세요 · 남은 적 %d" % enemies_remaining
+		"조준하고, 쏜다. 막힌 다리는 뚫는 것이다." if touch_enabled else "우클릭 조준, 좌클릭 사격. 막힌 다리는 뚫는 것이다.",
+		"경계병 %d — 접근한다" % enemies_remaining
 	)
 
 
@@ -1762,7 +1770,7 @@ func _try_activate_tutorial_enemies() -> void:
 		if is_instance_valid(enemy):
 			nearest_distance = minf(nearest_distance, player.global_position.distance_to(enemy.global_position))
 	if nearest_distance > TUTORIAL_ENEMY_ACTIVATION_RANGE:
-		objective_progress.text = "경계병까지 %.0fm · 남은 적 %d" % [nearest_distance, enemies_remaining]
+		objective_progress.text = "경계병까지 %.0fm · 남은 %d" % [nearest_distance, enemies_remaining]
 		return
 	tutorial_enemies_activated = true
 	for enemy in enemies:

@@ -87,6 +87,8 @@ func _open_ui() -> void:
 	panel.clip_contents = true
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.018, 0.023, 0.02, 0.96), Color("#c29c5b")))
 	center.add_child(panel)
+	# 모달 표준 등장 — 툭 나타나지 않는다.
+	HudStyle.enter_modal(panel)
 	var margin := MarginContainer.new()
 	var inner_margin := 12 if viewport_size.y < 640.0 else 20
 	margin.add_theme_constant_override("margin_left", inner_margin)
@@ -371,16 +373,10 @@ func _button(text: String, icon_name := "") -> Button:
 	var button := Button.new()
 	button.text = text
 	if not icon_name.is_empty():
-		button.icon = UI_ICONS.get_icon(icon_name, 28, Color("#e5dfd0"))
+		button.icon = UI_ICONS.get_icon(icon_name, 28, HudStyle.TEXT)
 		button.expand_icon = true
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	button.add_theme_font_override("font", FONT)
-	button.add_theme_font_size_override("font_size", 14)
-	button.add_theme_stylebox_override("normal", _panel_style(Color(0.06, 0.066, 0.058, 0.96), Color("#68736b")))
-	button.add_theme_stylebox_override("hover", _panel_style(Color(0.11, 0.096, 0.06, 0.98), Color("#d2ad61")))
-	button.add_theme_stylebox_override("pressed", _panel_style(Color(0.12, 0.085, 0.04, 0.98), Color("#f0c463")))
-	button.add_theme_stylebox_override("disabled", _panel_style(Color(0.03, 0.034, 0.032, 0.72), Color("#38413c")))
-	return button
+	return HudStyle.style_button(button, HudStyle.LINE_FOCUS)
 
 
 func _close_button() -> Button:

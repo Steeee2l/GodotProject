@@ -64,6 +64,8 @@ func _build_ui() -> void:
 		_panel_style(Color(0.025, 0.03, 0.032, 0.99), Color("#d19a4d"), 8)
 	)
 	add_child(panel)
+	# 모달 표준 등장.
+	HudStyle.enter_modal(panel)
 
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 22)

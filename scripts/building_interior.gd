@@ -590,7 +590,7 @@ func _build_interface() -> void:
 	building_objective_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.015, 0.02, 0.022, 0.9), Color(0.42, 0.55, 0.52, 0.65)))
 	canvas.add_child(building_objective_panel)
 	building_objective_label = Label.new()
-	building_objective_label.text = "  건물 수색\n  · 적을 제압하고 물자를 회수하십시오"
+	building_objective_label.text = "  건물 수색\n  · 적을 제압하고 물자를 회수한다"
 	building_objective_label.add_theme_font_override("font", FONT)
 	building_objective_label.add_theme_font_size_override("font_size", 15)
 	building_objective_label.modulate = Color(0.92, 0.76, 0.32)
@@ -1147,7 +1147,7 @@ func _load_floor(floor_number: int, arrival: String) -> void:
 	var building_name := _get_building_display_name()
 	building_info_label.text = "%s · %d / %d층\n경계 중\n실내 수색 구역" % [building_name, floor_number, BuildingRunState.max_floors]
 	if building_objective_label != null:
-		building_objective_label.text = "  %s 수색\n  · 적을 제압하고 물자를 회수하십시오" % building_name
+		building_objective_label.text = "  %s 수색\n  · 적을 제압하고 물자를 회수한다" % building_name
 	_show_status("%d층 진입 · 배치 시드 %d" % [floor_number, BuildingRunState.get_floor_seed(floor_number)])
 	loading_floor = false
 
@@ -1393,16 +1393,16 @@ func _handle_floor_cleared() -> void:
 		else "%s %d층 확보" % [building_name, cleared_floor]
 	)
 	var detail := (
-		"모든 층의 위협을 제거했습니다. 전리품을 확인하고 도시로 복귀하십시오."
+		"모든 층 제압 완료. 전리품을 챙기고 도시로 돌아간다."
 		if full_clear
 		else "현재 층의 위협을 모두 제거했습니다. 남은 층을 계속 수색할 수 있습니다."
 	)
 	_show_floor_clear_banner(title, detail)
 	if building_objective_label != null:
 		building_objective_label.text = (
-			"  %s 탐색 완료\n  · 전리품을 확인하고 도시로 복귀하십시오" % building_name
+			"  %s 탐색 완료\n  · 전리품을 챙기고 도시로 돌아간다" % building_name
 			if full_clear
-			else "  %s %d층 확보\n  · 남은 층을 계속 수색하십시오" % [building_name, cleared_floor]
+			else "  %s %d층 확보\n  · 남은 층을 마저 수색한다" % [building_name, cleared_floor]
 		)
 
 

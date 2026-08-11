@@ -216,7 +216,7 @@ func _handle_jackpot_power() -> void:
 		2
 	)
 	_show_jackpot_alarm_flash()
-	host._show_field_notice("경보 발생 · 봉인 화물 좌표 노출 · 접근하는 대응대를 경계하십시오.")
+	host._show_field_notice("경보 발생 · 화물 좌표 노출 · 대응대가 온다")
 	host.monologue.play([
 		"전력이 돌아왔다. 삼백 밤 만에, 도시의 일부가 눈을 떴다.",
 		"…도시가 눈을 뜨면 다른 것들도 함께 깨어난다. 서둘러야 해.",

@@ -387,7 +387,7 @@ func _build_item_detail_panel() -> Control:
 	text_box.clip_contents = false
 	text_box.add_theme_constant_override("separation", 4)
 	row.add_child(text_box)
-	item_detail_title = _label("아이템을 선택하세요", 14, Color("#e8e0c7"))
+	item_detail_title = _label("가방", 14, Color("#e8e0c7"))
 	item_detail_title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	item_detail_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(item_detail_title)
@@ -1305,8 +1305,8 @@ func _refresh_item_detail() -> void:
 		item_detail_reason.visible = false
 	if selected_item.is_empty():
 		item_detail_icon.texture = UI_ICONS.get_icon("backpack", 72, Color("#71877c"))
-		item_detail_title.text = "아이템을 선택하세요"
-		item_detail_description.text = "가방의 아이콘을 누르면 상세 정보가 표시됩니다."
+		item_detail_title.text = "가방"
+		item_detail_description.text = "아이템을 누르면 여기서 살펴본다."
 		return
 
 	item_detail_icon.texture = _item_texture(selected_item)

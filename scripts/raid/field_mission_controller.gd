@@ -228,7 +228,7 @@ func _update_field_missions(delta: float) -> void:
 		field_mission_prepare_timer = maxf(0.0, field_mission_prepare_timer - delta)
 		_set_field_mission_objective(
 			"작전 준비 · %s" % str(host.active_field_mission.get_meta("title", "현장 임무")),
-			"시작까지 %.1f초 · 주변을 확인하고 엄폐하십시오." % field_mission_prepare_timer,
+			"시작까지 %.1f초 · 주변을 살피고 자리를 잡는다." % field_mission_prepare_timer,
 			Color("#f0c96d")
 		)
 		if field_mission_prepare_timer <= 0.0:
@@ -298,7 +298,7 @@ func _activate_field_mission() -> void:
 			_spawn_field_mission_reach_target(float(host.active_field_mission.get_meta("target_distance", 13.5)))
 	_set_field_mission_objective(
 		str(host.active_field_mission.get_meta("title", "현장 임무")),
-		str(host.active_field_mission.get_meta("description", "현장 목표를 수행하십시오.")),
+		str(host.active_field_mission.get_meta("description", "현장 목표를 따른다.")),
 		Color("#efd06f")
 	)
 	# 개시 순간에만 짧게 번쩍이는 신호. 세부 목표는 목표 패널이 계속 추적한다.
