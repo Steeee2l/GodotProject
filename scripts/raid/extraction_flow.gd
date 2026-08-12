@@ -226,32 +226,47 @@ func _show_extraction_result(rescued_count: int) -> void:
 		]
 	var cargo_summary := str(cargo_result.get("summary", "특별 화물 없음"))
 	# 경로 이름·배율·보급 보너스는 바로 위 extraction_route_label이 이미 말한다.
-	# 여기서 한 번 더 반복하지 않는다.
-	var lines: PackedStringArray = [
-		"처치 %d명 · 보스 %d명 · 주민 후송 %d명" % [
-			host.run_kills,
-			host.enemy_director.run_boss_kills,
-			rescued_count,
-		],
-		mission_summary,
-		cargo_summary,
-		"경로 XP +%d · 총 경험치 +%d" % [route_xp_bonus, xp_reward],
-		"위험 정산금  고철 +%s" % GameState.format_compact_number(risk_payout),
-	]
-	# 도시 의뢰(계약 완주 후 반복 목표) 달성 시 즉시 지급 + 정산 줄로 보여준다.
+	# 숫자는 타일/칩이, 문장은 아래 요약 라벨이 맡는다.
+	host.hud.clear_result_visuals()
+	host.hud.add_result_stat(
+		"weapon",
+		str(host.run_kills + host.enemy_director.run_boss_kills),
+		"처치" if host.enemy_director.run_boss_kills == 0 else "처치 · 보스 %d" % host.enemy_director.run_boss_kills,
+		HudStyle.DANGER
+	)
+	host.hud.add_result_stat("resident", str(rescued_count), "주민 후송", HudStyle.GREEN)
+	host.hud.add_result_stat(
+		"scrap",
+		"+%s" % GameState.format_compact_number(risk_payout),
+		"위험 정산금",
+		HudStyle.GOLD
+	)
+	host.hud.add_result_reward_chip("upgrade", "경험치 +%d" % xp_reward, HudStyle.GREEN)
+	if route_xp_bonus > 0:
+		host.hud.add_result_reward_chip("raid", "경로 보너스 XP +%d" % route_xp_bonus, HudStyle.GOLD)
+	if host.completed_mission_xp > 0:
+		host.hud.add_result_reward_chip("check", "임무 XP +%d" % host.completed_mission_xp, HudStyle.GOLD)
+	# 도시 의뢰(계약 완주 후 반복 목표) 달성 시 즉시 지급 + 칩으로 보여준다.
 	var commission_payout: Dictionary = GameState.settle_city_commission(host.run_kills)
 	if not commission_payout.is_empty():
-		var commission_line := "사자의 의뢰 완수  고철 +%s" % GameState.format_compact_number(
+		var commission_text := "사자의 의뢰 · 고철 +%s" % GameState.format_compact_number(
 			int(commission_payout.get("scrap", 0))
 		)
 		if int(commission_payout.get("churu", 0)) > 0:
-			commission_line += " · 츄르 +%d" % int(commission_payout.get("churu", 0))
-		lines.append(commission_line)
+			commission_text += " · 츄르 +%d" % int(commission_payout.get("churu", 0))
+		host.hud.add_result_reward_chip("churu", commission_text, HudStyle.GOLD)
 	# 가방을 "시간"으로 환산한다. 원자재 12개는 아무 느낌도 없지만
 	# "쉘터 가동 3시간 12분"은 다음 출정의 이유가 된다.
 	var runtime_seconds := GameState.get_raw_material_runtime_seconds()
 	if runtime_seconds > 0.0:
-		lines.append("가져온 원자재  →  쉘터 가동 %s" % GameState.format_duration_korean(runtime_seconds))
+		host.hud.add_result_reward_chip(
+			"time",
+			"원자재 → 쉘터 가동 %s" % GameState.format_duration_korean(runtime_seconds),
+			HudStyle.GREEN
+		)
+	var lines: PackedStringArray = [mission_summary]
+	if cargo_summary != "특별 화물 없음":
+		lines.append(cargo_summary)
 	# 끝난 것만 정리하지 말고 다음까지 남은 거리를 보여준다.
 	var next_goal := GameState.get_active_contract_progress_text()
 	if not next_goal.is_empty():

@@ -22,18 +22,33 @@ func _process(_delta: float) -> void:
 	queue_redraw()
 
 
+const ALERT_RANGE := 26.0
+
 func _draw() -> void:
+	# 모바일 한정 — 데스크톱은 시야가 넓어 마커가 소음이 된다.
+	if not DisplayServer.is_touchscreen_available():
+		return
 	if not is_instance_valid(player) or not is_instance_valid(camera):
 		return
 	var viewport_rect := get_viewport().get_visible_rect()
 	var safe_rect := viewport_rect.grow(-48.0)
-	var center := viewport_rect.get_center()
+	# 방향 기준은 화면 중앙이 아니라 플레이어의 화면 위치다.
+	var center := camera.unproject_position(player.global_position)
 	var drawn_sectors := {}
 	for node in get_tree().get_nodes_in_group("raid_enemy"):
 		if not (node is Node3D) or not is_instance_valid(node):
 			continue
 		var enemy := node as Node3D
 		if bool(enemy.get("dying")) or not bool(enemy.get("alerted")):
+			continue
+		# 정확도의 핵심 두 가지: ① 나를 노리는 적만(세력 간 교전으로 경계된 적 제외),
+		# ② 실제 위협 거리 안의 적만. 예전엔 50m 밖 무관한 적도 떠서
+		# "가 보면 아무도 없는" 마커가 됐다.
+		if enemy.get("target") != player:
+			continue
+		var to_enemy: Vector3 = enemy.global_position - player.global_position
+		to_enemy.y = 0.0
+		if to_enemy.length() > ALERT_RANGE:
 			continue
 		var world_point := enemy.global_position + Vector3(0.0, 1.7, 0.0)
 		var screen_point := camera.unproject_position(world_point)

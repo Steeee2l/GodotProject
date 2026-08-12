@@ -5,11 +5,13 @@ const FLOOR_TEXTURE_PATH := "res://assets/interiors/shelter_floor_topdown_v3.png
 const WALL_TEXTURE_PATH := "res://assets/interiors/shelter_wall_panel_v3.png"
 const ESCAPE_PIPE_TEXTURE_PATH := "res://assets/interiors/shelter_escape_pipe_v1.png"
 const BED_MODULE_SCENE := preload("res://scenes/modules/shelter_bed_module.tscn")
-const WORKBENCH_MODULE_SCENE := preload("res://scenes/modules/shelter_workbench_module.tscn")
-const SCRATCHER_BANK_MODULE_SCENE := preload("res://scenes/modules/scratcher_bank_module.tscn")
-const CATNIP_SCRAPER_MODULE_SCENE := preload("res://scenes/modules/catnip_scraper_module.tscn")
-const STORAGE_MODULE_SCENE := preload("res://scenes/modules/shelter_storage_module.tscn")
-const TRAINING_MODULE_SCENE := preload("res://scenes/modules/shelter_training_module.tscn")
+# 시설 기계는 더 이상 3D 기물로 놓지 않는다 — 로직 스크립트만 심고 UI(운영 독)로 연다.
+const WORKBENCH_MODULE_SCRIPT := preload("res://scripts/shelter_workbench_module.gd")
+const SCRATCHER_BANK_MODULE_SCRIPT := preload("res://scripts/scratcher_bank_module.gd")
+const CATNIP_SCRAPER_MODULE_SCRIPT := preload("res://scripts/catnip_scraper_module.gd")
+const STORAGE_MODULE_SCRIPT := preload("res://scripts/shelter_storage_module.gd")
+const TRAINING_MODULE_SCRIPT := preload("res://scripts/shelter_training_module.gd")
+const SHELTER_OPS_CONSOLE_SCRIPT := preload("res://scripts/hud/shelter_ops_console.gd")
 const DORMITORY_RACK_TEXTURE := preload(
 	"res://assets/interiors/modules/dormitory_rack_v1.png"
 )
@@ -163,6 +165,10 @@ var merchant_ui_open := false
 var contract_agent: Node3D
 var iron_trainer: Node3D
 var juhong_character: Node3D
+var ops_console: ShelterOpsConsole
+var facility_logic: Dictionary = {}
+var current_chat_resident: Node3D
+var resident_chat_random := RandomNumberGenerator.new()
 var contract_ui_layer: CanvasLayer
 var contract_ui_body: VBoxContainer
 var contract_ui_open := false
@@ -235,26 +241,14 @@ func _player_bed_position() -> Vector3:
 	return Vector3(-_room_half_extents().x + 1.95, 0.0, -5.4)
 
 
-func _workbench_position() -> Vector3:
-	# 서쪽 벽 정비 구역: 침대 남쪽.
-	return Vector3(-_room_half_extents().x + 3.1, 0.0, 1.6)
-
-
+# 기계 기물은 사라졌지만 작업조가 모이는 "작업 구역" 좌표는 남는다.
+# 배정된 주민은 여전히 이 지점 주변에 줄지어 앉아 일한다.
 func _scratcher_bank_position() -> Vector3:
 	return Vector3(-_room_half_extents().x + 20.0, 0.0, _factory_line_z())
 
 
 func _catnip_scraper_position() -> Vector3:
 	return Vector3(-_room_half_extents().x + 13.0, 0.0, _factory_line_z())
-
-
-func _storage_position() -> Vector3:
-	return Vector3(-_room_half_extents().x + 6.0, 0.0, _factory_line_z())
-
-
-func _training_position() -> Vector3:
-	# 서쪽 벽 정비 구역: 작업대 남쪽.
-	return Vector3(-_room_half_extents().x + 3.1, 0.0, 8.6)
 
 
 func _contract_agent_position() -> Vector3:
@@ -529,92 +523,41 @@ const LOCKED_FACILITY_HINTS := {
 }
 
 
-func _ensure_locked_silhouette(
-	module_root: Node3D, facility_id: String, facility_position: Vector3
-) -> void:
-	var silhouette_name := "LockedSilhouette_%s" % facility_id
-	if module_root.get_node_or_null(silhouette_name) != null:
-		return
-	var texture_paths := {
-		"workbench": "res://assets/interiors/modules/shelter_workbench_wall_aligned_v4.png",
-		"scratcher_bank": "res://assets/interiors/modules/scratcher_bank_wall_aligned_v1.png",
-		"catnip_scraper": "res://assets/interiors/modules/catnip_scraper_wall_aligned_v1.png",
-		"storage": "res://assets/interiors/modules/shelter_storage_wall_aligned_v4.png",
-		"training": "res://assets/interiors/modules/shelter_training_wall_aligned_v1.png",
-	}
-	var path := str(texture_paths.get(facility_id, ""))
-	if path.is_empty() or not ResourceLoader.exists(path):
-		return
-	var root := Node3D.new()
-	root.name = silhouette_name
-	root.position = facility_position
-	module_root.add_child(root)
-	var sprite := Sprite3D.new()
-	sprite.name = "SilhouetteSprite"
-	sprite.texture = load(path) as Texture2D
-	var height := float(sprite.texture.get_height())
-	sprite.pixel_size = 5.6 / float(maxi(1, sprite.texture.get_width()))
-	sprite.position.y = height * sprite.pixel_size * 0.5 + 0.02
-	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sprite.shaded = false
-	sprite.transparent = true
-	sprite.render_priority = 8
-	# 어둡고 반투명한 청사진 느낌. 실물과 헷갈리면 안 된다.
-	sprite.modulate = Color(0.35, 0.45, 0.52, 0.30)
-	root.add_child(sprite)
-	var label := Label3D.new()
-	label.name = "UnlockHint"
-	label.text = "잠김 · %s" % LOCKED_FACILITY_HINTS.get(facility_id, "계약으로 해금")
-	label.font = FONT
-	label.font_size = 40
-	label.pixel_size = 0.008
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	label.modulate = Color(0.62, 0.72, 0.78, 0.85)
-	label.outline_size = 8
-	label.position.y = 0.55
-	root.add_child(label)
-
-
 func _refresh_unlocked_facilities(module_root: Node3D = null, animate: bool = true) -> Array[String]:
 	if module_root == null:
 		module_root = get_node_or_null("StageOneModules") as Node3D
 	if module_root == null:
 		return []
 	var created: Array[String] = []
+	# 기계는 방에 놓지 않는다. 시설은 운영 독(UI)에서 열리고,
+	# 여기서는 그 UI가 부릴 로직 노드만 기존 이름을 유지한 채 심는다.
 	for facility_data in [
-		["workbench", "WeaponWorkbench", WORKBENCH_MODULE_SCENE, _workbench_position()],
-		["scratcher_bank", "ScratcherBank", SCRATCHER_BANK_MODULE_SCENE, _scratcher_bank_position()],
-		["catnip_scraper", "CatnipScraper", CATNIP_SCRAPER_MODULE_SCENE, _catnip_scraper_position()],
-		["storage", "ShelterStorage", STORAGE_MODULE_SCENE, _storage_position()],
-		["training", "SurvivalTrainingFacility", TRAINING_MODULE_SCENE, _training_position()],
+		["workbench", "WeaponWorkbench", WORKBENCH_MODULE_SCRIPT],
+		["scratcher_bank", "ScratcherBank", SCRATCHER_BANK_MODULE_SCRIPT],
+		["catnip_scraper", "CatnipScraper", CATNIP_SCRAPER_MODULE_SCRIPT],
+		["storage", "ShelterStorage", STORAGE_MODULE_SCRIPT],
+		["training", "SurvivalTrainingFacility", TRAINING_MODULE_SCRIPT],
 	]:
 		var facility_id := str(facility_data[0])
 		var node_name := str(facility_data[1])
 		if not GameState.is_shelter_facility_unlocked(facility_id):
-			# 잠긴 시설도 자리는 보여야 한다. 빈 방은 "여기서 뭘 하지"가 되고,
-			# 실루엣이 있는 방은 "저걸 어떻게 열지"가 된다.
-			_ensure_locked_silhouette(module_root, facility_id, facility_data[3] as Vector3)
 			continue
-		var silhouette := module_root.get_node_or_null("LockedSilhouette_%s" % facility_id)
-		if silhouette != null:
-			silhouette.queue_free()
-		if module_root.get_node_or_null(node_name) != null:
+		var existing := module_root.get_node_or_null(node_name)
+		if existing != null:
+			facility_logic[facility_id] = existing
 			continue
-		var scene := facility_data[2] as PackedScene
-		var module := scene.instantiate() as Node3D
+		var module_script := facility_data[2] as GDScript
+		var module := module_script.new() as Node3D
 		module.name = node_name
-		module.position = facility_data[3] as Vector3
 		module_root.add_child(module)
-		if animate:
-			module.scale = Vector3(0.82, 0.82, 0.82)
-			var build_tween := module.create_tween()
-			build_tween.tween_property(module, "scale", Vector3.ONE, 0.42).set_trans(
-				Tween.TRANS_BACK
-			).set_ease(Tween.EASE_OUT)
+		# 보이지 않는 로직 노드가 접근 프롬프트를 띄우면 안 된다. 그룹은 침대만 남긴다.
+		module.remove_from_group("shelter_module")
+		facility_logic[facility_id] = module
 		created.append(facility_id)
 	if animate and not created.is_empty():
 		refresh_shelter_residents(true)
+	if ops_console != null:
+		ops_console.refresh()
 	return created
 
 
@@ -731,6 +674,7 @@ func _setup_iron_trainer() -> void:
 	iron_trainer = SHELTER_CONTRACT_TRAINER_SCRIPT.new() as Node3D
 	iron_trainer.position = _iron_trainer_position()
 	add_child(iron_trainer)
+	iron_trainer.call("set_player_target", player)
 
 
 func _setup_juhong_story_character() -> void:
@@ -1310,6 +1254,9 @@ func _build_interface() -> void:
 	canvas.name = "ShelterHUD"
 	canvas.layer = 5
 	add_child(canvas)
+	ops_console = SHELTER_OPS_CONSOLE_SCRIPT.new()
+	ops_console.attach(self)
+	ops_console.build_dock(canvas)
 	var theme := Theme.new()
 	theme.default_font = FONT
 	var panel := PanelContainer.new()
@@ -2826,6 +2773,8 @@ func _apply_shelter_safe_layout() -> void:
 		status_panel.offset_top = 24.0 + safe.y
 		status_panel.offset_right = 270.0
 		status_panel.offset_bottom = status_panel.offset_top + 52.0
+	if ops_console != null:
+		ops_console.apply_layout(safe)
 
 
 func _update_nearby_station() -> void:
@@ -2892,6 +2841,19 @@ func _update_nearby_station() -> void:
 			nearest = "module"
 			nearest_distance = module_distance
 			nearest_module = module
+	# 주민 곁을 지나면 잡담을 걸 수 있다. 관리(일 배정)는 운영 독이 맡고,
+	# 발로 하는 건 대화뿐이다.
+	var nearest_resident: Node3D
+	for node in get_tree().get_nodes_in_group("shelter_resident"):
+		if not (node is Node3D) or not is_instance_valid(node):
+			continue
+		var resident := node as Node3D
+		var resident_distance := player.global_position.distance_to(resident.global_position)
+		if resident_distance <= 1.55 and resident_distance < nearest_distance:
+			nearest = "resident_chat"
+			nearest_distance = resident_distance
+			nearest_resident = resident
+	current_chat_resident = nearest_resident
 	if current_module != nearest_module:
 		if is_instance_valid(current_module) and current_module.has_method("set_interaction_focus"):
 			current_module.call("set_interaction_focus", false)
@@ -2906,19 +2868,14 @@ func _update_nearby_station() -> void:
 	if current_station.is_empty():
 		prompt_label.text = ""
 	elif current_station == "module" and is_instance_valid(current_module):
+		# 기계가 사라진 지금 이 그룹에는 침대만 남아 있다.
 		prompt_label.text = "[F]  %s" % str(current_module.call("get_interaction_prompt"))
-		interact_button.text = "사용"
-		var module_kind := str(current_module.get_meta("module_kind", ""))
-		var interaction_icon := "workbench"
-		if module_kind == "catnip_scraper":
-			interaction_icon = "catnip"
-		elif module_kind == "scratcher_bank":
-			interaction_icon = "scrap"
-		elif module_kind == "training":
-			interaction_icon = "fitness"
-		elif module_kind == "storage":
-			interaction_icon = "secure"
-		interact_button.icon = UI_ICONS.get_icon(interaction_icon, 32, Color("#dce8e1"))
+		interact_button.text = "휴식"
+		interact_button.icon = UI_ICONS.get_icon("recovery", 32, Color("#dce8e1"))
+	elif current_station == "resident_chat":
+		prompt_label.text = "[F]  주민과 잡담"
+		interact_button.text = "잡담"
+		interact_button.icon = UI_ICONS.get_icon("resident", 32, Color("#9fc9d8"))
 	elif current_station == "merchant_waiting":
 		prompt_label.text = "[F]  누군가와 대화"
 		interact_button.text = "대화"
@@ -2958,6 +2915,8 @@ func _interact() -> void:
 		"module":
 			if is_instance_valid(current_module) and current_module.has_method("interact"):
 				_show_status(str(current_module.call("interact")))
+		"resident_chat":
+			_spawn_resident_chat_bubble(current_chat_resident)
 		"pipe_exit":
 			_open_raid_zone_select()
 		"merchant_waiting":
@@ -2973,8 +2932,57 @@ func _interact() -> void:
 	_update_stats()
 
 
+# 잡담은 정보가 아니라 공기다. 다만 그 공기에 세계의 비밀이 조금씩 섞여 나온다.
+const RESIDENT_CHAT_LINES := [
+	"오늘도 사이렌은 남쪽에서만 울리더라.",
+	"사람들 냄새가 하나도 안 남았어. 삼백 밤이 지났는데도.",
+	"캣닢 배급이 늘었대. 나비 덕이라고들 해.",
+	"격리 신호 얘기 들었어? 벽 너머에서 온다던데.",
+	"발톱 관리는 게으름이 아니야. 생존이지.",
+	"어젯밤 고철 더미에서 라디오가 지직거렸대. 아직 누가 있다는 거야.",
+	"같은 문장만 반복되는 방송이 있대. 소름 돋아서 더는 안 들었어.",
+	"철근 교관 무섭지. 근데 그 덕에 다들 살아 있잖아.",
+	"바깥은 어때? …아니, 말 안 해도 돼. 얼굴에 다 써 있어.",
+	"꾹꾹이도 하다 보면 요령이 붙어. 뭐든 그래.",
+	"사자님은 뭔가 알고 있어. 말을 아끼는 것뿐이지.",
+	"비 오는 날엔 도시가 조용해. 그게 더 무서워.",
+]
+
+
+func _spawn_resident_chat_bubble(resident: Node3D) -> void:
+	if not is_instance_valid(resident):
+		return
+	var previous := resident.get_node_or_null("ChatBubble")
+	if previous != null:
+		previous.queue_free()
+	var label := Label3D.new()
+	label.name = "ChatBubble"
+	label.text = RESIDENT_CHAT_LINES[resident_chat_random.randi_range(0, RESIDENT_CHAT_LINES.size() - 1)]
+	label.font = FONT
+	label.font_size = 30
+	label.pixel_size = 0.0056
+	label.width = 340.0
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.position = Vector3(0.0, 1.92, 0.0)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.render_priority = 127
+	label.modulate = Color(0.92, 0.95, 0.93, 0.0)
+	label.outline_modulate = Color(0.015, 0.02, 0.016, 0.98)
+	label.outline_size = 10
+	resident.add_child(label)
+	var fade := label.create_tween()
+	fade.tween_property(label, "modulate:a", 1.0, 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	fade.tween_interval(2.8)
+	fade.tween_property(label, "modulate:a", 0.0, 0.4).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	fade.tween_callback(label.queue_free)
+
+
 func _update_stats() -> void:
 	GameState._ensure_resident_records()
+	if ops_console != null:
+		ops_console.refresh()
 	stats_label.text = "SHELTER 01   ·   Tier %d   ·   Lv.%d" % [
 		GameState.shelter_tier,
 		GameState.player_level,
@@ -4382,6 +4390,10 @@ func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
 		return true
 	if _mobile_button_contains(interact_button, touch.position):
 		_interact()
+		if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
+			Input.vibrate_handheld(16)
+		return true
+	if ops_console != null and ops_console.handle_touch(touch.position):
 		if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
 			Input.vibrate_handheld(16)
 		return true

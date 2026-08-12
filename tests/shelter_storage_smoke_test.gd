@@ -76,7 +76,8 @@ func _run() -> void:
 	if game_state.call("get_storage_grid_size") != Vector2i(7, 6):
 		_fail("storage upgrade did not expand the grid")
 
-	var storage := load("res://scenes/modules/shelter_storage_module.tscn").instantiate() as Node3D
+	# 기계 씬은 제거됐다 — 창고는 스크립트 전용 로직 노드로 살고 UI는 운영 독에서 열린다.
+	var storage := (load("res://scripts/shelter_storage_module.gd") as GDScript).new() as Node3D
 	root.add_child(storage)
 	await process_frame
 	storage.call("interact")

@@ -18,6 +18,28 @@ func _run() -> void:
 	var initial_modules := first_shelter.get_node("StageOneModules") as Node3D
 	assert(initial_modules.get_node_or_null("PlayerBed") != null)
 	assert(str(first_shelter.call("_build_offline_status_text", {})).is_empty())
+	# 창고는 시작부터 열려 있다(전리품 보관 학습). 나머지는 계약/복귀로 해금.
+	assert(initial_modules.get_node_or_null("ShelterStorage") != null)
+	for locked_node_name in [
+		"WeaponWorkbench",
+		"ScratcherBank",
+		"CatnipScraper",
+		"SurvivalTrainingFacility",
+	]:
+		assert(initial_modules.get_node_or_null(locked_node_name) == null)
+	assert(get_nodes_in_group("shelter_contract_agent").size() == 1)
+	assert(get_nodes_in_group("shelter_merchant").is_empty())
+	assert(root.find_child("ContractNarrativePanel", true, false) is PanelContainer)
+	# 타자기 연출 때문에 한 줄에 입력이 2번(전체 표시→다음) 들 수 있다.
+	for _advance_index in 24:
+		if not bool(first_shelter.get("contract_story_open")):
+			break
+		first_shelter.call("_advance_contract_story")
+	assert(not bool(first_shelter.get("contract_story_open")))
+	assert(bool(game_state.get("saja_intro_seen")))
+	# 스토리 모달이 닫혀야(다음 프레임 그룹 해제) 하단 액션 버튼이 다시 보인다.
+	await process_frame
+	await process_frame
 	var shelter_medkit_button := root.find_child("ShelterMedkitButton", true, false) as Button
 	assert(shelter_medkit_button != null)
 	assert(shelter_medkit_button.visible)
@@ -28,20 +50,11 @@ func _run() -> void:
 	first_shelter.call("_use_shelter_medkit")
 	assert(int(game_state.get("player_health")) == 88)
 	assert(int(game_state.get("medkits")) == 0)
-	for locked_node_name in [
-		"WeaponWorkbench",
-		"ScratcherBank",
-		"CatnipScraper",
-		"ShelterStorage",
-		"SurvivalTrainingFacility",
-	]:
-		assert(initial_modules.get_node_or_null(locked_node_name) == null)
-	assert(get_nodes_in_group("shelter_contract_agent").size() == 1)
-	assert(get_nodes_in_group("shelter_merchant").is_empty())
-	assert(root.find_child("ContractNarrativePanel", true, false) is PanelContainer)
-	for _line_index in 5:
-		first_shelter.call("_advance_contract_story")
-	assert(bool(game_state.get("saja_intro_seen")))
+	# 운영 독: 시설 5종 버튼이 항상 떠 있고 잠금 상태를 보여준다.
+	var ops_dock := root.find_child("ShelterOpsDock", true, false) as VBoxContainer
+	assert(ops_dock != null)
+	assert(ops_dock.get_node_or_null("OpsButton_scratcher_bank") is Button)
+	assert((ops_dock.get_node("OpsButton_scratcher_bank") as Button).text.contains("잠김"))
 	first_shelter.queue_free()
 	await process_frame
 
@@ -65,7 +78,9 @@ func _run() -> void:
 	assert(get_nodes_in_group("shelter_contract_agent").size() == 1)
 	assert(get_nodes_in_group("shelter_iron_trainer").size() == 1)
 	assert(root.find_child("ContractNarrativePanel", true, false) is PanelContainer)
-	for _line_index in 5:
+	for _advance_index in 24:
+		if not bool(progressed_shelter.get("contract_story_open")):
+			break
 		progressed_shelter.call("_advance_contract_story")
 	assert(bool(game_state.get("saja_second_run_intro_seen")))
 	var iron_accept := game_state.call("accept_current_iron_mission") as Dictionary
@@ -89,15 +104,12 @@ func _run() -> void:
 		== "쉘터에 복귀했습니다. 생산기에 주민을 배치할 수 있습니다."
 	)
 	assert(progressed_modules.get_node_or_null("ScratcherBank") != null)
-	assert(progressed_modules.get_node_or_null("FactoryInfrastructure") != null)
-	assert(
-		progressed_modules.get_node_or_null("FactoryWorkerStations/ScratcherWorkerLane")
-		!= null
-	)
-	assert(
-		progressed_modules.get_node_or_null("FactoryWorkerStations/ScratcherLineSlot01")
-		!= null
-	)
+	# 기계는 로직 노드다 — 씬 기물이 아니라 운영 독이 여는 UI만 남는다.
+	var scratcher_logic := progressed_modules.get_node("ScratcherBank")
+	assert(scratcher_logic.get_child_count() == 0)
+	assert(not scratcher_logic.is_in_group("shelter_module"))
+	var facility_logic := progressed_shelter.get("facility_logic") as Dictionary
+	assert(facility_logic.get("scratcher_bank") == scratcher_logic)
 
 	progressed_shelter.call("_unlock_all_facilities_debug")
 	assert(progressed_modules.get_node_or_null("WeaponWorkbench") != null)

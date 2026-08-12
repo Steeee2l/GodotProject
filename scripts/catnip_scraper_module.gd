@@ -8,7 +8,8 @@ const RESIDENT_PORTRAITS := preload("res://scripts/resident_portrait_catalog.gd"
 
 @export var interaction_radius := 4.0
 
-@onready var sprite: Sprite3D = $ScraperSprite
+# 씬 없이 로직 노드로만 인스턴스될 수 있다 — 스프라이트는 없을 수 있다.
+@onready var sprite: Sprite3D = get_node_or_null("ScraperSprite") as Sprite3D
 
 var ui_layer: CanvasLayer
 var content: VBoxContainer

@@ -198,7 +198,8 @@ const CATEGORY_ICONS := {
 
 @export var interaction_radius := 3.9
 
-@onready var sprite: Sprite3D = $WorkbenchSprite
+# 씬 없이 로직 노드로만 인스턴스될 수 있다 — 스프라이트는 없을 수 있다.
+@onready var sprite: Sprite3D = get_node_or_null("WorkbenchSprite") as Sprite3D
 
 var has_focus := false
 var ui_layer: CanvasLayer
@@ -213,12 +214,11 @@ func _ready() -> void:
 	add_to_group("shelter_module")
 	add_to_group("shelter_workbench")
 	set_meta("module_kind", "workbench")
-	# 텍스처·위치·크기는 씬(.tscn)이 정한다. 예전에는 여기서 덮어써서
-	# 씬에 새 아트를 넣어도 런타임에는 옛 이미지가 나왔다.
-	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sprite.region_enabled = false
-	sprite.no_depth_test = false
-	sprite.render_priority = 12
+	if sprite != null:
+		sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		sprite.region_enabled = false
+		sprite.no_depth_test = false
+		sprite.render_priority = 12
 
 
 func get_interaction_prompt() -> String:

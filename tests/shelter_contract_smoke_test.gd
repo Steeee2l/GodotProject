@@ -27,6 +27,11 @@ func _run() -> void:
 	# 별개 NPC(철근)의 것이라 null 접근으로 죽었다.
 	var trainer_sprite := trainer.get_node("CharacterSprite") as AnimatedSprite3D
 	assert(trainer_sprite.sprite_frames.get_frame_count("idle_down_left") == 4)
+	# 시작 시 사자 소개 스토리가 자동으로 열린다 — 닫아야 상호작용 스캔이 돈다.
+	for _advance_index in 24:
+		if not bool(shelter.get("contract_story_open")):
+			break
+		shelter.call("_advance_contract_story")
 	var shelter_player := shelter.get_node("ShelterPlayer") as CharacterBody3D
 	shelter_player.global_position = trainer.global_position
 	shelter.call("_update_nearby_station")

@@ -80,78 +80,29 @@ func _run() -> void:
 		var shape := collision.shape as BoxShape3D
 		assert(shape.size == Vector3(2.35, 0.9, 2.95))
 		assert((bed as Node).get_node("GroundShadow") is MeshInstance3D)
-	var workbench := get_nodes_in_group("shelter_workbench")[0] as Node
-	var workbench_sprite := workbench.get_node("WorkbenchSprite") as Sprite3D
-	assert(workbench_sprite.texture.resource_path == WORKBENCH_TEXTURE_PATH)
-	assert(workbench_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
-	assert(not workbench_sprite.region_enabled)
-	assert(workbench_sprite.position.y > 1.0)
-	assert(is_equal_approx(workbench_sprite.position.z, 0.02))
-	assert(workbench_sprite.pixel_size > 0.003)
-	assert(workbench_sprite.scale == Vector3.ONE)
-	assert(not workbench_sprite.no_depth_test)
-	assert((workbench.get_node("GroundShadow") as MeshInstance3D).visible)
-	assert(workbench.has_method("interact"))
-	var bank := get_nodes_in_group("scratcher_bank")[0] as Node
-	var bank_sprite := bank.get_node("BankSprite") as Sprite3D
-	assert(bank_sprite.texture.resource_path == SCRATCHER_BANK_TEXTURE_PATH)
-	assert(bank_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
-	assert(bank_sprite.position.y > 1.0)
-	assert(is_equal_approx(bank_sprite.position.z, 0.02))
-	assert(bank_sprite.pixel_size > 0.003)
-	assert(not bank_sprite.no_depth_test)
-	assert((bank.get_node("GroundShadow") as MeshInstance3D).visible)
-	assert(bank.has_method("interact"))
-	var catnip_scraper := get_nodes_in_group("catnip_scraper")[0] as Node
-	var catnip_sprite := catnip_scraper.get_node("ScraperSprite") as Sprite3D
-	assert(catnip_sprite.texture.resource_path == CATNIP_SCRAPER_TEXTURE_PATH)
-	assert(catnip_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
-	assert(catnip_sprite.position.y > 1.0)
-	assert(is_equal_approx(catnip_sprite.position.z, 0.02))
-	assert(catnip_sprite.pixel_size > 0.003)
-	assert(not catnip_sprite.no_depth_test)
-	assert((catnip_scraper.get_node("GroundShadow") as MeshInstance3D).visible)
-	assert(catnip_scraper.has_method("interact"))
-	var training := get_nodes_in_group("training_facility")[0] as Node
-	var training_sprite := training.get_node("TrainingSprite") as Sprite3D
-	assert(training_sprite.texture.resource_path == TRAINING_TEXTURE_PATH)
-	assert(training_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
-	assert(training_sprite.position.y > 1.0)
-	assert(is_equal_approx(training_sprite.position.z, 0.02))
-	assert(training_sprite.pixel_size > 0.003)
-	assert(not training_sprite.no_depth_test)
-	assert((training.get_node("GroundShadow") as MeshInstance3D).visible)
-	assert(training.has_method("interact"))
-	var storage := get_nodes_in_group("shelter_storage")[0] as Node
-	var storage_sprite := storage.get_node("StorageSprite") as Sprite3D
-	assert(storage_sprite.texture.resource_path == STORAGE_TEXTURE_PATH)
-	assert(storage_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
-	assert(not storage_sprite.region_enabled)
-	assert(storage_sprite.position.y > 1.0)
-	assert(is_equal_approx(storage_sprite.position.z, 0.02))
-	assert(storage_sprite.pixel_size > 0.003)
-	assert(storage_sprite.scale == Vector3.ONE)
-	assert(not storage_sprite.no_depth_test)
-	assert((storage.get_node("GroundShadow") as MeshInstance3D).visible)
-	assert(storage.has_method("interact"))
-	# 생산 라인: 북쪽 벽(z<0)에 한 줄, x 순서는 창고 → 캣닢 → 꾹꾹이.
-	assert(catnip_scraper.position.z < 0.0)
-	assert(bank.position.z < 0.0)
-	assert(storage.position.z < 0.0)
-	assert(is_equal_approx(storage.position.z, catnip_scraper.position.z))
-	assert(is_equal_approx(bank.position.z, catnip_scraper.position.z))
-	assert(storage.position.x < catnip_scraper.position.x)
-	assert(catnip_scraper.position.x < bank.position.x)
-	# 정비 구역: 서쪽 벽 기둥, 중앙 광장은 비워 둔다.
-	assert(workbench.position.z > 0.0)
-	assert(training.position.z > workbench.position.z)
-	assert(workbench.position.x < -18.0)
-	assert(training.position.x < -18.0)
-
-	# 바닥 배치선·데크·도크·레인 같은 바닥 장식은 전부 걷어냈다. 시선을 어지럽히고
-	# 원근이 이상해 보이기만 했다. 벽면 설비(위에서 확인)만 남긴다.
-	assert(module_root.get_node_or_null("FactoryInfrastructure") == null)
-	assert(module_root.get_node_or_null("FactoryWorkerStations") == null)
+	# 기계 기물은 전부 걷어냈다 — 시설은 스프라이트 없는 로직 노드로만 존재하고
+	# UI(운영 독)에서 연다. 쉘터 바닥에는 침대·NPC·주민만 남는다.
+	for facility_group in [
+		"shelter_workbench",
+		"scratcher_bank",
+		"catnip_scraper",
+		"training_facility",
+		"shelter_storage",
+	]:
+		var facility := get_nodes_in_group(facility_group)[0] as Node3D
+		assert(facility.has_method("interact"))
+		assert(facility.get_child_count() == 0)
+		assert(not facility.is_in_group("shelter_module"))
+	# 접근 상호작용 그룹에는 침대만 남는다.
+	for interactive_module in get_nodes_in_group("shelter_module"):
+		assert(str((interactive_module as Node).get_meta("module_kind", "")) == "bed")
+	# 운영 독이 시설 5종을 연다.
+	var ops_dock := shelter.find_child("ShelterOpsDock", true, false) as VBoxContainer
+	assert(ops_dock != null)
+	for facility_id in [
+		"scratcher_bank", "catnip_scraper", "workbench", "training", "storage",
+	]:
+		assert(ops_dock.get_node_or_null("OpsButton_%s" % facility_id) is Button)
 
 	assert(shelter.get_node("ShelterPlayer") is CharacterBody3D)
 	assert(shelter.get("dash_button") is Button)

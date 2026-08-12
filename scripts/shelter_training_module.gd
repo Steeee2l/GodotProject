@@ -7,7 +7,8 @@ const SHELTER_UI := preload("res://scripts/shelter_ui_components.gd")
 
 @export var interaction_radius := 4.1
 
-@onready var sprite: Sprite3D = $TrainingSprite
+# 씬 없이 로직 노드로만 인스턴스될 수 있다 — 스프라이트는 없을 수 있다.
+@onready var sprite: Sprite3D = get_node_or_null("TrainingSprite") as Sprite3D
 
 var ui_layer: CanvasLayer
 var content: VBoxContainer

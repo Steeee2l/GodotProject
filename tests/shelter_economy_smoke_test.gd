@@ -33,6 +33,9 @@ func _run() -> void:
 	game_state.set("weapon_durability", 42.0)
 	game_state.set("shelter_last_progress_time", int(Time.get_unix_time_from_system()) - 7200)
 	game_state.set("workbench_repair_active", true)
+	# 생산은 원자재(가동 연료)를 태워야 돈다 — 출정과 쉘터를 묶는 관문.
+	game_state.set("raw_scrap", 100_000)
+	game_state.set("raw_catnip", 100_000)
 	var shelter := load("res://scenes/shelter_interior.tscn").instantiate() as Node3D
 	root.add_child(shelter)
 	await process_frame
@@ -55,8 +58,9 @@ func _run() -> void:
 		if not currency_labels.has(resource_id):
 			_fail("shelter resource value is missing for %s" % resource_name)
 			return
+		# 재화 칩 라벨은 압축 숫자만 담는다. 이름은 아이콘·툴팁이 맡는다.
 		var resource_label := currency_labels[resource_id] as Label
-		if resource_label == null or not resource_label.text.contains(resource_name):
+		if resource_label == null or resource_label.text.strip_edges().is_empty():
 			_fail("shelter resource value is unreadable for %s" % resource_name)
 			return
 		var resource_icon := shelter.find_child("%sIcon" % resource_name, true, false) as TextureRect
@@ -173,11 +177,13 @@ func _run() -> void:
 	game_state.call("tick_shelter_live", 60.0)
 	if int(game_state.get("scrap")) <= live_scrap_before:
 		_fail("live shelter worker tick did not add scrap")
+	# 통조림이 떨어지면 생산 라인이 멈춘다("생산 중단 · 통조림 필요").
 	game_state.set("canned_food", 0)
+	game_state.set("shelter_food_fraction", 0.0)
 	var unfed_scrap_before := int(game_state.get("scrap"))
 	game_state.call("tick_shelter_live", 3600.0)
-	if int(game_state.get("scrap")) <= unfed_scrap_before:
-		_fail("assigned shelter workers must keep producing without canned food")
+	if int(game_state.get("scrap")) > unfed_scrap_before + 1:
+		_fail("shelter workers must stop producing without canned food")
 	game_state.set("canned_food", 20)
 
 	var workbench := get_nodes_in_group("shelter_workbench")[0] as Node
@@ -376,9 +382,14 @@ func _run() -> void:
 	await process_frame
 	game_state.set("rescued_workers", 4)
 	game_state.call("_ensure_resident_records")
+	# 복원 상태에서 시설이 잠겨 있으면 생산률이 0이라 강화 비교가 무의미해진다.
+	game_state.call("unlock_all_shelter_facilities")
 	var restored_resident_ids := game_state.get("resident_cat_ids") as Array
-	if not restored_resident_ids.is_empty():
-		game_state.call("assign_worker_to_catnip", str(restored_resident_ids[0]))
+	if restored_resident_ids.is_empty():
+		_fail("restored save must keep at least one resident")
+	game_state.call("assign_worker_to_catnip", str(restored_resident_ids[0]))
+	if int(game_state.call("get_active_catnip_workers")) < 1:
+		_fail("catnip worker assignment failed after restore")
 
 	var before_level := int(game_state.get("scratcher_bank_level"))
 	var upgraded := bool(game_state.call("try_upgrade_scratcher_bank"))

@@ -1449,6 +1449,9 @@ func _resolve_melee_hit(direction: Vector3) -> void:
 		if GameState.is_churu_buff_active("sharp_claws"):
 			melee_damage = roundi(float(melee_damage) * 1.4)
 		enemy.call("take_melee_hit", melee_damage, direction, backstab)
+		# 배트가 실제로 맞았을 때만 화면이 울린다 — 헛스윙과 명중의 손맛을 가른다.
+		camera_shake_time = maxf(camera_shake_time, 0.12)
+		camera_shake_strength = maxf(camera_shake_strength, 0.22 if backstab else 0.16)
 
 
 func _spawn_player_melee_arc(direction: Vector3) -> void:

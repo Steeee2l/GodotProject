@@ -2180,27 +2180,25 @@ func get_worker_production_per_second(worker_id: String, production_kind: String
 				return 0.0
 			if not assigned_worker_ids.has(worker_id):
 				return 0.0
-			var base_rate := maxi(
-				1,
-				roundi(
-					float(trait_data.get("kneading", 1.0))
-					* scratcher_multiplier
-				)
-			)
-			return float(base_rate) * get_production_multiplier()
+			# 배율은 반올림 밖에서 곱한다. 안에서 곱하면 특성이 낮은 주민은
+			# 강화를 해도 정수 반올림에 먹혀 산출이 그대로다(죽은 업그레이드).
+			var base_rate := float(maxi(1, roundi(float(trait_data.get("kneading", 1.0)))))
+			return base_rate * scratcher_multiplier * get_production_multiplier()
 		"catnip":
 			if not is_shelter_facility_unlocked("catnip_scraper"):
 				return 0.0
 			if not assigned_catnip_worker_ids.has(worker_id):
 				return 0.0
-			return float(maxi(
-				1,
-				roundi(
-					float(trait_data.get("catnip", 1.0))
-					* BASE_CATNIP_PER_WORKER_SECOND
-					* catnip_scraper_multiplier
-				)
-			))
+			return (
+				float(maxi(
+					1,
+					roundi(
+						float(trait_data.get("catnip", 1.0))
+						* BASE_CATNIP_PER_WORKER_SECOND
+					)
+				))
+				* catnip_scraper_multiplier
+			)
 	return 0.0
 
 
@@ -2239,10 +2237,11 @@ func get_base_scrap_per_hour() -> float:
 	var total_per_second := 0.0
 	for worker_id in assigned_worker_ids:
 		var trait_data := get_resident_trait(worker_id)
-		total_per_second += float(maxi(
-			1,
-			roundi(float(trait_data.get("kneading", 1.0)) * scratcher_multiplier)
-		))
+		# 배율은 반올림 밖에서 — get_worker_production_per_second와 같은 이유.
+		total_per_second += (
+			float(maxi(1, roundi(float(trait_data.get("kneading", 1.0)))))
+			* scratcher_multiplier
+		)
 	return total_per_second * 3600.0
 
 

@@ -145,6 +145,10 @@ func _fire_ak47() -> void:
 	)
 	host._add_fatigue(FATIGUE_SHOT_GAIN)
 	_apply_weapon_recoil(aim_direction)
+	# 발사 반동을 화면에도 아주 약하게 싣는다. 산탄(다연발)은 조금 더 묵직하게.
+	var recoil_kick := 0.032 if pellet_count <= 1 else 0.062
+	host.camera_shake_time = maxf(host.camera_shake_time, 0.05)
+	host.camera_shake_strength = maxf(host.camera_shake_strength, recoil_kick)
 	# 총성은 도시가 듣는다. 소음기를 달면 그만큼 덜 들린다.
 	var sound_scale := clampf(float(host.weapon_stats.get("sound_radius", 1.0)), 0.15, 2.0)
 	host._add_raid_pressure(

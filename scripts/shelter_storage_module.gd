@@ -46,7 +46,8 @@ const COMPONENT_TEXTURES := {
 
 @export var interaction_radius := 4.0
 
-@onready var sprite: Sprite3D = $StorageSprite
+# 씬 없이 로직 노드로만 인스턴스될 수 있다 — 스프라이트는 없을 수 있다.
+@onready var sprite: Sprite3D = get_node_or_null("StorageSprite") as Sprite3D
 
 var ui_layer: CanvasLayer
 var content: VBoxContainer
@@ -57,11 +58,11 @@ func _ready() -> void:
 	add_to_group("shelter_module")
 	add_to_group("shelter_storage")
 	set_meta("module_kind", "storage")
-	# 텍스처·위치·크기는 씬(.tscn)이 정한다.
-	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sprite.region_enabled = false
-	sprite.no_depth_test = false
-	sprite.render_priority = 12
+	if sprite != null:
+		sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		sprite.region_enabled = false
+		sprite.no_depth_test = false
+		sprite.render_priority = 12
 
 
 func get_interaction_prompt() -> String:

@@ -37,6 +37,8 @@ var extraction_result_title: Label
 var extraction_route_icon: TextureRect
 var extraction_route_label: Label
 var extraction_result_summary: Label
+var extraction_stat_row: HBoxContainer
+var extraction_reward_flow: HFlowContainer
 var extraction_xp_bar: ProgressBar
 var extraction_xp_label: Label
 var extraction_level_choice_title: Label
@@ -672,6 +674,60 @@ func build_raid_opportunity_hud() -> void:
 
 
 
+func add_result_stat(icon_name: String, value: String, caption: String, accent: Color = HudStyle.GOLD) -> void:
+	# 정산 스탯 타일: 아이콘 + 큰 숫자 + 작은 라벨. 텍스트 줄보다 성과가 한눈에 온다.
+	if extraction_stat_row == null:
+		return
+	var tile := PanelContainer.new()
+	tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tile.add_theme_stylebox_override("panel", HudStyle.panel(HudStyle.INK_WELL, HudStyle.LINE, 7))
+	extraction_stat_row.add_child(tile)
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 2)
+	tile.add_child(box)
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(26, 26)
+	icon.texture = UI_ICONS.get_icon(icon_name, 26, accent)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	box.add_child(icon)
+	var value_label := HudStyle.label(value, HudStyle.TYPE_NUMBER, HudStyle.TEXT)
+	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(value_label)
+	var caption_label := HudStyle.label(caption, HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_DIM)
+	caption_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(caption_label)
+
+
+func add_result_reward_chip(icon_name: String, text: String, accent: Color = HudStyle.GOLD) -> void:
+	# 보상 칩: "+95 XP", "고철 +1.3K" 같은 획득 항목 하나가 칩 하나.
+	if extraction_reward_flow == null:
+		return
+	var chip := PanelContainer.new()
+	chip.add_theme_stylebox_override("panel", HudStyle.chip(accent.darkened(0.3)))
+	extraction_reward_flow.add_child(chip)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 5)
+	chip.add_child(row)
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(16, 16)
+	icon.texture = UI_ICONS.get_icon(icon_name, 16, accent)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	row.add_child(icon)
+	row.add_child(HudStyle.label(text, HudStyle.TYPE_CAPTION, HudStyle.TEXT))
+
+
+func clear_result_visuals() -> void:
+	for container in [extraction_stat_row, extraction_reward_flow]:
+		if container == null:
+			continue
+		for child in container.get_children():
+			child.queue_free()
+
+
 func build_extraction_progress_ui() -> void:
 	extraction_result_panel = PanelContainer.new()
 	extraction_result_panel.name = "ExtractionResultPanel"
@@ -738,10 +794,21 @@ func build_extraction_progress_ui() -> void:
 	extraction_route_label.add_theme_font_size_override("font_size", 17)
 	extraction_route_label.add_theme_color_override("font_color", Color("#e4e1d3"))
 	route_row.add_child(extraction_route_label)
+	# 성과는 숫자 타일로, 보상은 칩으로 — 텍스트 여덟 줄 대신 한눈에 읽히는 정산.
+	extraction_stat_row = HBoxContainer.new()
+	extraction_stat_row.name = "ExtractionStatRow"
+	extraction_stat_row.add_theme_constant_override("separation", 10)
+	content.add_child(extraction_stat_row)
+	extraction_reward_flow = HFlowContainer.new()
+	extraction_reward_flow.name = "ExtractionRewardFlow"
+	extraction_reward_flow.add_theme_constant_override("h_separation", 8)
+	extraction_reward_flow.add_theme_constant_override("v_separation", 6)
+	content.add_child(extraction_reward_flow)
 	extraction_result_summary = Label.new()
+	extraction_result_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	extraction_result_summary.add_theme_font_override("font", FONT)
-	extraction_result_summary.add_theme_font_size_override("font_size", 18)
-	extraction_result_summary.add_theme_color_override("font_color", Color("#c4cec8"))
+	extraction_result_summary.add_theme_font_size_override("font_size", HudStyle.TYPE_BODY)
+	extraction_result_summary.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
 	content.add_child(extraction_result_summary)
 	extraction_xp_bar = ProgressBar.new()
 	extraction_xp_bar.custom_minimum_size = Vector2(0, 24)
