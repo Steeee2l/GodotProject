@@ -48,6 +48,11 @@ func build_dock(hud_layer: CanvasLayer) -> void:
 		button.add_theme_font_override("font", FONT)
 		button.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION)
 		button.add_theme_constant_override("h_separation", 8)
+		# 재화 아이콘(고철·캣닢)은 대형 생성 PNG다 — 원본 크기로 들어오면
+		# 버튼 최소 크기가 폭발하므로 반드시 아이콘 폭을 못 박는다.
+		button.expand_icon = true
+		button.add_theme_constant_override("icon_max_width", 24)
+		button.clip_text = true
 		HudStyle.style_button(button, entry["accent"] as Color)
 		if not DisplayServer.is_touchscreen_available():
 			button.pressed.connect(open_facility.bind(facility_id))
