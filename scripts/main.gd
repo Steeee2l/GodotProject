@@ -4058,11 +4058,19 @@ func _setup_building_overlays() -> void:
 	_update_building_overlays()
 
 
+func _camera_pixels_per_unit() -> float:
+	# KEEP_WIDTH(세로모드)에서 camera.size는 '가로 폭'이다 — 세로 해상도로 나누면
+	# 2D 오버레이(플레이어·건물·차량)만 1.7배 커져 3D로 그려지는 적과 어긋난다.
+	var viewport_size := get_viewport().get_visible_rect().size
+	if camera.keep_aspect == Camera3D.KEEP_WIDTH:
+		return viewport_size.x / camera.size
+	return viewport_size.y / camera.size
+
+
 func _update_building_overlays() -> void:
 	if building_canvas == null:
 		return
-	var viewport_height := get_viewport().get_visible_rect().size.y
-	var screen_scale := viewport_height / camera.size
+	var screen_scale := _camera_pixels_per_unit()
 	var player_depth := OVERLAY_DEPTH_SORT.world_depth(player.global_position)
 	for index in range(roll_afterimages.size() - 1, -1, -1):
 		var ghost := roll_afterimages[index]
@@ -4317,8 +4325,7 @@ func _get_structure_footprint_radius(structure: Node3D) -> float:
 func _is_player_inside_sprite_screen_rect(sprite: Sprite3D) -> bool:
 	if sprite.texture == null or camera.projection != Camera3D.PROJECTION_ORTHOGONAL:
 		return false
-	var viewport_height := get_viewport().get_visible_rect().size.y
-	var screen_scale := viewport_height / camera.size
+	var screen_scale := _camera_pixels_per_unit()
 	var sprite_size := Vector2(sprite.texture.get_width(), sprite.texture.get_height()) * sprite.pixel_size * screen_scale
 	var sprite_center := camera.unproject_position(sprite.global_position)
 	var sprite_rect := Rect2(sprite_center - sprite_size * 0.5, sprite_size)
