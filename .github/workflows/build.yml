@@ -17,8 +17,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-web:
+  # 내보내기와 Pages 배포를 한 잡으로 — 아티팩트 왕복과 잡 스핀업이 통째로 사라진다.
+  build-deploy-web:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,19 +46,26 @@ jobs:
       - name: Validate project
         run: godot --headless --path . --editor --quit
 
-      - name: Prepare export directories
-        run: mkdir -p build/web
-
       - name: Export Web build
-        run: godot --headless --path . --export-release "Web"
+        run: |
+          mkdir -p build/web
+          godot --headless --path . --export-release "Web"
 
-      - name: Upload Web build
-        uses: actions/upload-artifact@v4
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: web-build
           path: build/web
 
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # Windows 빌드는 배포처가 없다 — 매 푸시마다 돌리지 않고 수동 실행 전용.
   build-windows:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -76,42 +87,13 @@ jobs:
             godot-import-windows-
             godot-import-
 
-      - name: Validate project
-        run: godot --headless --path . --editor --quit
-
-      - name: Prepare export directories
-        run: mkdir -p build/windows
-
       - name: Export Windows build
-        run: godot --headless --path . --export-release "Windows Desktop"
+        run: |
+          mkdir -p build/windows
+          godot --headless --path . --export-release "Windows Desktop"
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
           path: build/windows
-
-  deploy-web:
-    needs: build-web
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Download Web build
-        uses: actions/download-artifact@v4
-        with:
-          name: web-build
-          path: build/web
-
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: build/web
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
