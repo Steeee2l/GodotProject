@@ -216,8 +216,12 @@ func _build_open_button() -> void:
 	open_button.offset_right = 1
 	open_button.offset_bottom = 0
 	_apply_button_font(open_button, 14)
-	open_button.add_theme_stylebox_override("normal", _panel_style(Color(0.02, 0.027, 0.025, 0.94), Color("#8ab7a0"), 6))
-	open_button.add_theme_stylebox_override("hover", _panel_style(Color(0.06, 0.075, 0.068, 0.98), Color("#d9c579"), 6))
+	if DisplayServer.is_touchscreen_available():
+		# 모바일은 필드 액션 버튼과 같은 원형 문법 — 사각 상자는 '깨진 옵션 버튼'처럼 읽혔다.
+		HudStyle.style_mobile_action(open_button, Color("#8ab7a0"), 26)
+	else:
+		open_button.add_theme_stylebox_override("normal", _panel_style(Color(0.02, 0.027, 0.025, 0.94), Color("#8ab7a0"), 6))
+		open_button.add_theme_stylebox_override("hover", _panel_style(Color(0.06, 0.075, 0.068, 0.98), Color("#d9c579"), 6))
 	open_button.pressed.connect(toggle)
 	add_child(open_button)
 
@@ -1748,16 +1752,19 @@ func _apply_responsive_layout() -> void:
 
 	if open_button:
 		var open_margin := clampf(viewport_size.x * 0.02, 8.0, 18.0)
-		var open_w := clampf(minf(118.0 * ui_scale, viewport_size.x * 0.11), 78.0, 118.0)
-		var open_h := clampf(minf(46.0 * ui_scale, viewport_size.y * 0.08), 32.0, 48.0)
+		var touch := DisplayServer.is_touchscreen_available()
+		# 모바일은 원형이라 정사각으로 잡는다.
+		var open_h := clampf(minf(46.0 * ui_scale, viewport_size.y * 0.08), 32.0, 48.0) if not touch else clampf(60.0 * ui_scale, 52.0, 68.0)
+		var open_w := clampf(minf(118.0 * ui_scale, viewport_size.x * 0.11), 78.0, 118.0) if not touch else open_h
 		open_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 		open_button.offset_left = -safe.z - open_margin - open_w
 		open_button.offset_top = safe.y + open_margin + clampf(94.0 * ui_scale, 68.0, 106.0)
 		open_button.offset_right = -safe.z - open_margin
 		open_button.offset_bottom = open_button.offset_top + open_h
-		open_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER if responsive_compact else HORIZONTAL_ALIGNMENT_LEFT
+		if not touch:
+			open_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER if responsive_compact else HORIZONTAL_ALIGNMENT_LEFT
+			open_button.add_theme_font_size_override("font_size", 14 if viewport_size.x >= 760 else 11)
 		open_button.text = "가방"
-		open_button.add_theme_font_size_override("font_size", 14 if viewport_size.x >= 760 else 11)
 
 	var safe_width := clampf(viewport_size.x - safe.x - safe.z - 24.0, 300.0, 1600.0)
 	# 예전에는 최소 340으로 올려 잡아서, 가로 모드 폰처럼 낮은 화면에서는
