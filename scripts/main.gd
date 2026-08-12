@@ -2417,6 +2417,12 @@ func _layout_mobile_utility_row() -> float:
 	# 생성 시점 offset(-108)에 머물러 있었다. 그래서 줍기 버튼이 발사 버튼
 	# 아래 화면 밖에 잘린 채 떠 있었고 눌러도 아무 일이 없었다.
 	if not DisplayServer.is_touchscreen_available():
+		# 데스크톱에도 구급약 슬롯(SHIFT 안내 겸용)은 남는다. 터치 전용 줄이
+		# 생기면서 이 버튼까지 같이 숨어 버린 회귀를 여기서 복구한다.
+		if mobile_medkit_button != null:
+			mobile_medkit_button.visible = not (
+				_is_inventory_open() or _is_tactical_map_open() or lore_reader.is_open()
+			)
 		return 0.0
 	var viewport_size := get_viewport().get_visible_rect().size
 	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
@@ -2810,13 +2816,13 @@ func _build_mobile_utility_buttons(font: Font) -> void:
 		mobile_reload_button.pressed.connect(weapon_combat._reload_ak47)
 	mobile_reload_button.visible = touch_enabled
 
-	mobile_flashlight_button = _make_mobile_utility_button("FlashlightButton", "Flash", "flashlight", font, -288.0)
+	mobile_flashlight_button = _make_mobile_utility_button("FlashlightButton", "조명", "flashlight", font, -288.0)
 	mobile_flashlight_button.toggle_mode = true
 	if not touch_enabled:
 		mobile_flashlight_button.toggled.connect(_on_mobile_flashlight_toggled)
 	mobile_flashlight_button.visible = touch_enabled
 
-	mobile_map_button = _make_mobile_utility_button("MapButton", "Map", "map", font, -378.0)
+	mobile_map_button = _make_mobile_utility_button("MapButton", "지도", "map", font, -378.0)
 	if not touch_enabled:
 		mobile_map_button.pressed.connect(_on_mobile_map_pressed)
 	mobile_map_button.visible = touch_enabled
@@ -2840,7 +2846,7 @@ func _make_mobile_utility_button(
 	button_name: String,
 	label: String,
 	icon_name: String,
-	font: Font,
+	_font: Font,
 	right_offset: float
 ) -> Button:
 	var button := Button.new()
@@ -2851,16 +2857,9 @@ func _make_mobile_utility_button(
 	button.offset_right = right_offset + 80
 	button.offset_bottom = -114
 	button.text = label
-	button.icon = UI_ICONS.get_icon(icon_name, 32, Color("#dbe8df"))
-	button.expand_icon = true
-	button.focus_mode = Control.FOCUS_NONE
-	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	button.icon = UI_ICONS.get_icon(icon_name, 26, Color("#dbe8df"))
 	button.z_index = 90
-	button.add_theme_font_override("font", font)
-	button.add_theme_font_size_override("font_size", 13)
-	button.add_theme_stylebox_override("normal", _make_panel_style(Color(0.025, 0.035, 0.034, 0.94), Color("#718a7e"), 38))
-	button.add_theme_stylebox_override("hover", _make_panel_style(Color(0.055, 0.08, 0.07, 0.97), Color("#b9d1c4"), 38))
-	button.add_theme_stylebox_override("pressed", _make_panel_style(Color(0.11, 0.17, 0.13, 0.98), Color("#dff0e5"), 38))
+	HudStyle.style_mobile_action(button, HudStyle.LINE_FOCUS, 26)
 	$HUD.add_child(button)
 	return button
 
@@ -2869,8 +2868,10 @@ func _make_mobile_utility_button_left(
 	button_name: String,
 	label: String,
 	icon_name: String,
-	font: Font
+	_font: Font
 ) -> Button:
+	# 이름은 역사적 잔재다(예전엔 좌하단 전용). 지금은 유틸리티 줄의 다른
+	# 버튼과 같은 원형 프리셋을 쓰고, 위치는 _layout_mobile_utility_row가 정한다.
 	var button := Button.new()
 	button.name = button_name
 	button.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -2879,19 +2880,9 @@ func _make_mobile_utility_button_left(
 	button.offset_right = -128
 	button.offset_bottom = -18
 	button.text = label
-	button.icon = UI_ICONS.get_icon(icon_name, 34, Color("#dbe8df"))
-	button.expand_icon = true
-	button.add_theme_constant_override("icon_max_width", 34)
-	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-	button.focus_mode = Control.FOCUS_NONE
-	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	button.icon = UI_ICONS.get_icon(icon_name, 26, Color("#dbe8df"))
 	button.z_index = 90
-	button.add_theme_font_override("font", font)
-	button.add_theme_font_size_override("font_size", 12)
-	button.add_theme_stylebox_override("normal", _make_panel_style(HudStyle.INK, Color("#718a7e"), 7))
-	button.add_theme_stylebox_override("hover", _make_panel_style(Color(0.055, 0.08, 0.07, 0.97), Color("#b9d1c4"), 7))
-	button.add_theme_stylebox_override("pressed", _make_panel_style(Color(0.11, 0.17, 0.13, 0.98), Color("#dff0e5"), 7))
+	HudStyle.style_mobile_action(button, HudStyle.GREEN, 26)
 	$HUD.add_child(button)
 	return button
 

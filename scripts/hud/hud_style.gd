@@ -48,6 +48,51 @@ const TYPE_NUMBER := 20     # 강조 수치(탄약 등)
 # ── 패널 프리셋 ────────────────────────────────────────────────
 
 
+static func style_mobile_action(
+	button: Button, accent: Color, icon_limit := 30, filled := false
+) -> Button:
+	# 모바일 원형 액션 버튼 — 아이콘 위, 라벨 아래, 완전한 원.
+	# 반경 999는 어느 크기에서도 원으로 수렴한다(크기는 레이아웃이 정한다).
+	# 필드 우하단의 모든 터치 버튼은 이 프리셋 하나만 쓴다. 모양이 하나여야
+	# 손가락이 외운다.
+	button.focus_mode = Control.FOCUS_NONE
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	button.expand_icon = true
+	button.add_theme_constant_override("icon_max_width", icon_limit)
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.clip_text = true
+	button.add_theme_font_override("font", FONT)
+	button.add_theme_font_size_override("font_size", TYPE_CAPTION)
+	button.add_theme_color_override("font_color", TEXT)
+	button.add_theme_color_override("font_pressed_color", Color.WHITE)
+	button.add_theme_color_override("font_hover_color", TEXT)
+	button.add_theme_color_override("font_disabled_color", TEXT_FAINT)
+	var normal_bg := Color(
+		lerpf(INK.r, accent.r, 0.22),
+		lerpf(INK.g, accent.g, 0.22),
+		lerpf(INK.b, accent.b, 0.22),
+		0.94
+	) if filled else Color(INK.r, INK.g, INK.b, 0.9)
+	var normal := panel(normal_bg, Color(accent, 0.66), 999)
+	normal.set_border_width_all(2)
+	var hover := panel(normal_bg.lightened(0.04), Color(accent, 0.85), 999)
+	hover.set_border_width_all(2)
+	var pressed := panel(
+		Color(accent.r * 0.42, accent.g * 0.42, accent.b * 0.42, 0.96),
+		accent,
+		999
+	)
+	pressed.set_border_width_all(2)
+	var disabled := panel(Color(INK.r, INK.g, INK.b, 0.55), Color(accent, 0.2), 999)
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", pressed)
+	button.add_theme_stylebox_override("disabled", disabled)
+	return button
+
+
 static func panel(background: Color, border: Color, radius: int = 4) -> StyleBoxFlat:
 	# (하위 호환) 자유 조합. 새 코드는 아래 프리셋을 쓴다.
 	var style := StyleBoxFlat.new()

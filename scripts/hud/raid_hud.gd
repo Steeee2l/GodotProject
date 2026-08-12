@@ -443,16 +443,10 @@ func build(owner_node: Node) -> void:
 	fire_button.offset_bottom = -24
 	fire_button.text = "발사"
 	fire_button.icon = UI_ICONS.get_icon("weapon", 36, Color("#ffd29a"))
-	fire_button.expand_icon = true
 	fire_button.tooltip_text = "AK-47 발사"
-	fire_button.focus_mode = Control.FOCUS_NONE
-	fire_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	fire_button.z_index = 90
-	fire_button.add_theme_font_override("font", font)
-	fire_button.add_theme_font_size_override("font_size", 17)
-	fire_button.add_theme_stylebox_override("normal", HudStyle.panel(Color(0.16, 0.055, 0.04, 0.92), Color("#d98155"), 40))
-	fire_button.add_theme_stylebox_override("hover", HudStyle.panel(Color(0.24, 0.075, 0.045, 0.94), Color("#e99a67"), 40))
-	fire_button.add_theme_stylebox_override("pressed", HudStyle.panel(Color(0.42, 0.12, 0.055, 0.96), Color("#ffc078"), 40))
+	# 주 행동은 유일하게 '채워진' 원 — 화면에서 제일 먼저 읽혀야 한다.
+	HudStyle.style_mobile_action(fire_button, Color("#e08a58"), 36, true)
 	if not touch_enabled:
 		fire_button.button_down.connect(Callable(host, "_on_fire_button_down"))
 		fire_button.button_up.connect(Callable(host, "_on_fire_button_up"))
@@ -466,18 +460,11 @@ func build(owner_node: Node) -> void:
 	melee_button.offset_top = -104
 	melee_button.offset_right = -118
 	melee_button.offset_bottom = -24
-	melee_button.text = "Melee"
-	melee_button.icon = UI_ICONS.get_icon("melee", 36, Color("#dbe9df"))
-	melee_button.expand_icon = true
+	melee_button.text = "근접"
+	melee_button.icon = UI_ICONS.get_icon("melee", 34, Color("#dbe9df"))
 	melee_button.tooltip_text = "야구 방망이 휘두르기"
-	melee_button.focus_mode = Control.FOCUS_NONE
-	melee_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	melee_button.z_index = 90
-	melee_button.add_theme_font_override("font", font)
-	melee_button.add_theme_font_size_override("font_size", 16)
-	melee_button.add_theme_stylebox_override("normal", HudStyle.panel(Color(0.055, 0.075, 0.07, 0.92), Color("#9eb6a5"), 40))
-	melee_button.add_theme_stylebox_override("hover", HudStyle.panel(Color(0.075, 0.11, 0.095, 0.94), Color("#c4d6c8"), 40))
-	melee_button.add_theme_stylebox_override("pressed", HudStyle.panel(Color(0.12, 0.19, 0.15, 0.96), Color("#e5f0e7"), 40))
+	HudStyle.style_mobile_action(melee_button, HudStyle.LINE_FOCUS, 34)
 	if not touch_enabled:
 		melee_button.pressed.connect(Callable(host, "_on_melee_button_pressed"))
 	melee_button.visible = touch_enabled
@@ -490,18 +477,11 @@ func build(owner_node: Node) -> void:
 	dash_button.offset_top = -104
 	dash_button.offset_right = -208
 	dash_button.offset_bottom = -24
-	dash_button.text = "Dash"
-	dash_button.icon = UI_ICONS.get_icon("dash", 36, HudStyle.TEXT)
-	dash_button.expand_icon = true
-	dash_button.tooltip_text = "Dash"
-	dash_button.focus_mode = Control.FOCUS_NONE
-	dash_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	dash_button.text = "회피"
+	dash_button.icon = UI_ICONS.get_icon("dash", 34, HudStyle.TEXT)
+	dash_button.tooltip_text = "구르기 회피"
 	dash_button.z_index = 90
-	dash_button.add_theme_font_override("font", font)
-	dash_button.add_theme_font_size_override("font_size", 16)
-	dash_button.add_theme_stylebox_override("normal", HudStyle.panel(Color(0.045, 0.065, 0.08, 0.92), Color("#82a8b8"), 40))
-	dash_button.add_theme_stylebox_override("hover", HudStyle.panel(Color(0.06, 0.1, 0.13, 0.94), Color("#add0dc"), 40))
-	dash_button.add_theme_stylebox_override("pressed", HudStyle.panel(Color(0.08, 0.17, 0.22, 0.96), Color("#d8f2f7"), 40))
+	HudStyle.style_mobile_action(dash_button, Color("#82a8b8"), 34)
 	if not touch_enabled:
 		dash_button.pressed.connect(Callable(host, "_on_dash_button_pressed"))
 	dash_button.visible = touch_enabled
