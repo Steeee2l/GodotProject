@@ -49,7 +49,7 @@ const TYPE_NUMBER := 20     # 강조 수치(탄약 등)
 
 
 static func style_mobile_action(
-	button: Button, accent: Color, icon_limit := 30, filled := false
+	button: Button, accent: Color, icon_limit := 30, filled := false, label_size := TYPE_CAPTION
 ) -> Button:
 	# 모바일 원형 액션 버튼 — 아이콘 위, 라벨 아래, 완전한 원.
 	# 반경 999는 어느 크기에서도 원으로 수렴한다(크기는 레이아웃이 정한다).
@@ -59,12 +59,15 @@ static func style_mobile_action(
 	button.mouse_filter = Control.MOUSE_FILTER_STOP
 	button.expand_icon = true
 	button.add_theme_constant_override("icon_max_width", icon_limit)
+	# 아이콘과 라벨을 원 중앙에 나란히. TOP 정렬은 아이콘이 원 테두리
+	# 꼭대기에 붙고 라벨만 중앙에 남아 '따로 노는' 모양이 된다.
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.add_theme_constant_override("h_separation", 5)
 	button.clip_text = true
 	button.add_theme_font_override("font", FONT)
-	button.add_theme_font_size_override("font_size", TYPE_CAPTION)
+	button.add_theme_font_size_override("font_size", label_size)
 	button.add_theme_color_override("font_color", TEXT)
 	button.add_theme_color_override("font_pressed_color", Color.WHITE)
 	button.add_theme_color_override("font_hover_color", TEXT)

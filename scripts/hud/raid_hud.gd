@@ -446,7 +446,7 @@ func build(owner_node: Node) -> void:
 	fire_button.tooltip_text = "AK-47 발사"
 	fire_button.z_index = 90
 	# 주 행동은 유일하게 '채워진' 원 — 화면에서 제일 먼저 읽혀야 한다.
-	HudStyle.style_mobile_action(fire_button, Color("#e08a58"), 36, true)
+	HudStyle.style_mobile_action(fire_button, Color("#e08a58"), 38, true, HudStyle.TYPE_HEADING)
 	if not touch_enabled:
 		fire_button.button_down.connect(Callable(host, "_on_fire_button_down"))
 		fire_button.button_up.connect(Callable(host, "_on_fire_button_up"))
@@ -464,7 +464,7 @@ func build(owner_node: Node) -> void:
 	melee_button.icon = UI_ICONS.get_icon("melee", 34, Color("#dbe9df"))
 	melee_button.tooltip_text = "야구 방망이 휘두르기"
 	melee_button.z_index = 90
-	HudStyle.style_mobile_action(melee_button, HudStyle.LINE_FOCUS, 34)
+	HudStyle.style_mobile_action(melee_button, HudStyle.LINE_FOCUS, 36, false, HudStyle.TYPE_BODY)
 	if not touch_enabled:
 		melee_button.pressed.connect(Callable(host, "_on_melee_button_pressed"))
 	melee_button.visible = touch_enabled
@@ -481,7 +481,7 @@ func build(owner_node: Node) -> void:
 	dash_button.icon = UI_ICONS.get_icon("dash", 34, HudStyle.TEXT)
 	dash_button.tooltip_text = "구르기 회피"
 	dash_button.z_index = 90
-	HudStyle.style_mobile_action(dash_button, Color("#82a8b8"), 34)
+	HudStyle.style_mobile_action(dash_button, Color("#82a8b8"), 36, false, HudStyle.TYPE_BODY)
 	if not touch_enabled:
 		dash_button.pressed.connect(Callable(host, "_on_dash_button_pressed"))
 	dash_button.visible = touch_enabled
