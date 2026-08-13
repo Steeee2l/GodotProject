@@ -47,7 +47,8 @@ static func make_resource_chip(
 ) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.name = "ResourceChip_%s" % resource_id
-	panel.custom_minimum_size = Vector2(72 if compact else 112, 36 if compact else 40)
+	# 컴팩트 72px는 "x80"에서 마지막 글자가 잘리는 한계선이었다.
+	panel.custom_minimum_size = Vector2(86 if compact else 112, 36 if compact else 40)
 	panel.tooltip_text = "%s %s" % [display_name, value_text]
 	panel.add_theme_stylebox_override(
 		"panel",

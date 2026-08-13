@@ -395,6 +395,8 @@ func _build_resource_strip() -> Control:
 	var compact := get_viewport().get_visible_rect().size.x < 1040.0
 	for key in ["scrap", "catnip", "canned_food", "scope_lens", "rubber_gasket", "magazine_spring"]:
 		var resource_key := str(key)
+		# 좁은 화면에서 이름까지 넣으면 정작 수치가 잘려 "아이콘 x"만 남는다.
+		# 컴팩트에선 아이콘이 이름을 대신하고 수치만 남긴다.
 		var chip := SHELTER_UI.make_resource_chip(
 			resource_key,
 			_resource_name(resource_key),
@@ -402,7 +404,7 @@ func _build_resource_strip() -> Control:
 			_resource_icon(resource_key),
 			_resource_accent(resource_key),
 			compact,
-			true
+			not compact
 		)
 		var value_label := chip.find_child("ResourceValue_%s" % resource_key, true, false) as Label
 		if value_label != null:
