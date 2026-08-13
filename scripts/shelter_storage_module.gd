@@ -125,9 +125,11 @@ func _open_ui() -> void:
 
 	var panel := PanelContainer.new()
 	panel.name = "ShelterStoragePanel"
+	# 세로 화면은 720 상한을 풀어 위아래를 꽉 쓴다 — 스크롤을 줄이는 게 우선.
+	var portrait := viewport_size.y > viewport_size.x
 	panel.custom_minimum_size = Vector2(
 		minf(1120.0, available_size.x - outer_margin * 2.0),
-		minf(720.0, available_size.y - outer_margin * 2.0)
+		(available_size.y - outer_margin * 2.0) if portrait else minf(720.0, available_size.y - outer_margin * 2.0)
 	)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER

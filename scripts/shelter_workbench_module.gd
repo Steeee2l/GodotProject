@@ -278,7 +278,10 @@ func _rebuild_ui() -> void:
 	var compact := viewport_size.x < 900.0 or viewport_size.y < 650.0
 	var stacked := viewport_size.x < 760.0
 	var panel_width := minf(1240.0, maxf(300.0, available_size.x - (20.0 if compact else 40.0)))
-	var panel_height := minf(780.0, maxf(340.0, available_size.y - (16.0 if compact else 40.0)))
+	# 세로 화면은 780 상한을 풀어 화면을 위아래로 꽉 쓴다 — 안 그러면
+	# 아래 1/3을 버려 놓고 목록·상세가 제 살 깎으며 스크롤된다.
+	var height_room := maxf(340.0, available_size.y - (16.0 if compact else 40.0))
+	var panel_height := height_room if stacked else minf(780.0, height_room)
 	var root := PanelContainer.new()
 	root.name = "WorkbenchPanel"
 	root.anchor_left = 0.5
@@ -441,7 +444,8 @@ func _build_recipe_list() -> Control:
 	panel.name = "WorkbenchRecipePanel"
 	var viewport_size := get_viewport().get_visible_rect().size
 	var stacked := viewport_size.x < 760.0
-	panel.custom_minimum_size = Vector2(0.0 if stacked else 330.0, 170.0 if stacked else 0.0)
+	# 세로 화면은 패널이 화면을 꽉 쓰므로 목록도 더 크게 잡는다.
+	panel.custom_minimum_size = Vector2(0.0 if stacked else 330.0, 264.0 if stacked else 0.0)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL if stacked else Control.SIZE_FILL
 	panel.size_flags_vertical = Control.SIZE_FILL if stacked else Control.SIZE_EXPAND_FILL
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.035, 0.043, 0.049, 0.86), Color("#456b61"), 1, 8))
