@@ -375,25 +375,25 @@ const IRON_SPECIAL_MISSIONS: Array[Dictionary] = [
 
 const EQUIPMENT_DEFINITIONS := {
 	"scav_vest": {
-		"display_name": "누더기 방탄 조끼", "slot": "body", "damage_reduction": 0.12,
+		"display_name": "누더기 방탄 조끼", "slot": "body", "damage_reduction": 0.15,
 		"weight": 3.8, "icon": "armor",
 		"texture_path": "res://assets/equipment/generated/scav_vest.png",
-		"description": "얇은 철판을 덧댄 경량 조끼. 받는 피해를 12% 줄입니다.",
+		"description": "얇은 철판을 덧댄 경량 조끼. 받는 피해를 20% 줄입니다.",
 	},
 	"riot_vest": {
-		"display_name": "진압대 방탄 조끼", "slot": "body", "damage_reduction": 0.22,
+		"display_name": "진압대 방탄 조끼", "slot": "body", "damage_reduction": 0.30,
 		"weight": 6.2, "icon": "armor",
 		"texture_path": "res://assets/equipment/generated/riot_vest.png",
-		"description": "무겁지만 튼튼한 진압 장비. 받는 피해를 22% 줄입니다.",
+		"description": "무겁지만 튼튼한 진압 장비. 받는 피해를 30% 줄입니다.",
 	},
 	"patched_helmet": {
-		"display_name": "기워 붙인 헬멧", "slot": "head", "damage_reduction": 0.08,
+		"display_name": "기워 붙인 헬멧", "slot": "head", "damage_reduction": 0.10,
 		"weight": 1.4, "icon": "helmet",
 		"texture_path": "res://assets/equipment/generated/patched_helmet.png",
-		"description": "금이 간 안전모를 보강했습니다. 받는 피해를 8% 줄입니다.",
+		"description": "금이 간 안전모를 보강했습니다. 받는 피해를 10% 줄입니다.",
 	},
 	"tactical_helmet": {
-		"display_name": "전술 방탄 헬멧", "slot": "head", "damage_reduction": 0.15,
+		"display_name": "전술 방탄 헬멧", "slot": "head", "damage_reduction": 0.20,
 		"weight": 2.1, "icon": "helmet",
 		"texture_path": "res://assets/equipment/generated/tactical_helmet.png",
 		"description": "군용 내피가 남아 있는 헬멧. 받는 피해를 15% 줄입니다.",
@@ -1991,6 +1991,14 @@ func equip_if_upgrade(equipment_id: String) -> Dictionary:
 	return result
 
 
+func get_equipped_armor_piece_count() -> int:
+	var count := 0
+	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
+		if not equipment_id.is_empty():
+			count += 1
+	return count
+
+
 func get_equipment_damage_multiplier() -> float:
 	var reduction := 0.0
 	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
@@ -1998,7 +2006,8 @@ func get_equipment_damage_multiplier() -> float:
 			continue
 		var definition := get_equipment_definition(equipment_id)
 		reduction += float(definition.get("damage_reduction", 0.0))
-	return clampf(1.0 - reduction, 0.5, 1.0)
+	# 풀아머(조끼 30 + 헬멧 20)가 실제로 체감되도록 하한을 0.4까지 연다.
+	return clampf(1.0 - reduction, 0.4, 1.0)
 
 
 func save_equipped_weapon_loadout() -> void:

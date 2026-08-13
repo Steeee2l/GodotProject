@@ -3742,6 +3742,35 @@ func _get_random_armor_drop(seed_hint: int = 0) -> Dictionary:
 	}
 
 
+# ── 동시 사격 상한 ─────────────────────────────────────────────
+# 몇 마리가 몰려와도 실제로 방아쇠를 당기는 건 동시에 2마리뿐이다. 나머지는
+# 포위·이동한다. "다굴 = 즉사"를 "다굴 = 바쁘지만 뚫을 수 있음"으로 바꾸는
+# 고전 기법. 보스와 근접·수류탄(예비동작이 길어 읽힘)은 상한 밖이다.
+const MAX_CONCURRENT_SHOOTERS := 2
+var enemy_fire_tokens: Dictionary = {}
+
+
+func request_enemy_fire_token(enemy: Node) -> bool:
+	var now := Time.get_ticks_msec()
+	for key in enemy_fire_tokens.keys():
+		var holder := instance_from_id(int(key))
+		if (
+			holder == null
+			or not is_instance_valid(holder)
+			or int(enemy_fire_tokens[key]) < now
+			or bool(holder.get("dying"))
+		):
+			enemy_fire_tokens.erase(key)
+	var enemy_id := enemy.get_instance_id()
+	if enemy_fire_tokens.has(enemy_id):
+		enemy_fire_tokens[enemy_id] = now + 2400
+		return true
+	if enemy_fire_tokens.size() >= MAX_CONCURRENT_SHOOTERS:
+		return false
+	enemy_fire_tokens[enemy_id] = now + 2400
+	return true
+
+
 func _update_enemy_pressure(delta: float) -> void:
 	# 존 위협도가 바닥이다. 예전엔 night_intensity만 봐서, 낮 출정에서는 남산도
 	# 종로도 전부 threat 0으로 굴렀다 — 공격력·명중률·연사 곡선이 전부 죽어

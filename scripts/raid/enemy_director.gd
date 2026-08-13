@@ -375,6 +375,12 @@ func _spawn_enemy(
 func _on_enemy_died(enemy: CharacterBody3D) -> void:
 	host.run_kills += 1
 	GameState.raid_kills += 1
+	# 처치 흡혈 — 공격이 곧 유지력이다. 방어구를 갖출수록 더 크게 돌아,
+	# 장비가 갖춰진 판에서 "쓸어버리는" 궤도가 실제로 성립한다.
+	if host.player_health > 0:
+		var kill_heal := 3 + GameState.get_equipped_armor_piece_count()
+		host.player_health = mini(GameState.get_max_health(), host.player_health + kill_heal)
+		GameState.player_health = host.player_health
 	# 죽인 만큼 도시가 반응한다. 조용히 지나갈수록 판이 길어진다.
 	host._add_raid_pressure(RAID_EVENT_DIRECTOR.PRESSURE_PER_KILL)
 	host._advance_contract_progress("kills")

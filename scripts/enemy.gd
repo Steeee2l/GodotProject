@@ -1858,6 +1858,15 @@ func _start_pistol_burst(direction: Vector3) -> void:
 	if magazine_ammo <= 0:
 		_start_reload()
 		return
+	# 동시 사격 상한 — 사격 자리가 없으면 잠깐 물러나 포위를 잇는다.
+	var scene := get_tree().current_scene
+	if (
+		scene != null
+		and scene.has_method("request_enemy_fire_token")
+		and not bool(scene.call("request_enemy_fire_token", self))
+	):
+		attack_cooldown = 0.55
+		return
 	combat_state = "ranged_windup"
 	# 예비동작은 위협도에 반비례한다. 초반 존(0.15)은 0.4초 남짓으로 사람이
 	# 반응할 수 있게, 심층 존은 0.18초로 날카롭게. 예전 고정 0.18초 + 인지 0.12초
