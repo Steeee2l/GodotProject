@@ -1753,8 +1753,8 @@ func _refresh_contract_ui() -> void:
 		# 막다른 벽이 아니라 다음 목표 게시판이 된다.
 		var commission: Dictionary = GameState.get_city_commission()
 		if not commission.is_empty() and not bool(commission.get("completed", false)):
-			finished_body.text = "생산망은 완성됐다. 이제 도시를 되찾을 차례.\n\n이번 의뢰 · 출정에서 %d명 처치 → 고철 %s%s" % [
-				int(commission.get("kills_target", 0)),
+			finished_body.text = "생산망은 완성됐다. 이제 도시를 되찾을 차례.\n\n이번 의뢰 · %s → 고철 %s%s" % [
+				GameState.get_city_commission_summary(),
 				GameState.format_compact_number(int(commission.get("reward_scrap", 0))),
 				" + 츄르 %d" % int(commission.get("reward_churu", 0)) if int(commission.get("reward_churu", 0)) > 0 else "",
 			]

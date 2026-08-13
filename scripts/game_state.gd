@@ -3302,25 +3302,61 @@ func roll_city_commission() -> void:
 			highest_tier = maxi(highest_tier, int(get_raid_zone(str(zone_id)).get("required_tier", 1)))
 	var random := RandomNumberGenerator.new()
 	random.seed = int(map_seed) ^ (shelter_return_serial * 2654435761) ^ 0x434F4D4D
-	var kills_target := 5 + highest_tier * 2 + random.randi_range(0, 3)
+	# 의뢰 유형 3종 순환 — 처치(전투) / 귀중품(루팅) / 긴장도(배짱).
+	# 매 복귀마다 다른 놀이 방식을 요구해야 반복 목표가 심부름이 되지 않는다.
+	var commission_type: String = ["kills", "valuables", "pressure"][shelter_return_serial % 3]
 	city_commission = {
-		"kills_target": kills_target,
-		"reward_scrap": kills_target * (280 + highest_tier * 130),
+		"type": commission_type,
 		"reward_churu": 1 if shelter_return_serial % 3 == 0 else 0,
 		"serial": shelter_return_serial,
 		"completed": false,
 	}
+	match commission_type:
+		"kills":
+			var kills_target := 5 + highest_tier * 2 + random.randi_range(0, 3)
+			city_commission["kills_target"] = kills_target
+			city_commission["reward_scrap"] = kills_target * (280 + highest_tier * 130)
+		"valuables":
+			var value_target := 500 + highest_tier * 300 + random.randi_range(0, 2) * 100
+			city_commission["value_target"] = value_target
+			city_commission["reward_scrap"] = roundi(value_target * 1.5) + 600
+		"pressure":
+			var level_target := clampi(1 + (highest_tier - 1) / 2, 1, 3)
+			city_commission["level_target"] = level_target
+			city_commission["reward_scrap"] = 1400 + level_target * 1600
 
 
 func get_city_commission() -> Dictionary:
 	return city_commission.duplicate(true)
 
 
-func settle_city_commission(run_kills: int) -> Dictionary:
+func get_city_commission_summary() -> String:
+	# 게시판·브리핑 공용 한 줄 요약.
+	if city_commission.is_empty():
+		return ""
+	match str(city_commission.get("type", "kills")):
+		"valuables":
+			return "귀중품 가치 %s 이상 확보해 귀환" % format_compact_number(
+				int(city_commission.get("value_target", 0))
+			)
+		"pressure":
+			return "도시 긴장도 %d단계 이상에서 탈출" % int(city_commission.get("level_target", 1))
+	return "출정에서 약탈자 %d명 처치" % int(city_commission.get("kills_target", 0))
+
+
+func settle_city_commission(run_kills: int, pressure_level: int = 0, valuable_value: int = 0) -> Dictionary:
 	# 탈출 정산에서 호출. 달성했으면 즉시 지급하고 완료 표시(다음 복귀 때 새 의뢰).
 	if city_commission.is_empty() or bool(city_commission.get("completed", false)):
 		return {}
-	if run_kills < int(city_commission.get("kills_target", 999)):
+	var achieved := false
+	match str(city_commission.get("type", "kills")):
+		"kills":
+			achieved = run_kills >= int(city_commission.get("kills_target", 999))
+		"valuables":
+			achieved = valuable_value >= int(city_commission.get("value_target", 999999))
+		"pressure":
+			achieved = pressure_level >= int(city_commission.get("level_target", 99))
+	if not achieved:
 		return {}
 	var reward_scrap := int(city_commission.get("reward_scrap", 0))
 	var reward_churu := int(city_commission.get("reward_churu", 0))

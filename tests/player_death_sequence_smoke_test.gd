@@ -12,8 +12,10 @@ func _run() -> void:
     var main_scene: Node = load("res://scenes/main.tscn").instantiate()
     root.add_child(main_scene)
     await process_frame
-    var game_over_canvas := main_scene.get("game_over_canvas") as CanvasLayer
-    var game_over_panel := main_scene.get("game_over_panel") as PanelContainer
+    # 게임오버 UI는 main 변수가 아니라 game_over_screen 모듈로 옮겨졌다.
+    var game_over_screen: RefCounted = main_scene.get("game_over_screen")
+    var game_over_canvas := game_over_screen.get("canvas") as CanvasLayer
+    var game_over_panel := game_over_screen.get("panel") as PanelContainer
     assert(not game_over_canvas.visible, "The inactive game-over layer must not cover normal HUD controls.")
     assert(
         game_over_panel.mouse_filter == Control.MOUSE_FILTER_IGNORE,
@@ -28,33 +30,35 @@ func _run() -> void:
     assert(bool(main_scene.get("player_death_sequence_active")))
     assert(game_over_canvas.visible)
     assert(Engine.time_scale < 1.0)
-    var label := main_scene.get("game_over_label") as Label
+    var label := game_over_screen.get("title_label") as Label
     assert(label != null and label.text == "작전 실패")
-    var survival_value := main_scene.get("game_over_survival_value") as Label
-    var kills_value := main_scene.get("game_over_kills_value") as Label
-    var damage_value := main_scene.get("game_over_damage_value") as Label
+    var survival_value := game_over_screen.get("survival_value") as Label
+    var kills_value := game_over_screen.get("kills_value") as Label
+    var damage_value := game_over_screen.get("damage_value") as Label
     assert(survival_value != null and not survival_value.text.is_empty())
     assert(kills_value != null and kills_value.text == "3")
     assert(damage_value != null and damage_value.text == "420")
     assert(main_scene.find_child("GameOverStats", true, false) != null)
     assert(main_scene.find_child("GameOverRecoveryBanner", true, false) != null)
-    var loss_label := main_scene.get("game_over_loss_label") as Label
+    var loss_label := game_over_screen.get("loss_label") as Label
     assert(loss_label != null and loss_label.text.contains("사망 지점"))
-    var loss_grid := main_scene.get("game_over_loss_grid") as HFlowContainer
+    var loss_grid := game_over_screen.get("loss_grid") as HFlowContainer
     assert(loss_grid != null and loss_grid.get_child_count() > 0)
     assert(loss_grid.get_child(0) is PanelContainer)
-    var loss_count_label := main_scene.get("game_over_loss_count_label") as Label
+    var loss_count_label := game_over_screen.get("loss_count_label") as Label
     assert(loss_count_label != null and loss_count_label.text.ends_with("종"))
-    var continue_label := main_scene.get("game_over_continue_label") as Label
+    var continue_label := game_over_screen.get("continue_label") as Label
     assert(continue_label != null and continue_label.text.contains("쉘터로 복귀"))
     assert(game_over_panel.custom_minimum_size.y <= 500.0)
     var corpse := game_state.get("pending_corpse_recovery") as Dictionary
     var corpse_loot := corpse.get("loot", {}) as Dictionary
     assert(int((corpse_loot.get("weapon_inventory", {}) as Dictionary).get("ak47", 0)) == 1)
     assert(int(corpse_loot.get("canned_food", 0)) == 2)
+    # 시큐어 주머니가 죽음에서 1개를 지킨다(츄르>개조품>부품>구급약 우선순위).
+    # 츄르·개조품이 없는 이 시나리오에서는 스프링 1개가 보존되고 2개만 시체에 남는다.
     assert(
-        int((corpse_loot.get("mod_component_inventory", {}) as Dictionary).get("magazine_spring", 0)) == 3,
-        "All carried springs must remain in the corpse recovery bag."
+        int((corpse_loot.get("mod_component_inventory", {}) as Dictionary).get("magazine_spring", 0)) == 2,
+        "Two springs stay on the corpse; the secure pouch keeps one."
     )
     main_scene.call("_clear_carried_inventory_after_death")
     assert(not bool(game_state.get("has_ak")))
@@ -62,7 +66,8 @@ func _run() -> void:
     assert(str(game_state.get("equipped_weapon_id")).is_empty())
     assert(int(game_state.get("canned_food")) == 5)
     assert(int(game_state.call("get_stored_storage_count", "food", "canned_food")) == 5)
-    assert(int(game_state.call("get_mod_component_count", "magazine_spring")) == 0)
+    # 시큐어 주머니가 지킨 스프링 1개는 정산 후 인벤토리로 복원된다.
+    assert(int(game_state.call("get_mod_component_count", "magazine_spring")) == 1)
     assert((game_state.get("secure_dog_items") as Array).is_empty())
     Engine.time_scale = 1.0
     main_scene.queue_free()

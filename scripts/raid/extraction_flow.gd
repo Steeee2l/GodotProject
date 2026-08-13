@@ -246,7 +246,11 @@ func _show_extraction_result(rescued_count: int) -> void:
 	if host.completed_mission_xp > 0:
 		host.hud.add_result_reward_chip("check", "임무 XP +%d" % host.completed_mission_xp, HudStyle.GOLD)
 	# 도시 의뢰(계약 완주 후 반복 목표) 달성 시 즉시 지급 + 칩으로 보여준다.
-	var commission_payout: Dictionary = GameState.settle_city_commission(host.run_kills)
+	var commission_payout: Dictionary = GameState.settle_city_commission(
+		host.run_kills,
+		host.raid_pressure_level,
+		GameState.get_valuable_total_value()
+	)
 	if not commission_payout.is_empty():
 		var commission_text := "사자의 의뢰 · 고철 +%s" % GameState.format_compact_number(
 			int(commission_payout.get("scrap", 0))
