@@ -219,10 +219,10 @@ func _rebuild_ui() -> void:
 	var boost := _button(
 		"가동 중  %02d:%02d" % [boost_remaining / 60, boost_remaining % 60]
 		if boost_remaining > 0
-		else "캣닢 x%s · 10분 생산 x10" % GameState.format_compact_number(GameState.CATNIP_BOOST_COST),
+		else "캣닢 x%s · 10분 생산 x10" % GameState.format_compact_number(GameState.get_catnip_boost_cost()),
 		"catnip"
 	)
-	boost.disabled = boost_remaining > 0 or GameState.catnip < GameState.CATNIP_BOOST_COST
+	boost.disabled = boost_remaining > 0 or GameState.catnip < GameState.get_catnip_boost_cost()
 	boost.custom_minimum_size = Vector2(0, 40)
 	boost.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	boost.pressed.connect(_activate_boost)

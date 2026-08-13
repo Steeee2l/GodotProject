@@ -2207,9 +2207,10 @@ func get_production_multiplier() -> float:
 
 func activate_catnip_boost() -> bool:
 	process_shelter_progress()
-	if catnip < CATNIP_BOOST_COST:
+	var cost := get_catnip_boost_cost()
+	if catnip < cost:
 		return false
-	catnip -= CATNIP_BOOST_COST
+	catnip -= cost
 	catnip_boost_end_time = int(Time.get_unix_time_from_system()) + CATNIP_BOOST_DURATION_SECONDS
 	return true
 
@@ -2720,6 +2721,18 @@ func get_churu_bag_bonus_slots() -> int:
 	return 4 if is_churu_buff_active("big_pockets") else 0
 
 
+func get_catnip_field_buff_cost() -> int:
+	# 인크리멘탈 등가 교환 — 언제 가도 "내 생산 20분치"가 한 판 급여 가격이다.
+	# 착즙 라인이 커질수록 절대값은 오르지만 체감 부담은 일정하고,
+	# 잉여 캣닢은 농축 사다리(지수)가 흡수한다.
+	return maxi(400, roundi(get_catnip_per_second() * 60.0 * 20.0))
+
+
+func get_catnip_boost_cost() -> int:
+	# 생산 부스트도 같은 원리 — 생산 30분치.
+	return maxi(CATNIP_BOOST_COST, roundi(get_catnip_per_second() * 60.0 * 30.0))
+
+
 func get_catnip_buff_definition(buff_id: String) -> Dictionary:
 	return (CATNIP_FIELD_BUFFS.get(buff_id, {}) as Dictionary).duplicate(true)
 
@@ -2732,7 +2745,7 @@ func try_activate_catnip_field_buff(buff_id: String) -> bool:
 	# 택1 — 이미 다른 급여를 먹었으면 이번 판엔 바꿀 수 없다.
 	if not CATNIP_FIELD_BUFFS.has(buff_id) or not active_catnip_buff.is_empty():
 		return false
-	var cost := maxi(1, int((CATNIP_FIELD_BUFFS[buff_id] as Dictionary).get("cost", 1)))
+	var cost := get_catnip_field_buff_cost()
 	if catnip < cost:
 		return false
 	catnip -= cost

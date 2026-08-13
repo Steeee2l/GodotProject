@@ -405,7 +405,7 @@ func _run() -> void:
 	if float(game_state.call("get_catnip_per_hour")) <= catnip_rate_before:
 		_fail("catnip scraper upgrade did not improve production")
 
-	game_state.set("catnip", game_state.CATNIP_BOOST_COST)
+	game_state.set("catnip", int(game_state.call("get_catnip_boost_cost")))
 	if not bool(game_state.call("activate_catnip_boost")) or float(game_state.call("get_production_multiplier")) != 10.0:
 		_fail("catnip production boost failed")
 	var tier_cost := game_state.call("get_shelter_upgrade_cost") as Dictionary

@@ -81,7 +81,8 @@ func _run() -> void:
 	)
 
 	# 4) 캣닢 급여는 한 판짜리 택1 — 소비되고, 중복 선택은 거부되고, 복귀 시 사라진다.
-	game_state.catnip = 1000
+	# 가격은 생산 20분치로 스케일링되므로 현재 가격 기준으로 지갑을 채운다.
+	game_state.catnip = int(game_state.get_catnip_field_buff_cost()) + 50
 	var catnip_wallet: int = game_state.catnip
 	_check(game_state.try_activate_catnip_field_buff("swift_paws"), "캣닢 급여 적용 실패")
 	_check(game_state.catnip < catnip_wallet, "캣닢 급여가 캣닢을 소비하지 않음")

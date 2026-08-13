@@ -3596,9 +3596,9 @@ func _build_catnip_buff_row() -> Control:
 		button.name = "CatnipBuff_%s" % buff_id
 		button.toggle_mode = true
 		button.text = str(definition.get("title", buff_id))
-		button.tooltip_text = "%s · 캣닢 %d" % [
+		button.tooltip_text = "%s · 캣닢 %s" % [
 			str(definition.get("description", "")),
-			int(definition.get("cost", 0)),
+			GameState.format_compact_number(GameState.get_catnip_field_buff_cost()),
 		]
 		button.custom_minimum_size = Vector2(0, 38)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -3615,14 +3615,13 @@ func _build_catnip_buff_row() -> Control:
 
 
 func _refresh_catnip_buff_row(title: Label) -> void:
-	var sample_cost := 400
+	# 가격은 "내 캣닢 생산 20분치" — 인크리멘탈 성장에 비례해 따라온다.
+	var cost := GameState.get_catnip_field_buff_cost()
 	for buff_id in raid_catnip_buff_buttons:
 		var button := raid_catnip_buff_buttons[buff_id] as Button
-		var cost := int((GameState.CATNIP_FIELD_BUFFS[buff_id] as Dictionary).get("cost", 0))
-		sample_cost = cost
 		button.disabled = GameState.catnip < cost and raid_catnip_buff_choice != str(buff_id)
-	title.text = "캣닢 급여 · 한 판 버프 택1 (캣닢 %d) · 보유 %s" % [
-		sample_cost,
+	title.text = "캣닢 급여 · 한 판 버프 택1 (캣닢 %s) · 보유 %s" % [
+		GameState.format_compact_number(cost),
 		GameState.format_compact_number(GameState.catnip),
 	]
 
