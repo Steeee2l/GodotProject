@@ -28,13 +28,16 @@ static func get_event_interval(level: int) -> float:
 # ── 압력 축적 계수 ─────────────────────────────────────────────
 # 시간은 여전히 흐르지만 이제 가장 약한 입력이다. 소란을 피우면 훨씬 빨리 는다.
 const PRESSURE_PER_SECOND := 0.62
-const PRESSURE_PER_KILL := 16.0
-const PRESSURE_PER_GUNSHOT := 1.9
+const PRESSURE_PER_KILL := 22.0
+const PRESSURE_PER_GUNSHOT := 2.2
 const PRESSURE_PER_SUPPRESSED_GUNSHOT := 0.55
 const PRESSURE_PER_LOOT_VALUE := 0.022
 const PRESSURE_PER_ALARM := 45.0
 # 웅크려 숨어 있으면 도시가 조금씩 잊는다. 잠입 플레이에 보상을 준다.
-const PRESSURE_DECAY_PER_SECOND := 1.35
+# 감쇠가 수동 축적(0.62/s)보다 크면 긴장도는 순수 배수 상태가 되어
+# 공격적인 판에서도 레벨 0에 머문다(시뮬 실측). 감쇠는 축적보다 약간
+# 낮게 — 조용해도 도시는 천천히 조여 온다.
+const PRESSURE_DECAY_PER_SECOND := 0.55
 
 # ── 사건 테이블 ────────────────────────────────────────────────
 #

@@ -1805,6 +1805,15 @@ func _update_melee(direction: Vector3, distance: float) -> void:
 
 
 func _start_melee_windup(direction: Vector3) -> void:
+	# 동시 근접 상한 — 자리가 없으면 반 박자 물러나 포위를 잇는다.
+	var scene := get_tree().current_scene
+	if (
+		scene != null
+		and scene.has_method("request_enemy_melee_token")
+		and not bool(scene.call("request_enemy_melee_token", self))
+	):
+		attack_cooldown = 0.45
+		return
 	combat_state = "melee_windup"
 	state_timer = MELEE_WINDUP_TIME
 	pending_attack_direction = direction

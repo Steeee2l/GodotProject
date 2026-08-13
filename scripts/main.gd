@@ -3749,27 +3749,39 @@ func _get_random_armor_drop(seed_hint: int = 0) -> Dictionary:
 # 포위·이동한다. "다굴 = 즉사"를 "다굴 = 바쁘지만 뚫을 수 있음"으로 바꾸는
 # 고전 기법. 보스와 근접·수류탄(예비동작이 길어 읽힘)은 상한 밖이다.
 const MAX_CONCURRENT_SHOOTERS := 2
+const MAX_CONCURRENT_MELEE := 2
 var enemy_fire_tokens: Dictionary = {}
+var enemy_melee_tokens: Dictionary = {}
 
 
 func request_enemy_fire_token(enemy: Node) -> bool:
+	return _request_attack_token(enemy, enemy_fire_tokens, MAX_CONCURRENT_SHOOTERS, 2400)
+
+
+func request_enemy_melee_token(enemy: Node) -> bool:
+	# 근접 러시도 상한을 태운다 — 시뮬 실측: 근접 무리에 24초 만에 176피해로
+	# 사망. 사격만 막아서는 "다굴 = 끔살"이 근접으로 우회된다.
+	return _request_attack_token(enemy, enemy_melee_tokens, MAX_CONCURRENT_MELEE, 1500)
+
+
+func _request_attack_token(enemy: Node, pool: Dictionary, limit: int, hold_msec: int) -> bool:
 	var now := Time.get_ticks_msec()
-	for key in enemy_fire_tokens.keys():
+	for key in pool.keys():
 		var holder := instance_from_id(int(key))
 		if (
 			holder == null
 			or not is_instance_valid(holder)
-			or int(enemy_fire_tokens[key]) < now
+			or int(pool[key]) < now
 			or bool(holder.get("dying"))
 		):
-			enemy_fire_tokens.erase(key)
+			pool.erase(key)
 	var enemy_id := enemy.get_instance_id()
-	if enemy_fire_tokens.has(enemy_id):
-		enemy_fire_tokens[enemy_id] = now + 2400
+	if pool.has(enemy_id):
+		pool[enemy_id] = now + hold_msec
 		return true
-	if enemy_fire_tokens.size() >= MAX_CONCURRENT_SHOOTERS:
+	if pool.size() >= limit:
 		return false
-	enemy_fire_tokens[enemy_id] = now + 2400
+	pool[enemy_id] = now + hold_msec
 	return true
 
 
