@@ -3323,10 +3323,13 @@ func _update_equipment_ui() -> void:
 			"%s +%d" % [weapon_name, enhancement_level] if has_ak else "무기 없음"
 		)
 	if hud.equipment_name_label:
+		# 좁은 HUD 한 줄에 별명("캣라시니코프")까지 넣으면 기종명이 잘린다.
+		# 별명은 무기 그림 툴팁과 인벤토리가 맡고, 여기는 기종명만.
+		var short_weapon_name := weapon_name.split("\"")[0].strip_edges()
 		hud.equipment_name_label.text = (
-			"%s +%d" % [weapon_name, enhancement_level]
+			"%s +%d" % [short_weapon_name, enhancement_level]
 			if has_ak and enhancement_level > 0
-			else (weapon_name if has_ak else "무기 없음")
+			else (short_weapon_name if has_ak else "무기 없음")
 		)
 		hud.equipment_name_label.visible = has_ak
 	if hud.equipment_ammo_type_label:

@@ -83,6 +83,8 @@ var weapon_mod_inventory: Dictionary = {
 	"ak_precision_receiver": 0,
 }
 var weapon_inventory: Dictionary = {"ak47": 1}
+# 무기별 "첫 장착 보너스 탄창" 지급 여부 — 무기 체험은 장전된 총으로 시작한다.
+var weapon_first_equip_done: Array = []
 var equipment_inventory: Dictionary = {
 	"scav_vest": 0,
 	"riot_vest": 0,
@@ -1885,9 +1887,17 @@ func set_ammo_count(ammo_id: String, amount: int) -> void:
 
 
 func add_weapon(weapon_id: String, amount: int = 1) -> void:
+	var first_acquisition := amount > 0 and int(weapon_inventory.get(weapon_id, 0)) <= 0
 	weapon_inventory[weapon_id] = maxi(0, int(weapon_inventory.get(weapon_id, 0)) + amount)
 	if not weapon_mod_loadouts.has(weapon_id):
 		weapon_mod_loadouts[weapon_id] = []
+	if first_acquisition:
+		# 처음 손에 넣은 총은 바로 쏴 볼 수 있어야 한다 — 기본 탄약 두 탄창을 얹는다.
+		var definition: Dictionary = WEAPON_SYSTEM.get_weapon(weapon_id)
+		var ammo_id := str(definition.get("default_ammo_id", ""))
+		var magazine_size := int(definition.get("magazine_size", 0))
+		if not ammo_id.is_empty() and magazine_size > 0:
+			set_ammo_count(ammo_id, get_ammo_count(ammo_id) + magazine_size * 2)
 
 
 func get_equipment_definition(equipment_id: String) -> Dictionary:
@@ -3571,6 +3581,7 @@ func save_persistent_state() -> bool:
 		"progression_item_inventory": progression_item_inventory,
 		"weapon_mod_inventory": weapon_mod_inventory,
 		"weapon_inventory": weapon_inventory,
+		"weapon_first_equip_done": weapon_first_equip_done,
 		"equipment_inventory": equipment_inventory,
 		"equipped_body_armor_id": equipped_body_armor_id,
 		"equipped_head_armor_id": equipped_head_armor_id,
@@ -3720,6 +3731,7 @@ func load_persistent_state() -> bool:
 		if not weapon_mod_inventory.has(mod_id):
 			weapon_mod_inventory[mod_id] = 0
 	weapon_inventory = (data.get("weapon_inventory", weapon_inventory) as Dictionary).duplicate(true)
+	weapon_first_equip_done = (data.get("weapon_first_equip_done", weapon_first_equip_done) as Array).duplicate()
 	equipment_inventory = (data.get("equipment_inventory", equipment_inventory) as Dictionary).duplicate(true)
 	for equipment_id in EQUIPMENT_DEFINITIONS:
 		if not equipment_inventory.has(equipment_id):
@@ -3920,6 +3932,7 @@ func reset_run() -> void:
 		"ak_precision_receiver": 0,
 	}
 	weapon_inventory = {"ak47": 1}
+	weapon_first_equip_done = []
 	equipment_inventory = {
 		"scav_vest": 0,
 		"riot_vest": 0,

@@ -248,7 +248,8 @@ func _open_ui() -> void:
 		ui_layer.queue_free()
 	ui_layer = CanvasLayer.new()
 	ui_layer.name = "WorkbenchUILayer"
-	ui_layer.layer = 20
+	# 다른 시설 모달(80~90)과 같은 대역 — HUD 액세서리 위에 확실히 얹힌다.
+	ui_layer.layer = 84
 	ui_layer.add_to_group("shelter_modal_ui")
 	var ui_parent := get_tree().current_scene if get_tree().current_scene != null else get_tree().root
 	ui_parent.add_child(ui_layer)
@@ -327,14 +328,15 @@ func _build_flow_strip() -> Control:
 	strip.name = "WorkbenchFlowStrip"
 	strip.add_theme_constant_override("separation", 6)
 	strip.alignment = BoxContainer.ALIGNMENT_CENTER
+	var narrow := get_viewport().get_visible_rect().size.x < 760.0
 	var steps := [
-		["고철·재료", "parts"],
+		["재료" if narrow else "고철·재료", "parts"],
 		["→", ""],
 		["부품", "parts"],
 		["→", ""],
-		["개조품·무기", "weapons"],
+		["개조·무기" if narrow else "개조품·무기", "weapons"],
 		["→", ""],
-		["장착 후 +99 강화", "enhance"],
+		["+99 강화" if narrow else "장착 후 +99 강화", "enhance"],
 	]
 	for step in steps:
 		var text := str(step[0])
@@ -345,6 +347,9 @@ func _build_flow_strip() -> Control:
 			12,
 			Color("#f0d98e") if lit else (Color("#57675f") if text == "→" else Color("#8fa398"))
 		)
+		# HBox에서 autowrap 라벨의 최소 폭은 '한 글자'다 — 스트립 전체가
+		# 세로로 한 글자씩 꺾여 내려가는 참사를 만든다.
+		label.autowrap_mode = TextServer.AUTOWRAP_OFF
 		strip.add_child(label)
 	return strip
 

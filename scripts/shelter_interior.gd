@@ -737,12 +737,15 @@ func _apply_portrait_camera_aspect(target_camera: Camera3D) -> void:
 	target_camera.keep_aspect = Camera3D.KEEP_WIDTH if portrait else Camera3D.KEEP_HEIGHT
 
 
-func _play_juhong_entrance_cinematic() -> void:
-	# 주홍의 등장을 내러티브 이벤트로 연출한다: 암전 속에 이미 와 있고, 상하
-	# 레터박스가 내려오며 화면이 밝아지면, 몇 걸음 다가와 말을 건다.
+func _play_juhong_entrance_cinematic(entrance := true) -> void:
+	# 주홍의 모든 대화를 내러티브 이벤트로 연출한다. entrance=true(복귀 직후)는
+	# 암전 속에 이미 와 있다가 밝아지며 걸어오고, false(직접 말 걸기)는 암전 없이
+	# 레터박스만 내려온 뒤 한 걸음 다가와 말을 시작한다.
 	# 예전에는 그냥 구석에 서 있는 NPC라 "뜬금없이 나타나 대사만 하고 사라지는"
 	# 인상이었다.
 	if not is_instance_valid(juhong_character) or not is_instance_valid(player):
+		return
+	if get_node_or_null("JuhongCinematicLayer") != null:
 		return
 	var cine := CanvasLayer.new()
 	cine.name = "JuhongCinematicLayer"
@@ -752,7 +755,7 @@ func _play_juhong_entrance_cinematic() -> void:
 	var black := ColorRect.new()
 	black.name = "CineBlack"
 	black.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	black.color = Color(0, 0, 0, 1.0)
+	black.color = Color(0, 0, 0, 1.0 if entrance else 0.0)
 	black.mouse_filter = Control.MOUSE_FILTER_STOP
 	cine.add_child(black)
 	var bar_top := ColorRect.new()
@@ -769,17 +772,21 @@ func _play_juhong_entrance_cinematic() -> void:
 	bar_bottom.offset_top = 0.0
 	bar_bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cine.add_child(bar_bottom)
-	# 이미 와 있던 것처럼: 플레이어에게서 5.5m 떨어진 자리에 세워 두고,
-	# 밝아진 뒤 2.2m까지 걸어오게 한다.
+	# 등장이라면 "이미 와 있던 것처럼": 플레이어에게서 5.5m 떨어진 자리에 세워
+	# 두고 밝아진 뒤 2.2m까지, 직접 말 걸었다면 지금 자리에서 반걸음만 다가온다.
 	var away := juhong_character.global_position - player.global_position
 	away.y = 0.0
 	if away.length_squared() < 0.01:
 		away = Vector3(1.0, 0.0, 1.0)
 	away = away.normalized()
-	juhong_character.global_position = player.global_position + away * 5.5
-	var approach_target := player.global_position + away * 2.2
+	if entrance:
+		juhong_character.global_position = player.global_position + away * 5.5
+	var approach_target := player.global_position + away * (2.2 if entrance else 1.6)
 	var tween := create_tween()
-	tween.tween_property(black, "color:a", 0.0, 1.0).set_trans(Tween.TRANS_SINE)
+	if entrance:
+		tween.tween_property(black, "color:a", 0.0, 1.0).set_trans(Tween.TRANS_SINE)
+	else:
+		tween.tween_interval(0.05)
 	tween.parallel().tween_property(bar_top, "offset_bottom", 62.0, 0.8).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tween.parallel().tween_property(bar_bottom, "offset_top", -62.0, 0.8).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tween.tween_callback(func() -> void:
@@ -788,10 +795,13 @@ func _play_juhong_entrance_cinematic() -> void:
 			juhong_character.call("_play_animation", "walk")
 	)
 	tween.tween_interval(0.2)
-	tween.tween_property(juhong_character, "global_position", approach_target, 1.4).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(
+		juhong_character, "global_position", approach_target, 1.4 if entrance else 0.6
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	tween.tween_callback(func() -> void:
 		if is_instance_valid(juhong_character):
 			juhong_character.call("_play_animation", "idle")
+			_spawn_story_emote(juhong_character, "…", Color("#93a89d"))
 		_open_juhong_story()
 		_finish_juhong_cinematic(cine)
 	)
@@ -814,6 +824,90 @@ func _finish_juhong_cinematic(cine: CanvasLayer) -> void:
 	if bar_bottom != null:
 		tween.parallel().tween_property(bar_bottom, "offset_top", 0.0, 0.4)
 	tween.tween_callback(cine.queue_free)
+
+
+func _play_juhong_exit() -> void:
+	# 전령은 대사가 끝나면 온 길로 돌아간다 — 있던 자리에서 증발하지 않는다.
+	if not is_instance_valid(juhong_character) or not is_instance_valid(player):
+		if is_instance_valid(juhong_character):
+			juhong_character.queue_free()
+		return
+	var leaving := juhong_character
+	var away := leaving.global_position - player.global_position
+	away.y = 0.0
+	if away.length_squared() < 0.01:
+		away = Vector3(1.0, 0.0, 1.0)
+	away = away.normalized()
+	_spawn_story_emote(leaving, "…", Color("#93a89d"))
+	var tween := create_tween()
+	tween.tween_interval(0.55)
+	tween.tween_callback(func() -> void:
+		if is_instance_valid(leaving):
+			leaving.call("_play_animation", "walk")
+	)
+	tween.tween_property(
+		leaving, "global_position", leaving.global_position + away * 6.5, 2.4
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	# 걸어가는 마지막 1초 동안 어둠에 녹아든다.
+	var fade := create_tween()
+	fade.tween_interval(1.7)
+	var sprite := leaving.get_node_or_null("CharacterSprite")
+	if sprite != null:
+		fade.tween_property(sprite, "modulate:a", 0.0, 1.1)
+	for child in leaving.get_children():
+		if child is Label3D:
+			fade.parallel().tween_property(child, "modulate:a", 0.0, 0.8)
+	tween.tween_callback(leaving.queue_free)
+
+
+func _emote_for_story_line(target: Node3D, line: String) -> void:
+	# 대사의 문장부호가 곧 감정이다 — 과장 없이 한 글자만 띄운다.
+	var glyph := ""
+	if line.contains("!"):
+		glyph = "!"
+	elif line.contains("?"):
+		glyph = "?"
+	elif line.contains("…") or line.contains("..."):
+		glyph = "…"
+	if glyph.is_empty():
+		return
+	var color := (
+		Color("#f0d98e") if glyph == "!"
+		else Color("#9fc9d8") if glyph == "?"
+		else Color("#93a89d")
+	)
+	_spawn_story_emote(target, glyph, color)
+
+
+func _spawn_story_emote(target: Node3D, glyph: String, color: Color) -> void:
+	if not is_instance_valid(target):
+		return
+	var previous := target.get_node_or_null("StoryEmote")
+	if previous != null:
+		previous.queue_free()
+	var label := Label3D.new()
+	label.name = "StoryEmote"
+	label.text = glyph
+	label.font = FONT
+	label.font_size = 92
+	label.pixel_size = 0.006
+	label.position = Vector3(0.44, 2.4, 0.0)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.render_priority = 127
+	label.modulate = Color(color.r, color.g, color.b, 0.0)
+	label.outline_modulate = Color(0.015, 0.02, 0.016, 0.98)
+	label.outline_size = 14
+	label.scale = Vector3.ONE * 0.55
+	target.add_child(label)
+	var pop := label.create_tween()
+	pop.tween_property(label, "scale", Vector3.ONE * 1.12, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	pop.tween_property(label, "scale", Vector3.ONE, 0.12)
+	var visibility := label.create_tween()
+	visibility.tween_property(label, "modulate:a", 1.0, 0.1)
+	visibility.tween_interval(1.05)
+	visibility.tween_property(label, "modulate:a", 0.0, 0.35)
+	visibility.tween_callback(label.queue_free)
 
 
 func _open_juhong_story() -> void:
@@ -1021,6 +1115,9 @@ func _refresh_contract_story() -> void:
 		contract_story_typewriter.start(contract_story_lines[contract_story_index])
 	else:
 		contract_story_body_label.text = contract_story_lines[contract_story_index]
+	# 주홍 대사는 줄마다 감정 이모트가 머리 위에 뜬다.
+	if contract_story_completion_owner == "juhong" and is_instance_valid(juhong_character):
+		_emote_for_story_line(juhong_character, contract_story_lines[contract_story_index])
 	contract_story_progress_label.text = "%d / %d" % [
 		contract_story_index + 1,
 		contract_story_lines.size(),
@@ -1047,8 +1144,7 @@ func _advance_contract_story() -> void:
 		GameState.mark_shelter_story_event_seen(contract_story_completion_id)
 	elif contract_story_completion_owner == "juhong":
 		GameState.mark_juhong_event_seen(contract_story_completion_id)
-		if is_instance_valid(juhong_character):
-			juhong_character.queue_free()
+		_play_juhong_exit()
 		juhong_character = null
 	contract_story_open = false
 	if is_instance_valid(contract_story_layer):
@@ -2928,7 +3024,8 @@ func _interact() -> void:
 		"iron_trainer":
 			_open_iron_mission_dialog()
 		"juhong":
-			_open_juhong_story()
+			# 직접 말을 걸어도 전령의 대화는 연출을 탄다 — 레터박스 + 반걸음 접근.
+			_play_juhong_entrance_cinematic(false)
 	_update_stats()
 
 

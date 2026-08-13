@@ -527,6 +527,11 @@ func _on_inventory_weapon_equipped(weapon_id: String) -> void:
 	host.has_ak = true
 	GameState.has_ak = true
 	host._refresh_weapon_stats()
+	# 처음 잡아 보는 총은 장전된 채로 온다 — 주운 즉시 쏴 보는 경험이 우선이다.
+	# 무기당 1회뿐이라 교체로 재장전 시간을 회피하는 꼼수는 안 된다.
+	if not reequipping_same_weapon and not GameState.weapon_first_equip_done.has(weapon_id):
+		GameState.weapon_first_equip_done.append(weapon_id)
+		host.magazine_ammo = int(host.weapon_stats.get("magazine_size", host.magazine_ammo))
 	GameState.magazine_ammo = host.magazine_ammo
 	host._rebuild_player_weapon_frames()
 	_update_weapon_pose()
