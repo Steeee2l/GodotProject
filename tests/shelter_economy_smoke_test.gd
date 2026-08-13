@@ -11,7 +11,7 @@ func _run() -> void:
 	game_state.call("reset_run")
 	game_state.call("unlock_all_shelter_facilities")
 	game_state.set("scrap", 500)
-	game_state.set("canned_food", 20)
+	game_state.set("canned_food", 200)
 	game_state.set("rescued_workers", 4)
 	game_state.call("_ensure_resident_records")
 	var resident_ids := game_state.get("resident_cat_ids") as Array
@@ -33,9 +33,6 @@ func _run() -> void:
 	game_state.set("weapon_durability", 42.0)
 	game_state.set("shelter_last_progress_time", int(Time.get_unix_time_from_system()) - 7200)
 	game_state.set("workbench_repair_active", true)
-	# 생산은 원자재(가동 연료)를 태워야 돈다 — 출정과 쉘터를 묶는 관문.
-	game_state.set("raw_scrap", 100_000)
-	game_state.set("raw_catnip", 100_000)
 	var shelter := load("res://scenes/shelter_interior.tscn").instantiate() as Node3D
 	root.add_child(shelter)
 	await process_frame

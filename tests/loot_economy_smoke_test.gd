@@ -10,12 +10,12 @@ func _initialize() -> void:
 func _run() -> void:
 	var stage_one_profile := LOOT_ECONOMY.get_stage_profile(1)
 	var stage_four_profile := LOOT_ECONOMY.get_stage_profile(4)
-	assert(_container_count(stage_one_profile) == 43)
-	assert(_container_count(stage_four_profile) == 71)
+	assert(_container_count(stage_one_profile) == 36)
+	assert(_container_count(stage_four_profile) == 59)
 	assert(int(stage_one_profile.get("weapon_rarity_cap", 0)) == 1)
 	assert(int(stage_four_profile.get("weapon_rarity_cap", 0)) == 4)
-	assert(LOOT_ECONOMY.get_guaranteed_canned_food_pickup_count(1) == 20)
-	assert(LOOT_ECONOMY.get_guaranteed_canned_food_pickup_count(4) == 26)
+	assert(LOOT_ECONOMY.get_guaranteed_canned_food_pickup_count(1) == 21)
+	assert(LOOT_ECONOMY.get_guaranteed_canned_food_pickup_count(4) == 27)
 
 	var stage_one_supply := LOOT_ECONOMY.simulate_stage_supply(1, 600, 1103)
 	var stage_four_supply := LOOT_ECONOMY.simulate_stage_supply(4, 600, 2207)

@@ -39,6 +39,8 @@ func _run() -> void:
     state.canned_food = 250
     assert(int(state.get_raid_bag_used_slots()) == 2, "Canned food must stay in one bag slot.")
     state.add_weapon("mp5", 3)
+    # 첫 획득 무기는 기본 탄약 2탄창이 따라온다 — 슬롯 산수만 보는 테스트라 비운다.
+    state.set_ammo_count("9mm_fmj", 0)
     assert(int(state.get_raid_bag_used_slots()) == 5, "Each unequipped weapon must use one slot.")
     state.add_equipment("scav_vest", 2)
     assert(int(state.get_raid_bag_used_slots()) == 7, "Each equipment item must use one slot.")
@@ -51,6 +53,7 @@ func _run() -> void:
     state.canned_food = 0
     state.mod_component_inventory.clear()
     state.add_weapon("mp5", 11)
+    state.set_ammo_count("9mm_fmj", 0)
     state.set_ammo_count("762_fmj", 600)
     assert(int(state.get_raid_bag_used_slots()) == 12)
     assert(not state.can_add_raid_item("weapon", "m1911", 1), "A full bag must reject another weapon.")

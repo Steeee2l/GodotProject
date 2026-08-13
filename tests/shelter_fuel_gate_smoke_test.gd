@@ -1,6 +1,6 @@
 extends SceneTree
 
-# 원자재 게이트: 쉘터 생산이 출정에서 가져온 원자재와 통조림에 묶여 있는지 검증한다.
+# 연료 게이트: 쉘터 생산이 출정에서 가져온 통조림(단일 연료)에 묶여 있는지 검증한다.
 
 var failures: Array[String] = []
 
@@ -35,10 +35,8 @@ func _run() -> void:
 	game_state.assigned_worker_ids = scratcher_crew
 	game_state.assigned_catnip_worker_ids = catnip_crew
 
-	# 1) 통조림이 없으면 원자재가 있어도 생산이 멈춘다.
+	# 1) 통조림이 없으면 생산이 멈춘다.
 	game_state.canned_food = 0
-	game_state.raw_scrap = 50
-	game_state.raw_catnip = 50
 	var scrap_before: int = game_state.scrap
 	game_state.tick_shelter_live(60.0)
 	_check(
@@ -50,57 +48,55 @@ func _run() -> void:
 		"정지 사유가 no_food가 아님: %s" % game_state.get_shelter_stall_reason()
 	)
 
-	# 2) 원자재가 없으면 통조림이 있어도 생산이 멈춘다.
+	# 2) 통조림이 있으면 생산되고, 통조림이 실제로 줄어든다.
 	game_state.canned_food = 100
-	game_state.raw_scrap = 0
-	game_state.raw_catnip = 0
 	game_state.shelter_scrap_fraction = 0.0
 	game_state.shelter_catnip_fraction = 0.0
+	game_state.shelter_food_fraction = 0.0
+	var food_before: int = game_state.canned_food
 	scrap_before = game_state.scrap
 	var catnip_before: int = game_state.catnip
-	game_state.tick_shelter_live(120.0)
-	_check(
-		game_state.scrap == scrap_before,
-		"원자재가 없는데 고철이 생산됨 (%d -> %d)" % [scrap_before, game_state.scrap]
-	)
-	_check(
-		game_state.catnip == catnip_before,
-		"원자재가 없는데 캣닢이 생산됨 (%d -> %d)" % [catnip_before, game_state.catnip]
-	)
-
-	# 3) 둘 다 있으면 생산되고 원자재가 실제로 줄어든다.
-	game_state.raw_scrap = 50
-	game_state.raw_catnip = 50
-	var raw_scrap_before: int = game_state.raw_scrap
-	scrap_before = game_state.scrap
-	game_state.tick_shelter_live(600.0)
+	game_state.tick_shelter_live(3600.0 * 8.0)
 	_check(
 		game_state.scrap > scrap_before,
 		"연료가 충분한데 고철이 생산되지 않음 (%d -> %d)" % [scrap_before, game_state.scrap]
 	)
 	_check(
-		game_state.raw_scrap < raw_scrap_before,
-		"생산했는데 원자재가 소비되지 않음 (%d -> %d)" % [raw_scrap_before, game_state.raw_scrap]
+		game_state.catnip > catnip_before,
+		"연료가 충분한데 캣닢이 생산되지 않음 (%d -> %d)" % [catnip_before, game_state.catnip]
+	)
+	_check(
+		game_state.canned_food < food_before,
+		"생산했는데 통조림이 소비되지 않음 (%d -> %d)" % [food_before, game_state.canned_food]
 	)
 
-	# 4) 잔여 가동시간은 원자재/식량 중 짧은 쪽을 따른다.
-	game_state.canned_food = 1000
-	game_state.raw_scrap = 1
-	game_state.raw_catnip = 1000
-	var runtime: float = game_state.get_shelter_runtime_seconds()
+	# 3) 잔여 가동시간은 통조림 재고에 비례한다.
+	game_state.canned_food = 10
+	var runtime_small: float = game_state.get_shelter_runtime_seconds()
+	game_state.canned_food = 100
+	var runtime_large: float = game_state.get_shelter_runtime_seconds()
 	_check(
-		runtime > 0.0 and runtime <= game_state.WORKER_SECONDS_PER_RAW_SCRAP + 0.001,
-		"잔여 가동시간이 가장 부족한 원자재를 따르지 않음: %.1f초" % runtime
+		runtime_small > 0.0 and runtime_large > runtime_small * 5.0,
+		"잔여 가동시간이 통조림 재고를 따르지 않음: %.1f / %.1f" % [runtime_small, runtime_large]
 	)
 
-	# 5) 원자재는 부피가 커서 10개마다 가방 한 칸을 먹는다.
+	# 4) 캣닢 급여는 한 판짜리 택1 — 소비되고, 중복 선택은 거부되고, 복귀 시 사라진다.
+	game_state.catnip = 1000
+	var catnip_wallet: int = game_state.catnip
+	_check(game_state.try_activate_catnip_field_buff("swift_paws"), "캣닢 급여 적용 실패")
+	_check(game_state.catnip < catnip_wallet, "캣닢 급여가 캣닢을 소비하지 않음")
 	_check(
-		game_state.get_raid_item_slot_cost("raw_scrap", "raw_scrap", 10) == 1,
-		"원자재 10개가 1칸이 아님"
+		not game_state.try_activate_catnip_field_buff("keen_eyes"),
+		"캣닢 급여가 택1 규칙을 어기고 중복 적용됨"
 	)
 	_check(
-		game_state.get_raid_item_slot_cost("raw_scrap", "raw_scrap", 11) == 2,
-		"원자재 11개가 2칸이 아님"
+		game_state.get_move_speed_multiplier() > 1.11,
+		"잰걸음 급여가 이동 속도에 반영되지 않음"
+	)
+	game_state.register_shelter_return()
+	_check(
+		game_state.active_catnip_buff == "",
+		"캣닢 급여가 복귀 후에도 남아 있음"
 	)
 
 	# 6) 츄르 버프는 가방 용량을 실제로 늘리고, 복귀 시 사라진다.
@@ -168,10 +164,10 @@ func _run() -> void:
 	_check(game_state.is_milestone_unlocked("shelter_line"), "shelter_line 마일스톤이 기록되지 않음")
 
 	if failures.is_empty():
-		print("raw_material_gate_smoke_test: PASS")
+		print("shelter_fuel_gate_smoke_test: PASS")
 		quit(0)
 	else:
 		for failure in failures:
 			printerr("FAIL: %s" % failure)
-		printerr("raw_material_gate_smoke_test: %d건 실패" % failures.size())
+		printerr("shelter_fuel_gate_smoke_test: %d건 실패" % failures.size())
 		quit(1)

@@ -23,7 +23,7 @@ func _ready() -> void:
 
 
 func get_interaction_prompt() -> String:
-	return "꾹꾹이 생산기 · 고철 조각→고철 (주민 배치)"
+	return "꾹꾹이 생산기 · 통조림→고철 (주민 배치)"
 
 
 func get_interaction_radius() -> float:
@@ -219,7 +219,7 @@ func _rebuild_ui() -> void:
 	var boost := _button(
 		"가동 중  %02d:%02d" % [boost_remaining / 60, boost_remaining % 60]
 		if boost_remaining > 0
-		else "캣닢 x25 · 10분 생산 x10",
+		else "캣닢 x%s · 10분 생산 x10" % GameState.format_compact_number(GameState.CATNIP_BOOST_COST),
 		"catnip"
 	)
 	boost.disabled = boost_remaining > 0 or GameState.catnip < GameState.CATNIP_BOOST_COST
@@ -332,7 +332,7 @@ func _portrait_card(resident_id: String, is_seat: bool, slots: int) -> Button:
 		):
 			_reroll_worker(resident_id)
 	)
-	button.tooltip_text = "%s · %s\n꾹꾹이 x%.2f · 캣닢 x%.2f · 식비 x%.2f\n%s\n우클릭: 특성 재굴림 · 캣닢 %s" % [
+	button.tooltip_text = "%s · %s\n꾹꾹이 x%.2f · 캣닢 x%.2f · 식비 x%.2f\n%s\n우클릭: 특성 재굴림 · 츄르 %s" % [
 		display_name,
 		str(trait_data.get("name", "")),
 		float(trait_data.get("kneading", 1.0)),

@@ -13,7 +13,7 @@ const STAGE_PROFILES := {
 		"enemy_drop_cap": 18,
 		"raid_kill_cap": 40,
 		"weapon_case_chance": 0.16,
-		"guaranteed_canned_food_pickups": 20,
+		"guaranteed_canned_food_pickups": 21,
 		"canned_food_double_stack_chance": 0.22,
 		"container_counts": {
 			"street_cache": 14,
@@ -21,8 +21,6 @@ const STAGE_PROFILES := {
 			"toolbox": 6,
 			"clothing_cache": 4,
 			"weapon_case": 1,
-			"scrap_pile": 4,
-			"catnip_planter": 3,
 			"residential_pantry": 2,
 			"vending_machine": 2,
 			"pet_shop_crate": 2,
@@ -39,7 +37,7 @@ const STAGE_PROFILES := {
 		"enemy_drop_cap": 22,
 		"raid_kill_cap": 55,
 		"weapon_case_chance": 0.24,
-		"guaranteed_canned_food_pickups": 22,
+		"guaranteed_canned_food_pickups": 23,
 		"canned_food_double_stack_chance": 0.24,
 		"container_counts": {
 			"street_cache": 15,
@@ -48,8 +46,6 @@ const STAGE_PROFILES := {
 			"clothing_cache": 5,
 			"weapon_case": 2,
 			"secure_cache": 1,
-			"scrap_pile": 5,
-			"catnip_planter": 4,
 			"residential_pantry": 2,
 			"vending_machine": 2,
 			"pharmacy_shelf": 2,
@@ -67,7 +63,7 @@ const STAGE_PROFILES := {
 		"enemy_drop_cap": 28,
 		"raid_kill_cap": 70,
 		"weapon_case_chance": 0.34,
-		"guaranteed_canned_food_pickups": 24,
+		"guaranteed_canned_food_pickups": 25,
 		"canned_food_double_stack_chance": 0.26,
 		"container_counts": {
 			"street_cache": 14,
@@ -76,8 +72,6 @@ const STAGE_PROFILES := {
 			"clothing_cache": 5,
 			"weapon_case": 3,
 			"secure_cache": 4,
-			"scrap_pile": 6,
-			"catnip_planter": 4,
 			"pharmacy_shelf": 2,
 			"electronics_bin": 3,
 			"office_desk": 2,
@@ -95,7 +89,7 @@ const STAGE_PROFILES := {
 		"enemy_drop_cap": 34,
 		"raid_kill_cap": 85,
 		"weapon_case_chance": 0.42,
-		"guaranteed_canned_food_pickups": 26,
+		"guaranteed_canned_food_pickups": 27,
 		"canned_food_double_stack_chance": 0.28,
 		"container_counts": {
 			"street_cache": 14,
@@ -104,8 +98,6 @@ const STAGE_PROFILES := {
 			"clothing_cache": 6,
 			"weapon_case": 5,
 			"secure_cache": 5,
-			"scrap_pile": 7,
-			"catnip_planter": 5,
 			"electronics_bin": 4,
 			"office_desk": 3,
 			"subway_locker": 3,
@@ -123,7 +115,7 @@ const STAGE_PROFILES := {
 		"enemy_drop_cap": 40,
 		"raid_kill_cap": 100,
 		"weapon_case_chance": 0.5,
-		"guaranteed_canned_food_pickups": 28,
+		"guaranteed_canned_food_pickups": 29,
 		"canned_food_double_stack_chance": 0.30,
 		"container_counts": {
 			"street_cache": 14,
@@ -132,8 +124,6 @@ const STAGE_PROFILES := {
 			"clothing_cache": 6,
 			"weapon_case": 7,
 			"secure_cache": 8,
-			"scrap_pile": 8,
-			"catnip_planter": 6,
 			"electronics_bin": 5,
 			"office_desk": 4,
 			"subway_locker": 4,
@@ -209,29 +199,6 @@ const CONTAINER_DEFINITIONS := {
 			["ammo_762_fmj", 10.0],
 		],
 	},
-	"scrap_pile": {
-		"display_name": "고철 더미",
-		"roll_min": 2,
-		"roll_max": 3,
-		"empty_chance": 0.05,
-		"entries": [
-			["raw_scrap", 82.0],
-			["raw_catnip", 8.0],
-			["rubber_gasket", 6.0],
-			["magazine_spring", 4.0],
-		],
-	},
-	"catnip_planter": {
-		"display_name": "야생 캣닢 화단",
-		"roll_min": 2,
-		"roll_max": 3,
-		"empty_chance": 0.08,
-		"entries": [
-			["raw_catnip", 78.0],
-			["raw_scrap", 10.0],
-			["canned_food", 12.0],
-		],
-	},
 	# ── 장소가 성격을 갖게 하는 컨테이너들 ──
 	"pharmacy_shelf": {
 		"display_name": "약국 진열대",
@@ -262,7 +229,7 @@ const CONTAINER_DEFINITIONS := {
 		"display_name": "반려동물 용품 상자",
 		"roll_min": 2, "roll_max": 3, "empty_chance": 0.12,
 		"entries": [
-			["canned_food", 34.0], ["raw_catnip", 26.0], ["cat_toy_mouse", 18.0],
+			["canned_food", 60.0], ["cat_toy_mouse", 18.0],
 			["bell_collar", 14.0], ["medkit", 8.0],
 		],
 	},
@@ -338,27 +305,6 @@ const ITEM_CATALOG := {
 		"slot_size": 1,
 		"rarity_tier": 4,
 		"minimum_stage": 4,
-	},
-	# 원자재: 쉘터 가동 연료. 개당 가치는 낮지만 부피가 커서 가방을 압박한다.
-	"raw_scrap": {
-		"loot_type": "raw_scrap",
-		"display_name": "고철 조각",
-		"base_value": 14,
-		"slot_size": 1,
-		"rarity_tier": 1,
-		"minimum_stage": 1,
-		"stack_min": 3,
-		"stack_max": 6,
-	},
-	"raw_catnip": {
-		"loot_type": "raw_catnip",
-		"display_name": "캣닢 잎",
-		"base_value": 11,
-		"slot_size": 1,
-		"rarity_tier": 1,
-		"minimum_stage": 1,
-		"stack_min": 2,
-		"stack_max": 5,
 	},
 	"medkit": {
 		"loot_type": "medkit",
@@ -927,9 +873,6 @@ static func try_register_loot(
 	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 5)] as Dictionary
 	var value := get_definition_value(definition)
 	var loot_type := str(definition.get("type", ""))
-	# 원자재는 쉘터 가동 연료다. 가치 상한 때문에 스폰이 막히면 진행이 멈추므로 제외한다.
-	if loot_type in ["raw_scrap", "raw_catnip"]:
-		return true
 	if not ignore_caps:
 		if (
 			loot_type == "weapon"
@@ -1009,8 +952,6 @@ static func simulate_stage_supply(stage_tier: int, run_count: int, seed_value: i
 				var value := get_definition_value(definition)
 				# 원자재는 전리품이 아니라 연료다. try_register_loot과 마찬가지로
 				# 가치 예산에서 빼야 탄약·부품 스폰을 잠식하지 않는다.
-				if str(definition.get("type", "")) in ["raw_scrap", "raw_catnip"]:
-					continue
 				if run_value + value > int(profile.get("field_value_cap", 0)):
 					continue
 				if (

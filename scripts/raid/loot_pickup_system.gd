@@ -116,14 +116,6 @@ func _create_loot_pickup(loot_type: String, world_position: Vector3, data: Dicti
 			sprite.texture = CHURU_TEXTURE
 			sprite.pixel_size = 0.0011
 			highlight_color = Color("#f2bd55")
-		"raw_scrap":
-			sprite.texture = UI_ICONS.get_icon("scrap", 96, Color("#b9a68c"))
-			sprite.pixel_size = _pickup_pixel_size(sprite.texture, 0.62)
-			highlight_color = Color("#b9a68c")
-		"raw_catnip":
-			sprite.texture = UI_ICONS.get_icon("catnip", 96, Color("#8fd07a"))
-			sprite.pixel_size = _pickup_pixel_size(sprite.texture, 0.62)
-			highlight_color = Color("#8fd07a")
 		"valuable":
 			sprite.texture = UI_ICONS.get_icon("loot", 96, Color("#e6c979"))
 			sprite.pixel_size = _pickup_pixel_size(sprite.texture, 0.58)
@@ -314,7 +306,6 @@ func _collect_nearby_ammo() -> void:
 	host._add_fatigue(FATIGUE_LOOT_GAIN)
 	var loot_type := str(host.nearby_ammo_pickup.get_meta("loot_type", "ammo"))
 	var amount := int(host.nearby_ammo_pickup.get_meta("amount", 1))
-	_maybe_teach_raw_material(loot_type)
 	match loot_type:
 		"canned_food":
 			GameState.canned_food += amount
@@ -415,22 +406,6 @@ func _armor_pickup_notice(equipment_id: String) -> String:
 	return "▲ %s 장착! 방어 %d%% → %d%%" % [display_name, previous_pct, new_pct]
 
 
-func _maybe_teach_raw_material(loot_type: String) -> void:
-	# 용도와 부피는 컨테이너를 처음 열 때 raw_material_tip_seen이 이미 가르친다.
-	# 여기서는 한 걸음 더 나간 것만 말한다 — 이 칸을 자원에 쓸지 장비에 쓸지가
-	# 이 게임의 실제 선택이라는 것. 앞선 안내를 본 뒤에만 뜬다.
-	if loot_type != "raw_scrap" and loot_type != "raw_catnip":
-		return
-	if GameState.raw_material_lesson_seen or not GameState.raw_material_tip_seen:
-		return
-	GameState.raw_material_lesson_seen = true
-	GameState.save_persistent_state()
-	host._show_field_notice(
-		"가방 한 칸을 원자재에 쓸지 장비에 쓸지가 이 도시의 진짜 선택이다.\n"
-		+ "살아 돌아온 가방만 쉘터의 것이 된다."
-	)
-
-
 func _show_bag_full_notice() -> void:
 	if host.hud.ammo_notice:
 		host.hud.ammo_notice.text = "가방이 꽉 찼습니다."
@@ -463,12 +438,6 @@ func _build_pickup_candidate(pickup: Node3D) -> Dictionary:
 		"churu":
 			item_type = "churu"
 			item_id = "churu"
-		"raw_scrap":
-			item_type = "raw_scrap"
-			item_id = "raw_scrap"
-		"raw_catnip":
-			item_type = "raw_catnip"
-			item_id = "raw_catnip"
 		"valuable":
 			item_type = "valuable"
 			item_id = str(pickup.get_meta("item_id", "subway_token"))
@@ -541,10 +510,6 @@ func _spawn_discarded_raid_item(item_type: String, item_id: String, amount: int)
 			loot_type = "canned_food"
 		"churu":
 			loot_type = "churu"
-		"raw_scrap":
-			loot_type = "raw_scrap"
-		"raw_catnip":
-			loot_type = "raw_catnip"
 		"valuable":
 			loot_type = "valuable"
 			data["item_id"] = item_id
@@ -583,8 +548,6 @@ func _raid_item_display_name(item_type: String, item_id: String) -> String:
 		"canned_food": "통조림",
 		"medkit": "구급약",
 		"churu": "희귀 츄르",
-		"raw_scrap": "고철 조각",
-		"raw_catnip": "캣닢 잎",
 		"rifle_blueprint": "소총 제작 청사진",
 		"shotgun_blueprint": "산탄총 제작 청사진",
 		"sealed_zone_keycard": "봉인구역 키카드",
@@ -608,10 +571,6 @@ func _raid_item_description(item_type: String, item_id: String) -> String:
 			return "주민이 일하려면 먹어야 합니다. 떨어지면 쉘터 생산이 멈춥니다."
 		"churu":
 			return "쉘터 확장에 쓰이는 희귀 재화입니다."
-		"raw_scrap":
-			return "꾹꾹이 라인의 원료입니다. 부피가 커서 10개마다 가방 한 칸을 차지합니다."
-		"raw_catnip":
-			return "캣닢 정제기의 원료입니다. 부피가 커서 10개마다 가방 한 칸을 차지합니다."
 		"valuable":
 			return "쓸 데는 없지만 값이 나갑니다. 쉘터에서 고철로 바꿉니다."
 		"medkit":
@@ -635,10 +594,6 @@ func _raid_item_texture(item_type: String, item_id: String) -> Texture2D:
 			return CHURU_TEXTURE
 		"medkit":
 			return UI_ICONS.get_icon("medkit", 96, Color("#f4eee2"))
-		"raw_scrap":
-			return UI_ICONS.get_icon("scrap", 96, Color("#b9a68c"))
-		"raw_catnip":
-			return UI_ICONS.get_icon("catnip", 96, Color("#8fd07a"))
 		"valuable":
 			return UI_ICONS.get_icon("loot", 96, Color("#e6c979"))
 		"progression":
@@ -719,8 +674,7 @@ func _spawn_onboarding_loot_cluster(world: ProceduralCityMap) -> void:
 	var origin := player.global_position
 	# 한 자리에 몰아 두면 "왜 이렇게 많아?"가 된다. 수를 줄이고 넓게 흩뿌린다.
 	var plan := [
-		{"type": "raw_scrap", "amount": 8, "data": {}},
-		{"type": "raw_catnip", "amount": 6, "data": {}},
+		{"type": "canned_food", "amount": 3, "data": {}},
 		{"type": "medkit", "amount": 1, "data": {}},
 		{"type": "mod_component", "amount": 1, "data": {"component_id": "scope_lens"}},
 	]

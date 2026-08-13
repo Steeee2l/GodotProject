@@ -49,12 +49,10 @@ var weapon_level: int = 1
 # 구급약 1개를 쥐여 주고 시작한다. 0개로 첫 출정을 보내면 회복 수단이 운빨
 # 루팅(사실상 동전 던지기)이 되고, 사망 화면은 있지도 않던 구급약을 논한다.
 var medkits: int = 1
+# 통조림은 쉘터의 유일한 가동 연료다. 출정에서 가져와 주민 노동을 산다.
 var canned_food: int = 0
 var catnip: int = 0
 var churu: int = 0
-# 원자재는 출정에서만 들어온다. 쉘터는 이것을 소비해 정제 자원을 만든다.
-var raw_scrap: int = 0
-var raw_catnip: int = 0
 # 귀중품: 용도가 없고 오직 값어치만 있는 물건. 추출 슈터의 핵심 판단축인
 # "칸당 가치"를 순수하게 만드는 아이템 계열이다. 쉘터에서 고철로 환전한다.
 var valuable_inventory: Dictionary = {}
@@ -144,18 +142,15 @@ var workbench_starter_parts_claimed: bool = false
 var shelter_scrap_fraction: float = 0.0
 var shelter_catnip_fraction: float = 0.0
 var shelter_food_fraction: float = 0.0
-var shelter_raw_scrap_fraction: float = 0.0
-var shelter_raw_catnip_fraction: float = 0.0
 # 이번 출정에만 적용되는 츄르 버프. 출정 종료/사망 시 소멸한다.
 var active_churu_buffs: Array[String] = []
+# 이번 출정에만 적용되는 캣닢 급여(택1). 출정 종료/사망 시 소멸한다.
+var active_catnip_buff := ""
 var last_corpse_decay_notice: Dictionary = {}
 # 첫 판에서 "가방이 꽉 찼을 때의 갈등"을 한 번은 반드시 겪게 한다.
 var bag_pressure_lesson_seen: bool = false
-# 첫 원자재 컨테이너 개봉 시 한 번만 용도를 설명한다.
-var raw_material_tip_seen: bool = false
 # 첫 출정에서 한 번씩만 뜨는 코칭. 다리 위 튜토리얼은 동사(이동·조준·사격)만
 # 가르치고 끝나서, 정작 이 게임의 결정 구조는 아무도 설명하지 않았다.
-var raw_material_lesson_seen: bool = false
 var workbench_lesson_seen: bool = false
 var fatigue_lesson_seen: bool = false
 var extraction_choice_lesson_seen: bool = false
@@ -545,9 +540,10 @@ const SHELTER_UPGRADE_COSTS := {
 #
 # 재굴림: 주민 특성은 이제 트레이드오프라 나쁜 조합이 나올 수 있다.
 # 캣닢을 태워 다시 뽑는다. 뽑을수록 비싸져서 무한 리롤은 막는다.
-const RESIDENT_REROLL_BASE_COST := 1200
-const RESIDENT_REROLL_STEP := 900
-const RESIDENT_REROLL_MAX_COST := 12000
+# 리롤은 츄르로 지불한다 — 희귀 재화이므로 낮은 수치로 시작해 천천히 오른다.
+const RESIDENT_REROLL_BASE_COST := 1
+const RESIDENT_REROLL_STEP := 1
+const RESIDENT_REROLL_MAX_COST := 5
 
 const CATNIP_BOOST_COST := 900
 const CATNIP_BOOST_DURATION_SECONDS := 600
@@ -617,14 +613,33 @@ const CHURU_BUFFS := {
 	},
 }
 
-# ── 원자재 게이트 ──────────────────────────────────────────────
-# 쉘터는 원자재를 만들지 못한다. 출정에서 가져온 만큼만 가공할 수 있다.
-# 원자재 1개가 주민 1명을 몇 초 동안 돌리는지.
-const WORKER_SECONDS_PER_RAW_SCRAP := 60.0
-const WORKER_SECONDS_PER_RAW_CATNIP := 90.0
-# 정제 산출: 원자재 1개당 나오는 정제 자원의 기대량 (배율 적용 전).
-const REFINED_SCRAP_PER_RAW := 600
-const REFINED_CATNIP_PER_RAW := 240
+# ── 캣닢 출정 급여 ─────────────────────────────────────────────
+# 착즙 라인이 곧 전투 준비다. 출정 전에 캣닢 한 줌을 먹이면 한 판짜리
+# 체질 보정이 붙는다 — 츄르 버프와 같은 수명(복귀/사망 시 소멸).
+const CATNIP_FIELD_BUFFS := {
+	"swift_paws": {
+		"title": "잰걸음",
+		"short_title": "이속",
+		"description": "이번 출정 동안 이동 속도 +12%",
+		"cost": 400,
+		"icon": "speed",
+	},
+	"keen_eyes": {
+		"title": "집중",
+		"short_title": "명중",
+		"description": "이번 출정 동안 탄퍼짐 -25%",
+		"cost": 400,
+		"icon": "interact",
+	},
+	"steady_heart": {
+		"title": "끈기",
+		"short_title": "피로",
+		"description": "이번 출정 동안 피로도 증가 -35%",
+		"cost": 400,
+		"icon": "stamina",
+	},
+}
+
 # 특성은 서열이 아니라 선택이어야 한다. 예전엔 전부 1.0 이상이라
 # "누가 더 좋은가"만 있었고 어디에 넣을지 고민할 이유가 없었다.
 # 이제 각자 잘하는 쪽과 못하는 쪽이 갈리고, 잘하는 만큼 더 먹는다.
@@ -837,7 +852,7 @@ func apply_corpse_decay() -> Dictionary:
 	if ratio >= 1.0:
 		return {"status": "intact"}
 	var loot := pending_corpse_recovery.get("loot", {}) as Dictionary
-	for scalar_key in ["medkits", "canned_food", "churu", "raw_scrap", "raw_catnip"]:
+	for scalar_key in ["medkits", "canned_food", "churu"]:
 		loot[scalar_key] = int(floor(float(int(loot.get(scalar_key, 0))) * ratio))
 	for inventory_key in [
 		"ammo_inventory",
@@ -901,11 +916,9 @@ func clear_carried_raid_inventory_after_death() -> void:
 	medkits = 0
 	canned_food = get_stored_storage_count("food", "canned_food")
 	churu = 0
-	# 가지고 있던 원자재는 시체와 함께 현장에 남는다. 창고에 넣어둔 분량만 살아남는다.
-	raw_scrap = 0
-	raw_catnip = 0
 	valuable_inventory.clear()
 	clear_churu_buffs()
+	clear_catnip_field_buff()
 	magazine_ammo = 0
 	reserve_ammo = 0
 	has_ak = false
@@ -932,8 +945,9 @@ func register_shelter_return(survived: bool = true) -> void:
 	if survived:
 		survived_return_count += 1
 	clear_confirmed_raid_manifest()
-	# 츄르 버프는 한 판짜리다. 복귀와 동시에 사라진다.
+	# 츄르 버프와 캣닢 급여는 한 판짜리다. 복귀와 동시에 사라진다.
 	clear_churu_buffs()
+	clear_catnip_field_buff()
 	# 남겨 둔 시체는 그동안 남의 손을 탄다.
 	last_corpse_decay_notice = apply_corpse_decay()
 	pending_milestone_unlocks = check_milestone_unlocks()
@@ -1385,18 +1399,11 @@ func get_raid_item_stack_limit(item_type: String) -> int:
 	return maxi(1, int(RAID_STACK_LIMITS.get(item_type, 1)))
 
 
-# 원자재는 부피가 크다. 한 슬롯에 이만큼만 들어가고, 넘치면 슬롯을 더 먹는다.
-const RAW_MATERIAL_PER_SLOT := 10
-const RAW_MATERIAL_TYPES := ["raw_scrap", "raw_catnip"]
-
-
 func get_raid_item_slot_cost(item_type: String, _item_id: String, amount: int) -> int:
 	if amount <= 0:
 		return 0
 	if item_type in ["weapon", "equipment"]:
 		return amount
-	if item_type in RAW_MATERIAL_TYPES:
-		return ceili(float(amount) / float(RAW_MATERIAL_PER_SLOT))
 	return 1
 
 
@@ -1408,10 +1415,6 @@ func _get_raid_bag_count(item_type: String, item_id: String) -> int:
 			return get_progression_item_count(item_id)
 		"churu":
 			return maxi(0, churu)
-		"raw_scrap":
-			return maxi(0, raw_scrap)
-		"raw_catnip":
-			return maxi(0, raw_catnip)
 		"valuable":
 			return maxi(0, int(valuable_inventory.get(item_id, 0)))
 		"special_cargo":
@@ -1430,8 +1433,6 @@ func get_raid_bag_used_slots() -> int:
 		get_backpack_storage_count("food", "canned_food")
 	)
 	used += get_raid_item_slot_cost("churu", "churu", churu)
-	used += get_raid_item_slot_cost("raw_scrap", "raw_scrap", raw_scrap)
-	used += get_raid_item_slot_cost("raw_catnip", "raw_catnip", raw_catnip)
 	for valuable_id in valuable_inventory.keys():
 		used += get_raid_item_slot_cost(
 			"valuable", str(valuable_id), int(valuable_inventory[valuable_id])
@@ -1488,7 +1489,6 @@ func get_raid_item_added_slot_delta(
 func get_raid_items_added_slot_delta(items: Array[Dictionary]) -> int:
 	var added_slots: int = 0
 	var planned_stack_keys: Dictionary = {}
-	var planned_raw_amounts: Dictionary = {}
 	var cargo_planned: bool = not raid_special_cargo.is_empty()
 	for item in items:
 		var item_type: String = str(item.get("type", ""))
@@ -1504,21 +1504,10 @@ func get_raid_items_added_slot_delta(items: Array[Dictionary]) -> int:
 				added_slots += 1
 				cargo_planned = true
 			continue
-		if item_type in RAW_MATERIAL_TYPES:
-			# 원자재는 누적량에 따라 슬롯이 늘어나므로 배치 전체를 합산해서 계산한다.
-			planned_raw_amounts[item_type] = int(planned_raw_amounts.get(item_type, 0)) + amount
-			continue
 		var stack_key: String = "%s:%s" % [item_type, item_id]
 		if _get_raid_bag_count(item_type, item_id) <= 0 and not planned_stack_keys.has(stack_key):
 			added_slots += 1
 			planned_stack_keys[stack_key] = true
-	for raw_type in planned_raw_amounts.keys():
-		var raw_id := str(raw_type)
-		var current_raw := _get_raid_bag_count(raw_id, raw_id)
-		added_slots += (
-			get_raid_item_slot_cost(raw_id, raw_id, current_raw + int(planned_raw_amounts[raw_type]))
-			- get_raid_item_slot_cost(raw_id, raw_id, current_raw)
-		)
 	return added_slots
 
 
@@ -1557,10 +1546,6 @@ func try_add_raid_item(item_type: String, item_id: String, amount: int = 1) -> b
 			canned_food += amount
 		"churu":
 			churu += amount
-		"raw_scrap":
-			raw_scrap += amount
-		"raw_catnip":
-			raw_catnip += amount
 		"valuable":
 			valuable_inventory[item_id] = int(valuable_inventory.get(item_id, 0)) + amount
 		_:
@@ -1591,10 +1576,6 @@ func remove_raid_bag_item(item_type: String, item_id: String, amount: int) -> in
 			canned_food = maxi(0, canned_food - removable)
 		"churu":
 			churu = maxi(0, churu - removable)
-		"raw_scrap":
-			raw_scrap = maxi(0, raw_scrap - removable)
-		"raw_catnip":
-			raw_catnip = maxi(0, raw_catnip - removable)
 		"valuable":
 			valuable_inventory[item_id] = maxi(0, int(valuable_inventory.get(item_id, 0)) - removable)
 		"special_cargo":
@@ -2276,16 +2257,10 @@ func tick_shelter_live(delta: float) -> int:
 	var safe_delta := maxf(delta, 0.0)
 	var scrap_rate := get_scrap_per_second()
 	var catnip_rate := get_catnip_per_second()
+	# 연료는 통조림 하나다. 주민이 먹은 시간만큼 두 라인이 함께 돈다.
 	var work_delta := _consume_worker_food_for_duration(safe_delta)
-	# 라인별로 원자재를 따로 태운다. 한쪽이 멈춰도 다른 쪽은 계속 돈다.
-	var scrap_seconds := _consume_raw_material_for_duration(
-		"scrap", get_active_scratcher_workers(), work_delta
-	)
-	var catnip_seconds := _consume_raw_material_for_duration(
-		"catnip", get_active_catnip_workers(), work_delta
-	)
-	var gain := scrap_rate * scrap_seconds
-	var catnip_gain := catnip_rate * catnip_seconds
+	var gain := scrap_rate * work_delta
+	var catnip_gain := catnip_rate * work_delta
 	shelter_scrap_fraction += gain
 	shelter_catnip_fraction += catnip_gain
 	var whole_catnip := int(floor(shelter_catnip_fraction))
@@ -2441,19 +2416,13 @@ func process_shelter_progress() -> Dictionary:
 	var base_scrap_rate := get_base_scrap_per_hour()
 	var catnip_rate := get_catnip_per_hour()
 	var work_seconds := _consume_worker_food_for_duration(float(elapsed))
-	var scrap_seconds := _consume_raw_material_for_duration(
-		"scrap", get_active_scratcher_workers(), work_seconds
-	)
-	var catnip_seconds := _consume_raw_material_for_duration(
-		"catnip", get_active_catnip_workers(), work_seconds
-	)
-	var base_scrap_gain := base_scrap_rate * scrap_seconds / 3600.0
-	var boosted_seconds := mini(roundi(scrap_seconds), maxi(0, mini(now, catnip_boost_end_time) - progress_start))
+	var base_scrap_gain := base_scrap_rate * work_seconds / 3600.0
+	var boosted_seconds := mini(roundi(work_seconds), maxi(0, mini(now, catnip_boost_end_time) - progress_start))
 	var boosted_extra := base_scrap_rate * float(boosted_seconds) / 3600.0 * (CATNIP_BOOST_MULTIPLIER - 1.0)
 	shelter_scrap_fraction += base_scrap_gain + boosted_extra
 	var scrap_gain := int(floor(shelter_scrap_fraction))
 	shelter_scrap_fraction -= float(scrap_gain)
-	shelter_catnip_fraction += catnip_rate * catnip_seconds / 3600.0
+	shelter_catnip_fraction += catnip_rate * work_seconds / 3600.0
 	var catnip_gain := int(floor(shelter_catnip_fraction))
 	shelter_catnip_fraction -= float(catnip_gain)
 	catnip += catnip_gain
@@ -2490,38 +2459,6 @@ func _consume_worker_food_for_duration(requested_seconds: float) -> float:
 	if consumed > 0:
 		canned_food -= consumed
 		shelter_food_fraction -= float(consumed)
-	return work_seconds
-
-
-func _consume_raw_material_for_duration(
-	kind: String, worker_count: int, requested_seconds: float
-) -> float:
-	# 원자재가 있는 만큼만 가공한다. 이것이 출정과 쉘터를 묶는 지점이다.
-	if worker_count <= 0 or requested_seconds <= 0.0:
-		return 0.0
-	var is_catnip := kind == "catnip"
-	var stock: int = raw_catnip if is_catnip else raw_scrap
-	if stock <= 0:
-		return 0.0
-	var seconds_per_unit: float = (
-		WORKER_SECONDS_PER_RAW_CATNIP if is_catnip else WORKER_SECONDS_PER_RAW_SCRAP
-	)
-	var units_per_second := float(worker_count) / maxf(seconds_per_unit, 0.000001)
-	var affordable_seconds := float(stock) / maxf(units_per_second, 0.000001)
-	var work_seconds := minf(requested_seconds, affordable_seconds)
-	var fraction_key := work_seconds * units_per_second
-	if is_catnip:
-		shelter_raw_catnip_fraction += fraction_key
-		var used_catnip := mini(raw_catnip, int(floor(shelter_raw_catnip_fraction)))
-		if used_catnip > 0:
-			raw_catnip -= used_catnip
-			shelter_raw_catnip_fraction -= float(used_catnip)
-	else:
-		shelter_raw_scrap_fraction += fraction_key
-		var used_scrap := mini(raw_scrap, int(floor(shelter_raw_scrap_fraction)))
-		if used_scrap > 0:
-			raw_scrap -= used_scrap
-			shelter_raw_scrap_fraction -= float(used_scrap)
 	return work_seconds
 
 
@@ -2575,8 +2512,8 @@ func try_reroll_resident_trait(resident_id: String) -> Dictionary:
 	if not resident_cat_ids.has(resident_id):
 		return {"ok": false, "reason": "unknown"}
 	var cost := get_resident_reroll_cost(resident_id)
-	if catnip < cost:
-		return {"ok": false, "reason": "catnip", "cost": cost}
+	if churu < cost:
+		return {"ok": false, "reason": "churu", "cost": cost}
 	var current := get_resident_trait(resident_id)
 	var current_name := str(current.get("name", ""))
 	# 같은 특성이 다시 나오면 돈만 버린 셈이 된다. 후보에서 뺀다.
@@ -2586,7 +2523,7 @@ func try_reroll_resident_trait(resident_id: String) -> Dictionary:
 			candidates.append(preset as Dictionary)
 	if candidates.is_empty():
 		return {"ok": false, "reason": "no_candidates"}
-	catnip -= cost
+	churu -= cost
 	resident_reroll_counts[resident_id] = int(resident_reroll_counts.get(resident_id, 0)) + 1
 	var picked := candidates[randi() % candidates.size()].duplicate(true)
 	# 이름·초상화 같은 정체성은 유지하고 능력치만 바꾼다.
@@ -2645,32 +2582,13 @@ func get_total_worker_appetite() -> float:
 
 
 func get_shelter_runtime_seconds() -> float:
-	# HUD의 "쉘터 잔여 가동" — 연료와 식량 중 먼저 바닥나는 쪽이 한계다.
-	var scratcher_workers := get_active_scratcher_workers()
-	var catnip_workers := get_active_catnip_workers()
-	var worker_count := scratcher_workers + catnip_workers
-	if worker_count <= 0:
+	# HUD의 "쉘터 잔여 가동" — 연료는 통조림 하나다.
+	if get_active_scratcher_workers() + get_active_catnip_workers() <= 0:
 		return 0.0
-	var limits: Array[float] = []
-	if canned_food > 0:
-		var appetite := maxf(0.001, get_total_worker_appetite())
-		limits.append(float(canned_food) * WORKER_HOURS_PER_CANNED_FOOD * 3600.0 / appetite)
-	else:
+	if canned_food <= 0:
 		return 0.0
-	if scratcher_workers > 0:
-		limits.append(
-			float(raw_scrap) * WORKER_SECONDS_PER_RAW_SCRAP / float(scratcher_workers)
-		)
-	if catnip_workers > 0:
-		limits.append(
-			float(raw_catnip) * WORKER_SECONDS_PER_RAW_CATNIP / float(catnip_workers)
-		)
-	if limits.is_empty():
-		return 0.0
-	var shortest: float = limits[0]
-	for value in limits:
-		shortest = minf(shortest, value)
-	return maxf(0.0, shortest)
+	var appetite := maxf(0.001, get_total_worker_appetite())
+	return float(canned_food) * WORKER_HOURS_PER_CANNED_FOOD * 3600.0 / appetite
 
 
 func capture_pre_raid_snapshot() -> void:
@@ -2722,17 +2640,12 @@ func build_pre_raid_changes() -> Array[String]:
 	return changes
 
 
-func get_raw_material_runtime_seconds() -> float:
-	# "원자재 12개"는 아무 느낌도 주지 않는다. "쉘터 가동 3시간 12분"은 준다.
+func get_canned_food_runtime_seconds() -> float:
+	# "통조림 12개"는 아무 느낌도 주지 않는다. "쉘터 가동 3시간 12분"은 준다.
 	# 정산 화면에서 가방을 시간으로 환산해 보여주기 위한 값이다.
-	#
-	# 주민이 아직 없어도 숫자가 0이 되면 안 된다. 그러면 첫 출정에서 원자재를
-	# 주워 온 플레이어가 아무 보상도 못 느낀다. 주민 1명을 기준으로 환산한다.
-	var scrap_workers := maxi(1, get_active_scratcher_workers())
-	var catnip_workers := maxi(1, get_active_catnip_workers())
-	var scrap_seconds := float(raw_scrap) * WORKER_SECONDS_PER_RAW_SCRAP / float(scrap_workers)
-	var catnip_seconds := float(raw_catnip) * WORKER_SECONDS_PER_RAW_CATNIP / float(catnip_workers)
-	return maxf(0.0, maxf(scrap_seconds, catnip_seconds))
+	# 주민이 아직 없어도 0이 되면 안 되므로 주민 1명(식성 1.0) 기준으로 환산한다.
+	var appetite := maxf(1.0, get_total_worker_appetite())
+	return maxf(0.0, float(canned_food) * WORKER_HOURS_PER_CANNED_FOOD * 3600.0 / appetite)
 
 
 static func format_duration_korean(total_seconds: float) -> String:
@@ -2807,15 +2720,44 @@ func get_churu_bag_bonus_slots() -> int:
 	return 4 if is_churu_buff_active("big_pockets") else 0
 
 
+func get_catnip_buff_definition(buff_id: String) -> Dictionary:
+	return (CATNIP_FIELD_BUFFS.get(buff_id, {}) as Dictionary).duplicate(true)
+
+
+func is_catnip_buff_active(buff_id: String) -> bool:
+	return active_catnip_buff == buff_id
+
+
+func try_activate_catnip_field_buff(buff_id: String) -> bool:
+	# 택1 — 이미 다른 급여를 먹었으면 이번 판엔 바꿀 수 없다.
+	if not CATNIP_FIELD_BUFFS.has(buff_id) or not active_catnip_buff.is_empty():
+		return false
+	var cost := maxi(1, int((CATNIP_FIELD_BUFFS[buff_id] as Dictionary).get("cost", 1)))
+	if catnip < cost:
+		return false
+	catnip -= cost
+	active_catnip_buff = buff_id
+	save_persistent_state()
+	return true
+
+
+func clear_catnip_field_buff() -> void:
+	active_catnip_buff = ""
+
+
+func get_catnip_spread_multiplier() -> float:
+	return 0.75 if is_catnip_buff_active("keen_eyes") else 1.0
+
+
+func get_catnip_fatigue_multiplier() -> float:
+	return 0.65 if is_catnip_buff_active("steady_heart") else 1.0
+
+
 func get_shelter_stall_reason() -> String:
 	if get_active_scratcher_workers() + get_active_catnip_workers() <= 0:
 		return "no_workers"
 	if canned_food <= 0:
 		return "no_food"
-	if get_active_scratcher_workers() > 0 and raw_scrap <= 0:
-		return "no_raw_scrap"
-	if get_active_catnip_workers() > 0 and raw_catnip <= 0:
-		return "no_raw_catnip"
 	return ""
 
 
@@ -3130,7 +3072,8 @@ func get_move_speed_multiplier() -> float:
 	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
 		if not equipment_id.is_empty():
 			equipment_bonus += float(get_equipment_definition(equipment_id).get("move_speed_bonus", 0.0))
-	return progression_multiplier * (1.0 + equipment_bonus)
+	var catnip_bonus := 0.12 if is_catnip_buff_active("swift_paws") else 0.0
+	return progression_multiplier * (1.0 + equipment_bonus + catnip_bonus)
 
 
 func get_stamina_cost_multiplier() -> float:
@@ -3544,7 +3487,7 @@ func save_persistent_state() -> bool:
 	_normalize_iron_mission_state()
 	save_equipped_weapon_loadout()
 	var data := {
-		"version": 11,
+		"version": 12,
 		"map_seed": map_seed,
 		"raid_serial": raid_serial,
 		"player_health": player_health,
@@ -3559,13 +3502,10 @@ func save_persistent_state() -> bool:
 		"canned_food": canned_food,
 		"catnip": catnip,
 		"churu": churu,
-		"raw_scrap": raw_scrap,
-		"raw_catnip": raw_catnip,
 		"valuable_inventory": valuable_inventory,
 		"active_churu_buffs": active_churu_buffs,
+		"active_catnip_buff": active_catnip_buff,
 		"bag_pressure_lesson_seen": bag_pressure_lesson_seen,
-		"raw_material_tip_seen": raw_material_tip_seen,
-		"raw_material_lesson_seen": raw_material_lesson_seen,
 		"workbench_lesson_seen": workbench_lesson_seen,
 		"fatigue_lesson_seen": fatigue_lesson_seen,
 		"extraction_choice_lesson_seen": extraction_choice_lesson_seen,
@@ -3619,8 +3559,6 @@ func save_persistent_state() -> bool:
 		"shelter_scrap_fraction": shelter_scrap_fraction,
 		"shelter_catnip_fraction": shelter_catnip_fraction,
 		"shelter_food_fraction": shelter_food_fraction,
-		"shelter_raw_scrap_fraction": shelter_raw_scrap_fraction,
-		"shelter_raw_catnip_fraction": shelter_raw_catnip_fraction,
 		"shelter_return_serial": shelter_return_serial,
 		"survived_return_count": survived_return_count,
 		"city_commission": city_commission,
@@ -3697,22 +3635,21 @@ func load_persistent_state() -> bool:
 	canned_food = int(data.get("canned_food", canned_food))
 	catnip = maxi(0, roundi(float(data.get("catnip", catnip))))
 	churu = int(data.get("churu", churu))
-	raw_scrap = maxi(0, int(data.get("raw_scrap", raw_scrap)))
-	raw_catnip = maxi(0, int(data.get("raw_catnip", raw_catnip)))
 	valuable_inventory = (data.get("valuable_inventory", {}) as Dictionary).duplicate(true)
 	active_churu_buffs = _to_string_array(data.get("active_churu_buffs", []))
+	active_catnip_buff = str(data.get("active_catnip_buff", ""))
 	bag_pressure_lesson_seen = bool(data.get("bag_pressure_lesson_seen", bag_pressure_lesson_seen))
-	raw_material_tip_seen = bool(data.get("raw_material_tip_seen", raw_material_tip_seen))
-	raw_material_lesson_seen = bool(data.get("raw_material_lesson_seen", raw_material_lesson_seen))
 	workbench_lesson_seen = bool(data.get("workbench_lesson_seen", workbench_lesson_seen))
 	fatigue_lesson_seen = bool(data.get("fatigue_lesson_seen", fatigue_lesson_seen))
 	extraction_choice_lesson_seen = bool(data.get("extraction_choice_lesson_seen", extraction_choice_lesson_seen))
 	unlocked_milestones = _to_string_array(data.get("unlocked_milestones", []))
 	resident_reroll_counts = (data.get("resident_reroll_counts", {}) as Dictionary).duplicate(true)
-	if int(data.get("version", 0)) < 11:
-		# 구버전 세이브는 원자재 개념이 없다. 기존 진행이 즉시 멈추지 않도록 초기 연료를 지급한다.
-		raw_scrap = maxi(raw_scrap, 40)
-		raw_catnip = maxi(raw_catnip, 20)
+	if int(data.get("version", 0)) < 12:
+		# v12: 원자재 2종을 폐지하고 통조림 단일 연료로 통합했다.
+		# 구세이브의 원자재 잔량은 가동시간이 비슷해지도록 통조림으로 환전한다.
+		var legacy_raw := maxi(0, int(data.get("raw_scrap", 0))) + maxi(0, int(data.get("raw_catnip", 0)))
+		if legacy_raw > 0:
+			canned_food += maxi(1, ceili(float(legacy_raw) / 4.0))
 	fatigue = float(data.get("fatigue", fatigue))
 	rescued_workers = int(data.get("rescued_workers", rescued_workers))
 	resident_cat_ids = _to_string_array(data.get("resident_cat_ids", []))
@@ -3777,8 +3714,6 @@ func load_persistent_state() -> bool:
 	shelter_scrap_fraction = float(data.get("shelter_scrap_fraction", shelter_scrap_fraction))
 	shelter_catnip_fraction = float(data.get("shelter_catnip_fraction", shelter_catnip_fraction))
 	shelter_food_fraction = float(data.get("shelter_food_fraction", shelter_food_fraction))
-	shelter_raw_scrap_fraction = float(data.get("shelter_raw_scrap_fraction", shelter_raw_scrap_fraction))
-	shelter_raw_catnip_fraction = float(data.get("shelter_raw_catnip_fraction", shelter_raw_catnip_fraction))
 	shelter_return_serial = int(data.get("shelter_return_serial", shelter_return_serial))
 	# 구 세이브 호환: 값이 없으면 기존 귀환 수를 생환 수로 간주한다.
 	survived_return_count = int(data.get("survived_return_count", shelter_return_serial))
@@ -3896,13 +3831,10 @@ func reset_run() -> void:
 	canned_food = 0
 	catnip = 0
 	churu = 0
-	raw_scrap = 0
-	raw_catnip = 0
 	valuable_inventory.clear()
 	active_churu_buffs.clear()
+	active_catnip_buff = ""
 	bag_pressure_lesson_seen = false
-	raw_material_tip_seen = false
-	raw_material_lesson_seen = false
 	fatigue_lesson_seen = false
 	extraction_choice_lesson_seen = false
 	unlocked_milestones.clear()
@@ -3985,8 +3917,6 @@ func reset_run() -> void:
 	shelter_scrap_fraction = 0.0
 	shelter_catnip_fraction = 0.0
 	shelter_food_fraction = 0.0
-	shelter_raw_scrap_fraction = 0.0
-	shelter_raw_catnip_fraction = 0.0
 	workbench_starter_parts_claimed = false
 	shelter_return_serial = 0
 	survived_return_count = 0

@@ -22,7 +22,7 @@ func _ready() -> void:
 
 
 func get_interaction_prompt() -> String:
-	return "스크래핑 생산기 · 캣닢 잎→캣닢 (주민 배치)"
+	return "스크래핑 생산기 · 통조림→캣닢 (주민 배치)"
 
 
 func get_interaction_radius() -> float:
@@ -247,7 +247,7 @@ func _rebuild_ui() -> void:
 	var boost_note := _label(
 		"부스터 가동 중  %02d:%02d" % [remaining / 60, remaining % 60]
 		if remaining > 0
-		else "캣닢 25 = 생산 x10 부스터 (꾹꾹이 생산기에서 가동)",
+		else "캣닢 %s = 생산 x10 부스터 (꾹꾹이 생산기에서 가동)" % GameState.format_compact_number(GameState.CATNIP_BOOST_COST),
 		12,
 		Color("#cde79e")
 	)

@@ -2639,10 +2639,6 @@ func _update_stats_summary() -> void:
 			fuel = "주민 미배치"
 		"no_food":
 			fuel = "통조림 없음"
-		"no_raw_scrap":
-			fuel = "고철 조각 없음"
-		"no_raw_catnip":
-			fuel = "캣닢 잎 없음"
 	stats_summary_label.text = "고철 %s  ·  가동 %s" % [
 		GameState.format_compact_number(GameState.scrap),
 		fuel,
@@ -2675,10 +2671,6 @@ func _update_runtime_row() -> void:
 			text = "주민 미배치"
 		"no_food":
 			text = "통조림 없음 · 정지"
-		"no_raw_scrap":
-			text = "고철 조각 없음"
-		"no_raw_catnip":
-			text = "캣닢 잎 없음"
 	shelter_runtime_label.text = text
 	shelter_runtime_label.add_theme_color_override("font_color", accent)
 
@@ -3555,6 +3547,8 @@ func _open_raid_zone_select() -> void:
 	raid_zone_detail_requirement.add_theme_color_override("font_color", Color("#d78371"))
 	raid_zone_detail_requirement.visible = false
 	detail_box.add_child(raid_zone_detail_requirement)
+	# 캣닢 급여 택1 — 착즙 라인이 곧 전투 준비라는 등식을 여기서 만든다.
+	detail_column.add_child(_build_catnip_buff_row())
 	raid_zone_resupply_button = _merchant_button("창고에서 빠른 보충", false, "backpack")
 	raid_zone_resupply_button.name = "RaidZoneResupplyButton"
 	raid_zone_resupply_button.custom_minimum_size.y = 44
@@ -3575,6 +3569,73 @@ func _open_raid_zone_select() -> void:
 	if initial_zone_id.is_empty() and not zone_ids.is_empty():
 		initial_zone_id = str(zone_ids[0])
 	_select_raid_zone_preview(initial_zone_id)
+
+
+var raid_catnip_buff_choice := ""
+var raid_catnip_buff_buttons: Dictionary = {}
+
+
+func _build_catnip_buff_row() -> Control:
+	# 출정 전에 캣닢 한 줌 = 한 판짜리 체질 보정. 세 개 중 하나만 고를 수 있다.
+	raid_catnip_buff_choice = ""
+	raid_catnip_buff_buttons.clear()
+	var box := VBoxContainer.new()
+	box.name = "CatnipBuffRow"
+	box.add_theme_constant_override("separation", 5)
+	var title := Label.new()
+	title.add_theme_font_override("font", FONT)
+	title.add_theme_font_size_override("font_size", 12)
+	title.add_theme_color_override("font_color", Color("#9db3a9"))
+	box.add_child(title)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	box.add_child(row)
+	for buff_id in GameState.CATNIP_FIELD_BUFFS:
+		var definition: Dictionary = GameState.CATNIP_FIELD_BUFFS[buff_id]
+		var button := Button.new()
+		button.name = "CatnipBuff_%s" % buff_id
+		button.toggle_mode = true
+		button.text = str(definition.get("title", buff_id))
+		button.tooltip_text = "%s · 캣닢 %d" % [
+			str(definition.get("description", "")),
+			int(definition.get("cost", 0)),
+		]
+		button.custom_minimum_size = Vector2(0, 38)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.icon = UI_ICONS.get_icon(str(definition.get("icon", "catnip")), 18, Color("#aeea78"))
+		button.expand_icon = true
+		button.add_theme_constant_override("icon_max_width", 18)
+		HudStyle.style_button(button, Color("#7fb069"))
+		button.toggled.connect(_on_catnip_buff_toggled.bind(str(buff_id)))
+		row.add_child(button)
+		raid_catnip_buff_buttons[str(buff_id)] = button
+	_refresh_catnip_buff_row(title)
+	box.set_meta("title_label", title)
+	return box
+
+
+func _refresh_catnip_buff_row(title: Label) -> void:
+	var sample_cost := 400
+	for buff_id in raid_catnip_buff_buttons:
+		var button := raid_catnip_buff_buttons[buff_id] as Button
+		var cost := int((GameState.CATNIP_FIELD_BUFFS[buff_id] as Dictionary).get("cost", 0))
+		sample_cost = cost
+		button.disabled = GameState.catnip < cost and raid_catnip_buff_choice != str(buff_id)
+	title.text = "캣닢 급여 · 한 판 버프 택1 (캣닢 %d) · 보유 %s" % [
+		sample_cost,
+		GameState.format_compact_number(GameState.catnip),
+	]
+
+
+func _on_catnip_buff_toggled(pressed: bool, buff_id: String) -> void:
+	# 토글 하나만 켜지게. 실제 소비는 출정 확정 순간에 이뤄진다.
+	if pressed:
+		raid_catnip_buff_choice = buff_id
+		for other_id in raid_catnip_buff_buttons:
+			if str(other_id) != buff_id:
+				(raid_catnip_buff_buttons[other_id] as Button).set_pressed_no_signal(false)
+	elif raid_catnip_buff_choice == buff_id:
+		raid_catnip_buff_choice = ""
 
 
 func _build_raid_zone_row(zone_id: String) -> Control:
@@ -4076,6 +4137,10 @@ func _confirm_launch_raid_zone(zone_id: String) -> void:
 	if is_instance_valid(raid_zone_launch_button):
 		raid_zone_launch_button.disabled = true
 		raid_zone_launch_button.text = "출정 준비 중..."
+	# 캣닢 급여는 확정 순간에만 소비된다 — 브리핑에서 고르기만 하고 취소하면 무료.
+	if not raid_catnip_buff_choice.is_empty():
+		GameState.try_activate_catnip_field_buff(raid_catnip_buff_choice)
+		raid_catnip_buff_choice = ""
 	GameState.confirm_raid_loadout(zone_id)
 	GameState.start_new_raid()
 	# 다음 브리핑에서 "지난 출정 이후"를 계산할 기준점을 여기서 찍는다.
@@ -4275,10 +4340,10 @@ func _build_offline_status_text(progress: Dictionary) -> String:
 	if has_line:
 		var runtime := GameState.get_shelter_runtime_seconds()
 		if runtime > 0.0:
-			lines.append("남은 원자재로 %s 더 돌아갑니다." % GameState.format_duration_korean(runtime))
+			lines.append("남은 통조림으로 %s 더 돌아갑니다." % GameState.format_duration_korean(runtime))
 		elif GameState.get_active_scratcher_workers() + GameState.get_active_catnip_workers() > 0:
 			# 이게 이 게임의 연결 고리다. 라인이 멈췄다는 건 곧 나가야 한다는 뜻이다.
-			lines.append("원자재가 떨어져 생산이 멈췄습니다. 도시에서 더 가져와야 합니다.")
+			lines.append("통조림이 떨어져 생산이 멈췄습니다. 도시에서 더 가져와야 합니다.")
 		elif lines.is_empty():
 			lines.append("쉘터에 복귀했습니다. 생산기에 주민을 배치할 수 있습니다.")
 	return "\n".join(lines)

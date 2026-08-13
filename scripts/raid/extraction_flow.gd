@@ -255,13 +255,13 @@ func _show_extraction_result(rescued_count: int) -> void:
 		if int(commission_payout.get("churu", 0)) > 0:
 			commission_text += " · 츄르 +%d" % int(commission_payout.get("churu", 0))
 		host.hud.add_result_reward_chip("churu", commission_text, HudStyle.GOLD)
-	# 가방을 "시간"으로 환산한다. 원자재 12개는 아무 느낌도 없지만
+	# 가방을 "시간"으로 환산한다. 통조림 12개는 아무 느낌도 없지만
 	# "쉘터 가동 3시간 12분"은 다음 출정의 이유가 된다.
-	var runtime_seconds := GameState.get_raw_material_runtime_seconds()
+	var runtime_seconds := GameState.get_canned_food_runtime_seconds()
 	if runtime_seconds > 0.0:
 		host.hud.add_result_reward_chip(
 			"time",
-			"원자재 → 쉘터 가동 %s" % GameState.format_duration_korean(runtime_seconds),
+			"통조림 비축 → 쉘터 가동 %s" % GameState.format_duration_korean(runtime_seconds),
 			HudStyle.GREEN
 		)
 	var lines: PackedStringArray = [mission_summary]

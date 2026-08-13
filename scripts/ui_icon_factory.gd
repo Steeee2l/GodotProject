@@ -7,9 +7,6 @@ const GENERATED_CURRENCY_PATHS := {
 	"catnip": "res://assets/ui/currency/catnip.png",
 	"food": "res://assets/ui/currency/canned_food.png",
 	"churu": "res://assets/ui/currency/churu.png",
-	# 원자재는 정제 자원과 같은 아이콘을 쓰되 색으로 구분한다.
-	"raw_scrap": "res://assets/ui/currency/scrap.png",
-	"raw_catnip": "res://assets/ui/currency/catnip.png",
 }
 const GENERATED_ITEM_ICON_PATHS := {
 	"medkit": "res://assets/generated/p0_sliced/item_icons/medkit.png",

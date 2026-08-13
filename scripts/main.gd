@@ -4831,7 +4831,7 @@ func _spawn_opportunity_definition(
 	var adjusted := definition.duplicate(true)
 	var data := (adjusted.get("data", {}) as Dictionary).duplicate(true)
 	var loot_type := str(adjusted.get("type", ""))
-	if loot_type in ["ammo", "canned_food", "mod_component", "medkit", "raw_scrap", "raw_catnip", "valuable"]:
+	if loot_type in ["ammo", "canned_food", "mod_component", "medkit", "valuable"]:
 		var amount := maxi(1, int(data.get("amount", 1)))
 		data["amount"] = maxi(1, ceili(float(amount) * raid_reward_multiplier))
 		data["total_value"] = int(data.get("base_value", 0)) * int(data["amount"])
@@ -6361,19 +6361,6 @@ func _open_field_loot_container(point: Node3D) -> void:
 	_add_fatigue(FATIGUE_LOOT_GAIN)
 	if spawned_count == 0:
 		_show_field_notice("%s · 비어 있다" % LOOT_ECONOMY.get_container_display_name(container_type))
-	elif (
-		container_type in ["scrap_pile", "catnip_planter"]
-		and not GameState.raw_material_tip_seen
-	):
-		# 첫 원자재 컨테이너 — 이 조각이 왜 필요한지 여기서 한 번만 가르친다.
-		GameState.raw_material_tip_seen = true
-		GameState.save_persistent_state()
-		_show_field_notice(
-			"%s 개방.
-이 조각들이 쉘터 생산 라인의 연료다. 주민이 일하려면 이걸 가져가야 한다.
-부피가 커서 10개마다 가방 한 칸을 차지한다."
-			% LOOT_ECONOMY.get_container_display_name(container_type)
-		)
 	else:
 		_show_field_notice(
 			"%s 개방 · 전리품 %d개" % [
@@ -6404,8 +6391,6 @@ func _recover_previous_corpse() -> void:
 	GameState.medkits += maxi(0, int(loot.get("medkits", 0)))
 	GameState.canned_food += maxi(0, int(loot.get("canned_food", 0)))
 	GameState.churu += maxi(0, int(loot.get("churu", 0)))
-	GameState.raw_scrap += maxi(0, int(loot.get("raw_scrap", 0)))
-	GameState.raw_catnip += maxi(0, int(loot.get("raw_catnip", 0)))
 	_add_dictionary_loot(
 		GameState.mod_component_inventory,
 		loot.get("mod_component_inventory", {}) as Dictionary
@@ -6517,7 +6502,12 @@ func _update_fatigue(delta: float, is_moving: bool) -> void:
 func _add_fatigue(amount: float) -> void:
 	if amount <= 0.0:
 		return
-	fatigue = clampf(fatigue + amount * GameState.get_fatigue_gain_multiplier(), 0.0, FATIGUE_MAX)
+	fatigue = clampf(
+		fatigue
+		+ amount * GameState.get_fatigue_gain_multiplier() * GameState.get_catnip_fatigue_multiplier(),
+		0.0,
+		FATIGUE_MAX
+	)
 	GameState.fatigue = fatigue
 	_refresh_fatigue_hud()
 	# 피로는 체력이 아니라 "얼마나 더 머무를 수 있는가"다. 보스가 튀어나오는
