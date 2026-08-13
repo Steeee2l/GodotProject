@@ -550,7 +550,10 @@ const CATNIP_BOOST_DURATION_SECONDS := 600
 const CATNIP_BOOST_MULTIPLIER := 10.0
 const BASE_SCRAP_PER_WORKER_HOUR := 72.0
 const BASE_CATNIP_PER_WORKER_SECOND := 1.0
-const WORKER_HOURS_PER_CANNED_FOOD := 6.0
+# 통조림 1개 = 주민 1명(식성 1.0) 30분 노동. 6시간이던 시절에는 한 판의
+# 통조림이 이틀치 연료가 되어 출정이 심부름으로 전락했다. 판당 25개면
+# 3~4시간 가동 — "한 판 = 반나절 연료"의 리듬을 만든다.
+const WORKER_HOURS_PER_CANNED_FOOD := 0.5
 
 # ── 문턱 해금 ──────────────────────────────────────────────────
 #
@@ -2488,7 +2491,7 @@ func grant_extraction_risk_payout(kills: int, pressure_level: int, reward_multip
 	# 출정 자체가 진행 통화를 벌게 한다. 예전에는 고철이 거의 전부 쉘터
 	# 수동 생산에서 나와, 중반부터 출정이 "심부름"이 되고 진행은 대기가 됐다.
 	# 오래 버티고(긴장도) 싸운(킬) 대가를 고철로 직접 준다.
-	var base := 800 + maxi(0, kills) * 140
+	var base := 1000 + maxi(0, kills) * 180
 	var risk := 1.0 + float(clampi(pressure_level, 0, 3)) * 0.6
 	var payout := roundi(float(base) * risk * maxf(1.0, reward_multiplier))
 	scrap += payout
@@ -2858,7 +2861,8 @@ func try_upgrade_scratcher_bank() -> bool:
 		return false
 	scrap -= cost
 	scratcher_bank_level = next_level
-	scratcher_multiplier = pow(2.2, float(scratcher_bank_level - 1))
+	# 착즙(1.8ⁿ)과 균형 — 2.2ⁿ은 후반 고철 인플레를 만들었다.
+	scratcher_multiplier = pow(1.9, float(scratcher_bank_level - 1))
 	return true
 
 
@@ -3718,7 +3722,8 @@ func load_persistent_state() -> bool:
 	shelter_workbench_level = clampi(int(data.get("shelter_workbench_level", shelter_workbench_level)), 1, 5)
 	shelter_tier = clampi(int(data.get("shelter_tier", shelter_tier)), 1, 5)
 	scratcher_bank_level = clampi(int(data.get("scratcher_bank_level", scratcher_bank_level)), 1, 5)
-	scratcher_multiplier = float(data.get("scratcher_multiplier", scratcher_multiplier))
+	# 저장값을 믿지 않고 레벨에서 재계산 — 배율 곡선을 바꿔도 구세이브가 따라온다.
+	scratcher_multiplier = pow(1.9, float(scratcher_bank_level - 1))
 	catnip_scraper_level = clampi(int(data.get("catnip_scraper_level", catnip_scraper_level)), 1, 5)
 	catnip_scraper_multiplier = float(data.get("catnip_scraper_multiplier", pow(1.8, float(catnip_scraper_level - 1))))
 	storage_level = clampi(int(data.get("storage_level", storage_level)), 1, 5)
