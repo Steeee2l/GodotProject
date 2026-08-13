@@ -51,7 +51,7 @@ var jackpot_progress: ProgressBar
 var damage_feedback_canvas: CanvasLayer
 var damage_vignette: ColorRect
 var damage_vignette_material: ShaderMaterial
-var damage_direction_indicator: Label
+var damage_direction_indicator: TextureRect
 var player_world_health_bar: Control
 var player_world_health_fill: Panel
 var player_health_fill_style: StyleBoxFlat
@@ -925,13 +925,15 @@ void fragment() {
 	damage_vignette_material.set_shader_parameter("intensity", 0.0)
 	damage_vignette.material = damage_vignette_material
 	damage_feedback_canvas.add_child(damage_vignette)
-	damage_direction_indicator = Label.new()
+	# 문자 "▲"는 웹 기본 폰트에 글리프가 없어 깨진 네모로 떴다.
+	# 폰트에 기대지 말고 직접 그린 화살표 텍스처를 쓴다.
+	damage_direction_indicator = TextureRect.new()
 	damage_direction_indicator.name = "DamageDirectionIndicator"
-	damage_direction_indicator.text = "▲"
-	damage_direction_indicator.add_theme_font_size_override("font_size", 42)
-	damage_direction_indicator.add_theme_color_override("font_color", Color("#ff5a46"))
-	damage_direction_indicator.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
-	damage_direction_indicator.add_theme_constant_override("outline_size", 7)
+	damage_direction_indicator.texture = UI_ICONS.get_icon("up", 40, Color("#ff5a46"))
+	damage_direction_indicator.custom_minimum_size = Vector2(40, 40)
+	damage_direction_indicator.size = Vector2(40, 40)
+	damage_direction_indicator.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	damage_direction_indicator.pivot_offset = Vector2(20, 20)
 	damage_direction_indicator.modulate.a = 0.0
 	damage_direction_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	damage_feedback_canvas.add_child(damage_direction_indicator)

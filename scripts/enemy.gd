@@ -401,6 +401,8 @@ func _ready() -> void:
 	threat_marker.name = "ThreatMarker"
 	threat_marker.text = "◆"
 	threat_marker.position = Vector3(0, THREAT_MARKER_Y, 0)
+	# 폰트를 안 박으면 웹 기본 폰트로 떨어져 ◆·★ 글리프가 깨진 네모로 뜬다.
+	threat_marker.font = DAMAGE_FONT
 	threat_marker.font_size = 72
 	threat_marker.outline_size = 18
 	threat_marker.modulate = Color("#ff4d3d")
