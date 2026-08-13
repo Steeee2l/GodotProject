@@ -140,7 +140,6 @@ const FATIGUE_SPEED_MIN := 0.58
 const ESCORT_SPEED_PENALTY := 0.07
 const FIELD_MISSION_TRIGGER_RADIUS := 4.6
 const LORE_CLUE_COUNT := 6
-const RAID_PRESSURE_THRESHOLDS := [120.0, 300.0, 540.0]
 const RAID_PRESSURE_REVEAL_SECONDS := 3.4
 const RAID_PRESSURE_REWARD_MULTIPLIERS := [1.0, 1.15, 1.35, 1.65]
 const DYNAMIC_INCIDENT_DELAY_MIN := 55.0
@@ -4756,7 +4755,7 @@ func _refresh_raid_pressure_hud() -> void:
 	if raid_pressure_reveal_time > 0.0:
 		hud.raid_pressure_icon.texture = UI_ICONS.get_icon("alert", 44, color)
 		return
-	if raid_pressure_level < RAID_PRESSURE_THRESHOLDS.size():
+	if raid_pressure_level < RAID_EVENT_DIRECTOR.LEVEL_THRESHOLDS.size() - 1:
 		# 시계가 아니라 게이지를 보여준다. 플레이어가 속도를 통제할 수 있어야 한다.
 		var progress: float = RAID_EVENT_DIRECTOR.get_level_progress(raid_pressure_points)
 		hud.raid_pressure_detail.text = "다음 대응 %d%% · 전리품 ×%.2f" % [

@@ -67,7 +67,6 @@ const RAID_EVENT_DIRECTOR := preload("res://scripts/raid_event_director.gd")
 const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
 const RAID_LOSS_MANAGER := preload("res://scripts/raid_loss_manager.gd")
 const RAID_PRESSURE_REWARD_MULTIPLIERS := [1.0, 1.15, 1.35, 1.65]
-const RAID_PRESSURE_THRESHOLDS := [120.0, 300.0, 540.0]
 const REINFORCEMENT_CALL_COOLDOWN := 38.0
 const REINFORCEMENT_CALL_DURATION := 4.6
 const REINFORCEMENT_CALL_TRIGGER_TIME := 30.0

@@ -43,7 +43,6 @@ const RAID_EXTRACTION_POLICY := preload("res://scripts/raid_extraction_policy.gd
 const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
 const RAID_LOSS_MANAGER := preload("res://scripts/raid_loss_manager.gd")
 const RAID_PRESSURE_REWARD_MULTIPLIERS := [1.0, 1.15, 1.35, 1.65]
-const RAID_PRESSURE_THRESHOLDS := [120.0, 300.0, 540.0]
 const RESCUED_CAT_FOLLOWER_SCRIPT := preload("res://scripts/rescued_cat_follower.gd")
 const RESCUE_HOLD_DURATION := 1.8
 const RESCUE_POINT_COUNT := 5

@@ -20,7 +20,6 @@ const RAID_HOTSPOT_COUNT := 3
 const RAID_HOTSPOT_DISCOVERY_DISTANCE := 24.0
 const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
 const RAID_PRESSURE_REWARD_MULTIPLIERS := [1.0, 1.15, 1.35, 1.65]
-const RAID_PRESSURE_THRESHOLDS := [120.0, 300.0, 540.0]
 const SECURE_MILITARY_CACHE_TEXTURE := preload("res://assets/events/secure_military_cache_v1.png")
 const SUBWAY_EMERGENCY_GENERATOR_TEXTURE := preload("res://assets/events/subway_emergency_generator_v2.png")
 const SUBWAY_MANIFEST_TERMINAL_TEXTURE := preload("res://assets/events/subway_manifest_terminal_v2.png")

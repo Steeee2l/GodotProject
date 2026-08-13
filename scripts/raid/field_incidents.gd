@@ -24,7 +24,6 @@ const RAID_EVENT_DIRECTOR := preload("res://scripts/raid_event_director.gd")
 const RAID_HOTSPOT_COUNT := 3
 const RAID_HOTSPOT_DISCOVERY_DISTANCE := 24.0
 const RAID_PRESSURE_REWARD_MULTIPLIERS := [1.0, 1.15, 1.35, 1.65]
-const RAID_PRESSURE_THRESHOLDS := [120.0, 300.0, 540.0]
 const SECURE_MILITARY_CACHE_TEXTURE := preload("res://assets/events/secure_military_cache_v1.png")
 const SILHOUETTE_COLOR := Color("#26343b")
 const STRUCTURE_REVEAL_BUILDING_ALPHA := 0.46
