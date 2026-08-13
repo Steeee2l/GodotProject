@@ -59,9 +59,9 @@ static func style_mobile_action(
 	button.mouse_filter = Control.MOUSE_FILTER_STOP
 	button.expand_icon = true
 	button.add_theme_constant_override("icon_max_width", icon_limit)
-	# 아이콘과 라벨을 원 중앙에 나란히. TOP 정렬은 아이콘이 원 테두리
-	# 꼭대기에 붙고 라벨만 중앙에 남아 '따로 노는' 모양이 된다.
-	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# 아이콘과 라벨을 원 중앙에 나란히. icon_alignment CENTER는 아이콘을
+	# 텍스트 '위에 겹쳐' 그리므로 금지 — LEFT + 그룹 중앙 정렬이 정답이다.
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	button.add_theme_constant_override("h_separation", 5)

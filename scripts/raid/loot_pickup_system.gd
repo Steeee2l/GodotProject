@@ -668,25 +668,3 @@ func _update_loot_highlight(pickup: Node3D, distance: float, _delta: float) -> v
 		marker.modulate = color
 
 
-func _spawn_onboarding_loot_cluster(world: ProceduralCityMap) -> void:
-	# 첫 판에서 가방 갈등을 반드시 한 번 겪게 한다. 부피가 큰 원자재와
-	# 값비싼 소형 물품을 같이 깔아, 무엇을 실을지 고르게 만든다.
-	var origin := player.global_position
-	# 한 자리에 몰아 두면 "왜 이렇게 많아?"가 된다. 수를 줄이고 넓게 흩뿌린다.
-	var plan := [
-		{"type": "canned_food", "amount": 3, "data": {}},
-		{"type": "medkit", "amount": 1, "data": {}},
-		{"type": "mod_component", "amount": 1, "data": {"component_id": "scope_lens"}},
-	]
-	for index in plan.size():
-		var entry := plan[index] as Dictionary
-		var angle := TAU * float(index) / float(plan.size()) + spawn_random.randf_range(-0.4, 0.4)
-		var radius := spawn_random.randf_range(9.0, 16.0)
-		var drop := origin + Vector3(cos(angle), 0.0, sin(angle)) * radius
-		var data := (entry["data"] as Dictionary).duplicate()
-		data["amount"] = int(entry["amount"])
-		_create_loot_pickup(
-			str(entry["type"]),
-			world.find_nearest_open_position(drop),
-			data
-		)

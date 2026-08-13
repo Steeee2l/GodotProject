@@ -2814,7 +2814,9 @@ func _build_mobile_utility_buttons(font: Font) -> void:
 	mobile_reload_button = _make_mobile_utility_button("ReloadButton", "장전", "reload", font, -198.0)
 	if not touch_enabled:
 		mobile_reload_button.pressed.connect(weapon_combat._reload_ak47)
-	mobile_reload_button.visible = touch_enabled
+	# 표시 여부와 위치는 _layout_mobile_utility_row()가 단독으로 정한다.
+	# 여기서 켜 두면 레이아웃이 돌기 전까지 생성 좌표에 유령 버튼이 뜬다.
+	mobile_reload_button.visible = false
 
 	mobile_flashlight_button = _make_mobile_utility_button("FlashlightButton", "조명", "flashlight", font, -288.0)
 	mobile_flashlight_button.toggle_mode = true
