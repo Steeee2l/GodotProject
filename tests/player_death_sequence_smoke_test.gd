@@ -7,6 +7,7 @@ func _initialize() -> void:
 
 func _run() -> void:
     var game_state := root.get_node("GameState")
+    game_state.set("persistence_enabled", false)
     game_state.call("reset_run")
     var main_scene: Node = load("res://scenes/main.tscn").instantiate()
     root.add_child(main_scene)

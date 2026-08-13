@@ -538,6 +538,8 @@ func _ready() -> void:
 	_initialize_equipped_weapon()
 	_refresh_pointer_mode()
 	_apply_hud_layout()
+	# 첫 출정에서 한 번, 자리 잡을 시간을 준 뒤 키 조작 레슨을 띄운다.
+	get_tree().create_timer(2.5).timeout.connect(hud.build_controls_lesson)
 
 
 func _snap_camera_to_player() -> void:

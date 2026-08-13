@@ -39,6 +39,10 @@ func _run() -> void:
 	assert(weapon_system.validate_ammo_loadout("ak47", "ak_30rnd", "762_ap"))
 	assert(not weapon_system.validate_ammo_loadout("ak47", "mp5_30rnd", "9mm_fmj"))
 
+	# 로컬 세이브(스탯·방어구)가 로드된 채 돌면 피해 수치 검증이 환경 의존이 된다.
+	var game_state := root.get_node("GameState")
+	game_state.set("persistence_enabled", false)
+	game_state.call("reset_run")
 	var packed_scene: PackedScene = load("res://scenes/main.tscn")
 	var main_scene: Node = packed_scene.instantiate()
 	root.add_child(main_scene)
@@ -150,6 +154,8 @@ func _run() -> void:
 	var loaf_recoil := (main_scene.get("recoil_velocity") as Vector3).length()
 	assert(loaf_recoil < standing_recoil)
 
+	# 식빵 자세 중에는 장전이 금지된다 — 반동 검사에서 켠 loafing을 되돌린다.
+	main_scene.set("loafing", false)
 	main_scene.set("magazine_ammo", 0)
 	main_scene.set("reserve_ammo", 30)
 	main_scene.call("_reload_ak47")

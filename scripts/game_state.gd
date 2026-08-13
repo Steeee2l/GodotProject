@@ -152,6 +152,8 @@ var bag_pressure_lesson_seen: bool = false
 # 첫 출정에서 한 번씩만 뜨는 코칭. 다리 위 튜토리얼은 동사(이동·조준·사격)만
 # 가르치고 끝나서, 정작 이 게임의 결정 구조는 아무도 설명하지 않았다.
 var workbench_lesson_seen: bool = false
+# 첫 출정에서 키 조작(TAB/R/SHIFT/E/SPACE)을 한 번 가르쳤는지.
+var field_controls_lesson_seen: bool = false
 var fatigue_lesson_seen: bool = false
 var extraction_choice_lesson_seen: bool = false
 var unlocked_milestones: Array[String] = []
@@ -3533,6 +3535,7 @@ func save_persistent_state() -> bool:
 		"active_catnip_buff": active_catnip_buff,
 		"bag_pressure_lesson_seen": bag_pressure_lesson_seen,
 		"workbench_lesson_seen": workbench_lesson_seen,
+		"field_controls_lesson_seen": field_controls_lesson_seen,
 		"fatigue_lesson_seen": fatigue_lesson_seen,
 		"extraction_choice_lesson_seen": extraction_choice_lesson_seen,
 		"unlocked_milestones": unlocked_milestones,
@@ -3666,6 +3669,7 @@ func load_persistent_state() -> bool:
 	active_catnip_buff = str(data.get("active_catnip_buff", ""))
 	bag_pressure_lesson_seen = bool(data.get("bag_pressure_lesson_seen", bag_pressure_lesson_seen))
 	workbench_lesson_seen = bool(data.get("workbench_lesson_seen", workbench_lesson_seen))
+	field_controls_lesson_seen = bool(data.get("field_controls_lesson_seen", field_controls_lesson_seen))
 	fatigue_lesson_seen = bool(data.get("fatigue_lesson_seen", fatigue_lesson_seen))
 	extraction_choice_lesson_seen = bool(data.get("extraction_choice_lesson_seen", extraction_choice_lesson_seen))
 	unlocked_milestones = _to_string_array(data.get("unlocked_milestones", []))
@@ -3863,6 +3867,7 @@ func reset_run() -> void:
 	active_catnip_buff = ""
 	bag_pressure_lesson_seen = false
 	fatigue_lesson_seen = false
+	field_controls_lesson_seen = false
 	extraction_choice_lesson_seen = false
 	unlocked_milestones.clear()
 	resident_reroll_counts.clear()

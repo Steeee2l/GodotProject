@@ -988,6 +988,59 @@ void fragment() {
 
 
 
+func build_controls_lesson() -> void:
+	# 첫 출정 1회, 데스크톱 전용 — 아무도 가르쳐 주지 않던 키들을 한 줄로.
+	# (모바일 버튼은 라벨이 곧 설명이라 필요 없다.)
+	if DisplayServer.is_touchscreen_available() or GameState.field_controls_lesson_seen:
+		return
+	GameState.field_controls_lesson_seen = true
+	GameState.save_persistent_state()
+	var panel := PanelContainer.new()
+	panel.name = "FieldControlsLesson"
+	panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	panel.offset_left = -352
+	panel.offset_right = 352
+	panel.offset_bottom = -168
+	panel.offset_top = -224
+	panel.add_theme_stylebox_override("panel", HudStyle.toast())
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.z_index = 120
+	host.get_node("HUD").add_child(panel)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 18)
+	panel.add_child(row)
+	var font := HudStyle.FONT
+	for pair in [
+		["TAB", "지도"], ["R", "장전"], ["SHIFT", "구급약"],
+		["E", "가방"], ["SPACE", "구르기"], ["우클릭", "정조준"],
+	]:
+		var item := HBoxContainer.new()
+		item.add_theme_constant_override("separation", 6)
+		row.add_child(item)
+		var keycap := PanelContainer.new()
+		keycap.add_theme_stylebox_override("panel", HudStyle.keycap())
+		item.add_child(keycap)
+		var key_label := Label.new()
+		key_label.text = str(pair[0])
+		key_label.add_theme_font_override("font", font)
+		key_label.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION)
+		key_label.add_theme_color_override("font_color", HudStyle.TEXT)
+		keycap.add_child(key_label)
+		var caption := Label.new()
+		caption.text = str(pair[1])
+		caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		caption.add_theme_font_override("font", font)
+		caption.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION)
+		caption.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
+		item.add_child(caption)
+	HudStyle.enter(panel)
+	var fade := panel.create_tween()
+	fade.tween_interval(12.0)
+	fade.tween_property(panel, "modulate:a", 0.0, 0.8)
+	fade.tween_callback(panel.queue_free)
+
+
 func setup_aim_feedback() -> void:
 	aim_direction_indicator = MeshInstance3D.new()
 	aim_direction_indicator.name = "AimDirectionIndicator"
