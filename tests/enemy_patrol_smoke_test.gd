@@ -66,7 +66,9 @@ func _run() -> void:
 	assert(bool(enemy.get("opening_shot_pending")), "A ranged enemy must prepare immediate return fire.")
 	assert(is_zero_approx(float(enemy.get("attack_cooldown"))))
 	var ammo_before_return_fire := int(enemy.get("magazine_ammo"))
-	for frame in 30:
+	# 사거리 밖(8m)에서 맞았으므로 접근+예비동작 시간이 필요하다. 30프레임은
+	# 이동속도 리밸런스 후 빠듯해졌다.
+	for frame in 150:
 		await physics_frame
 	assert(
 		int(enemy.get("magazine_ammo")) < ammo_before_return_fire,
