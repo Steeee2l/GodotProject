@@ -215,6 +215,16 @@ func _show_extraction_result(rescued_count: int) -> void:
 	var risk_payout := GameState.grant_extraction_risk_payout(
 		host.run_kills, host.raid_pressure_level, selected_extraction_multiplier
 	)
+	# 잠입 보상 — 시스템은 잠입을 파는데 경제가 학살만 사면 안 된다.
+	# 무발각 탈출(유령 침투)은 정산 +35%, 암살 처치는 킬 XP 가중.
+	var stealth_xp: int = int(host.run_stealth_kills) * 18
+	var ghost_xp := 0
+	var ghost_scrap := 0
+	if not host.run_player_detected:
+		ghost_xp = 80
+		ghost_scrap = maxi(400, roundi(float(risk_payout) * 0.35))
+		GameState.scrap += ghost_scrap
+	xp_reward += stealth_xp + ghost_xp
 	pending_extraction_xp_result = GameState.add_raid_experience(xp_reward)
 	host.hud.extraction_result_title.text = "탈출 성공 · Lv.%d" % int(pending_extraction_xp_result.get("new_level", GameState.player_level))
 	var mission_summary := "완료한 임무 없음"
@@ -241,6 +251,18 @@ func _show_extraction_result(rescued_count: int) -> void:
 		HudStyle.GOLD
 	)
 	host.hud.add_result_reward_chip("upgrade", "경험치 +%d" % xp_reward, HudStyle.GREEN)
+	if ghost_scrap > 0:
+		host.hud.add_result_reward_chip(
+			"secure",
+			"유령 침투 — 무발각 · 고철 +%s · XP +%d" % [
+				GameState.format_compact_number(ghost_scrap), ghost_xp,
+			],
+			HudStyle.GOLD
+		)
+	if stealth_xp > 0:
+		host.hud.add_result_reward_chip(
+			"melee", "암살 %d회 · XP +%d" % [host.run_stealth_kills, stealth_xp], HudStyle.GREEN
+		)
 	if route_xp_bonus > 0:
 		host.hud.add_result_reward_chip("raid", "경로 보너스 XP +%d" % route_xp_bonus, HudStyle.GOLD)
 	if host.completed_mission_xp > 0:

@@ -498,6 +498,7 @@ func _try_stealth_takedown() -> bool:
 	)):
 		return false
 	_play_stealth_takedown_impact()
+	host.run_stealth_kills += 1
 	host.melee_attack_cooldown = MELEE_ATTACK_COOLDOWN
 	host._add_fatigue(FATIGUE_MELEE_GAIN * 0.65)
 	host._lock_aim_direction(attack_direction)

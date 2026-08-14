@@ -106,5 +106,26 @@ func _run() -> void:
 		assert(int(counts.get(5, 0)) > 0)  # Lv5 잭팟 존재
 		assert(int(counts.get(5, 0)) < SAMPLES / 10)  # 잭팟은 희귀해야 한다
 
+	# ── 방어구 트레이드오프: 상위 계열은 은신 페널티를 함께 진다 ──
+	var riot_def: Dictionary = game_state.call("get_equipment_definition", "riot_vest")
+	assert(float(riot_def.get("visibility_multiplier", 1.0)) > 1.0)
+	var sneakers_def: Dictionary = game_state.call("get_equipment_definition", "patched_sneakers")
+	assert(float(sneakers_def.get("scent_multiplier", 1.0)) < 1.0)
+	var assault_def: Dictionary = game_state.call("get_equipment_definition", "assault_boots")
+	assert(float(assault_def.get("scent_multiplier", 1.0)) > 1.0)
+	# 레벨이 올라도 트레이드오프는 그대로다 — 계열의 성격이지 성장 스탯이 아니다
+	var riot5_def: Dictionary = game_state.call("get_equipment_definition", "riot_vest@5")
+	assert(absf(
+		float(riot5_def.get("visibility_multiplier", 1.0))
+		- float(riot_def.get("visibility_multiplier", 1.0))
+	) < 0.001)
+	# 장착 합산 반영
+	assert(bool(game_state.call("add_equipment", "riot_vest", 1)))
+	assert(bool(game_state.call("equip_equipment", "riot_vest")))
+	assert(float(game_state.call("get_equipment_visibility_multiplier")) > 1.0)
+	assert(bool(game_state.call("add_equipment", "patched_sneakers", 1)))
+	assert(bool(game_state.call("equip_equipment", "patched_sneakers")))
+	assert(float(game_state.call("get_equipment_scent_multiplier")) < 1.0)
+
 	print("EQUIPMENT_LEVEL_SMOKE_TEST_PASSED")
 	quit(0)

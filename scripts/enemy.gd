@@ -678,10 +678,11 @@ func _get_search_break_distance() -> float:
 func _get_target_visibility_multiplier() -> float:
 	if target != primary_player_target or not is_instance_valid(primary_player_target):
 		return 1.0
+	# 상한 1.45: 무거운 방어구는 1.0을 넘겨 "더 잘 보이는" 페널티를 허용한다.
 	return clampf(
 		float(primary_player_target.get_meta("stealth_visibility_multiplier", 1.0)),
 		0.35,
-		1.0
+		1.45
 	)
 
 
@@ -1382,6 +1383,10 @@ func _become_alerted() -> void:
 	lure_point = null
 	lure_arrived = false
 	detection_awareness = 1.0
+	if newly_alerted and is_targeting_player():
+		var scene := _raid_host()
+		if scene != null and scene.has_method("notify_player_detected"):
+			scene.call("notify_player_detected")
 	if is_instance_valid(target):
 		last_known_position = target.global_position
 	pursuit_time = maxf(

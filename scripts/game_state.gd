@@ -387,9 +387,9 @@ const EQUIPMENT_DEFINITIONS := {
 	},
 	"riot_vest": {
 		"display_name": "진압대 방탄 조끼", "slot": "body", "damage_reduction": 0.30,
-		"weight": 6.2, "icon": "armor",
+		"weight": 6.2, "icon": "armor", "visibility_multiplier": 1.08,
 		"texture_path": "res://assets/equipment/generated/riot_vest.png",
-		"description": "무겁지만 튼튼한 진압 장비. 받는 피해를 30% 줄입니다.",
+		"description": "무겁지만 튼튼한 진압 장비. 받는 피해를 30% 줄이지만 덩치가 커져 눈에 잘 띕니다.",
 	},
 	"patched_helmet": {
 		"display_name": "기워 붙인 헬멧", "slot": "head", "damage_reduction": 0.10,
@@ -399,16 +399,16 @@ const EQUIPMENT_DEFINITIONS := {
 	},
 	"tactical_helmet": {
 		"display_name": "전술 방탄 헬멧", "slot": "head", "damage_reduction": 0.20,
-		"weight": 2.1, "icon": "helmet",
+		"weight": 2.1, "icon": "helmet", "visibility_multiplier": 1.04,
 		"texture_path": "res://assets/equipment/generated/tactical_helmet.png",
-		"description": "군용 내피가 남아 있는 헬멧. 받는 피해를 15% 줄입니다.",
+		"description": "군용 내피가 남아 있는 헬멧. 받는 피해를 20% 줄이지만 실루엣이 커집니다.",
 	},
 	"patched_sneakers": {
 		"display_name": "기워 붙인 운동화", "slot": "feet",
 		"move_speed_bonus": 0.06, "stamina_cost_multiplier": 0.92,
-		"weight": 0.7, "icon": "footwear",
+		"weight": 0.7, "icon": "footwear", "scent_multiplier": 0.85,
 		"texture_path": "res://assets/equipment/generated/patched_sneakers.png",
-		"description": "가볍게 기워 발소리와 무게를 줄인 생존용 운동화입니다.",
+		"description": "가볍게 기워 발소리와 냄새 흔적을 줄인 생존용 운동화입니다.",
 	},
 	"tactical_boots": {
 		"display_name": "경량 전술화", "slot": "feet",
@@ -419,22 +419,22 @@ const EQUIPMENT_DEFINITIONS := {
 	},
 	"military_vest": {
 		"display_name": "군납 방탄복", "slot": "body", "damage_reduction": 0.34,
-		"weight": 7.4, "icon": "armor",
+		"weight": 7.4, "icon": "armor", "visibility_multiplier": 1.12,
 		"texture_path": "res://assets/equipment/generated/military_vest.png",
-		"description": "봉쇄선 부대에서 흘러나온 정식 군납품. 받는 피해를 34% 줄입니다.",
+		"description": "봉쇄선 부대에서 흘러나온 정식 군납품. 받는 피해를 34% 줄이지만 눈에 확 띕니다.",
 	},
 	"military_helmet": {
 		"display_name": "군납 전투 헬멧", "slot": "head", "damage_reduction": 0.24,
-		"weight": 2.6, "icon": "helmet",
+		"weight": 2.6, "icon": "helmet", "visibility_multiplier": 1.06,
 		"texture_path": "res://assets/equipment/generated/military_helmet.png",
-		"description": "레일과 내피가 온전한 전투 헬멧. 받는 피해를 24% 줄입니다.",
+		"description": "레일과 내피가 온전한 전투 헬멧. 받는 피해를 24% 줄이지만 실루엣이 커집니다.",
 	},
 	"assault_boots": {
 		"display_name": "강습 부츠", "slot": "feet",
 		"move_speed_bonus": 0.05, "stamina_cost_multiplier": 0.70,
-		"weight": 1.7, "icon": "footwear",
+		"weight": 1.7, "icon": "footwear", "scent_multiplier": 1.15,
 		"texture_path": "res://assets/equipment/generated/assault_boots.png",
-		"description": "봉쇄선 강습조가 신던 부츠. 무게 대비 기동성이 탁월합니다.",
+		"description": "봉쇄선 강습조가 신던 부츠. 기동성이 탁월하지만 무거워 냄새 흔적이 짙게 남습니다.",
 	},
 }
 const PLAYER_LEVEL_REWARDS := {
@@ -2078,6 +2078,34 @@ func get_equipped_armor_piece_count() -> int:
 		if not equipment_id.is_empty():
 			count += 1
 	return count
+
+
+# ── 방어구 트레이드오프 ────────────────────────────────────────
+# 상위 계열은 순수 상위호환이 아니다: 두꺼운 방어구는 눈에 잘 띄고(피탐지↑),
+# 무거운 부츠는 냄새 흔적이 짙다. "무엇을 입을까"가 빌드 선택이 된다.
+# 트레이드오프 스탯은 레벨 성장에서 제외 — 계열 고유의 성격이다.
+
+
+func get_equipment_visibility_multiplier() -> float:
+	var multiplier := 1.0
+	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
+		if str(equipment_id).is_empty():
+			continue
+		multiplier *= float(
+			get_equipment_definition(str(equipment_id)).get("visibility_multiplier", 1.0)
+		)
+	return clampf(multiplier, 0.8, 1.35)
+
+
+func get_equipment_scent_multiplier() -> float:
+	var multiplier := 1.0
+	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
+		if str(equipment_id).is_empty():
+			continue
+		multiplier *= float(
+			get_equipment_definition(str(equipment_id)).get("scent_multiplier", 1.0)
+		)
+	return clampf(multiplier, 0.7, 1.4)
 
 
 func get_equipment_damage_multiplier() -> float:

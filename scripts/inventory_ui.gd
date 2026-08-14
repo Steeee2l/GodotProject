@@ -1528,6 +1528,13 @@ func _format_equipment_stats(definition: Dictionary) -> String:
 	var stamina_cost_percent := roundi((float(definition.get("stamina_cost_multiplier", 1.0)) - 1.0) * 100.0)
 	if stamina_cost_percent != 0:
 		stats.append("대시 스태미나 %s%d%%" % ["+" if stamina_cost_percent > 0 else "", stamina_cost_percent])
+	# 트레이드오프 — 좋은 것만 보여주면 선택이 아니라 사다리다.
+	var visibility_percent := roundi((float(definition.get("visibility_multiplier", 1.0)) - 1.0) * 100.0)
+	if visibility_percent != 0:
+		stats.append("피탐지 %s%d%%" % ["+" if visibility_percent > 0 else "", visibility_percent])
+	var scent_percent := roundi((float(definition.get("scent_multiplier", 1.0)) - 1.0) * 100.0)
+	if scent_percent != 0:
+		stats.append("냄새 흔적 %s%d%%" % ["+" if scent_percent > 0 else "", scent_percent])
 	return "  ·  ".join(stats)
 
 

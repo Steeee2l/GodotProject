@@ -217,7 +217,9 @@ func _update_movers(delta: float) -> void:
 		var kind := str(data.kind)
 		var moved := mover.global_position.distance_to(data.last_position) > 0.08
 		if kind == "player":
-			add_trace(mover.global_position, kind, (2.0 if moved else 8.0) * delta)
+			# 신발 트레이드오프: 가벼운 운동화는 흔적이 옅고 강습 부츠는 짙다.
+			var scent_scale := float(GameState.get_equipment_scent_multiplier())
+			add_trace(mover.global_position, kind, (2.0 if moved else 8.0) * delta * scent_scale)
 			var key := "%s:%d:%d" % [kind, cell.x, cell.y]
 			if trails.has(key):
 				var entry := trails[key] as Dictionary

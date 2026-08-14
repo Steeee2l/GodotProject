@@ -309,6 +309,9 @@ var fatigue_warning_band := -1
 var run_started_msec := 0
 var run_kills := 0
 var run_damage_dealt := 0
+# 잠입 보상 추적: 한 번도 발각되지 않고 탈출하면 '유령 침투' 정산 보너스.
+var run_player_detected := false
+var run_stealth_kills := 0
 var raid_start_snapshot := {}
 var corpse_recovery_point: Node3D
 var game_over_screen := GameOverScreen.new()
@@ -544,6 +547,7 @@ func _ready() -> void:
 	# 진입 유예 시작 — 40초 또는 첫 공격까지. 적 훅(사격 상한·유예)이 이 노드를
 	# 그룹으로 찾는다(테스트 환경에선 current_scene이 메인 씬이 아니다).
 	add_to_group("raid_host")
+	_refresh_stealth_visibility_meta()
 	raid_entry_grace_until_msec = Time.get_ticks_msec() + 40000
 
 
@@ -940,14 +944,20 @@ func _end_space_hold() -> void:
 	space_hold_consumed = false
 
 
+func _refresh_stealth_visibility_meta() -> void:
+	# 식빵 자세(은신)와 방어구 피탐지(트레이드오프)를 곱해 적 시야 판정에 넘긴다.
+	player.set_meta(
+		"stealth_visibility_multiplier",
+		(LOAF_VISIBILITY_MULTIPLIER if loafing else 1.0)
+		* GameState.get_equipment_visibility_multiplier()
+	)
+
+
 func _set_loafing(enabled: bool) -> void:
 	if loafing == enabled:
 		return
 	loafing = enabled
-	player.set_meta(
-		"stealth_visibility_multiplier",
-		LOAF_VISIBILITY_MULTIPLIER if loafing else 1.0
-	)
+	_refresh_stealth_visibility_meta()
 	player.set_meta("loafing_stealth", loafing)
 	if loafing:
 		fire_button_held = false
@@ -3348,6 +3358,8 @@ func _weapon_condition_tint() -> Color:
 
 
 func _update_equipment_ui() -> void:
+	# 장비가 바뀌면 피탐지 배율도 함께 갱신된다 (방어구 트레이드오프).
+	_refresh_stealth_visibility_meta()
 	var weapon_name := str(weapon_stats.get("display_name", "AK-47"))
 	var magazine_size := int(weapon_stats.get("magazine_size", 30))
 	var ammo_name := str(WEAPON_SYSTEM.get_ammo(GameState.equipped_ammo_id).get("display_name", GameState.equipped_ammo_id))
@@ -3808,6 +3820,11 @@ func is_raid_entry_grace_active() -> bool:
 
 func break_raid_entry_grace() -> void:
 	raid_entry_grace_broken = true
+
+
+func notify_player_detected() -> void:
+	# 적이 플레이어를 표적으로 경계에 들어간 순간 — 유령 침투 보너스가 날아간다.
+	run_player_detected = true
 
 
 func request_enemy_fire_token(enemy: Node) -> bool:
