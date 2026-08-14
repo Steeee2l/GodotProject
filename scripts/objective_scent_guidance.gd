@@ -111,18 +111,18 @@ func _select_target() -> Dictionary:
 		if status in ["completed", "failed"]:
 			continue
 		var role := str(data.get("role", "mission"))
+		# 후각 재정의: "지도에 없는 것만 코가 찾는다."
+		# 원거리 목적지(primary/mission 사이트)는 전술 지도가 이미 보여주므로
+		# 금빛 고속도로를 깔지 않는다. 냄새 안내는 진행 중 임무의 근거리
+		# 단서(active_target)와 지도에 안 뜨는 생존자 흔적(rescue)만.
+		if role not in ["active_target", "rescue"]:
+			continue
 		var score := 0.0
 		match role:
 			"active_target":
 				score = 400.0
-			"primary":
-				score = 260.0
 			"rescue":
 				score = 110.0
-			_:
-				score = 100.0
-		if status in ["preparing", "active"]:
-			score = 330.0
 		score -= player.global_position.distance_to(site.global_position) * 0.04
 		if score > best_score:
 			best_score = score

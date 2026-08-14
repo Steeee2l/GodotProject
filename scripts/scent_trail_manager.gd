@@ -93,7 +93,7 @@ func _create_trail(
 	var marker := Sprite3D.new()
 	marker.name = "Scent_%s_%d" % [kind, trails.size()]
 	marker.texture = scent_texture
-	marker.pixel_size = 0.021 if kind in ["objective", "rescue"] else 0.018
+	marker.pixel_size = 0.021 if kind in ["objective", "rescue", "enemy"] else 0.018
 	marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	marker.shaded = false
 	marker.transparent = true
@@ -165,7 +165,10 @@ func _process(delta: float) -> void:
 	for key in trails.keys():
 		var entry := trails[key] as Dictionary
 		if not bool(entry.get("persistent", false)):
-			entry.strength = maxf(0.0, float(entry.strength) - decay)
+			# 적 흔적은 후각의 주인공 — 천천히 식어서 순찰 경로가 길게 읽힌다.
+			# (진할수록 최근에 지나간 것. 지도는 장소를 알지만 시간은 모른다.)
+			var kind_decay := 0.55 if str(entry.kind) == "enemy" else 1.0
+			entry.strength = maxf(0.0, float(entry.strength) - decay * kind_decay)
 		var marker_value: Variant = entry.get("marker")
 		if float(entry.strength) <= 0.0 or not is_instance_valid(marker_value):
 			if is_instance_valid(marker_value):
@@ -189,7 +192,8 @@ func _process(delta: float) -> void:
 				"rescue":
 					alpha = 0.7
 				"enemy":
-					alpha = 0.58
+					# 위험 감지가 후각의 존재 이유 — 붉은 흔적이 제일 잘 보여야 한다.
+					alpha = 0.85
 			color.a = intensity * alpha
 			marker.modulate = color
 			var pulse := 0.94 + sin(now * 3.6 + marker.position.x * 0.11 + marker.position.z * 0.09) * 0.12

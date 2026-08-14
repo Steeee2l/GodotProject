@@ -214,7 +214,7 @@ func _install_scent_system() -> void:
 		var hint_count := int(host.get_meta("scent_hint_count", 0))
 		if active and hint_count < 3:
 			host.set_meta("scent_hint_count", hint_count + 1)
-			host.hud.ammo_notice.text = "킁킁 — 멈추면 냄새가 보인다 · 금빛=임무 · 초록=생존자 · 붉음=적"
+			host.hud.ammo_notice.text = "킁킁 — 붉은 냄새는 적이 지나간 길, 진할수록 방금이다 · 초록=생존자"
 			host.hud.ammo_notice.visible = true
 			host.ammo_notice_time = 0.35
 		elif not active and hint_count <= 3:
