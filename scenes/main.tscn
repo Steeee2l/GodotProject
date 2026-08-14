@@ -18,6 +18,7 @@ fog_enabled = true
 fog_light_color = Color(0.32, 0.36, 0.38, 1)
 fog_light_energy = 0.65
 fog_density = 0.008
+fog_sky_affect = 0.0
 
 [sub_resource type="ParticleProcessMaterial" id="Particles_rain"]
 emission_shape = 3
