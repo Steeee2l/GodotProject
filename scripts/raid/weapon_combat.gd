@@ -144,6 +144,8 @@ func _fire_ak47() -> void:
 		float(host.weapon_stats.get("max_spread_deg", 14.0))
 	)
 	host._add_fatigue(FATIGUE_SHOT_GAIN)
+	if host.has_method("break_raid_entry_grace"):
+		host.break_raid_entry_grace()
 	_apply_weapon_recoil(aim_direction)
 	# 발사 반동을 화면에도 아주 약하게 싣는다. 산탄(다연발)은 조금 더 묵직하게.
 	var recoil_kick := 0.032 if pellet_count <= 1 else 0.062

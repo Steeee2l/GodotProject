@@ -540,6 +540,10 @@ func _ready() -> void:
 	_apply_hud_layout()
 	# 첫 출정에서 한 번, 자리 잡을 시간을 준 뒤 키 조작 레슨을 띄운다.
 	get_tree().create_timer(2.5).timeout.connect(hud.build_controls_lesson)
+	# 진입 유예 시작 — 40초 또는 첫 공격까지. 적 훅(사격 상한·유예)이 이 노드를
+	# 그룹으로 찾는다(테스트 환경에선 current_scene이 메인 씬이 아니다).
+	add_to_group("raid_host")
+	raid_entry_grace_until_msec = Time.get_ticks_msec() + 40000
 
 
 func _snap_camera_to_player() -> void:
@@ -1331,6 +1335,7 @@ func _try_melee_attack() -> void:
 	if melee_attack_cooldown > 0.0 or melee_attack_active or roll_active or loafing or player_health <= 0:
 		return
 	melee_attack_cooldown = MELEE_ATTACK_COOLDOWN
+	break_raid_entry_grace()
 	_add_fatigue(FATIGUE_MELEE_GAIN)
 	var attack_direction := weapon_combat._get_mouse_world_direction() if weapon_combat._uses_mouse_aim() else _get_current_facing_world_direction()
 	_lock_aim_direction(attack_direction)
@@ -3753,6 +3758,21 @@ const MAX_CONCURRENT_SHOOTERS := 2
 const MAX_CONCURRENT_MELEE := 2
 var enemy_fire_tokens: Dictionary = {}
 var enemy_melee_tokens: Dictionary = {}
+
+
+# ── 진입 유예 ──────────────────────────────────────────────────
+# 판 시작 40초 동안, 플레이어가 먼저 공격하지 않는 한 원거리 시야 탐지가
+# 쌓이지 않는다. 실측: 스폰 지점에서 지도만 읽어도 30초 내 사망했다.
+var raid_entry_grace_until_msec := 0
+var raid_entry_grace_broken := false
+
+
+func is_raid_entry_grace_active() -> bool:
+	return not raid_entry_grace_broken and Time.get_ticks_msec() < raid_entry_grace_until_msec
+
+
+func break_raid_entry_grace() -> void:
+	raid_entry_grace_broken = true
 
 
 func request_enemy_fire_token(enemy: Node) -> bool:

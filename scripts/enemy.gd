@@ -282,6 +282,15 @@ func restore_player_target() -> void:
 func add_scent_suspicion(scent_position: Vector3, amount: float) -> void:
 	if dying or alerted:
 		return
+	# 진입 유예 중에는 냄새로도 끌려오지 않는다 — 스폰에서 지도를 읽는 동안
+	# 고인 냄새가 순찰을 끌어들여 '시작하자마자 포위'를 만들었다.
+	var scene := _raid_host()
+	if (
+		scene != null
+		and scene.has_method("is_raid_entry_grace_active")
+		and bool(scene.call("is_raid_entry_grace_active"))
+	):
+		return
 	detection_awareness = minf(0.88, detection_awareness + maxf(0.0, amount))
 	last_known_position = scent_position
 	if detection_awareness >= SUSPICION_THRESHOLD:
@@ -681,6 +690,17 @@ func _update_detection_awareness(
 		visibility_multiplier
 	)
 	if detection_seconds < 0.0:
+		_decay_detection_awareness(delta)
+		return false
+	# 진입 유예 — 판 시작 직후 지도를 읽는 동안에는 지근거리가 아니면
+	# 시야 탐지가 쌓이지 않는다. 플레이어가 먼저 쏘면 유예는 즉시 끝난다.
+	var scene := _raid_host()
+	if (
+		distance > 9.0
+		and scene != null
+		and scene.has_method("is_raid_entry_grace_active")
+		and bool(scene.call("is_raid_entry_grace_active"))
+	):
 		_decay_detection_awareness(delta)
 		return false
 	detection_awareness = minf(
@@ -1298,6 +1318,13 @@ func _choose_patrol_target() -> void:
 	patrol_repath_time = randf_range(2.0, 4.5)
 
 
+func _raid_host() -> Node:
+	# current_scene은 테스트/시뮬 환경에서 메인 씬이 아닐 수 있다.
+	# 그룹이 1순위, current_scene은 폴백.
+	var host := get_tree().get_first_node_in_group("raid_host")
+	return host if host != null else get_tree().current_scene
+
+
 func _become_alerted() -> void:
 	var newly_alerted := not alerted
 	alerted = true
@@ -1806,7 +1833,7 @@ func _update_melee(direction: Vector3, distance: float) -> void:
 
 func _start_melee_windup(direction: Vector3) -> void:
 	# 동시 근접 상한 — 자리가 없으면 반 박자 물러나 포위를 잇는다.
-	var scene := get_tree().current_scene
+	var scene := _raid_host()
 	if (
 		scene != null
 		and scene.has_method("request_enemy_melee_token")
@@ -1870,7 +1897,7 @@ func _start_pistol_burst(direction: Vector3) -> void:
 		_start_reload()
 		return
 	# 동시 사격 상한 — 사격 자리가 없으면 잠깐 물러나 포위를 잇는다.
-	var scene := get_tree().current_scene
+	var scene := _raid_host()
 	if (
 		scene != null
 		and scene.has_method("request_enemy_fire_token")

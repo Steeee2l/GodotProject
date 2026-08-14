@@ -298,7 +298,26 @@ func _build_enemy_patrol_route(
 ) -> Array[Vector3]:
 	var points: Array[Vector3] = [origin]
 	if patrol_mode == "road_route":
-		return world.get_long_road_patrol_route(origin, route_seed, [player.get_rid()])
+		# 장거리 도로 순찰이 진입 지점을 관통해 "시작하자마자 적" 체감을 만들었다
+		# (실측: 가만히 서 있으면 30초 내 사망). 경로의 어떤 '구간'도 진입
+		# 안전 반경을 스치지 않게 자르고, 남은 구간이 빈약하면 제자리 순찰로 강등.
+		var road_route := world.get_long_road_patrol_route(origin, route_seed, [player.get_rid()])
+		var entry_point := player.global_position
+		var entry_safe := float(host.raid_zone_data.get(
+			"entry_safe_radius", RAID_ENTRY_ENEMY_SAFE_RADIUS
+		))
+		var safe_prefix: Array[Vector3] = []
+		for route_point in road_route:
+			if not safe_prefix.is_empty():
+				var segment_from := safe_prefix.back() as Vector3
+				if _segment_distance_to_point_flat(segment_from, route_point, entry_point) < entry_safe:
+					break
+			elif Vector2(route_point.x - entry_point.x, route_point.z - entry_point.z).length() < entry_safe:
+				break
+			safe_prefix.append(route_point)
+		if safe_prefix.size() >= 2:
+			return safe_prefix
+		patrol_mode = "route"
 	var point_count := 3 if patrol_mode == "sentry" else 5
 	var route_radius := 4.2 if patrol_mode == "sentry" else 8.5
 	var base_angle := deg_to_rad(float(posmod(route_seed * 67, 360)))
@@ -322,6 +341,17 @@ func _build_enemy_patrol_route(
 		):
 			points.append(candidate)
 	return points
+
+
+func _segment_distance_to_point_flat(from: Vector3, to: Vector3, point: Vector3) -> float:
+	var a := Vector2(from.x, from.z)
+	var b := Vector2(to.x, to.z)
+	var p := Vector2(point.x, point.z)
+	var ab := b - a
+	if ab.length_squared() < 0.0001:
+		return a.distance_to(p)
+	var t := clampf((p - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+	return (a + ab * t).distance_to(p)
 
 
 func _spawn_enemy(
