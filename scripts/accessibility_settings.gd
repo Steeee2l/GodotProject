@@ -20,7 +20,6 @@ var battery_saver := false
 var backdrop: ColorRect
 var panel: PanelContainer
 var panel_center: CenterContainer
-var mobile_button: Button
 var was_tree_paused := false
 
 
@@ -148,12 +147,7 @@ func _build_ui() -> void:
 	var footer := _label("색상만으로 상태를 구분하지 않으며 아이콘과 문자를 함께 표시합니다.", 12, Color("#8fa59b"))
 	footer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(footer)
-	mobile_button = Button.new()
-	mobile_button.icon = UI_ICONS.get_icon("settings", 27, Color("#d9d6c4"))
-	mobile_button.custom_minimum_size = Vector2(50, 50)
-	mobile_button.tooltip_text = "표시 및 조작 설정"
-	mobile_button.pressed.connect(open)
-	add_child(mobile_button)
+	# 모바일 우상단 진입 버튼은 화면 정리를 위해 만들지 않는다(F10으로 진입).
 
 
 func _add_slider(parent: VBoxContainer, title: String, description: String, minimum: float, maximum: float, step: float, value: float, callback: Callable) -> void:
@@ -212,13 +206,6 @@ func _apply_layout() -> void:
 	)
 	panel.custom_minimum_size = panel_size
 	panel.size = panel_size
-	# 필드 우상단이 붐벼서 모바일 진입 버튼은 감춘다(설정 자체는 데스크톱 키로 접근 가능).
-	mobile_button.visible = false
-	mobile_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	mobile_button.offset_left = -66.0 - safe.z
-	mobile_button.offset_top = 78.0 + safe.y
-	mobile_button.offset_right = -12.0 - safe.z
-	mobile_button.offset_bottom = 132.0 + safe.y
 
 
 func _panel_style() -> StyleBoxFlat:
