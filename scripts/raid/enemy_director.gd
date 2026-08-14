@@ -362,6 +362,9 @@ func _spawn_enemy(
 	assigned_squad_anchor: Vector3 = Vector3.ZERO,
 	formation_offset: Vector3 = Vector3.ZERO
 ) -> CharacterBody3D:
+	# 장비가 좋을수록 도시가 사납다 — 위협도가 오르면 적 체력·시야와 함께
+	# 무기 롤 품질도 올라가므로, 강해진 만큼 더 좋은 드랍을 상대에게서 얻는다.
+	threat = clampf(threat + GameState.get_loadout_threat_bonus(), 0.0, 1.0)
 	var enemy_weapon_id := "baseball_bat"
 	if kind != "melee":
 		var roll := spawn_random.randf()

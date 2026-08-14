@@ -127,5 +127,13 @@ func _run() -> void:
 	assert(bool(game_state.call("equip_equipment", "patched_sneakers")))
 	assert(float(game_state.call("get_equipment_scent_multiplier")) < 1.0)
 
+	# ── 장비가치→위협도: 좋은 장비를 입으면 스폰 위협 보너스가 오른다 ──
+	var geared_bonus := float(game_state.call("get_loadout_threat_bonus"))
+	game_state.call("unequip_equipment", "body")
+	game_state.call("unequip_equipment", "feet")
+	var bare_bonus := float(game_state.call("get_loadout_threat_bonus"))
+	assert(geared_bonus > bare_bonus)
+	assert(geared_bonus <= 0.35 + 0.001)
+
 	print("EQUIPMENT_LEVEL_SMOKE_TEST_PASSED")
 	quit(0)

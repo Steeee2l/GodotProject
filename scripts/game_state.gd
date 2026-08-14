@@ -2086,6 +2086,31 @@ func get_equipped_armor_piece_count() -> int:
 # 트레이드오프 스탯은 레벨 성장에서 제외 — 계열 고유의 성격이다.
 
 
+func get_loadout_threat_bonus() -> float:
+	# 성장-긴장 역전 해소: 장비가 좋아질수록 도시가 사납게 굶는다.
+	# 무기 강화(+30에서 만점)와 방어구(계열×레벨)를 합쳐 0~0.35를 스폰
+	# 위협도에 더한다 — 적 체력·시야·무기 롤이 함께 오르므로 위험과 보상이
+	# 같이 자란다. 만렙이 남산을 산책하는 그림을 막는 장치.
+	var weapon_part := clampf(
+		float(get_weapon_enhancement_level(equipped_weapon_id)) / 30.0, 0.0, 1.0
+	) * 0.15
+	var armor_points := 0.0
+	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
+		if str(equipment_id).is_empty():
+			continue
+		var definition := get_equipment_definition(str(equipment_id))
+		var family := 0.0
+		match str(definition.get("base_id", ""))\
+			.trim_suffix("_vest").trim_suffix("_helmet").trim_suffix("_boots").trim_suffix("_sneakers"):
+			"riot", "tactical":
+				family = 1.0
+			"military", "assault":
+				family = 2.0
+		armor_points += family * 1.5 + float(definition.get("level", 1))
+	var armor_part := clampf(armor_points / 24.0, 0.0, 1.0) * 0.2
+	return weapon_part + armor_part
+
+
 func get_equipment_visibility_multiplier() -> float:
 	var multiplier := 1.0
 	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:

@@ -3798,6 +3798,12 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 	raid_zone_detail_description.text = identity if not identity.is_empty() else base_description
 	if not tactical_rule.is_empty():
 		raid_zone_detail_description.text += "\n전술 · %s" % tactical_rule
+	# 장비가 좋을수록 도시가 사납다 — 감춰진 배율이면 억울하고, 보이면 선택이 된다.
+	var loadout_bonus := float(GameState.get_loadout_threat_bonus())
+	if loadout_bonus >= 0.03:
+		raid_zone_detail_description.text += (
+			"\n도시 반응 · 네 장비 소문이 돌았다 — 적 위협 +%d%%" % roundi(loadout_bonus * 100.0)
+		)
 	# 존 고유 규칙 — 이 구역이 다른 구역과 어떻게 다르게 굴러가는지. 위협도
 	# 숫자가 아니라, 준비물이 달라지는 정보라 눈에 띄게 노란색으로 붙인다.
 	# 특수 규칙이 있는 구역에서만 노란 줄로 알린다. 규칙 없는 초반 구역에서
