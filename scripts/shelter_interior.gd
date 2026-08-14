@@ -1345,6 +1345,69 @@ func _ui_blocks_player() -> bool:
 	)
 
 
+var shelter_weapon_card: PanelContainer
+var shelter_weapon_card_icon: TextureRect
+var shelter_weapon_card_label: Label
+
+
+func _build_shelter_weapon_card() -> void:
+	# 출정 필드의 우하단 무기 카드를 쉘터에서도 유지한다 — 지금 낀 총과
+	# 그 총이 먹는 탄을 어디서든 한눈에. (탄약 혼동 방지)
+	shelter_weapon_card = PanelContainer.new()
+	shelter_weapon_card.name = "ShelterWeaponCard"
+	shelter_weapon_card.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	var card_bottom := -196.0 if DisplayServer.is_touchscreen_available() else -16.0
+	shelter_weapon_card.offset_right = -14.0
+	shelter_weapon_card.offset_left = -292.0
+	shelter_weapon_card.offset_bottom = card_bottom
+	shelter_weapon_card.offset_top = card_bottom - 66.0
+	shelter_weapon_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shelter_weapon_card.add_theme_stylebox_override(
+		"panel", _rounded_panel_style(Color(0.02, 0.027, 0.025, 0.92), Color("#6f8a7c"), 8)
+	)
+	get_node("ShelterHUD").add_child(shelter_weapon_card)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	shelter_weapon_card.add_child(row)
+	shelter_weapon_card_icon = TextureRect.new()
+	shelter_weapon_card_icon.custom_minimum_size = Vector2(74, 40)
+	shelter_weapon_card_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	shelter_weapon_card_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	row.add_child(shelter_weapon_card_icon)
+	shelter_weapon_card_label = Label.new()
+	shelter_weapon_card_label.add_theme_font_override("font", FONT)
+	shelter_weapon_card_label.add_theme_font_size_override("font_size", 12)
+	shelter_weapon_card_label.add_theme_color_override("font_color", Color("#dfe8e2"))
+	shelter_weapon_card_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(shelter_weapon_card_label)
+	_refresh_shelter_weapon_card()
+
+
+func _refresh_shelter_weapon_card() -> void:
+	if shelter_weapon_card == null:
+		return
+	var weapon_id := str(GameState.equipped_weapon_id)
+	if weapon_id.is_empty() or not bool(GameState.has_ak):
+		shelter_weapon_card.visible = false
+		return
+	shelter_weapon_card.visible = true
+	var weapon_definition := WEAPON_SYSTEM.get_weapon(weapon_id)
+	var ammo_name := str(
+		WEAPON_SYSTEM.get_ammo(GameState.equipped_ammo_id).get(
+			"display_name", GameState.equipped_ammo_id
+		)
+	)
+	var short_name := str(weapon_definition.get("display_name", weapon_id)).split("\"")[0].strip_edges()
+	shelter_weapon_card_icon.texture = WEAPON_VISUAL_CATALOG.get_weapon_texture(weapon_id)
+	shelter_weapon_card_label.text = "%s  +%d\n%s\n장탄 %02d · 예비 %d" % [
+		short_name,
+		GameState.get_weapon_enhancement_level(weapon_id),
+		ammo_name,
+		int(GameState.magazine_ammo),
+		GameState.get_ammo_count(GameState.equipped_ammo_id),
+	]
+
+
 func _build_interface() -> void:
 	var canvas := CanvasLayer.new()
 	canvas.name = "ShelterHUD"
@@ -1564,6 +1627,7 @@ func _build_interface() -> void:
 	inventory_ui.connect("equipment_changed", _on_inventory_equipment_changed)
 	inventory_ui.connect("item_discard_requested", _on_inventory_item_discard_requested)
 	_refresh_inventory_state()
+	_build_shelter_weapon_card()
 	roll_cooldown_indicator = ROLL_COOLDOWN_INDICATOR_SCRIPT.new() as Control
 	roll_cooldown_indicator.name = "ShelterRollCooldownIndicator"
 	canvas.add_child(roll_cooldown_indicator)
@@ -3193,6 +3257,7 @@ func _use_shelter_medkit() -> void:
 func _refresh_inventory_state() -> void:
 	if inventory_ui == null:
 		return
+	_refresh_shelter_weapon_card()
 	var weapon_id := str(GameState.equipped_weapon_id)
 	var weapon_definition := WEAPON_SYSTEM.get_weapon(weapon_id)
 	var stored_weapons := 0
@@ -3223,6 +3288,8 @@ func _on_inventory_open_state_changed(is_open: bool) -> void:
 		touch_vector = Vector2.ZERO
 		player.velocity = Vector3.ZERO
 		_set_motion_state("idle")
+	else:
+		_refresh_shelter_weapon_card()
 
 
 func _on_inventory_weapon_mods_changed() -> void:

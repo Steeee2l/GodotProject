@@ -1017,11 +1017,14 @@ func _refresh_contents() -> void:
 		if count <= 0:
 			continue
 		var definition := WEAPON_SYSTEM.get_weapon(weapon_id)
+		var default_ammo_name := str(WEAPON_SYSTEM.get_ammo(
+			str(definition.get("default_ammo_id", ""))
+		).get("display_name", "?"))
 		_add_bag_item({
 			"id": weapon_id,
 			"type": "weapon",
 			"title": str(definition.get("display_name", weapon_id)),
-			"description": "가방에 보관 중인 무기입니다. 선택 후 장착하면 현재 주무기와 교체됩니다.",
+			"description": "사용 탄약 · %s\n선택 후 장착하면 현재 주무기와 교체됩니다." % default_ammo_name,
 			"quantity": count,
 			"equipped": false,
 			"texture": weapon_textures.get(weapon_id) as Texture2D,
@@ -1258,7 +1261,14 @@ func _refresh_weapon_detail() -> void:
 	weapon_preview.texture = _weapon_preview_texture()
 	var full_magazines := floori(float(reserve_state) / float(maxi(1, magazine_size_state)))
 	var loose_rounds := reserve_state % maxi(1, magazine_size_state)
-	weapon_stats.text = "현재 탄창 %02d / %02d\n예비 %03d발  ·  완전 탄창 %d개 + 낱탄 %d발\n내구도 %.1f%%  ·  탄퍼짐 %.1f°\n피해 %d  ·  반동 %.2f  ·  장전 %.1fs" % [
+	# 어떤 탄을 먹는 총인지가 첫 줄 — 탄약 혼동이 가방 안에서 끝나야 한다.
+	var ammo_name := str(
+		WEAPON_SYSTEM.get_ammo(game_state.equipped_ammo_id).get(
+			"display_name", game_state.equipped_ammo_id
+		)
+	)
+	weapon_stats.text = "사용 탄약 · %s\n현재 탄창 %02d / %02d\n예비 %03d발  ·  완전 탄창 %d개 + 낱탄 %d발\n내구도 %.1f%%  ·  탄퍼짐 %.1f°\n피해 %d  ·  반동 %.2f  ·  장전 %.1fs" % [
+		ammo_name,
 		magazine_state,
 		magazine_size_state,
 		reserve_state,
@@ -1755,6 +1765,18 @@ func _equipment_button(slot_name: String, texture: Texture2D, active: bool, call
 	return button
 
 
+func _force_modal_bounds() -> void:
+	# 세로모드 무기 상세창 우측 밀림의 최종 방어선: 부모 체인이 어떤 낡은 값을
+	# 물고 있어도, 정렬이 끝난 시점에 모달 내부를 뷰포트 크기로 강제한다.
+	if modal == null or not modal.visible:
+		return
+	var canvas_size := get_viewport().get_visible_rect().size
+	var safe_margin := modal.get_node_or_null("InventorySafeMargin") as Control
+	if safe_margin != null and not safe_margin.size.is_equal_approx(canvas_size):
+		safe_margin.position = Vector2.ZERO
+		safe_margin.size = canvas_size
+
+
 func _apply_responsive_layout() -> void:
 	if inventory_panel == null or weapon_panel == null or shell == null:
 		return
@@ -1799,12 +1821,28 @@ func _apply_responsive_layout() -> void:
 		modal.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		var safe_margin := modal.get_node_or_null("InventorySafeMargin") as MarginContainer
 		if safe_margin:
+			# 시작 시 기준 해상도 스왑 도중 부모 체인(root→modal)의 size가 낡은
+			# 폭(1026)으로 남는 프레임이 있다. 부모를 믿지 말고 뷰포트 실측값에
+			# 직접 바인딩 — 세로모드 무기 상세창이 오른쪽으로 밀려 잘리던 원인.
+			safe_margin.position = Vector2.ZERO
+			safe_margin.size = viewport_size
+			# 시작 해상도 스왑 잔재가 이 프레임의 정렬 이후 다시 덮어쓸 수 있다 —
+			# 모든 정렬이 끝난 다음 프레임에 뷰포트 실측값으로 한 번 더 못박는다.
+			call_deferred("_force_modal_bounds")
 			safe_margin.add_theme_constant_override("margin_left", roundi(12.0 + safe.x))
 			safe_margin.add_theme_constant_override("margin_top", roundi(12.0 + safe.y))
 			safe_margin.add_theme_constant_override("margin_right", roundi(12.0 + safe.z))
 			safe_margin.add_theme_constant_override("margin_bottom", roundi(12.0 + safe.w))
-		inventory_panel.custom_minimum_size = Vector2(panel_width, panel_height)
-		weapon_panel.custom_minimum_size = Vector2(panel_width, panel_height)
+		# 숨겨질 패널의 최소 크기는 0으로 — 컴팩트(세로)에서 무기 상세만 보일 때
+		# 숨은 인벤 패널의 500px 최소폭이 CenterContainer 최소 크기에 새어들어
+		# 중심축이 오른쪽으로 밀렸다(상세창이 화면 밖으로 잘리던 원인).
+		var inventory_hidden := responsive_compact and showing_weapon
+		inventory_panel.custom_minimum_size = (
+			Vector2.ZERO if inventory_hidden else Vector2(panel_width, panel_height)
+		)
+		weapon_panel.custom_minimum_size = (
+			Vector2(panel_width, panel_height) if showing_weapon else Vector2.ZERO
+		)
 		var visible_panel_count := 2 if showing_weapon and not responsive_compact else 1
 		var shell_width := panel_width * visible_panel_count
 		if visible_panel_count > 1:

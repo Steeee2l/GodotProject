@@ -35,6 +35,10 @@ func _apply_orientation_scale() -> void:
 	var wanted := Vector2i(720, 1280) if portrait else Vector2i(1280, 720)
 	if window.content_scale_size != wanted:
 		window.content_scale_size = wanted
+		# content_scale_size 변경은 size_changed를 다시 쏘지 않는다 — 이 핸들러보다
+		# 먼저 돌았던 다른 UI 레이아웃들은 스왑 '직전'의 캔버스 폭으로 굳는다
+		# (세로모드 무기 상세창이 오른쪽으로 밀리던 원인). 새 기준으로 전원 재통지.
+		get_viewport().size_changed.emit.call_deferred()
 	fade = ColorRect.new()
 	fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	fade.color = Color(0, 0, 0, 0)
