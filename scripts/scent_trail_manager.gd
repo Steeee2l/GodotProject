@@ -6,7 +6,11 @@ signal focus_changed(active: bool)
 const CELL_SIZE := 2.5
 const MAX_TRAILS := 320
 const BASE_DECAY_PER_SECOND := 2.2
-const FOCUS_REVEAL_RADIUS := 18.0
+const FOCUS_REVEAL_RADIUS := 22.0
+# 멈춰 서 있으면 이만큼 뒤에 자동으로 냄새를 읽기 시작한다.
+const AUTO_SNIFF_DELAY := 0.55
+# 움직이기 시작해도 이만큼은 흔적이 남아 보인다(깜빡임 방지).
+const AUTO_SNIFF_LINGER := 0.5
 const SCENT_COLORS := {
 	"enemy": Color("#ff665f"),
 	"rescue": Color("#75e39b"),
@@ -16,6 +20,9 @@ const SCENT_COLORS := {
 
 var player: Node3D
 var focus_active := false
+var manual_focus_held := false
+var stationary_time := 0.0
+var linger_time := 0.0
 var night_factor := 0.0
 var tracked: Dictionary = {}
 var trails: Dictionary = {}
@@ -28,7 +35,6 @@ func setup(player_node: Node3D) -> void:
 	player = player_node
 	scent_texture = _build_scent_texture()
 	register_mover(player_node, "player")
-	_build_mobile_focus_button()
 
 
 func register_mover(mover: Node3D, kind: String) -> void:
@@ -108,10 +114,29 @@ func _create_trail(
 
 
 func set_focus_active(active: bool) -> void:
-	if focus_active == active:
-		return
-	focus_active = active
-	focus_changed.emit(active)
+	# 데스크톱 Q키 홀드 — 자동 후각과 별개로 즉시 켤 수 있는 수동 경로.
+	manual_focus_held = active
+
+
+func _update_auto_sniff(delta: float) -> void:
+	# 후각 대개편: 버튼 없이, 멈춰 서면 나비가 자동으로 냄새를 읽는다.
+	# 고양이는 걸음을 멈추고 킁킁거린다 — 조작이 아니라 습성이다.
+	var moving := true
+	if is_instance_valid(player):
+		var velocity_value: Variant = player.get("velocity")
+		if velocity_value is Vector3:
+			moving = (velocity_value as Vector3).length_squared() > 0.05
+	if moving:
+		stationary_time = 0.0
+		linger_time = maxf(0.0, linger_time - delta)
+	else:
+		stationary_time += delta
+		if stationary_time >= AUTO_SNIFF_DELAY:
+			linger_time = AUTO_SNIFF_LINGER
+	var next_active := manual_focus_held or linger_time > 0.0
+	if next_active != focus_active:
+		focus_active = next_active
+		focus_changed.emit(focus_active)
 
 
 func set_night_factor(value: float) -> void:
@@ -130,6 +155,7 @@ func get_strength_near(world_position: Vector3, kind: String, radius: float = 5.
 
 
 func _process(delta: float) -> void:
+	_update_auto_sniff(delta)
 	update_accumulator += delta
 	if update_accumulator >= 0.18:
 		_update_movers(update_accumulator)
@@ -245,34 +271,5 @@ func _build_scent_texture() -> Texture2D:
 	return ImageTexture.create_from_image(image)
 
 
-func _build_mobile_focus_button() -> void:
-	if not DisplayServer.is_touchscreen_available():
-		return
-	var layer := CanvasLayer.new()
-	layer.layer = 145
-	add_child(layer)
-	var button := Button.new()
-	button.name = "ScentFocusButton"
-	button.text = "후각"
-	button.tooltip_text = "누르는 동안 주변의 냄새 흔적을 확인합니다."
-	button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	button.offset_left = -190
-	button.offset_top = -112
-	button.offset_right = -112
-	button.offset_bottom = -34
-	button.custom_minimum_size = Vector2(78, 78)
-	button.focus_mode = Control.FOCUS_NONE
-	button.add_theme_font_size_override("font_size", 16)
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color(0.025, 0.035, 0.038, 0.86)
-	normal.border_color = Color("#78b49a")
-	normal.set_border_width_all(2)
-	normal.set_corner_radius_all(39)
-	button.add_theme_stylebox_override("normal", normal)
-	var pressed := normal.duplicate() as StyleBoxFlat
-	pressed.bg_color = Color(0.16, 0.3, 0.25, 0.94)
-	pressed.border_color = Color("#a9f2c5")
-	button.add_theme_stylebox_override("pressed", pressed)
-	button.button_down.connect(set_focus_active.bind(true))
-	button.button_up.connect(set_focus_active.bind(false))
-	layer.add_child(button)
+# (구) 모바일 "후각" 홀드 버튼은 폐지됐다 — 폰트 미지정으로 글자가 헥스
+# 박스로 깨진 채 화면에 떠 있던 그 원이다. 후각은 이제 정지 시 자동 발동.

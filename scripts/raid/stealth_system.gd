@@ -207,10 +207,18 @@ func _install_scent_system() -> void:
 	host.objective_scent_guidance.call("setup", host.scent_system, player, host.get_node("World"))
 	host.scent_system.connect("focus_changed", func(active: bool) -> void:
 		host.scent_focus_active = active
-		if host.hud.ammo_notice:
-			host.hud.ammo_notice.text = "후각 집중 · 금빛은 임무, 초록빛은 구조 흔적" if active else ""
-			host.hud.ammo_notice.visible = active
+		if host.hud.ammo_notice == null:
+			return
+		# 자동 후각은 정지할 때마다 발동한다 — 학습용 안내는 판당 3회면 충분하고,
+		# 그 뒤로는 조용히 흔적만 떠오른다.
+		var hint_count := int(host.get_meta("scent_hint_count", 0))
+		if active and hint_count < 3:
+			host.set_meta("scent_hint_count", hint_count + 1)
+			host.hud.ammo_notice.text = "킁킁 — 멈추면 냄새가 보인다 · 금빛=임무 · 초록=생존자 · 붉음=적"
+			host.hud.ammo_notice.visible = true
 			host.ammo_notice_time = 0.35
+		elif not active and hint_count <= 3:
+			host.hud.ammo_notice.visible = false
 	)
 
 

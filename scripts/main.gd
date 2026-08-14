@@ -6912,7 +6912,7 @@ func _input(event: InputEvent) -> void:
 				pickup_keyboard_held = key_event.pressed
 		elif key == KEY_R and key_event.pressed and has_ak:
 			weapon_combat._reload_ak47()
-		elif key == KEY_G and key_event.pressed:
+		elif key == KEY_T and key_event.pressed:
 			can_throw.toggle_aim()
 		elif key == KEY_N and key_event.pressed:
 			_save_run_state()
