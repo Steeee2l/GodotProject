@@ -157,7 +157,9 @@ func _create_loot_pickup(loot_type: String, world_position: Vector3, data: Dicti
 			sprite.texture = AMMO_762_TEXTURE
 			sprite.pixel_size = 0.0032
 	pickup.add_child(sprite)
-	_add_loot_highlight(pickup, highlight_color, 0.92)
+	# 링 0.92는 화면에서 UI 버튼 크기로 보여 "깨진 버튼"으로 오해받았다.
+	# 반쯤 줄이고 흐리게 — 월드의 물건은 월드의 물건처럼 보여야 한다.
+	_add_loot_highlight(pickup, highlight_color, 0.52)
 	ammo_pickups.append(pickup)
 	return pickup
 
@@ -621,13 +623,13 @@ func _add_loot_highlight(pickup: Node3D, color: Color, radius: float) -> void:
 	var material := StandardMaterial3D.new()
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = Color(color.r, color.g, color.b, 0.34)
+	material.albedo_color = Color(color.r, color.g, color.b, 0.2)
 	material.emission_enabled = true
 	material.emission = color
-	material.emission_energy_multiplier = 1.6
+	material.emission_energy_multiplier = 1.1
 
 	var ring_mesh := TorusMesh.new()
-	ring_mesh.inner_radius = radius * 0.88
+	ring_mesh.inner_radius = radius * 0.9
 	ring_mesh.outer_radius = radius
 	ring_mesh.rings = 24
 	ring_mesh.ring_segments = 8

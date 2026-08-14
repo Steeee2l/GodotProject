@@ -279,6 +279,49 @@ func restore_player_target() -> void:
 		_clear_alert()
 
 
+# ── 통조림 유인 ────────────────────────────────────────────────
+# 던져진 통조림 소리에 끌려가 먹는다. 경계(alerted) 전 상태에서만 작동하고,
+# 의심(suspicious)이 생기면 즉시 유인을 버린다 — 먹다가도 인기척엔 반응한다.
+var lure_point: Node3D
+var lure_arrived := false
+
+
+func set_lure_point(point: Node3D) -> void:
+	if dying or alerted or backstab_stunned:
+		return
+	lure_point = point
+	lure_arrived = false
+
+
+func is_lure_eating() -> bool:
+	return lure_arrived and is_instance_valid(lure_point)
+
+
+func _update_lure_behavior(_delta: float) -> bool:
+	if not is_instance_valid(lure_point):
+		lure_point = null
+		lure_arrived = false
+		return false
+	var offset := lure_point.global_position - global_position
+	offset.y = 0.0
+	var distance := offset.length()
+	if distance > 1.15:
+		lure_arrived = false
+		var direction := _steer_around_obstacles(offset.normalized())
+		velocity = direction * PATROL_SPEED * 1.25
+		_set_facing_from_world_direction(direction)
+		_set_motion_state("walk")
+		return true
+	# 도착: 통조림을 내려다보며 먹는다 — 캔이 사라질 때까지 정지 표적이 된다.
+	# (도착 감지·게이지·대사는 CanThrowSystem이 lure_arrived를 보고 처리한다.)
+	lure_arrived = true
+	velocity = velocity.move_toward(Vector3.ZERO, 20.0 * _delta)
+	if offset.length_squared() > 0.01:
+		_set_facing_from_world_direction(offset.normalized())
+	_set_motion_state("idle")
+	return true
+
+
 func add_scent_suspicion(scent_position: Vector3, amount: float) -> void:
 	if dying or alerted:
 		return
@@ -506,10 +549,14 @@ func _physics_process(delta: float) -> void:
 			_become_alerted()
 		else:
 			if perception_state == "suspicious":
+				# 인기척이 통조림보다 우선 — 먹다가도 의심이 생기면 조사한다.
+				lure_arrived = false
 				_update_suspicious_behavior(
 					delta,
 					has_line_of_sight and target_inside_detection_fan
 				)
+			elif _update_lure_behavior(delta):
+				pass
 			else:
 				_update_patrol(delta)
 			move_and_slide()
@@ -1328,6 +1375,8 @@ func _raid_host() -> Node:
 func _become_alerted() -> void:
 	var newly_alerted := not alerted
 	alerted = true
+	lure_point = null
+	lure_arrived = false
 	detection_awareness = 1.0
 	if is_instance_valid(target):
 		last_known_position = target.global_position

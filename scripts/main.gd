@@ -194,7 +194,6 @@ var mobile_context_button: Button
 var mobile_context_wants_visible := false
 var mobile_medkit_button: Button
 var mobile_reload_button: Button
-var mobile_flashlight_button: Button
 var mobile_map_button: Button
 var fire_cooldown := 0.0
 var fire_button_held := false
@@ -324,6 +323,7 @@ var loot_system := LootPickupSystem.new()
 var bgm := BgmDirector.new()
 var stealth := StealthSystem.new()
 var weapon_combat := WeaponCombat.new()
+var can_throw := CanThrowSystem.new()
 var monologue := FieldMonologue.new()
 var raid_zone_data: Dictionary = {}
 var active_zone_rule := ""
@@ -471,6 +471,7 @@ func _ready() -> void:
 	loot_system.attach(self)
 	stealth.attach(self)
 	weapon_combat.attach(self)
+	can_throw.attach(self)
 	# 발각 방향 인디케이터 — 화면 밖(또는 안개에 가려진) 경계 상태 적의 방향을
 	# 화면 가장자리에 느낌표로 띄운다. 시야가 좁은 모바일에서 "어디서 걸렸는지"를
 	# 보고 도망칠 수 있게 하는 장치인데, 클래스만 있고 어디서도 생성되지 않았다.
@@ -803,10 +804,15 @@ func _physics_process(delta: float) -> void:
 	stealth._update_visibility_fog()
 	stealth._update_enemy_visibility(delta)
 	stealth._update_stealth_takedown_prompt()
+	can_throw.update(delta)
+	_update_fire_button_context()
 	if perception_system:
 		perception_system.call("set_aim_direction", _get_perception_aim_direction())
 		if perception_system.has_method("set_aim_expanded"):
-			perception_system.call("set_aim_expanded", laser_aim_held)
+			perception_system.call(
+				"set_aim_expanded",
+				laser_aim_held or DisplayServer.is_touchscreen_available()
+			)
 	$CameraRig/Rain.position.y = 8.0
 	var city_world := $World as ProceduralCityMap
 	var sector_label := city_world.get_sector_label(player.global_position)
@@ -1892,8 +1898,6 @@ func _play_boss_defeat_sequence(enemy: CharacterBody3D) -> void:
 	laser_aim_held = false
 	touch_vector = Vector2.ZERO
 	player.velocity = Vector3.ZERO
-	if mobile_flashlight_button:
-		mobile_flashlight_button.set_pressed_no_signal(false)
 	_update_combat_overlay_visibility()
 	var display_name := str(enemy.get_meta("display_name", "위험 개체"))
 	boss_defeat_title.text = "%s, 침묵" % display_name
@@ -2456,15 +2460,11 @@ func _layout_mobile_utility_row() -> float:
 	var manual_reload := not bool(AccessibilitySettings.auto_reload)
 	var placed := 0
 	var utility_cursor := -side_margin
+	# 지도 버튼은 우상단 가방 아래 스택으로 이동했다(아래 별도 배치).
 	for entry in [
 		[mobile_context_button, mobile_context_wants_visible and not hud_blocked],
 		[mobile_medkit_button, not hud_blocked],
 		[mobile_reload_button, manual_reload and not hud_blocked],
-		[mobile_flashlight_button, not hud_blocked],
-		[
-			mobile_map_button,
-			not hud_blocked and not extraction_transition_active,
-		],
 	]:
 		var button := entry[0] as Button
 		if button == null:
@@ -2480,6 +2480,26 @@ func _layout_mobile_utility_row() -> float:
 		button.custom_minimum_size = Vector2(utility_size, utility_size)
 		utility_cursor -= utility_size + utility_gap
 		placed += 1
+	# 지도: 우상단 가방 버튼 바로 아래(같은 우측 여백·같은 원 크기).
+	# inventory_ui._apply_responsive_layout의 가방 배치 수식을 그대로 따른다.
+	if mobile_map_button != null:
+		mobile_map_button.visible = not hud_blocked and not extraction_transition_active
+		if mobile_map_button.visible:
+			var map_safe := UI_SAFE_AREA.get_margins(viewport_size)
+			var bag_scale := clampf(
+				(minf(viewport_size.x / 780.0, viewport_size.y / 1360.0) if viewport_size.y > viewport_size.x else minf(viewport_size.x / 1360.0, viewport_size.y / 780.0)),
+				0.65,
+				1.25
+			)
+			var bag_margin := clampf(viewport_size.x * 0.02, 8.0, 18.0)
+			var bag_size := clampf(60.0 * bag_scale, 52.0, 68.0)
+			var bag_top := map_safe.y + bag_margin + clampf(94.0 * bag_scale, 68.0, 106.0)
+			mobile_map_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+			mobile_map_button.offset_right = -map_safe.z - bag_margin
+			mobile_map_button.offset_left = -map_safe.z - bag_margin - bag_size
+			mobile_map_button.offset_top = bag_top + bag_size + 10.0
+			mobile_map_button.offset_bottom = bag_top + bag_size * 2.0 + 10.0
+			mobile_map_button.custom_minimum_size = Vector2(bag_size, bag_size)
 	return utility_size if placed > 0 else 0.0
 
 
@@ -2731,14 +2751,19 @@ func _apply_hud_layout() -> void:
 		hud.fire_button.offset_right = action_base
 		hud.fire_button.offset_left = action_base - action_button_size
 		hud.fire_button.custom_minimum_size = Vector2(action_button_size, action_button_size)
+	# 근접 버튼은 폐지 — 발사 버튼이 상황(발사/근접/암살)을 읽는다.
 	if hud.melee_button:
-		hud.melee_button.visible = touch_available and not hide_action
-		hud.melee_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-		hud.melee_button.offset_bottom = -bottom_margin
-		hud.melee_button.offset_top = -bottom_margin - action_button_size
-		hud.melee_button.offset_right = action_base - action_button_size - action_gap
-		hud.melee_button.offset_left = action_base - action_button_size * 2.0 - action_gap
-		hud.melee_button.custom_minimum_size = Vector2(action_button_size, action_button_size)
+		hud.melee_button.visible = false
+	# 가운데 자리는 통조림 투척 버튼이 차지한다.
+	if can_throw != null and can_throw.throw_button != null:
+		var can_button: Button = can_throw.throw_button
+		can_button.visible = touch_available and not hide_action
+		can_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		can_button.offset_bottom = -bottom_margin
+		can_button.offset_top = -bottom_margin - action_button_size
+		can_button.offset_right = action_base - action_button_size - action_gap
+		can_button.offset_left = action_base - action_button_size * 2.0 - action_gap
+		can_button.custom_minimum_size = Vector2(action_button_size, action_button_size)
 	if hud.dash_button:
 		hud.dash_button.visible = touch_available and not hide_action
 		hud.dash_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
@@ -2824,12 +2849,8 @@ func _build_mobile_utility_buttons(font: Font) -> void:
 	# 여기서 켜 두면 레이아웃이 돌기 전까지 생성 좌표에 유령 버튼이 뜬다.
 	mobile_reload_button.visible = false
 
-	mobile_flashlight_button = _make_mobile_utility_button("FlashlightButton", "조명", "flashlight", font, -288.0)
-	mobile_flashlight_button.toggle_mode = true
-	if not touch_enabled:
-		mobile_flashlight_button.toggled.connect(_on_mobile_flashlight_toggled)
-	mobile_flashlight_button.visible = touch_enabled
-
+	# 조명(정조준) 버튼은 폐지 — 모바일은 시야 확장이 기본 장착이다.
+	# (stealth_system이 터치 기기에서 aim_expanded를 상시 1.0으로 만든다.)
 	mobile_map_button = _make_mobile_utility_button("MapButton", "지도", "map", font, -378.0)
 	if not touch_enabled:
 		mobile_map_button.pressed.connect(_on_mobile_map_pressed)
@@ -2932,15 +2953,6 @@ func _on_mobile_context_button_down() -> void:
 func _on_mobile_context_button_up() -> void:
 	hud.field_interaction_touch_held = false
 	pickup_touch_held = false
-
-
-func _on_mobile_flashlight_toggled(enabled: bool) -> void:
-	laser_aim_held = enabled
-	if laser_aim_held:
-		var facing_direction := _get_current_facing_world_direction()
-		_lock_aim_direction(weapon_combat._get_mobile_aim_assist_direction(facing_direction))
-	if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
-		Input.vibrate_handheld(12)
 
 
 func _on_mobile_map_pressed() -> void:
@@ -3201,11 +3213,39 @@ func _initialize_equipped_weapon() -> void:
 
 
 func _on_fire_button_down() -> void:
+	# 발사 버튼 하나가 상황을 읽는다: 암살 가능 → 암살, 총과 탄이 있으면 → 사격,
+	# 아니면 → 근접. 근접 전용 버튼은 폐지됐다(모바일 버튼 통폐합).
 	fire_button_held = true
-	weapon_combat._acquire_mobile_fire_target()
-	weapon_combat._try_fire_ak47()
+	if stealth._try_stealth_takedown():
+		fire_button_held = false
+	elif has_ak and (magazine_ammo > 0 or reserve_ammo > 0):
+		weapon_combat._acquire_mobile_fire_target()
+		weapon_combat._try_fire_ak47()
+	else:
+		fire_button_held = false
+		_try_melee_attack()
 	if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
 		Input.vibrate_handheld(18)
+
+
+func _update_fire_button_context() -> void:
+	# 버튼 라벨이 지금 누르면 일어날 일을 말해 준다 (발사/근접/암살).
+	if hud.fire_button == null or not hud.fire_button.visible:
+		return
+	var next_label := "발사"
+	if is_instance_valid(stealth.nearby_stealth_takedown_target):
+		next_label = "암살"
+	elif not (has_ak and (magazine_ammo > 0 or reserve_ammo > 0)):
+		next_label = "근접"
+	if hud.fire_button.text != next_label:
+		hud.fire_button.text = next_label
+		match next_label:
+			"암살":
+				hud.fire_button.icon = UI_ICONS.get_icon("melee", 38, Color("#ff9d8f"))
+			"근접":
+				hud.fire_button.icon = UI_ICONS.get_icon("melee", 38, Color("#ffd29a"))
+			_:
+				hud.fire_button.icon = UI_ICONS.get_icon("weapon", 38, Color("#ffd29a"))
 
 
 func _on_fire_button_up() -> void:
@@ -3455,8 +3495,6 @@ func _on_inventory_open_state_changed(is_open: bool) -> void:
 		pickup_keyboard_held = false
 		field_interaction_keyboard_held = false
 		touch_vector = Vector2.ZERO
-		if mobile_flashlight_button:
-			mobile_flashlight_button.set_pressed_no_signal(false)
 	_refresh_pointer_mode()
 	_apply_hud_layout()
 	_update_combat_overlay_visibility()
@@ -6742,14 +6780,14 @@ func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
 		return true
 	if _is_inventory_open() or _is_tactical_map_open() or lore_reader.is_open() or extraction_transition_active:
 		return false
+	# 투척 조준 중엔 화면 전체가 착탄 지점이다 — 버튼보다 먼저 처리한다.
+	if can_throw.handle_touch(touch.position):
+		return true
 	if _mobile_button_contains(hud.fire_button, touch.position):
 		if fire_touch_id != -1:
 			return true
 		fire_touch_id = touch.index
 		_on_fire_button_down()
-		return true
-	if _mobile_button_contains(hud.melee_button, touch.position):
-		_on_melee_button_pressed()
 		return true
 	if _mobile_button_contains(hud.dash_button, touch.position):
 		_on_dash_button_pressed()
@@ -6760,11 +6798,6 @@ func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
 		return true
 	if _mobile_button_contains(mobile_reload_button, touch.position):
 		weapon_combat._reload_ak47()
-		return true
-	if _mobile_button_contains(mobile_flashlight_button, touch.position):
-		var enabled := not mobile_flashlight_button.button_pressed
-		mobile_flashlight_button.set_pressed_no_signal(enabled)
-		_on_mobile_flashlight_toggled(enabled)
 		return true
 	if _mobile_button_contains(mobile_medkit_button, touch.position):
 		_use_quick_medkit()
@@ -6879,6 +6912,8 @@ func _input(event: InputEvent) -> void:
 				pickup_keyboard_held = key_event.pressed
 		elif key == KEY_R and key_event.pressed and has_ak:
 			weapon_combat._reload_ak47()
+		elif key == KEY_G and key_event.pressed:
+			can_throw.toggle_aim()
 		elif key == KEY_N and key_event.pressed:
 			_save_run_state()
 			GameState.randomize_map()
@@ -6971,7 +7006,10 @@ func _input(event: InputEvent) -> void:
 func _handle_combat_mouse_button(mouse_event: InputEventMouseButton) -> void:
 	if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 		if mouse_event.pressed:
-			if stealth._try_stealth_takedown():
+			if can_throw.is_aiming():
+				can_throw.throw_at_screen(mouse_event.position)
+				mouse_fire_held = false
+			elif stealth._try_stealth_takedown():
 				mouse_fire_held = false
 			elif laser_aim_held and has_ak and (magazine_ammo > 0 or reserve_ammo > 0):
 				mouse_fire_held = true

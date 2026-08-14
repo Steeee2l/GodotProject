@@ -188,7 +188,11 @@ func _update_visibility_fog() -> void:
 	visibility_material.set_shader_parameter("near_radius", lerpf(112.0, 64.0, host.night_intensity))
 	visibility_material.set_shader_parameter("fan_cos", lerpf(0.06, 0.34, host.night_intensity))
 	visibility_material.set_shader_parameter("darkness", edge_darkness)
-	visibility_material.set_shader_parameter("aim_expanded", 1.0 if host.laser_aim_held else 0.0)
+	# 모바일은 조명(정조준) 버튼이 없다 — 확장 시야가 기본 장착이다.
+	visibility_material.set_shader_parameter(
+		"aim_expanded",
+		1.0 if (host.laser_aim_held or DisplayServer.is_touchscreen_available()) else 0.0
+	)
 	visibility_material.set_shader_parameter("circle_radius", circle_radius)
 
 
