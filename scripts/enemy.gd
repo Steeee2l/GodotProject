@@ -287,7 +287,11 @@ var lure_arrived := false
 
 
 func set_lure_point(point: Node3D) -> void:
-	if dying or alerted or backstab_stunned:
+	# 유인 불가: 죽는 중 / 이미 경계(플레이어든 타 세력이든 교전 중이면
+	# alerted=true) / 기절 / 보스(통조림 앞에 쪼그려 앉는 보스는 위엄이 없다).
+	if dying or alerted or backstab_stunned or bool(get_meta("raid_boss", false)):
+		return
+	if combat_state != "normal":
 		return
 	lure_point = point
 	lure_arrived = false
