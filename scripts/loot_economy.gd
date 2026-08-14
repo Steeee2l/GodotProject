@@ -1098,7 +1098,7 @@ static func _materialize_item(
 	if loot_type == "armor":
 		# 장비 레벨은 도시 티어를 따라 굴린다 — 상위 도시일수록 같은 장비도
 		# 좋은 개체가 나와 갈아 끼우는 맛을 만든다. 가치도 레벨을 따라 오른다.
-		var level := _roll_equipment_level(clampi(stage_tier, 1, 5), random)
+		var level := roll_equipment_level(clampi(stage_tier, 1, 5), random.randf())
 		if level > 1:
 			data["equipment_id"] = "%s@%d" % [str(data.get("equipment_id", item_id)), level]
 			data["display_name"] = "%s Lv.%d" % [str(data.get("display_name", "장비")), level]
@@ -1110,15 +1110,30 @@ static func _materialize_item(
 	return {"type": loot_type, "data": data}
 
 
-static func _roll_equipment_level(stage_tier: int, random: RandomNumberGenerator) -> int:
-	# 주로 도시 티어와 같은 레벨, 25%는 한 단계 아래, 18%는 한 단계 위.
-	var roll := random.randf()
-	var level := stage_tier
-	if roll < 0.25:
-		level = stage_tier - 1
-	elif roll > 0.82:
-		level = stage_tier + 1
-	return clampi(level, 1, 5)
+static func roll_equipment_level(stage_tier: int, unit_roll: float) -> int:
+	# 등급(장비 종류)은 도시 티어가 정하고, 레벨은 어느 도시에서든 1~5가 전부
+	# 나온다 — 풀을 넓혀 갈아 끼우는 맛을 만든다. 티어와 같은 레벨이 최빈값,
+	# 아래 레벨은 흔한 소모품, 위 레벨은 잭팟(한 레벨 위마다 ×0.22).
+	# 예: 티어1 ≈ Lv1 78% · Lv2 17% · Lv3 3.8% · Lv4 0.8% · Lv5 0.2%
+	#     티어4 ≈ Lv1 11% · Lv2 14% · Lv3 22% · Lv4 43% · Lv5 10%
+	var tier := clampi(stage_tier, 1, 5)
+	var weights: Array[float] = []
+	var total := 0.0
+	for level in range(1, 6):
+		var weight := (
+			1.0 / float(tier - level + 1)
+			if level <= tier
+			else pow(0.22, float(level - tier))
+		)
+		weights.append(weight)
+		total += weight
+	var threshold := clampf(unit_roll, 0.0, 0.999999) * total
+	var accumulated := 0.0
+	for level in range(1, 6):
+		accumulated += weights[level - 1]
+		if threshold < accumulated:
+			return level
+	return tier
 
 
 static func _roll_ammo_amount(

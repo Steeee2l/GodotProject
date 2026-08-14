@@ -71,24 +71,34 @@ func _run() -> void:
 	assert(bool(upgrade_result.get("equipped", false)))
 	assert(str(game_state.call("get_equipped_equipment", "body")) == "scav_vest@5")
 
-	# ── 드랍 레벨이 도시 티어를 따라간다 ──
+	# ── 드랍 레벨 분포: 어느 티어든 1~5가 다 나오되 가중치가 티어를 따른다 ──
 	var random := RandomNumberGenerator.new()
 	random.seed = 20260814
-	var tier1_levels: Dictionary = {}
-	var tier4_levels: Dictionary = {}
-	for _attempt in 300:
+	var tier1_counts: Dictionary = {}
+	var tier4_counts: Dictionary = {}
+	var tier1_sum := 0
+	var tier4_sum := 0
+	const SAMPLES := 2000
+	for _attempt in SAMPLES:
 		var tier1_item: Dictionary = LOOT_ECONOMY._materialize_item("patched_sneakers", 1, random)
 		var tier4_item: Dictionary = LOOT_ECONOMY._materialize_item("tactical_boots", 4, random)
 		var tier1_id := str((tier1_item.get("data", {}) as Dictionary).get("equipment_id", ""))
 		var tier4_id := str((tier4_item.get("data", {}) as Dictionary).get("equipment_id", ""))
-		tier1_levels[int(game_state.call("get_equipment_level", tier1_id))] = true
-		tier4_levels[int(game_state.call("get_equipment_level", tier4_id))] = true
-	# 티어1은 1~2레벨만, 티어4는 3~5레벨만 나와야 한다
-	for level in tier1_levels:
-		assert(int(level) >= 1 and int(level) <= 2)
-	for level in tier4_levels:
-		assert(int(level) >= 3 and int(level) <= 5)
-	assert(tier4_levels.size() >= 2)
+		var tier1_level := int(game_state.call("get_equipment_level", tier1_id))
+		var tier4_level := int(game_state.call("get_equipment_level", tier4_id))
+		tier1_counts[tier1_level] = int(tier1_counts.get(tier1_level, 0)) + 1
+		tier4_counts[tier4_level] = int(tier4_counts.get(tier4_level, 0)) + 1
+		tier1_sum += tier1_level
+		tier4_sum += tier4_level
+	print("tier1_levels=", tier1_counts, " tier4_levels=", tier4_counts)
+	# 종로(티어1)에서도 상위 레벨 잭팟이 존재한다 — 풀이 넓어야 갈아 끼우는 맛이 산다
+	assert(int(tier1_counts.get(1, 0)) > SAMPLES / 2)  # 최빈값은 Lv1
+	assert(int(tier1_counts.get(3, 0)) > 0)  # Lv3 잭팟 존재
+	assert(tier1_counts.size() >= 3)
+	# 티어4는 분포 전체가 위로 밀리고(평균 비교), 아래 레벨도 소량 섞인다
+	assert(float(tier4_sum) / float(SAMPLES) > float(tier1_sum) / float(SAMPLES) + 1.5)
+	assert(int(tier4_counts.get(4, 0)) > int(tier4_counts.get(1, 0)))
+	assert(tier4_counts.size() >= 4)
 
 	print("EQUIPMENT_LEVEL_SMOKE_TEST_PASSED")
 	quit(0)

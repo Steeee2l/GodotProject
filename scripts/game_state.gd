@@ -1939,17 +1939,11 @@ func get_equipment_definition(equipment_id: String) -> Dictionary:
 
 
 func roll_equipment_drop_id(base_id: String) -> String:
-	# 드랍 레벨은 도시 티어를 따라간다: 주로 티어와 같고, 가끔 한 단계 아래/위.
-	# 상위 도시로 갈수록 같은 신발도 더 좋은 개체가 떨어져 갈아 끼우는 맛을 만든다.
+	# 레벨 분포는 loot_economy.roll_equipment_level 단일 소스 — 어느 도시든
+	# 1~5가 다 나오되 가중치가 티어를 따라간다(상위 레벨은 잭팟).
 	var zone: Dictionary = RAID_ZONES.get(selected_raid_zone, {})
 	var tier := int(zone.get("stage_tier", 1))
-	var roll := randf()
-	var level := tier
-	if roll < 0.25:
-		level = tier - 1
-	elif roll > 0.82:
-		level = tier + 1
-	return make_equipment_id(base_id, clampi(level, 1, EQUIPMENT_MAX_LEVEL))
+	return make_equipment_id(base_id, LOOT_ECONOMY.roll_equipment_level(tier, randf()))
 
 
 func get_equipment_count(equipment_id: String) -> int:
