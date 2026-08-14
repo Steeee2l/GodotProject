@@ -190,8 +190,7 @@ func _update_visibility_fog() -> void:
 	visibility_material.set_shader_parameter("darkness", edge_darkness)
 	# 모바일은 조명(정조준) 버튼이 없다 — 확장 시야가 기본 장착이다.
 	visibility_material.set_shader_parameter(
-		"aim_expanded",
-		1.0 if (host.laser_aim_held or DisplayServer.is_touchscreen_available()) else 0.0
+		"aim_expanded", 1.0 if _is_aim_vision_expanded() else 0.0
 	)
 	visibility_material.set_shader_parameter("circle_radius", circle_radius)
 
@@ -247,7 +246,10 @@ func _update_enemy_visibility(delta: float = 1.0 / 60.0) -> void:
 		return
 	var fully_visible_radius := lerpf(178.0, 104.0, host.night_intensity)
 	var reveal_radius := fully_visible_radius + lerpf(46.0, 30.0, host.night_intensity)
-	if host.laser_aim_held:
+	# 안개 셰이더의 aim_expanded와 반드시 같은 조건이어야 한다. 모바일(조명
+	# 상시)에서 안개만 확장되고 페이드는 구반경을 쓰면, 밝은 땅 위에 투명한
+	# 적이 서서 투사체만 날아오는 유령 사격이 된다.
+	if _is_aim_vision_expanded():
 		fully_visible_radius = lerpf(430.0, 185.0, host.night_intensity)
 		reveal_radius = lerpf(560.0, 285.0, host.night_intensity)
 	for enemy in host.enemies:
@@ -306,11 +308,17 @@ func _enemy_player_visibility_factor(
 	var enemy_screen_direction := (enemy_screen - player_screen).normalized()
 	var near_radius := lerpf(112.0, 64.0, host.night_intensity)
 	var fan_cos := lerpf(0.06, 0.34, host.night_intensity)
-	if host.laser_aim_held and screen_distance > near_radius and enemy_screen_direction.dot(facing_screen_direction) < fan_cos:
+	if _is_aim_vision_expanded() and screen_distance > near_radius and enemy_screen_direction.dot(facing_screen_direction) < fan_cos:
 		return 0.0
 	if screen_distance <= fully_visible_radius:
 		return 1.0
 	return 1.0 - smoothstep(fully_visible_radius, reveal_radius, screen_distance)
+
+
+func _is_aim_vision_expanded() -> bool:
+	# 시야 확장의 단일 조건 — 안개 셰이더(aim_expanded)·적 페이드·시야 판정이
+	# 전부 이 함수 하나를 봐야 서로 어긋나지 않는다.
+	return host.laser_aim_held or DisplayServer.is_touchscreen_available()
 
 
 func _enemy_is_in_player_vision(enemy: Node3D, visible_radius: float) -> bool:
@@ -328,7 +336,7 @@ func _enemy_is_in_player_vision(enemy: Node3D, visible_radius: float) -> bool:
 	var enemy_screen_direction := (enemy_screen - player_screen).normalized()
 	var near_radius := lerpf(112.0, 64.0, host.night_intensity)
 	var fan_cos := lerpf(0.06, 0.34, host.night_intensity)
-	if host.laser_aim_held and player_screen.distance_to(enemy_screen) > near_radius and enemy_screen_direction.dot(facing_screen_direction) < fan_cos:
+	if _is_aim_vision_expanded() and player_screen.distance_to(enemy_screen) > near_radius and enemy_screen_direction.dot(facing_screen_direction) < fan_cos:
 		return false
 	var query := PhysicsRayQueryParameters3D.create(
 		player.global_position + Vector3(0, 0.42, 0),
