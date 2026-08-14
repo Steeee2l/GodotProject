@@ -3733,17 +3733,12 @@ func _find_squad_member_position(
 
 
 func _get_random_armor_drop(seed_hint: int = 0) -> Dictionary:
+	# 계열(어떤 장비인가)은 도시가 정하고, 레벨은 공통 분포로 굴린다.
+	# 계열 배열은 [몸, 머리, 발] 순서라 슬롯 롤과 1:1 대응한다.
 	var equipment_slot_roll := posmod(seed_hint + spawn_random.randi(), 3)
-	var high_grade := spawn_random.randf() < 0.22 + night_intensity * 0.18
-	var equipment_id := ""
-	match equipment_slot_roll:
-		0:
-			equipment_id = "riot_vest" if high_grade else "scav_vest"
-		1:
-			equipment_id = "tactical_helmet" if high_grade else "patched_helmet"
-		_:
-			equipment_id = "tactical_boots" if high_grade else "patched_sneakers"
-	equipment_id = GameState.roll_equipment_drop_id(equipment_id)
+	var zone: Dictionary = GameState.RAID_ZONES.get(GameState.selected_raid_zone, {})
+	var pool: Array = LOOT_ECONOMY.armor_pool_for_stage(int(zone.get("stage_tier", 1)))
+	var equipment_id := GameState.roll_equipment_drop_id(str(pool[equipment_slot_roll]))
 	var definition := GameState.get_equipment_definition(equipment_id)
 	return {
 		"amount": 1,

@@ -184,6 +184,9 @@ const CONTAINER_DEFINITIONS := {
 			["riot_vest", 4.0],
 			["tactical_helmet", 3.0],
 			["tactical_boots", 4.0],
+			["military_vest", 2.0],
+			["military_helmet", 1.5],
+			["assault_boots", 2.0],
 		],
 	},
 	"weapon_case": {
@@ -281,6 +284,9 @@ const CONTAINER_DEFINITIONS := {
 			["riot_vest", 7.0],
 			["tactical_helmet", 6.0],
 			["tactical_boots", 5.0],
+			["military_vest", 5.0],
+			["military_helmet", 4.0],
+			["assault_boots", 4.0],
 			["rifle_blueprint", 3.2],
 			["shotgun_blueprint", 3.2],
 			["sealed_zone_keycard", 1.4],
@@ -626,6 +632,33 @@ const ITEM_CATALOG := {
 		"rarity_tier": 3,
 		"minimum_stage": 3,
 	},
+	"military_vest": {
+		"loot_type": "armor",
+		"equipment_id": "military_vest",
+		"display_name": "군납 방탄복",
+		"base_value": 1450,
+		"slot_size": 5,
+		"rarity_tier": 4,
+		"minimum_stage": 4,
+	},
+	"military_helmet": {
+		"loot_type": "armor",
+		"equipment_id": "military_helmet",
+		"display_name": "군납 전투 헬멧",
+		"base_value": 1200,
+		"slot_size": 3,
+		"rarity_tier": 4,
+		"minimum_stage": 4,
+	},
+	"assault_boots": {
+		"loot_type": "armor",
+		"equipment_id": "assault_boots",
+		"display_name": "강습 부츠",
+		"base_value": 1050,
+		"slot_size": 2,
+		"rarity_tier": 4,
+		"minimum_stage": 4,
+	},
 }
 
 const DISTRICT_BIASES := {
@@ -820,9 +853,11 @@ static func roll_enemy_drop(
 			stage,
 			random
 		)
-	var armor_pool := ["scav_vest", "patched_helmet", "patched_sneakers"]
-	if stage >= 3 and random.randf() < 0.22:
-		armor_pool = ["riot_vest", "tactical_helmet", "tactical_boots"]
+	var armor_pool: Array = armor_pool_for_stage(stage)
+	var family_index := armor_family_index_for_stage(stage)
+	# 계열 경계에서 한 단계 아래 계열도 소량 섞인다 — 팔거나 임시로 쓸 필러.
+	if family_index > 0 and random.randf() < 0.25:
+		armor_pool = ARMOR_FAMILIES[family_index - 1]
 	return _materialize_item(
 		armor_pool[random.randi_range(0, armor_pool.size() - 1)],
 		stage,
@@ -831,17 +866,13 @@ static func roll_enemy_drop(
 
 
 static func _roll_enemy_armor_id(stage: int, random: RandomNumberGenerator) -> String:
-	# 후반일수록 상위 티어가 섞여 나온다. 슬롯(몸·머리·발)은 고르게 굴려서
-	# 어느 칸이든 갈아 끼울 기회가 돌아오게 한다.
-	var high_tier_chance := 0.0
-	if stage >= 3:
-		high_tier_chance = 0.30 + float(stage - 3) * 0.12
-	var pool := (
-		["riot_vest", "tactical_helmet", "tactical_boots"]
-		if random.randf() < high_tier_chance
-		else ["scav_vest", "patched_helmet", "patched_sneakers"]
-	)
-	return pool[random.randi_range(0, pool.size() - 1)]
+	# 적이 두른 방어구는 그 도시의 계열을 따른다. 슬롯(몸·머리·발)은 고르게
+	# 굴려서 어느 칸이든 갈아 끼울 기회가 돌아오게 한다.
+	var pool: Array = armor_pool_for_stage(stage)
+	var family_index := armor_family_index_for_stage(stage)
+	if family_index > 0 and random.randf() < 0.25:
+		pool = ARMOR_FAMILIES[family_index - 1]
+	return str(pool[random.randi_range(0, pool.size() - 1)])
 
 
 static func get_enemy_weapon_drop_chance(stage_tier: int) -> float:
@@ -1098,7 +1129,7 @@ static func _materialize_item(
 	if loot_type == "armor":
 		# 장비 레벨은 도시 티어를 따라 굴린다 — 상위 도시일수록 같은 장비도
 		# 좋은 개체가 나와 갈아 끼우는 맛을 만든다. 가치도 레벨을 따라 오른다.
-		var level := roll_equipment_level(clampi(stage_tier, 1, 5), random.randf())
+		var level := roll_equipment_level(random.randf())
 		if level > 1:
 			data["equipment_id"] = "%s@%d" % [str(data.get("equipment_id", item_id)), level]
 			data["display_name"] = "%s Lv.%d" % [str(data.get("display_name", "장비")), level]
@@ -1110,30 +1141,40 @@ static func _materialize_item(
 	return {"type": loot_type, "data": data}
 
 
-static func roll_equipment_level(stage_tier: int, unit_roll: float) -> int:
-	# 등급(장비 종류)은 도시 티어가 정하고, 레벨은 어느 도시에서든 1~5가 전부
-	# 나온다 — 풀을 넓혀 갈아 끼우는 맛을 만든다. 티어와 같은 레벨이 최빈값,
-	# 아래 레벨은 흔한 소모품, 위 레벨은 잭팟(한 레벨 위마다 ×0.22).
-	# 예: 티어1 ≈ Lv1 78% · Lv2 17% · Lv3 3.8% · Lv4 0.8% · Lv5 0.2%
-	#     티어4 ≈ Lv1 11% · Lv2 14% · Lv3 22% · Lv4 43% · Lv5 10%
-	var tier := clampi(stage_tier, 1, 5)
-	var weights: Array[float] = []
-	var total := 0.0
-	for level in range(1, 6):
-		var weight := (
-			1.0 / float(tier - level + 1)
-			if level <= tier
-			else pow(0.22, float(level - tier))
-		)
-		weights.append(weight)
-		total += weight
-	var threshold := clampf(unit_roll, 0.0, 0.999999) * total
+# ── 장비 계열과 레벨 ────────────────────────────────────────────
+# 도시가 정하는 건 "어떤 계열의 장비가 나오는가"(생존자 → 진압 → 군납).
+# 레벨(1~5)은 어느 도시에서든 같은 분포로 굴러간다 — 종로 전용 운동화도
+# Lv5까지 존재하고, 봉쇄선의 군납품도 Lv1부터 나온다. 도시 진행 = 계열
+# 상승, 파밍 반복 = 레벨 상승. 두 축이 곱해져 풀이 넓어진다.
+const ARMOR_FAMILIES := [
+	["scav_vest", "patched_helmet", "patched_sneakers"],   # 티어 1~2 · 생존자 계열
+	["riot_vest", "tactical_helmet", "tactical_boots"],    # 티어 3 · 진압 계열
+	["military_vest", "military_helmet", "assault_boots"], # 티어 4~5 · 군납 계열
+]
+const EQUIPMENT_LEVEL_WEIGHTS := [0.45, 0.27, 0.15, 0.09, 0.04]
+
+
+static func armor_family_index_for_stage(stage_tier: int) -> int:
+	if stage_tier >= 4:
+		return 2
+	if stage_tier >= 3:
+		return 1
+	return 0
+
+
+static func armor_pool_for_stage(stage_tier: int) -> Array:
+	return ARMOR_FAMILIES[armor_family_index_for_stage(stage_tier)]
+
+
+static func roll_equipment_level(unit_roll: float) -> int:
+	# 도시와 무관한 공통 분포: Lv1 45% · Lv2 27% · Lv3 15% · Lv4 9% · Lv5 4%.
+	var threshold := clampf(unit_roll, 0.0, 0.999999)
 	var accumulated := 0.0
 	for level in range(1, 6):
-		accumulated += weights[level - 1]
+		accumulated += EQUIPMENT_LEVEL_WEIGHTS[level - 1]
 		if threshold < accumulated:
 			return level
-	return tier
+	return 5
 
 
 static func _roll_ammo_amount(

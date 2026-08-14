@@ -71,34 +71,40 @@ func _run() -> void:
 	assert(bool(upgrade_result.get("equipped", false)))
 	assert(str(game_state.call("get_equipped_equipment", "body")) == "scav_vest@5")
 
-	# ── 드랍 레벨 분포: 어느 티어든 1~5가 다 나오되 가중치가 티어를 따른다 ──
+	# ── 도시가 정하는 건 계열, 레벨은 어디서든 1~5 공통 분포 ──
+	assert(str((LOOT_ECONOMY.armor_pool_for_stage(1) as Array)[0]) == "scav_vest")
+	assert(str((LOOT_ECONOMY.armor_pool_for_stage(3) as Array)[0]) == "riot_vest")
+	assert(str((LOOT_ECONOMY.armor_pool_for_stage(5) as Array)[0]) == "military_vest")
+	# 군납 계열은 진압 계열보다 기본기가 좋다 (같은 레벨 기준 점수 우위)
+	assert(
+		float(game_state.call("get_equipment_score", "military_vest"))
+		> float(game_state.call("get_equipment_score", "riot_vest"))
+	)
+	assert(
+		float(game_state.call("get_equipment_score", "assault_boots"))
+		> float(game_state.call("get_equipment_score", "tactical_boots"))
+	)
 	var random := RandomNumberGenerator.new()
 	random.seed = 20260814
 	var tier1_counts: Dictionary = {}
-	var tier4_counts: Dictionary = {}
-	var tier1_sum := 0
-	var tier4_sum := 0
+	var tier5_counts: Dictionary = {}
 	const SAMPLES := 2000
 	for _attempt in SAMPLES:
 		var tier1_item: Dictionary = LOOT_ECONOMY._materialize_item("patched_sneakers", 1, random)
-		var tier4_item: Dictionary = LOOT_ECONOMY._materialize_item("tactical_boots", 4, random)
+		var tier5_item: Dictionary = LOOT_ECONOMY._materialize_item("assault_boots", 5, random)
 		var tier1_id := str((tier1_item.get("data", {}) as Dictionary).get("equipment_id", ""))
-		var tier4_id := str((tier4_item.get("data", {}) as Dictionary).get("equipment_id", ""))
+		var tier5_id := str((tier5_item.get("data", {}) as Dictionary).get("equipment_id", ""))
 		var tier1_level := int(game_state.call("get_equipment_level", tier1_id))
-		var tier4_level := int(game_state.call("get_equipment_level", tier4_id))
+		var tier5_level := int(game_state.call("get_equipment_level", tier5_id))
 		tier1_counts[tier1_level] = int(tier1_counts.get(tier1_level, 0)) + 1
-		tier4_counts[tier4_level] = int(tier4_counts.get(tier4_level, 0)) + 1
-		tier1_sum += tier1_level
-		tier4_sum += tier4_level
-	print("tier1_levels=", tier1_counts, " tier4_levels=", tier4_counts)
-	# 종로(티어1)에서도 상위 레벨 잭팟이 존재한다 — 풀이 넓어야 갈아 끼우는 맛이 산다
-	assert(int(tier1_counts.get(1, 0)) > SAMPLES / 2)  # 최빈값은 Lv1
-	assert(int(tier1_counts.get(3, 0)) > 0)  # Lv3 잭팟 존재
-	assert(tier1_counts.size() >= 3)
-	# 티어4는 분포 전체가 위로 밀리고(평균 비교), 아래 레벨도 소량 섞인다
-	assert(float(tier4_sum) / float(SAMPLES) > float(tier1_sum) / float(SAMPLES) + 1.5)
-	assert(int(tier4_counts.get(4, 0)) > int(tier4_counts.get(1, 0)))
-	assert(tier4_counts.size() >= 4)
+		tier5_counts[tier5_level] = int(tier5_counts.get(tier5_level, 0)) + 1
+	print("tier1_levels=", tier1_counts, " tier5_levels=", tier5_counts)
+	for counts: Dictionary in [tier1_counts, tier5_counts]:
+		# 종로 전용 운동화도, 봉쇄선 강습 부츠도 똑같이 Lv1~5 전부 존재한다
+		assert(counts.size() == 5)
+		assert(int(counts.get(1, 0)) > int(counts.get(3, 0)))  # 최빈값은 Lv1
+		assert(int(counts.get(5, 0)) > 0)  # Lv5 잭팟 존재
+		assert(int(counts.get(5, 0)) < SAMPLES / 10)  # 잭팟은 희귀해야 한다
 
 	print("EQUIPMENT_LEVEL_SMOKE_TEST_PASSED")
 	quit(0)

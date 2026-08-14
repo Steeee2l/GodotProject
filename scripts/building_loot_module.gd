@@ -308,16 +308,13 @@ func _resolved_weapon_id() -> String:
 
 
 func _resolved_equipment_id() -> String:
-	var equipment_ids: Array[String] = [
-		"scav_vest",
-		"patched_helmet",
-		"patched_sneakers",
-	]
-	var base_id := equipment_ids[absi(loot_key.hash()) % equipment_ids.size()]
-	# 레벨도 loot_key에서 결정적으로 굴린다 — 같은 컨테이너는 항상 같은 개체.
+	# 계열은 도시 티어가 정하고, 레벨은 loot_key에서 결정적으로 굴린다 —
+	# 같은 컨테이너는 항상 같은 개체.
 	var zone: Dictionary = GameState.RAID_ZONES.get(GameState.selected_raid_zone, {})
 	var tier := int(zone.get("stage_tier", 1))
+	var pool: Array = GameState.LOOT_ECONOMY.armor_pool_for_stage(tier)
+	var base_id := str(pool[absi(loot_key.hash()) % pool.size()])
 	var unit_roll := float(absi((loot_key + ":equip_level").hash()) % 1000) / 1000.0
 	return GameState.make_equipment_id(
-		base_id, GameState.LOOT_ECONOMY.roll_equipment_level(tier, unit_roll)
+		base_id, GameState.LOOT_ECONOMY.roll_equipment_level(unit_roll)
 	)

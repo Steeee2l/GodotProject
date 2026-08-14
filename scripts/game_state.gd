@@ -90,6 +90,9 @@ var equipment_inventory: Dictionary = {
 	"tactical_helmet": 0,
 	"patched_sneakers": 0,
 	"tactical_boots": 0,
+	"military_vest": 0,
+	"military_helmet": 0,
+	"assault_boots": 0,
 }
 var equipped_body_armor_id: String = ""
 var equipped_head_armor_id: String = ""
@@ -413,6 +416,25 @@ const EQUIPMENT_DEFINITIONS := {
 		"weight": 1.4, "icon": "footwear",
 		"texture_path": "res://assets/equipment/generated/tactical_boots.png",
 		"description": "발목을 잡아주면서도 유연한 밑창을 사용한 경량 전술화입니다.",
+	},
+	"military_vest": {
+		"display_name": "군납 방탄복", "slot": "body", "damage_reduction": 0.34,
+		"weight": 7.4, "icon": "armor",
+		"texture_path": "res://assets/equipment/generated/military_vest.png",
+		"description": "봉쇄선 부대에서 흘러나온 정식 군납품. 받는 피해를 34% 줄입니다.",
+	},
+	"military_helmet": {
+		"display_name": "군납 전투 헬멧", "slot": "head", "damage_reduction": 0.24,
+		"weight": 2.6, "icon": "helmet",
+		"texture_path": "res://assets/equipment/generated/military_helmet.png",
+		"description": "레일과 내피가 온전한 전투 헬멧. 받는 피해를 24% 줄입니다.",
+	},
+	"assault_boots": {
+		"display_name": "강습 부츠", "slot": "feet",
+		"move_speed_bonus": 0.05, "stamina_cost_multiplier": 0.70,
+		"weight": 1.7, "icon": "footwear",
+		"texture_path": "res://assets/equipment/generated/assault_boots.png",
+		"description": "봉쇄선 강습조가 신던 부츠. 무게 대비 기동성이 탁월합니다.",
 	},
 }
 const PLAYER_LEVEL_REWARDS := {
@@ -1939,11 +1961,9 @@ func get_equipment_definition(equipment_id: String) -> Dictionary:
 
 
 func roll_equipment_drop_id(base_id: String) -> String:
-	# 레벨 분포는 loot_economy.roll_equipment_level 단일 소스 — 어느 도시든
-	# 1~5가 다 나오되 가중치가 티어를 따라간다(상위 레벨은 잭팟).
-	var zone: Dictionary = RAID_ZONES.get(selected_raid_zone, {})
-	var tier := int(zone.get("stage_tier", 1))
-	return make_equipment_id(base_id, LOOT_ECONOMY.roll_equipment_level(tier, randf()))
+	# 레벨 분포는 도시와 무관한 공통 분포(loot_economy 단일 소스) — 도시가
+	# 정하는 건 계열(어떤 장비가 나오는가)이고, 레벨은 어디서든 1~5다.
+	return make_equipment_id(base_id, LOOT_ECONOMY.roll_equipment_level(randf()))
 
 
 func get_equipment_count(equipment_id: String) -> int:
@@ -3996,6 +4016,9 @@ func reset_run() -> void:
 		"tactical_helmet": 0,
 		"patched_sneakers": 0,
 		"tactical_boots": 0,
+		"military_vest": 0,
+		"military_helmet": 0,
+		"assault_boots": 0,
 	}
 	equipped_body_armor_id = ""
 	equipped_head_armor_id = ""
