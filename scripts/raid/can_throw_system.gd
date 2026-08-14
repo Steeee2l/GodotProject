@@ -11,7 +11,7 @@ extends RefCounted
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 
-const THROW_RANGE := 8.5
+const THROW_RANGE := 17.0
 const NOISE_RADIUS := 13.0
 const EAT_DURATION := 6.5
 const AIM_TIMEOUT := 6.0
@@ -188,18 +188,21 @@ func _throw_to(landing: Vector3) -> void:
 	sprite.texture = host.loot_system._get_canned_food_texture()
 	sprite.pixel_size = 0.0052
 	can.add_child(sprite)
-	# 포물선 비행: xz는 선형, y는 4t(1-t) 아치.
+	# 포물선 비행: xz는 선형, y는 4t(1-t) 아치. 멀리 던질수록 오래·높게 난다.
+	var flight_distance := Vector2(landing.x - start.x, landing.z - start.z).length()
+	var flight_time := clampf(0.3 + flight_distance * 0.022, 0.34, 0.75)
+	var arc_height := clampf(1.2 + flight_distance * 0.09, 1.4, 2.8)
 	var tween := host.create_tween()
 	tween.tween_method(
 		func(t: float) -> void:
 			if not is_instance_valid(can):
 				return
 			var flat := start.lerp(Vector3(landing.x, start.y, landing.z), t)
-			flat.y = lerpf(start.y, 0.34, t) + 1.7 * 4.0 * t * (1.0 - t)
+			flat.y = lerpf(start.y, 0.34, t) + arc_height * 4.0 * t * (1.0 - t)
 			can.global_position = flat,
 		0.0,
 		1.0,
-		0.48
+		flight_time
 	)
 	tween.tween_callback(func() -> void:
 		if is_instance_valid(can):
