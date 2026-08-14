@@ -108,7 +108,7 @@ transform = Transform3D(0.7880108, 0.4980806, -0.3618768, 0, 0.5877853, 0.809017
 light_color = Color(0.72, 0.77, 0.8, 1)
 light_energy = 1.15
 shadow_enabled = true
-directional_shadow_max_distance = 130.0
+directional_shadow_max_distance = 260.0
 
 [node name="CameraRig" type="Node3D" parent="."]
 

@@ -432,8 +432,20 @@ func _ready() -> void:
 	player.collision_layer = COLLISION_PROFILES.PLAYER_LAYER
 	player.collision_mask = COLLISION_PROFILES.PLAYER_MOVEMENT_MASK
 	player.add_to_group("player")
-	camera.position = Vector3.ONE * CAMERA_DIAGONAL_OFFSET
+	# 직교 카메라는 거리와 무관하게 구도가 같다. 4배 뒤로 빼는 이유는 세로
+	# 모드: 세로 시야 반경(~31u)이 카메라 거리(~23u)보다 커서 화면 하단이
+	# near 평면 뒤로 넘어가 검게 잘렸다("하단 검은 띠"의 진범).
+	camera.position = Vector3.ONE * (CAMERA_DIAGONAL_OFFSET * 4.0)
 	camera.look_at(Vector3.ZERO)
+	# 카메라가 멀어지면 3D 오디오가 다 멀어진다 — 리스너는 예전 카메라
+	# 자리(플레이어 근처)에 남겨 소리 거리감을 보존한다.
+	var audio_listener := AudioListener3D.new()
+	audio_listener.name = "FieldAudioListener"
+	camera.add_child(audio_listener)
+	audio_listener.position = Vector3(
+		0.0, 0.0, -(CAMERA_DIAGONAL_OFFSET * 3.0 * sqrt(3.0))
+	)
+	audio_listener.make_current()
 	var world := $World as ProceduralCityMap
 	var launched_from_shelter := GameState.returning_from_shelter
 	if launched_from_shelter:
