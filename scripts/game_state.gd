@@ -1886,8 +1886,70 @@ func add_weapon(weapon_id: String, amount: int = 1) -> void:
 			set_ammo_count(ammo_id, get_ammo_count(ammo_id) + magazine_size * 2)
 
 
+# ── 장비 레벨 ──────────────────────────────────────────────────
+# 같은 장비도 "레벨 3짜리 신발"이 존재한다. 저장·장착·거래는 전부 문자열 ID
+# 기반이라, 레벨을 ID에 접미사("scav_vest@3")로 새기면 나머지 시스템은 그대로
+# 동작한다. 정의 조회가 접미사를 해석해 스탯을 키워서 돌려준다.
+const EQUIPMENT_MAX_LEVEL := 5
+const EQUIPMENT_LEVEL_GROWTH := 0.28  # 레벨당 성능 성장률
+
+
+func split_equipment_id(equipment_id: String) -> Array:
+	var at := equipment_id.find("@")
+	if at < 0:
+		return [equipment_id, 1]
+	return [
+		equipment_id.substr(0, at),
+		clampi(int(equipment_id.substr(at + 1)), 1, EQUIPMENT_MAX_LEVEL),
+	]
+
+
+func get_equipment_level(equipment_id: String) -> int:
+	return int(split_equipment_id(equipment_id)[1])
+
+
+func make_equipment_id(base_id: String, level: int) -> String:
+	level = clampi(level, 1, EQUIPMENT_MAX_LEVEL)
+	return base_id if level <= 1 else "%s@%d" % [base_id, level]
+
+
 func get_equipment_definition(equipment_id: String) -> Dictionary:
-	return (EQUIPMENT_DEFINITIONS.get(equipment_id, {}) as Dictionary).duplicate(true)
+	var parts := split_equipment_id(equipment_id)
+	var definition := (EQUIPMENT_DEFINITIONS.get(parts[0], {}) as Dictionary).duplicate(true)
+	if definition.is_empty():
+		return definition
+	var level := int(parts[1])
+	definition["base_id"] = parts[0]
+	definition["level"] = level
+	if level > 1:
+		var growth := 1.0 + EQUIPMENT_LEVEL_GROWTH * float(level - 1)
+		if definition.has("damage_reduction"):
+			# 부위당 상한 0.5 — 총합 하한 0.4(get_equipment_damage_multiplier)와 이중 안전망.
+			definition["damage_reduction"] = minf(
+				float(definition["damage_reduction"]) * growth, 0.5
+			)
+		if definition.has("move_speed_bonus"):
+			definition["move_speed_bonus"] = float(definition["move_speed_bonus"]) * growth
+		if definition.has("stamina_cost_multiplier"):
+			definition["stamina_cost_multiplier"] = maxf(
+				1.0 - (1.0 - float(definition["stamina_cost_multiplier"])) * growth, 0.55
+			)
+		definition["display_name"] = "%s Lv.%d" % [definition["display_name"], level]
+	return definition
+
+
+func roll_equipment_drop_id(base_id: String) -> String:
+	# 드랍 레벨은 도시 티어를 따라간다: 주로 티어와 같고, 가끔 한 단계 아래/위.
+	# 상위 도시로 갈수록 같은 신발도 더 좋은 개체가 떨어져 갈아 끼우는 맛을 만든다.
+	var zone: Dictionary = RAID_ZONES.get(selected_raid_zone, {})
+	var tier := int(zone.get("stage_tier", 1))
+	var roll := randf()
+	var level := tier
+	if roll < 0.25:
+		level = tier - 1
+	elif roll > 0.82:
+		level = tier + 1
+	return make_equipment_id(base_id, clampi(level, 1, EQUIPMENT_MAX_LEVEL))
 
 
 func get_equipment_count(equipment_id: String) -> int:
@@ -1895,7 +1957,7 @@ func get_equipment_count(equipment_id: String) -> int:
 
 
 func add_equipment(equipment_id: String, amount: int = 1) -> bool:
-	if not EQUIPMENT_DEFINITIONS.has(equipment_id) or amount <= 0:
+	if get_equipment_definition(equipment_id).is_empty() or amount <= 0:
 		return false
 	equipment_inventory[equipment_id] = get_equipment_count(equipment_id) + amount
 	return true

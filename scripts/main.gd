@@ -3202,6 +3202,7 @@ func _initialize_equipped_weapon() -> void:
 
 func _on_fire_button_down() -> void:
 	fire_button_held = true
+	weapon_combat._acquire_mobile_fire_target()
 	weapon_combat._try_fire_ak47()
 	if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
 		Input.vibrate_handheld(18)
@@ -3742,6 +3743,7 @@ func _get_random_armor_drop(seed_hint: int = 0) -> Dictionary:
 			equipment_id = "tactical_helmet" if high_grade else "patched_helmet"
 		_:
 			equipment_id = "tactical_boots" if high_grade else "patched_sneakers"
+	equipment_id = GameState.roll_equipment_drop_id(equipment_id)
 	var definition := GameState.get_equipment_definition(equipment_id)
 	return {
 		"amount": 1,

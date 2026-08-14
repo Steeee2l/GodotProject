@@ -586,6 +586,10 @@ func _set_feedback(message: String, success: bool) -> void:
 
 
 func _item_name(item_id: String) -> String:
+	# 레벨 장비("scav_vest@3")는 정의 조회가 "이름 Lv.3"까지 만들어 준다.
+	var equipment_definition: Dictionary = GameState.get_equipment_definition(item_id)
+	if not equipment_definition.is_empty():
+		return str(equipment_definition.get("display_name", item_id))
 	return str(ITEM_NAMES.get(item_id, item_id.replace("_", " ").capitalize()))
 
 

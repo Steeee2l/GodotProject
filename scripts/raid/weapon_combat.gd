@@ -345,7 +345,9 @@ func _spawn_launch_fx(direction: Vector3) -> void:
 	host._spawn_particle_burst(origin, direction, Color("#ffd98a"), 6, 0.09, 2.0, 4.2, 0.04, 0.12)
 	host._spawn_smoke_cloud(origin, direction)
 	host.get_tree().create_timer(0.055).timeout.connect(func() -> void:
-		host._spawn_smoke_cloud(origin + direction * 0.08, direction)
+		# 판이 끝난 뒤(호스트 해제 후) 타이머가 늦게 발화할 수 있다.
+		if is_instance_valid(host):
+			host._spawn_smoke_cloud(origin + direction * 0.08, direction)
 	)
 
 
@@ -396,6 +398,12 @@ func _play_gunshot() -> void:
 func _get_current_fire_direction() -> Vector3:
 	if _uses_mouse_aim():
 		return _get_mouse_world_direction()
+	# 스티키 표적이 살아 있으면 8방향 quantize를 거치지 않고 표적을 직격한다.
+	if _is_mobile_assist_target_valid():
+		var to_target: Vector3 = mobile_assist_target.global_position - player.global_position
+		to_target.y = 0.0
+		if to_target.length_squared() > 0.01:
+			return to_target.normalized()
 	var screen_direction: Vector2 = DIRECTION_VECTORS[host.facing]
 	var facing_direction := Vector3(
 		screen_direction.x + screen_direction.y,
@@ -479,6 +487,46 @@ func _uses_mouse_aim() -> bool:
 
 
 var mobile_assist_target: CharacterBody3D
+
+
+func _acquire_mobile_fire_target(force_for_test := false) -> void:
+	# 발사 버튼을 누르는 순간엔 바라보는 방향과 무관하게 감지범위 안의
+	# 최근접 적을 잡는다. 조이스틱으로 총구 방향까지 만들 필요가 없어야
+	# 모바일에서 쏠 만해진다. 접근성 어시스트 강도와 무관하게 항상 동작.
+	if (_uses_mouse_aim() and not force_for_test) or _is_mobile_assist_target_valid():
+		return
+	var best_enemy: CharacterBody3D
+	var best_distance := INF
+	for enemy in host.enemies:
+		if not is_instance_valid(enemy) or bool(enemy.get("dying")):
+			continue
+		if float(enemy.get("player_visibility_factor")) < 0.2:
+			continue
+		var offset: Vector3 = enemy.global_position - player.global_position
+		offset.y = 0.0
+		var distance: float = offset.length()
+		if distance <= 0.05 or distance > MOBILE_AIM_ASSIST_MAX_DISTANCE:
+			continue
+		var query := PhysicsRayQueryParameters3D.create(
+			player.global_position + Vector3(0, 0.45, 0),
+			enemy.global_position + Vector3(0, 0.45, 0),
+			COLLISION_PROFILES.WORLD_ONLY_SIGHT_MASK
+		)
+		query.exclude = [player.get_rid(), enemy.get_rid()]
+		if not player.get_world_3d().direct_space_state.intersect_ray(query).is_empty():
+			continue
+		if distance < best_distance:
+			best_distance = distance
+			best_enemy = enemy
+	if best_enemy == null:
+		return
+	mobile_assist_target = best_enemy
+	var to_target: Vector3 = best_enemy.global_position - player.global_position
+	to_target.y = 0.0
+	if to_target.length_squared() > 0.01:
+		var direction := to_target.normalized()
+		host._lock_aim_direction(direction)
+		host._set_facing_from_world_direction(direction)
 
 
 func _update_mobile_aim_direction(movement_world_direction: Vector3) -> void:

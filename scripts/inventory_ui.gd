@@ -1914,6 +1914,53 @@ func _bag_item_button(item: Dictionary) -> Button:
 		material_badge.add_theme_color_override("font_outline_color", Color("#79d4bd"))
 		material_badge.add_theme_constant_override("outline_size", 6)
 		button.add_child(material_badge)
+	if item_type == "equipment" and has_quantity and not bool(item.get("equipped", false)):
+		var equipment_definition: Dictionary = game_state.get_equipment_definition(item_id)
+		var equipment_level := int(equipment_definition.get("level", 1))
+		if equipment_level > 1:
+			var level_badge := Label.new()
+			level_badge.name = "EquipmentLevelBadge"
+			level_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			level_badge.set_anchors_preset(Control.PRESET_TOP_LEFT)
+			level_badge.offset_left = 5
+			level_badge.offset_top = 4
+			level_badge.offset_right = 43
+			level_badge.offset_bottom = 24
+			level_badge.text = "Lv%d" % equipment_level
+			level_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			level_badge.add_theme_font_override("font", font_ref)
+			level_badge.add_theme_font_size_override("font_size", 10)
+			level_badge.add_theme_color_override(
+				"font_color", Color("#ffd98a") if equipment_level >= 4 else Color("#cfe3d6")
+			)
+			level_badge.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+			level_badge.add_theme_constant_override("outline_size", 5)
+			button.add_child(level_badge)
+		# 지금 낀 것보다 좋으면 ▲ — 리스트만 훑어도 갈아 낄 게 보인다.
+		var equipment_slot := str(equipment_definition.get("slot", "body"))
+		var equipped_in_slot := str(game_state.get_equipped_equipment(equipment_slot))
+		var equipped_score := (
+			float(game_state.get_equipment_score(equipped_in_slot))
+			if not equipped_in_slot.is_empty()
+			else -1.0
+		)
+		if float(game_state.get_equipment_score(item_id)) > equipped_score:
+			var upgrade_badge := Label.new()
+			upgrade_badge.name = "EquipmentUpgradeBadge"
+			upgrade_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			upgrade_badge.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+			upgrade_badge.offset_left = -26
+			upgrade_badge.offset_top = 3
+			upgrade_badge.offset_right = -5
+			upgrade_badge.offset_bottom = 23
+			upgrade_badge.text = "▲"
+			upgrade_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			upgrade_badge.add_theme_font_override("font", font_ref)
+			upgrade_badge.add_theme_font_size_override("font_size", 12)
+			upgrade_badge.add_theme_color_override("font_color", Color("#8ef2a0"))
+			upgrade_badge.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+			upgrade_badge.add_theme_constant_override("outline_size", 5)
+			button.add_child(upgrade_badge)
 	if bool(item.get("equipped", false)):
 		var equipped_badge := Label.new()
 		equipped_badge.name = "EquippedBadge"

@@ -1095,9 +1095,30 @@ static func _materialize_item(
 	data["amount"] = amount
 	data["item_id"] = item_id
 	data["stage_tier"] = clampi(stage_tier, 1, 5)
+	if loot_type == "armor":
+		# 장비 레벨은 도시 티어를 따라 굴린다 — 상위 도시일수록 같은 장비도
+		# 좋은 개체가 나와 갈아 끼우는 맛을 만든다. 가치도 레벨을 따라 오른다.
+		var level := _roll_equipment_level(clampi(stage_tier, 1, 5), random)
+		if level > 1:
+			data["equipment_id"] = "%s@%d" % [str(data.get("equipment_id", item_id)), level]
+			data["display_name"] = "%s Lv.%d" % [str(data.get("display_name", "장비")), level]
+			data["base_value"] = int(round(
+				float(data.get("base_value", 0)) * (1.0 + 0.35 * float(level - 1))
+			))
 	data["total_value"] = int(data.get("base_value", 0)) * amount
 	data["value_per_slot"] = float(data["total_value"]) / float(maxi(1, int(data.get("slot_size", 1))))
 	return {"type": loot_type, "data": data}
+
+
+static func _roll_equipment_level(stage_tier: int, random: RandomNumberGenerator) -> int:
+	# 주로 도시 티어와 같은 레벨, 25%는 한 단계 아래, 18%는 한 단계 위.
+	var roll := random.randf()
+	var level := stage_tier
+	if roll < 0.25:
+		level = stage_tier - 1
+	elif roll > 0.82:
+		level = stage_tier + 1
+	return clampi(level, 1, 5)
 
 
 static func _roll_ammo_amount(

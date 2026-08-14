@@ -212,7 +212,8 @@ func _apply_layout() -> void:
 	)
 	panel.custom_minimum_size = panel_size
 	panel.size = panel_size
-	mobile_button.visible = DisplayServer.is_touchscreen_available() and not is_open()
+	# 필드 우상단이 붐벼서 모바일 진입 버튼은 감춘다(설정 자체는 데스크톱 키로 접근 가능).
+	mobile_button.visible = false
 	mobile_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	mobile_button.offset_left = -66.0 - safe.z
 	mobile_button.offset_top = 78.0 + safe.y
