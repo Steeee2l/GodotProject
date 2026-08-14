@@ -179,6 +179,9 @@ func toggle() -> void:
 	set_open(not opened)
 
 
+var _suppress_open_button_signal := false
+
+
 func set_open(value: bool) -> void:
 	opened = value
 	if opened:
@@ -187,7 +190,11 @@ func set_open(value: bool) -> void:
 	if modal:
 		modal.visible = opened
 	if open_button:
+		# 터치 입력 도중 버튼을 숨기면 pressed가 동기 재발화해 toggle이 중첩
+		# 호출된다(쉘터에서 가방이 열리자마자 닫히던 원인). 가드로 끊는다.
+		_suppress_open_button_signal = true
 		open_button.visible = not opened
+		_suppress_open_button_signal = false
 	if opened:
 		_refresh_contents()
 	_apply_responsive_layout()
@@ -222,7 +229,10 @@ func _build_open_button() -> void:
 	else:
 		open_button.add_theme_stylebox_override("normal", _panel_style(Color(0.02, 0.027, 0.025, 0.94), Color("#8ab7a0"), 6))
 		open_button.add_theme_stylebox_override("hover", _panel_style(Color(0.06, 0.075, 0.068, 0.98), Color("#d9c579"), 6))
-	open_button.pressed.connect(toggle)
+	open_button.pressed.connect(func() -> void:
+		if not _suppress_open_button_signal:
+			toggle()
+	)
 	add_child(open_button)
 
 
