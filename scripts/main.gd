@@ -99,9 +99,6 @@ const LORE_POSTER_TEXTURE := preload("res://assets/lore/forgotten_notice_board_v
 const BROKEN_SENTRY_TEXTURE := preload("res://assets/props/broken_sentry_salvage.png")
 const FIELD_LOOT_CACHE_TEXTURE := preload("res://assets/interiors/office_dungeon/modules/office_salvage_loot_v1.png")
 const START_WITH_COMPANION := false
-const AK_PICKUP_POSITION := Vector3(1.15, 0.32, 0.7)
-const PICKUP_DISTANCE := 1.75
-const PICKUP_HOLD_DURATION := 0.9
 const AIM_HOLD_DURATION := 0.55
 const MAP_CONTENT_SCALE := ProceduralCityMap.WORLD_SCALE
 const SECONDS_PER_GAME_HOUR := 36.0
@@ -184,10 +181,6 @@ var facing := "s"
 var motion_state := "idle"
 var occlusion_masks := {}
 var weapon_sprite: AnimatedSprite3D
-var ak_pickup: Node3D
-var pickup_touch_held := false
-var pickup_keyboard_held := false
-var pickup_hold_time := 0.0
 var mobile_context_button: Button
 # 컨텍스트 버튼이 "떠 있어야 하는가". 실제 visible과 위치는 유틸리티 줄
 # 레이아웃이 결정한다. 둘을 섞으면 생성 시점 좌표에 유령 버튼이 남는다.
@@ -815,7 +808,6 @@ func _physics_process(delta: float) -> void:
 	var map_limit := ($World as ProceduralCityMap).get_map_limit()
 	player.position.x = clampf(player.position.x, -map_limit, map_limit)
 	player.position.z = clampf(player.position.z, -map_limit, map_limit)
-	_update_pickup(delta)
 	loot_system._update_ammo_pickups(delta)
 	_refresh_mobile_context_button()
 	weapon_combat._update_firing(delta)
@@ -2128,42 +2120,6 @@ func _continue_after_death() -> void:
 	)
 
 
-func _spawn_ak_pickup() -> void:
-	ak_pickup = Node3D.new()
-	ak_pickup.name = "AK47Pickup"
-	ak_pickup.position = _safe_map_position(_scale_map_position(AK_PICKUP_POSITION))
-	add_child(ak_pickup)
-
-	var sprite := Sprite3D.new()
-	sprite.name = "DropSprite"
-	sprite.texture = WEAPON_VISUAL_CATALOG.get_weapon_texture("ak47")
-	sprite.pixel_size = WEAPON_VISUAL_CATALOG.get_world_pixel_size("ak47", 0.0034)
-	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sprite.shaded = false
-	sprite.transparent = true
-	sprite.no_depth_test = true
-	sprite.render_priority = 90
-	ak_pickup.add_child(sprite)
-
-	var shadow_material := StandardMaterial3D.new()
-	shadow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	shadow_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	shadow_material.albedo_color = Color(0, 0, 0, 0.32)
-	var shadow_mesh := CylinderMesh.new()
-	shadow_mesh.top_radius = 0.46
-	shadow_mesh.bottom_radius = 0.46
-	shadow_mesh.height = 0.012
-	shadow_mesh.radial_segments = 20
-	shadow_mesh.material = shadow_material
-	var shadow := MeshInstance3D.new()
-	shadow.name = "DropShadow"
-	shadow.position.y = -0.29
-	shadow.mesh = shadow_mesh
-	shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	ak_pickup.add_child(shadow)
-	loot_system._add_loot_highlight(ak_pickup, Color("#dfb94f"), 1.05)
-
-
 func _spawn_ammo_pickups() -> void:
 	var world := $World as ProceduralCityMap
 	var stage_tier := LOOT_ECONOMY.get_stage_for_zone(raid_zone_data)
@@ -2725,22 +2681,6 @@ func _apply_hud_layout() -> void:
 				knob.offset_right = knob_offset.x + knob_size
 				knob.offset_bottom = knob_offset.y + knob_size
 
-	if hud.pickup_panel:
-		hud.pickup_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-		var panel_w := clampf(viewport_size.x * 0.52, 300.0, 380.0)
-		# 버튼 48 + 진행바 8 + 여백이 들어가야 한다.
-		var panel_h := clampf(80.0 * ui_scale, 76.0, 94.0)
-		hud.pickup_panel.offset_left = -panel_w * 0.5
-		hud.pickup_panel.offset_right = panel_w * 0.5
-		hud.pickup_panel.offset_bottom = -maxf(bottom_margin + 118.0, viewport_size.y * 0.18)
-		hud.pickup_panel.offset_top = hud.pickup_panel.offset_bottom - panel_h
-		var pickup_button := hud.pickup_panel.get_node_or_null("VBoxContainer/Button") as Button
-		var pickup_progress_bar := hud.pickup_panel.get_node_or_null("VBoxContainer/ProgressBar") as ProgressBar
-		if pickup_button != null:
-			pickup_button.custom_minimum_size = Vector2(maxf(250.0, panel_w - 24.0), 48.0)
-		if pickup_progress_bar != null:
-			pickup_progress_bar.custom_minimum_size = Vector2(maxf(250.0, panel_w - 24.0), 8.0)
-
 	if hud.ammo_prompt_panel:
 		hud.ammo_prompt_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 		var ammo_panel_w := clampf(viewport_size.x * 0.52, 300.0, 380.0)
@@ -2981,15 +2921,12 @@ func _on_mobile_context_button_down() -> void:
 			hud.field_interaction_touch_held = true
 	elif is_instance_valid(nearby_ammo_pickup):
 		loot_system._collect_nearby_ammo()
-	elif not has_ak and is_instance_valid(ak_pickup):
-		pickup_touch_held = true
 	if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
 		Input.vibrate_handheld(16)
 
 
 func _on_mobile_context_button_up() -> void:
 	hud.field_interaction_touch_held = false
-	pickup_touch_held = false
 
 
 func _on_mobile_map_pressed() -> void:
@@ -3017,11 +2954,6 @@ func _refresh_mobile_context_button() -> void:
 	elif is_instance_valid(nearby_ammo_pickup):
 		label = "줍기"
 		mobile_context_button.disabled = false
-	elif not has_ak and is_instance_valid(ak_pickup):
-		var distance := Vector2(player.position.x, player.position.z).distance_to(Vector2(ak_pickup.position.x, ak_pickup.position.z))
-		if distance <= PICKUP_DISTANCE:
-			label = "무기 획득"
-			icon_name = "weapon"
 	# 표시 의도만 기록하고, 실제 visible과 위치는 _layout_mobile_utility_row()가
 	# 정한다. 여기서 visible을 직접 켜면 생성 시점 좌표에 그대로 나타난다.
 	var wants_visible := not label.is_empty()
@@ -3181,49 +3113,6 @@ func _refresh_field_interaction_visual(interaction_type: String, is_locked: bool
 		"pressed",
 		_make_panel_style(pressed_background, accent, 6)
 	)
-
-
-func _update_pickup(delta: float) -> void:
-	if has_ak or not is_instance_valid(ak_pickup):
-		return
-	ak_pickup.position.y = AK_PICKUP_POSITION.y + sin(Time.get_ticks_msec() * 0.004) * 0.045
-	var player_ground := Vector2(player.position.x, player.position.z)
-	var pickup_ground := Vector2(ak_pickup.position.x, ak_pickup.position.z)
-	var distance := player_ground.distance_to(pickup_ground)
-	loot_system._update_loot_highlight(ak_pickup, distance, delta)
-	var is_near := distance <= PICKUP_DISTANCE
-	hud.pickup_panel.visible = is_near
-	var holding := pickup_touch_held or pickup_keyboard_held
-	if is_near and holding:
-		pickup_hold_time = minf(pickup_hold_time + delta, PICKUP_HOLD_DURATION)
-		if pickup_hold_time >= PICKUP_HOLD_DURATION:
-			_equip_ak47()
-	else:
-		pickup_hold_time = 0.0
-	hud.pickup_progress.value = pickup_hold_time
-
-
-func _equip_ak47() -> void:
-	equipped_weapon_id = "ak47"
-	if equipped_weapon_mods.is_empty():
-		equipped_weapon_mods.append("scope_2x")
-	GameState.equipped_weapon_mods.assign(equipped_weapon_mods)
-	_refresh_weapon_stats()
-	has_ak = true
-	GameState.has_ak = true
-	GameState.equipped_weapon_id = equipped_weapon_id
-	pickup_touch_held = false
-	hud.pickup_panel.visible = false
-	if is_instance_valid(ak_pickup):
-		ak_pickup.queue_free()
-	weapon_sprite.visible = true
-	survivor.sprite_frames = unarmed_sprite_frames
-	_play_directional_animation()
-	weapon_combat._update_weapon_pose()
-	hud.equipment_panel.visible = true
-	hud.fire_button.visible = true
-	hud.fire_button.tooltip_text = "%s 발사" % str(weapon_stats.get("display_name", "AK-47"))
-	_update_equipment_ui()
 
 
 func _initialize_equipped_weapon() -> void:
@@ -3557,7 +3446,6 @@ func _on_inventory_open_state_changed(is_open: bool) -> void:
 		_release_mobile_held_actions()
 		mouse_fire_held = false
 		laser_aim_held = false
-		pickup_keyboard_held = false
 		field_interaction_keyboard_held = false
 		touch_vector = Vector2.ZERO
 	_refresh_pointer_mode()
@@ -6811,7 +6699,6 @@ func _release_mobile_held_actions() -> void:
 	context_touch_id = -1
 	fire_button_held = false
 	hud.field_interaction_touch_held = false
-	pickup_touch_held = false
 
 
 func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
@@ -6862,14 +6749,6 @@ func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
 		hud.field_interaction_panel != null
 		and hud.field_interaction_panel.visible
 		and hud.field_interaction_panel.get_global_rect().has_point(touch.position)
-	):
-		context_touch_id = touch.index
-		_on_mobile_context_button_down()
-		return true
-	if (
-		hud.pickup_panel != null
-		and hud.pickup_panel.visible
-		and hud.pickup_panel.get_global_rect().has_point(touch.position)
 	):
 		context_touch_id = touch.index
 		_on_mobile_context_button_down()
@@ -6982,13 +6861,10 @@ func _input(event: InputEvent) -> void:
 					field_interaction_keyboard_held = false
 				else:
 					field_interaction_keyboard_held = key_event.pressed
-				pickup_keyboard_held = false
 			elif key_event.pressed and is_instance_valid(nearby_ammo_pickup):
 				loot_system._collect_nearby_ammo()
-				pickup_keyboard_held = false
 			else:
 				field_interaction_keyboard_held = false
-				pickup_keyboard_held = key_event.pressed
 		elif key == KEY_R and key_event.pressed and has_ak:
 			weapon_combat._reload_ak47()
 		elif key == KEY_T and key_event.pressed:

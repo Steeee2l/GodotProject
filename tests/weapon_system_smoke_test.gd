@@ -88,7 +88,12 @@ func _run() -> void:
 	assert(int(main_scene.get("player_health")) == health_before_hit - 5)
 	assert(float(main_scene.get("player_hit_stun_time")) > 0.0)
 	assert((main_scene.get("recoil_velocity") as Vector3).x > 0.0)
-	main_scene.call("_equip_ak47")
+	# 옛 AK 픽업 플로우(_equip_ak47)는 죽은 코드로 제거됐다 — 무장 상태만 부여.
+	main_scene.set("has_ak", true)
+	var equipped_mods := main_scene.get("equipped_weapon_mods") as Array
+	if not equipped_mods.has("scope_2x"):
+		equipped_mods.append("scope_2x")
+	main_scene.call("_refresh_weapon_stats")
 	assert((main_scene.get("equipped_weapon_mods") as Array).has("scope_2x"))
 	var left_press := InputEventMouseButton.new()
 	left_press.button_index = MOUSE_BUTTON_LEFT

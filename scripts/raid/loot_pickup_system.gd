@@ -7,7 +7,6 @@ extends RefCounted
 
 const AIM_REVEAL_BUILDING_ALPHA := 0.28
 const AK_DROP_TEXTURE := preload("res://assets/weapons/ak47_drop.png")
-const AK_PICKUP_POSITION := Vector3(1.15, 0.32, 0.7)
 const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
 const BASE_ENEMY_COUNT := 24
@@ -50,10 +49,8 @@ const OCCLUSION_LATERAL_LIMIT := 5.1
 const OVERLAY_DEPTH_SORT := preload("res://scripts/overlay_depth_sort.gd")
 const PERCEPTION_SYSTEM_SCRIPT := preload("res://scripts/perception_system.gd")
 const PICKUP_DISTANCE := 1.75
-const PICKUP_HOLD_DURATION := 0.9
 const RAID_EVENT_DIRECTOR := preload("res://scripts/raid_event_director.gd")
 const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
-const RAID_PRESSURE_REWARD_MULTIPLIERS := [1.0, 1.15, 1.35, 1.65]
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
 const SCENT_TRAIL_MANAGER_SCRIPT := preload("res://scripts/scent_trail_manager.gd")
 const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")

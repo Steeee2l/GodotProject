@@ -15,7 +15,6 @@ func _run() -> void:
 	await physics_frame
 
 	assert(bool(main_scene.get("has_ak")))
-	assert(main_scene.get("ak_pickup") == null)
 	assert(bool(game_state.get("has_ak")))
 	var initial_pickups := main_scene.get("loot_system").ammo_pickups as Array
 	# 첫 판 온보딩 전리품 뭉치가 섞여 있을 수 있다. 이 테스트가 검증하려는 것은

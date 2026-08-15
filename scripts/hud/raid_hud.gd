@@ -11,11 +11,9 @@ const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const HudStyle := preload("res://scripts/hud/hud_style.gd")
 const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
-const AK_DROP_TEXTURE := preload("res://assets/weapons/ak47_drop.png")
 const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
 const FATIGUE_MAX := 100.0
 const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/magazine_spring.png")
-const PICKUP_HOLD_DURATION := 0.9
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
 const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
 
@@ -94,8 +92,6 @@ var field_interaction_touch_held := false
 var fire_button: Button
 var inventory_ui: Control
 var melee_button: Button
-var pickup_panel: PanelContainer
-var pickup_progress: ProgressBar
 
 
 func attach(owner_node: Node) -> void:
@@ -109,39 +105,6 @@ func build(owner_node: Node) -> void:
 	host = owner_node
 	var font := load("res://assets/fonts/Pretendard-Regular.otf") as Font
 	var touch_enabled := DisplayServer.is_touchscreen_available()
-	pickup_panel = PanelContainer.new()
-	pickup_panel.name = "PickupPrompt"
-	pickup_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	pickup_panel.offset_left = -170
-	pickup_panel.offset_top = -202
-	pickup_panel.offset_right = 170
-	pickup_panel.offset_bottom = -134
-	pickup_panel.add_theme_stylebox_override("panel", HudStyle.panel(HudStyle.INK, Color("#d5b45b")))
-	pickup_panel.visible = false
-	host.get_node("HUD").add_child(pickup_panel)
-
-	var pickup_box := VBoxContainer.new()
-	pickup_box.add_theme_constant_override("separation", 5)
-	pickup_panel.add_child(pickup_box)
-	var pickup_button := Button.new()
-	# 전투 중에 누르는 버튼이다. 권장 최소 터치 타겟(48px) 아래로 내려가면
-	# 놓치는 순간이 그대로 피해로 이어진다.
-	pickup_button.custom_minimum_size = Vector2(330, 48)
-	pickup_button.text = "AK-47  길게 눌러 줍기" if DisplayServer.is_touchscreen_available() else "AK-47  길게 눌러 줍기  [F]"
-	pickup_button.icon = AK_DROP_TEXTURE
-	pickup_button.expand_icon = true
-	pickup_button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	pickup_button.add_theme_font_override("font", font)
-	pickup_button.add_theme_font_size_override("font_size", 15)
-	pickup_button.button_down.connect(func() -> void: host.pickup_touch_held = true)
-	pickup_button.button_up.connect(func() -> void: host.pickup_touch_held = false)
-	pickup_box.add_child(pickup_button)
-	pickup_progress = ProgressBar.new()
-	pickup_progress.custom_minimum_size = Vector2(330, 8)
-	pickup_progress.max_value = PICKUP_HOLD_DURATION
-	pickup_progress.show_percentage = false
-	pickup_box.add_child(pickup_progress)
-
 	ammo_prompt_panel = PanelContainer.new()
 	ammo_prompt_panel.name = "AmmoPickupPrompt"
 	ammo_prompt_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)

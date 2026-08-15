@@ -42,7 +42,6 @@ const RAID_EVENT_DIRECTOR := preload("res://scripts/raid_event_director.gd")
 const RAID_EXTRACTION_POLICY := preload("res://scripts/raid_extraction_policy.gd")
 const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
 const RAID_LOSS_MANAGER := preload("res://scripts/raid_loss_manager.gd")
-const RAID_PRESSURE_REWARD_MULTIPLIERS := [1.0, 1.15, 1.35, 1.65]
 const RESCUED_CAT_FOLLOWER_SCRIPT := preload("res://scripts/rescued_cat_follower.gd")
 const RESCUE_HOLD_DURATION := 1.8
 const RESCUE_POINT_COUNT := 5
@@ -517,7 +516,6 @@ func _begin_extraction() -> void:
 	host.laser_aim_held = false
 	host.field_interaction_keyboard_held = false
 	host.hud.field_interaction_touch_held = false
-	host.pickup_touch_held = false
 	host.touch_vector = Vector2.ZERO
 	player.velocity = Vector3.ZERO
 	host.recoil_velocity = Vector3.ZERO

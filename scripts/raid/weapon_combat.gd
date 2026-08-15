@@ -7,7 +7,6 @@ extends RefCounted
 
 const AIM_HOLD_DURATION := 0.55
 const AK_DIRECTIONAL_TEXTURE := preload("res://assets/weapons/ak47_directional.png")
-const AK_PICKUP_POSITION := Vector3(1.15, 0.32, 0.7)
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
 const BASE_CAMERA_SIZE := 28.0
 const BOSS_DEFEAT_CAMERA_SIZE := 19.5
@@ -69,8 +68,6 @@ const MOBILE_AIM_ASSIST_DISTANCE_WEIGHT := 0.32
 const MOBILE_AIM_ASSIST_HALF_ANGLE_DEG := 42.0
 const MOBILE_AIM_ASSIST_MAX_DISTANCE := 34.0
 const OVERLAY_DEPTH_SORT := preload("res://scripts/overlay_depth_sort.gd")
-const PICKUP_DISTANCE := 1.75
-const PICKUP_HOLD_DURATION := 0.9
 const RAID_EVENT_DIRECTOR := preload("res://scripts/raid_event_director.gd")
 const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
 const RAID_LOSS_MANAGER := preload("res://scripts/raid_loss_manager.gd")
