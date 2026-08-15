@@ -93,6 +93,12 @@ func toggle_aim() -> void:
 	if GameState.canned_food <= 0:
 		return
 	_set_aiming(true)
+	# 모드에 들어왔음을 문장으로 말한다 — 링만으로는 "지금 탭하면 던진다"를
+	# 모른다. (판당 처음 2회만, 이후엔 조용히)
+	var hint_count := int(host.get_meta("can_throw_hint_count", 0))
+	if hint_count < 2:
+		host.set_meta("can_throw_hint_count", hint_count + 1)
+		host.hud.push_toast("링 안을 탭하면 투척 · 던지기 버튼 = 취소", Color("#79b98d"), 2.6)
 
 
 func _set_aiming(value: bool) -> void:
@@ -123,7 +129,12 @@ func _refresh_button() -> void:
 	if throw_button == null:
 		return
 	var count := int(GameState.canned_food)
-	var next_text := "던지기\nx%d" % count
+	# 조준 중엔 버튼이 취소+남은 시간 카운트다운으로 바뀐다.
+	var next_text := (
+		"취소 %d" % ceili(aim_timeout_left)
+		if aiming
+		else "던지기\nx%d" % count
+	)
 	if throw_button.text != next_text:
 		throw_button.text = next_text
 	throw_button.disabled = count <= 0 and not aiming
@@ -140,8 +151,30 @@ func handle_touch(touch_position: Vector2) -> bool:
 		toggle_aim()
 		return true
 	if aiming:
+		# 조준 모드가 화면 전체를 삼키면 안 된다: 조이스틱 영역과 다른 버튼
+		# 위 터치는 통과시켜 이동·행동을 유지하고, 실수로 캔이 날아가는
+		# 경로를 좁힌다. 착탄 지정은 "그 외의 화면"에서만.
+		var viewport_size := host.get_viewport().get_visible_rect().size
+		var in_joystick_zone: bool = (
+			touch_position.x < viewport_size.x * 0.55
+			and touch_position.y > viewport_size.y * 0.6
+		)
+		if in_joystick_zone or _touch_on_other_button(touch_position):
+			return false
 		throw_at_screen(touch_position)
 		return true
+	return false
+
+
+func _touch_on_other_button(touch_position: Vector2) -> bool:
+	for button_value in [
+		host.hud.fire_button, host.hud.dash_button,
+		host.mobile_medkit_button, host.mobile_reload_button,
+		host.mobile_context_button, host.mobile_map_button,
+	]:
+		var button := button_value as Button
+		if button != null and button.visible and button.get_global_rect().has_point(touch_position):
+			return true
 	return false
 
 

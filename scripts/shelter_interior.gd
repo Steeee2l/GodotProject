@@ -3376,7 +3376,21 @@ func _inventory_discard_display_name(item_type: String, item_id: String) -> Stri
 	return str(names.get(item_id, item_id))
 
 
+var shelter_tier_upgrade_armed_msec := 0
+
+
 func _upgrade_shelter_tier() -> void:
+	# 최대 지출 + 씬 리로드가 걸린 파괴적 행동 — 원탭으로 나가면 안 된다.
+	# 첫 탭은 비용을 다시 보여주며 무장, 4초 안의 두 번째 탭만 실행.
+	if Time.get_ticks_msec() - shelter_tier_upgrade_armed_msec > 4000:
+		shelter_tier_upgrade_armed_msec = Time.get_ticks_msec()
+		var cost: Dictionary = GameState.get_shelter_upgrade_cost()
+		_show_status("한 번 더 누르면 확장 · 고철 %s%s 소모" % [
+			GameState.format_compact_number(int(cost.get("scrap", 0))),
+			(" + 츄르 %d" % int(cost.get("churu", 0))) if int(cost.get("churu", 0)) > 0 else "",
+		])
+		return
+	shelter_tier_upgrade_armed_msec = 0
 	if GameState.try_upgrade_shelter_tier():
 		_show_status("쉘터 Tier %d 확장 완료 · 수용 %d · 꾹꾹이 %d · 스크래핑 %d" % [
 			GameState.shelter_tier,

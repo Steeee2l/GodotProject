@@ -626,9 +626,24 @@ func _item_texture(item_type: String, item_id: String, size: int) -> Texture2D:
 	return UI_ICONS.get_icon(icon_name, size, Color("#d7c27d"))
 
 
+var sell_valuables_armed_msec := 0
+
+
 func _sell_valuables() -> void:
+	# 전량 판매는 되돌릴 수 없다 — 첫 탭 무장, 4초 안의 두 번째 탭만 실행.
+	if Time.get_ticks_msec() - sell_valuables_armed_msec > 4000:
+		sell_valuables_armed_msec = Time.get_ticks_msec()
+		_set_feedback("한 번 더 누르면 귀중품 전부를 고철 %s에 판다" % GameState.format_compact_number(
+			GameState.get_valuable_total_value()
+		), false)
+		return
+	sell_valuables_armed_msec = 0
 	var result: Dictionary = GameState.sell_all_valuables()
 	if int(result.get("count", 0)) > 0:
+		_set_feedback("귀중품 %d점 판매 · 고철 +%s" % [
+			int(result.get("count", 0)),
+			GameState.format_compact_number(int(result.get("scrap", 0))),
+		], true)
 		_rebuild_ui()
 
 

@@ -1313,6 +1313,7 @@ func _refresh_weapon_detail() -> void:
 
 func _select_item(item: Dictionary) -> void:
 	selected_item = item.duplicate(true)
+	_disarm_discard()
 	_refresh_item_detail()
 
 
@@ -1479,6 +1480,19 @@ func _configure_discard_button(item_type: String) -> void:
 		item_detail_reason.visible = true
 
 
+var discard_armed_item_id := ""
+var discard_disarm_tween: Tween
+
+
+func _disarm_discard() -> void:
+	discard_armed_item_id = ""
+	if discard_disarm_tween != null and discard_disarm_tween.is_valid():
+		discard_disarm_tween.kill()
+	if item_discard_button != null:
+		item_discard_button.text = "버리기"
+		item_discard_button.remove_theme_color_override("font_color")
+
+
 func _on_selected_item_discard() -> void:
 	if selected_item.is_empty() or item_discard_button.disabled:
 		return
@@ -1496,6 +1510,19 @@ func _on_selected_item_discard() -> void:
 		return
 	var quantity := maxi(1, int(selected_item.get("quantity", 1)))
 	var amount: int = mini(quantity, int(game_state.get_raid_item_stack_limit(discard_type)))
+	# 원탭 사고 방지: 첫 탭은 "정말?"로 무장하고, 2.5초 안의 두 번째 탭만 실행.
+	# 탄약 60발이 오탭 한 번에 증발하던 문제의 안전핀.
+	if discard_armed_item_id != item_id:
+		discard_armed_item_id = item_id
+		item_discard_button.text = "한 번 더: x%d 버리기" % amount
+		item_discard_button.add_theme_color_override("font_color", Color("#ff9d8f"))
+		if discard_disarm_tween != null and discard_disarm_tween.is_valid():
+			discard_disarm_tween.kill()
+		discard_disarm_tween = create_tween()
+		discard_disarm_tween.tween_interval(2.5)
+		discard_disarm_tween.tween_callback(_disarm_discard)
+		return
+	_disarm_discard()
 	item_discard_requested.emit(discard_type, item_id, amount)
 
 
