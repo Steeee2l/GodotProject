@@ -389,6 +389,14 @@ var dynamic_incident_winning_faction := ""
 
 func _ready() -> void:
 	run_started_msec = Time.get_ticks_msec()
+	# ESC 일시정지 — 판 진행은 저장 대상이 아니므로 종료 = 판 포기(Alt+F4와 동일).
+	PauseMenu.install(self, func() -> bool:
+		return not (
+			_is_inventory_open()
+			or _is_tactical_map_open()
+			or lore_reader.is_open()
+			or extraction_transition_active
+		), "종료 (판 진행은 사라짐)")
 	raid_zone_data = GameState.get_raid_zone()
 	active_zone_rule = str(raid_zone_data.get("zone_rule", ""))
 	world_time_hours = GameState.world_time_hours

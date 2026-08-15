@@ -3670,25 +3670,46 @@ func save_persistent_state() -> bool:
 		"completed_iron_mission_ids": completed_iron_mission_ids,
 		"opening_completed": opening_completed,
 	}
-	var file := FileAccess.open(persistence_path, FileAccess.WRITE)
+	# 원자적 저장: 임시 파일에 다 쓴 뒤 교체한다. 어느 순간에 크래시가 나도
+	# 본 파일은 항상 완전한 JSON이다. 교체 직전 본은 .bak으로 남겨,
+	# 최악의 경우에도 한 세이브 전으로만 돌아간다.
+	var temp_path := persistence_path + ".tmp"
+	var backup_path := persistence_path + ".bak"
+	var file := FileAccess.open(temp_path, FileAccess.WRITE)
 	if file == null:
 		return false
 	file.store_string(JSON.stringify(data))
-	return true
+	file.flush()
+	file.close()
+	var dir := DirAccess.open("user://")
+	if dir == null:
+		return false
+	if FileAccess.file_exists(persistence_path):
+		if FileAccess.file_exists(backup_path):
+			dir.remove(backup_path)
+		dir.rename(persistence_path, backup_path)
+	return dir.rename(temp_path, persistence_path) == OK
 
 
 func load_persistent_state() -> bool:
 	if not persistence_enabled:
 		return false
-	if not FileAccess.file_exists(persistence_path):
+	# 본 파일이 없거나 손상됐으면 .bak으로 물러난다 — 조용한 진행 초기화 금지.
+	var data: Dictionary = {}
+	for candidate_path in [persistence_path, persistence_path + ".bak"]:
+		if not FileAccess.file_exists(str(candidate_path)):
+			continue
+		var file := FileAccess.open(str(candidate_path), FileAccess.READ)
+		if file == null:
+			continue
+		var parsed: Variant = JSON.parse_string(file.get_as_text())
+		if parsed is Dictionary:
+			data = parsed as Dictionary
+			if str(candidate_path) != persistence_path:
+				push_warning("세이브 본 파일 손상 — 백업(.bak)에서 복구했습니다.")
+			break
+	if data.is_empty():
 		return false
-	var file := FileAccess.open(persistence_path, FileAccess.READ)
-	if file == null:
-		return false
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
-	if not (parsed is Dictionary):
-		return false
-	var data := parsed as Dictionary
 	map_seed = int(data.get("map_seed", map_seed))
 	raid_serial = int(data.get("raid_serial", raid_serial))
 	player_health = int(data.get("player_health", player_health))

@@ -282,6 +282,8 @@ func _resident_roam_bounds() -> Rect2:
 
 func _ready() -> void:
 	add_to_group("shelter_resident_host")
+	# ESC 일시정지 — 쉘터는 저장하고 나가는 정상 출구.
+	PauseMenu.install(self, func() -> bool: return not _ui_blocks_player(), "저장 후 종료")
 	GameState.sync_shelter_progression_milestones()
 	var offline_notice: Dictionary = GameState.process_shelter_progress()
 	_build_room()
