@@ -96,7 +96,7 @@ func _run() -> void:
 	)
 	game_state.register_shelter_return()
 	_check(
-		game_state.active_catnip_buff == "",
+		(game_state.active_catnip_buffs as Array).is_empty(),
 		"캣닢 급여가 복귀 후에도 남아 있음"
 	)
 

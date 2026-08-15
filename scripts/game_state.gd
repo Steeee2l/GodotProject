@@ -148,7 +148,7 @@ var shelter_food_fraction: float = 0.0
 # 이번 출정에만 적용되는 츄르 버프. 출정 종료/사망 시 소멸한다.
 var active_churu_buffs: Array[String] = []
 # 이번 출정에만 적용되는 캣닢 급여(택1). 출정 종료/사망 시 소멸한다.
-var active_catnip_buff := ""
+var active_catnip_buffs: Array[String] = []
 var last_corpse_decay_notice: Dictionary = {}
 # 첫 판에서 "가방이 꽉 찼을 때의 갈등"을 한 번은 반드시 겪게 한다.
 var bag_pressure_lesson_seen: bool = false
@@ -1428,7 +1428,9 @@ func get_raid_item_stack_limit(item_type: String) -> int:
 func get_raid_item_slot_cost(item_type: String, _item_id: String, amount: int) -> int:
 	if amount <= 0:
 		return 0
-	if item_type in ["weapon", "equipment"]:
+	# 제작 재료는 부피가 있다 — 한 개가 한 칸. 재료를 쓸어 담으면 가방이
+	# 실제로 차야 '무엇을 두고 갈까'라는 이 게임의 심장이 재료에도 뛴다.
+	if item_type in ["weapon", "equipment", "component"]:
 		return amount
 	return 1
 
@@ -2806,11 +2808,14 @@ func get_churu_bag_bonus_slots() -> int:
 	return 4 if is_churu_buff_active("big_pockets") else 0
 
 
-func get_catnip_field_buff_cost() -> int:
+func get_catnip_field_buff_cost(stack_index: int = -1) -> int:
 	# 인크리멘탈 등가 교환 — 언제 가도 "내 생산 20분치"가 한 판 급여 가격이다.
-	# 착즙 라인이 커질수록 절대값은 오르지만 체감 부담은 일정하고,
-	# 잉여 캣닢은 농축 사다리(지수)가 흡수한다.
-	return maxi(400, roundi(get_catnip_per_second() * 60.0 * 20.0))
+	# 후반 잉여 캣닢의 스케일 소비처: 버프는 겹칠 수 있고(최대 3종) 겹칠수록
+	# 누진(×3) — 두 번째는 1시간치, 세 번째는 3시간치. '풀버프 출정'이
+	# 커진 착즙 라인의 배출구가 된다.
+	var index := stack_index if stack_index >= 0 else active_catnip_buffs.size()
+	var base := maxi(400, roundi(get_catnip_per_second() * 60.0 * 20.0))
+	return base * int(pow(3.0, clampi(index, 0, 2)))
 
 
 func get_catnip_boost_cost() -> int:
@@ -2819,24 +2824,28 @@ func get_catnip_boost_cost() -> int:
 
 
 func is_catnip_buff_active(buff_id: String) -> bool:
-	return active_catnip_buff == buff_id
+	return active_catnip_buffs.has(buff_id)
 
 
 func try_activate_catnip_field_buff(buff_id: String) -> bool:
-	# 택1 — 이미 다른 급여를 먹었으면 이번 판엔 바꿀 수 없다.
-	if not CATNIP_FIELD_BUFFS.has(buff_id) or not active_catnip_buff.is_empty():
+	# 같은 버프는 한 번만, 최대 3종까지 겹친다. 가격은 겹칠수록 누진.
+	if (
+		not CATNIP_FIELD_BUFFS.has(buff_id)
+		or active_catnip_buffs.has(buff_id)
+		or active_catnip_buffs.size() >= 3
+	):
 		return false
 	var cost := get_catnip_field_buff_cost()
 	if catnip < cost:
 		return false
 	catnip -= cost
-	active_catnip_buff = buff_id
+	active_catnip_buffs.append(buff_id)
 	save_persistent_state()
 	return true
 
 
 func clear_catnip_field_buff() -> void:
-	active_catnip_buff = ""
+	active_catnip_buffs.clear()
 
 
 func get_catnip_spread_multiplier() -> float:
@@ -3581,7 +3590,7 @@ func save_persistent_state() -> bool:
 		"churu": churu,
 		"valuable_inventory": valuable_inventory,
 		"active_churu_buffs": active_churu_buffs,
-		"active_catnip_buff": active_catnip_buff,
+		"active_catnip_buffs": active_catnip_buffs,
 		"bag_pressure_lesson_seen": bag_pressure_lesson_seen,
 		"workbench_lesson_seen": workbench_lesson_seen,
 		"field_controls_lesson_seen": field_controls_lesson_seen,
@@ -3736,7 +3745,11 @@ func load_persistent_state() -> bool:
 	churu = int(data.get("churu", churu))
 	valuable_inventory = (data.get("valuable_inventory", {}) as Dictionary).duplicate(true)
 	active_churu_buffs = _to_string_array(data.get("active_churu_buffs", []))
-	active_catnip_buff = str(data.get("active_catnip_buff", ""))
+	# 신형 배열 키 우선, 구형 단일 문자열 키는 배열로 승격.
+	active_catnip_buffs = _to_string_array(data.get("active_catnip_buffs", []))
+	var legacy_catnip_buff := str(data.get("active_catnip_buff", ""))
+	if active_catnip_buffs.is_empty() and not legacy_catnip_buff.is_empty():
+		active_catnip_buffs.append(legacy_catnip_buff)
 	bag_pressure_lesson_seen = bool(data.get("bag_pressure_lesson_seen", bag_pressure_lesson_seen))
 	workbench_lesson_seen = bool(data.get("workbench_lesson_seen", workbench_lesson_seen))
 	field_controls_lesson_seen = bool(data.get("field_controls_lesson_seen", field_controls_lesson_seen))
@@ -3934,7 +3947,7 @@ func reset_run() -> void:
 	churu = 0
 	valuable_inventory.clear()
 	active_churu_buffs.clear()
-	active_catnip_buff = ""
+	active_catnip_buffs.clear()
 	bag_pressure_lesson_seen = false
 	fatigue_lesson_seen = false
 	field_controls_lesson_seen = false

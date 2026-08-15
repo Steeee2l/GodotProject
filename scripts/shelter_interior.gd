@@ -3689,13 +3689,13 @@ func _open_raid_zone_select() -> void:
 	_select_raid_zone_preview(initial_zone_id)
 
 
-var raid_catnip_buff_choice := ""
+var raid_catnip_buff_choices: Array[String] = []
 var raid_catnip_buff_buttons: Dictionary = {}
 
 
 func _build_catnip_buff_row() -> Control:
 	# 출정 전에 캣닢 한 줌 = 한 판짜리 체질 보정. 세 개 중 하나만 고를 수 있다.
-	raid_catnip_buff_choice = ""
+	raid_catnip_buff_choices.clear()
 	raid_catnip_buff_buttons.clear()
 	var box := VBoxContainer.new()
 	box.name = "CatnipBuffRow"
@@ -3734,27 +3734,48 @@ func _build_catnip_buff_row() -> Control:
 	return box
 
 
+func _selected_catnip_buff_total_cost(count: int) -> int:
+	var total := 0
+	for index in count:
+		total += GameState.get_catnip_field_buff_cost(index)
+	return total
+
+
 func _refresh_catnip_buff_row(title: Label) -> void:
-	# 가격은 "내 캣닢 생산 20분치" — 인크리멘탈 성장에 비례해 따라온다.
-	var cost := GameState.get_catnip_field_buff_cost()
+	# 버프는 최대 3종까지 겹치고 가격은 누진(20분치→1시간치→3시간치).
+	# 커진 착즙 라인의 잉여가 '풀버프 출정'으로 빠져나간다.
+	var selected := raid_catnip_buff_choices.size()
+	var next_cost := GameState.get_catnip_field_buff_cost(selected)
+	var committed := _selected_catnip_buff_total_cost(selected)
 	for buff_id in raid_catnip_buff_buttons:
 		var button := raid_catnip_buff_buttons[buff_id] as Button
-		button.disabled = GameState.catnip < cost and raid_catnip_buff_choice != str(buff_id)
-	title.text = "캣닢 급여 · 한 판 버프 택1 (캣닢 %s) · 보유 %s" % [
-		GameState.format_compact_number(cost),
-		GameState.format_compact_number(GameState.catnip),
-	]
+		if raid_catnip_buff_choices.has(str(buff_id)):
+			button.disabled = false
+		else:
+			button.disabled = selected >= 3 or GameState.catnip < committed + next_cost
+	if selected >= 3:
+		title.text = "캣닢 급여 · 풀버프 (합계 %s) · 보유 %s" % [
+			GameState.format_compact_number(committed),
+			GameState.format_compact_number(GameState.catnip),
+		]
+	else:
+		title.text = "캣닢 급여 · 겹칠수록 비쌈 · 다음 %s (보유 %s)" % [
+			GameState.format_compact_number(next_cost),
+			GameState.format_compact_number(GameState.catnip),
+		]
 
 
 func _on_catnip_buff_toggled(pressed: bool, buff_id: String) -> void:
-	# 토글 하나만 켜지게. 실제 소비는 출정 확정 순간에 이뤄진다.
-	if pressed:
-		raid_catnip_buff_choice = buff_id
-		for other_id in raid_catnip_buff_buttons:
-			if str(other_id) != buff_id:
-				(raid_catnip_buff_buttons[other_id] as Button).set_pressed_no_signal(false)
-	elif raid_catnip_buff_choice == buff_id:
-		raid_catnip_buff_choice = ""
+	# 다중 선택 — 실제 소비는 출정 확정 순간에 선택 순서대로 이뤄진다.
+	if pressed and not raid_catnip_buff_choices.has(buff_id):
+		raid_catnip_buff_choices.append(buff_id)
+	elif not pressed:
+		raid_catnip_buff_choices.erase(buff_id)
+	var row := raid_catnip_buff_buttons.get(buff_id) as Button
+	if row != null and row.get_parent() != null:
+		var title := row.get_parent().get_parent().get_meta("title_label", null) as Label
+		if title != null:
+			_refresh_catnip_buff_row(title)
 
 
 func _build_raid_zone_map_marker(zone_id: String, zone_index: int) -> Control:
@@ -4190,9 +4211,11 @@ func _confirm_launch_raid_zone(zone_id: String) -> void:
 		raid_zone_launch_button.disabled = true
 		raid_zone_launch_button.text = "출정 준비 중..."
 	# 캣닢 급여는 확정 순간에만 소비된다 — 브리핑에서 고르기만 하고 취소하면 무료.
-	if not raid_catnip_buff_choice.is_empty():
-		GameState.try_activate_catnip_field_buff(raid_catnip_buff_choice)
-		raid_catnip_buff_choice = ""
+	for chosen_buff_id in raid_catnip_buff_choices:
+		# 선택 순서대로 누진 가격 — 캣닢이 모자라면 거기서 멈춘다.
+		if not GameState.try_activate_catnip_field_buff(str(chosen_buff_id)):
+			break
+	raid_catnip_buff_choices.clear()
 	GameState.confirm_raid_loadout(zone_id)
 	GameState.start_new_raid()
 	# 다음 브리핑에서 "지난 출정 이후"를 계산할 기준점을 여기서 찍는다.
