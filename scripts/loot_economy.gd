@@ -1225,10 +1225,32 @@ static func _equipped_ammo_item_id(stage: int) -> String:
 	if ammo_id.is_empty():
 		return ""
 	var item_id := "ammo_%s" % ammo_id
+	# 장착 구경은 스테이지 게이트를 안 탄다 — 플레이어가 이미 그 총을 들고
+	# 왔는데 그 도시에 그 탄이 "없어야 할" 이유가 없다. (762가 minimum_stage
+	# 2라서 시작 무기 AK가 정작 종로에서 굶던 문제.)
 	var definition := ITEM_CATALOG.get(item_id, {}) as Dictionary
-	if definition.is_empty() or not _item_allowed(definition, stage):
+	if definition.is_empty():
 		return ""
 	return item_id
+
+
+static func roll_matched_ammo_recovery(
+	stage_tier: int,
+	random: RandomNumberGenerator
+) -> Dictionary:
+	# 호환탄 회수 — 사수 시체에서 내 총에 맞는 탄을 골라 줍는다.
+	# 일반 드랍 테이블과 별개 판정: 테이블 안에서 확률을 키우면 방어구·식량
+	# 비중이 무너지므로, 회수는 독립 드랍으로 얹는다. 스테이지별 5~12발.
+	var stage := clampi(stage_tier, 1, 5)
+	var item_id := _equipped_ammo_item_id(stage)
+	if item_id.is_empty():
+		return {}
+	var definition := _materialize_item(item_id, stage, random)
+	if definition.is_empty():
+		return {}
+	var data := definition.get("data", {}) as Dictionary
+	data["amount"] = random.randi_range(4, 7) + stage
+	return definition
 
 
 static func _enemy_ammo_item_id(

@@ -69,8 +69,10 @@ func configure_rocket_boss(target_body: CharacterBody3D, initial_threat: float) 
 			) as Dictionary
 			zone_tier = clampi(int(zone.get("stage_tier", 1)), 1, 5)
 	var tier_multiplier := 1.0 + float(zone_tier - 1) * 0.45
+	# 기준: 중반 화력(AK+2, DPS ~240)이 회피 시간 포함 25~40초를 싸우는 양.
+	# 결투 시뮬 실측으로 산정 — 808이었을 땐 4초 만에 끝나 패턴이 놀았다.
 	var boss_health := roundi(
-		(520.0 + clampf(initial_threat, 0.0, 1.0) * 360.0) * tier_multiplier
+		(2400.0 + clampf(initial_threat, 0.0, 1.0) * 1400.0) * tier_multiplier
 	)
 	health = boss_health
 	max_health = boss_health

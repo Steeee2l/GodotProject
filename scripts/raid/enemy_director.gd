@@ -478,7 +478,38 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 				"display_name": component_names[component_id],
 			}
 		)
+		# 보스는 확정으로 장착 구경 탄약을 두 배 번들로 남긴다 — 보스전에서
+		# 태운 탄창을 그 자리에서 갚아 "이겼는데 빈털터리"를 막는다.
+		var boss_ammo: Dictionary = LOOT_ECONOMY.roll_matched_ammo_recovery(
+			stage_tier, spawn_random
+		)
+		if not boss_ammo.is_empty():
+			var boss_ammo_data := (boss_ammo.get("data", {}) as Dictionary).duplicate(true)
+			boss_ammo_data["amount"] = int(boss_ammo_data.get("amount", 6)) * 2
+			boss_ammo_data["loot_source"] = "enemy"
+			host._create_loot_pickup(
+				str(boss_ammo.get("type", "ammo")),
+				drop_position + Vector3(-1.0, 0.0, 0.6),
+				boss_ammo_data
+			)
 		return boss_drop
+	# 호환탄 회수 — 사수 시체는 45% 확률로 장착 구경 탄약을 별도로 남긴다.
+	# 일반 드랍(방어구·식량·부품) 테이블과 독립이라 그쪽 비중은 안 건드린다.
+	if str(enemy.get("enemy_kind")) != "melee" and spawn_random.randf() < 0.45:
+		var ammo_recovery: Dictionary = LOOT_ECONOMY.roll_matched_ammo_recovery(
+			stage_tier, spawn_random
+		)
+		if (
+			not ammo_recovery.is_empty()
+			and LOOT_ECONOMY.try_register_loot(GameState, ammo_recovery, "enemy", stage_tier)
+		):
+			var ammo_data := (ammo_recovery.get("data", {}) as Dictionary).duplicate(true)
+			ammo_data["loot_source"] = "enemy"
+			host._create_loot_pickup(
+				str(ammo_recovery.get("type", "ammo")),
+				drop_position + Vector3(-0.9, 0.0, 0.5),
+				ammo_data
+			)
 	var definition: Dictionary = LOOT_ECONOMY.roll_enemy_drop(
 		stage_tier,
 		str(enemy.get("enemy_kind")),

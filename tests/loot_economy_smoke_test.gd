@@ -50,8 +50,12 @@ func _run() -> void:
 			):
 				var data := definition.get("data", {}) as Dictionary
 				assert(int(data.get("ammo_tier", 1)) <= 2)
+				# 장착 구경(기본 762)은 스테이지 티어 캡을 면제받는다 —
+				# 플레이어가 이미 그 총을 들고 온 도시다.
+				var equipped_caliber := str(data.get("ammo_id", "")) == "762_fmj"
 				assert(
-					int(data.get("ammo_tier", 1))
+					equipped_caliber
+					or int(data.get("ammo_tier", 1))
 					<= int(profile.get("ammo_tier_cap", 1))
 				)
 			for definition in LOOT_ECONOMY.roll_container(
