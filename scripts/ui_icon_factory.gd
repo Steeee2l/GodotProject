@@ -164,8 +164,34 @@ static func get_icon(icon_name: String, size := 64, color := Color("#d9e3dc")) -
 			_rect(image, Rect2i(_p(10, 22, scale), _p(44, 31, scale)), color)
 			_rect(image, Rect2i(_p(15, 13, scale), _p(34, 12, scale)), color.lightened(0.12))
 			_rect(image, Rect2i(_p(28, 28, scale), _p(8, 13, scale)), color.darkened(0.35))
-		"health":
-			_polygon_fill(image, [_v(32, 55, scale), _v(11, 35, scale), _v(11, 20, scale), _v(20, 11, scale), _v(32, 20, scale), _v(44, 11, scale), _v(53, 20, scale), _v(53, 35, scale)], color)
+		"settings":
+			# 톱니바퀴 — 원 둘레에 이빨 8개 + 중앙 구멍.
+			_circle_outline(image, _v(32, 32, scale), 15.0 * scale, color, 7.0 * scale)
+			for tooth_index in 8:
+				var tooth_angle := TAU * float(tooth_index) / 8.0
+				_rect(image, Rect2i(
+					_p(
+						32.0 + cos(tooth_angle) * 22.0 - 4.0,
+						32.0 + sin(tooth_angle) * 22.0 - 4.0,
+						scale
+					),
+					_p(8, 8, scale)
+				), color)
+		"lore":
+			# 문서 — 접힌 귀퉁이가 있는 종이 + 글줄 3개.
+			_polygon_fill(image, [
+				_v(16, 8, scale), _v(40, 8, scale), _v(48, 16, scale),
+				_v(48, 56, scale), _v(16, 56, scale),
+			], color)
+			_polygon_fill(image, [_v(40, 8, scale), _v(48, 16, scale), _v(40, 16, scale)], color.darkened(0.3))
+			for line_index in 3:
+				_line(
+					image,
+					_v(21, 24 + line_index * 9, scale),
+					_v(43, 24 + line_index * 9, scale),
+					color.darkened(0.35),
+					2.5 * scale
+				)
 		"stamina":
 			_polygon_fill(image, [_v(36, 6, scale), _v(14, 35, scale), _v(29, 35, scale), _v(25, 58, scale), _v(51, 27, scale), _v(36, 27, scale)], color)
 		"speed":

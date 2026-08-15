@@ -2835,6 +2835,13 @@ func _apply_hud_layout() -> void:
 		hud.equipment_panel.offset_top = hud.equipment_panel.offset_bottom - eq_height
 		hud.equipment_panel.visible = not hud_blocked
 
+	if hud.toast_stack:
+		hud.toast_stack.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		var toast_w := minf(viewport_size.x * 0.9, 500.0)
+		hud.toast_stack.offset_left = -toast_w * 0.5
+		hud.toast_stack.offset_right = toast_w * 0.5
+		hud.toast_stack.offset_bottom = -maxf(330.0, viewport_size.y * 0.34)
+		hud.toast_stack.offset_top = hud.toast_stack.offset_bottom - 250.0
 	if hud.ammo_notice:
 		hud.ammo_notice.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 		var notice_w := minf(viewport_size.x * 0.62, 500.0)
@@ -3314,10 +3321,7 @@ func _weapon_jammed() -> bool:
 	if weapon_random.randf() >= jam_chance:
 		return false
 	fire_cooldown = 0.7
-	if hud.ammo_notice:
-		hud.ammo_notice.text = "급탄 불량 · 내구도 %.1f%%" % weapon_durability
-		hud.ammo_notice.visible = true
-		ammo_notice_time = 1.2
+	hud.push_toast("급탄 불량 · 내구도 %.1f%%" % weapon_durability, HudStyle.WARN, 1.4)
 	return true
 
 
@@ -3349,10 +3353,7 @@ func _get_current_facing_world_direction() -> Vector3:
 
 func _show_no_ammo_notice() -> void:
 	fire_cooldown = maxf(fire_cooldown, 0.35)
-	if hud.ammo_notice:
-		hud.ammo_notice.text = "탄약 없음\n예비탄을 확보해야 합니다."
-		hud.ammo_notice.visible = true
-		ammo_notice_time = 1.1
+	hud.push_toast("탄약 없음 · 예비탄을 확보해야 한다", HudStyle.DANGER, 1.4)
 	_update_equipment_ui()
 
 
@@ -3481,10 +3482,7 @@ func _use_quick_medkit() -> void:
 
 
 func _show_action_notice(message: String) -> void:
-	if hud.ammo_notice:
-		hud.ammo_notice.text = message
-		hud.ammo_notice.visible = true
-		ammo_notice_time = 1.25
+	hud.push_toast(message, HudStyle.GREEN, 1.4)
 
 
 func _get_stored_weapon_count() -> int:
@@ -4040,8 +4038,11 @@ func take_damage(amount: int) -> void:
 		health_bar.value = player_health
 	_refresh_top_status_label()
 	if hud.ammo_notice:
-		hud.ammo_notice.text = "피격  -%d   체력 %d/%d" % [applied_damage, player_health, GameState.get_max_health()]
-		hud.ammo_notice.visible = true
+		hud.push_toast(
+			"피격  -%d   체력 %d/%d" % [applied_damage, player_health, GameState.get_max_health()],
+			HudStyle.DANGER,
+			1.1
+		)
 		ammo_notice_time = 1.1
 	if player_health <= 0:
 		fire_button_held = false
@@ -4075,10 +4076,7 @@ func take_hostile_hit(amount: int, hit_direction: Vector3, attacker = null) -> v
 		last_damage_weapon_name = str(identity.get("weapon_name", last_damage_weapon_name))
 	take_hit(amount, hit_direction)
 	if last_damage_blocked > 0 and player_health > 0 and hud.ammo_notice:
-		hud.ammo_notice.text = "방어구가 피해 %d을 막았습니다" % last_damage_blocked
-		hud.ammo_notice.add_theme_color_override("font_color", Color("#8ed9ff"))
-		hud.ammo_notice.visible = true
-		ammo_notice_time = 1.0
+		hud.push_toast("방어구가 피해 %d을 막았다" % last_damage_blocked, Color("#8ed9ff"), 1.1)
 
 
 func _show_damage_direction(hit_direction: Vector3) -> void:
@@ -6592,27 +6590,11 @@ func _add_rescued_follower(world_position: Vector3) -> void:
 
 
 func _show_field_notice(message: String) -> void:
-	if not hud.ammo_notice:
-		return
-	if message == last_field_notice and ammo_notice_time > 0.0:
-		repeated_field_notice_count += 1
-	else:
-		last_field_notice = message
-		repeated_field_notice_count = 1
-	hud.ammo_notice.text = (
-		message
-		if repeated_field_notice_count <= 1
-		else "%s  ×%d" % [message, repeated_field_notice_count]
-	)
-	# 툭 나타나지 않게 짧게 떠오르고, 여러 줄 레슨은 읽을 시간을 더 준다.
-	if not hud.ammo_notice.visible:
-		hud.ammo_notice.visible = true
-		hud.ammo_notice.modulate.a = 0.0
-		var notice_tween := create_tween()
-		notice_tween.tween_property(hud.ammo_notice, "modulate:a", 1.0, 0.14)
+	# 토스트 스택으로 위임 — 중복 ×N 합치기·등퇴장 모션·개별 수명은 스택이 안다.
+	# 여러 줄 레슨은 읽을 시간을 더 준다.
 	var notice_lines := message.count("
 ") + 1
-	ammo_notice_time = 2.0 + 0.9 * float(notice_lines)
+	hud.push_toast(message, HudStyle.GOLD, 2.0 + 0.9 * float(notice_lines))
 
 
 func _update_fatigue(delta: float, is_moving: bool) -> void:
@@ -6830,6 +6812,31 @@ func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
 		return true
 	if _mobile_button_contains(mobile_medkit_button, touch.position):
 		_use_quick_medkit()
+		return true
+	# 중앙 하단 프롬프트 카드들 — 왼쪽 절반이 조이스틱 시작 판정(x<55%)에
+	# 먹혀 "길게 눌러 진행"이라 써 있는데 안 눌리던 문제. 라우터에서 선처리.
+	if (
+		hud.field_interaction_panel != null
+		and hud.field_interaction_panel.visible
+		and hud.field_interaction_panel.get_global_rect().has_point(touch.position)
+	):
+		context_touch_id = touch.index
+		_on_mobile_context_button_down()
+		return true
+	if (
+		hud.pickup_panel != null
+		and hud.pickup_panel.visible
+		and hud.pickup_panel.get_global_rect().has_point(touch.position)
+	):
+		context_touch_id = touch.index
+		_on_mobile_context_button_down()
+		return true
+	if (
+		hud.ammo_prompt_panel != null
+		and hud.ammo_prompt_panel.visible
+		and hud.ammo_prompt_panel.get_global_rect().has_point(touch.position)
+	):
+		loot_system._collect_nearby_ammo()
 		return true
 	return false
 

@@ -206,18 +206,16 @@ func _install_scent_system() -> void:
 	host.objective_scent_guidance.call("setup", host.scent_system, player, host.get_node("World"))
 	host.scent_system.connect("focus_changed", func(active: bool) -> void:
 		host.scent_focus_active = active
-		if host.hud.ammo_notice == null:
-			return
 		# 자동 후각은 정지할 때마다 발동한다 — 학습용 안내는 판당 3회면 충분하고,
 		# 그 뒤로는 조용히 흔적만 떠오른다.
 		var hint_count := int(host.get_meta("scent_hint_count", 0))
 		if active and hint_count < 3:
 			host.set_meta("scent_hint_count", hint_count + 1)
-			host.hud.ammo_notice.text = "킁킁 — 붉은 냄새는 적이 지나간 길, 진할수록 방금이다 · 초록=생존자"
-			host.hud.ammo_notice.visible = true
-			host.ammo_notice_time = 0.35
-		elif not active and hint_count <= 3:
-			host.hud.ammo_notice.visible = false
+			host.hud.push_toast(
+				"킁킁 — 붉은 냄새는 적이 지나간 길, 진할수록 방금이다 · 초록=생존자",
+				HudStyle.GREEN,
+				3.4
+			)
 	)
 
 
@@ -389,7 +387,7 @@ func _setup_stealth_takedown_prompt(font: Font) -> void:
 	stealth_takedown_input_icon.visible = not DisplayServer.is_touchscreen_available()
 	input_center.add_child(stealth_takedown_input_icon)
 	stealth_takedown_key_label = Label.new()
-	stealth_takedown_key_label.text = "탭"
+	stealth_takedown_key_label.text = "발사 버튼"
 	stealth_takedown_key_label.visible = DisplayServer.is_touchscreen_available()
 	stealth_takedown_key_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	stealth_takedown_key_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER

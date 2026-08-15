@@ -216,12 +216,14 @@ func _reload_ak47() -> void:
 	host.reload_timer = float(host.weapon_stats.get("reload_time", 2.15))
 	host.fire_cooldown = host.reload_timer
 	host._add_fatigue(FATIGUE_RELOAD_GAIN)
-	host.hud.ammo_notice.text = "%s 재장전 중 · %.1f초\n장전 중 이동·사격 제한" % [
-		str(host.weapon_stats.get("display_name", "무기")),
-		host.reload_timer,
-	]
-	host.hud.ammo_notice.visible = true
-	host.ammo_notice_time = host.reload_timer
+	host.hud.push_toast(
+		"%s 재장전 · %.1f초" % [
+			str(host.weapon_stats.get("display_name", "무기")).split("\"")[0].strip_edges(),
+			host.reload_timer,
+		],
+		HudStyle.WARN,
+		host.reload_timer
+	)
 	host._update_equipment_ui()
 
 

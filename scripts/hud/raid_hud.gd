@@ -64,6 +64,7 @@ var laser_endpoint: MeshInstance3D
 var aim_canvas: CanvasLayer
 var aim_reticle: Control
 var ammo_notice: Label
+var toast_stack: VBoxContainer
 var ammo_pickup_button: Button
 var ammo_prompt_panel: PanelContainer
 var dash_button: Button
@@ -125,7 +126,7 @@ func build(owner_node: Node) -> void:
 	# 전투 중에 누르는 버튼이다. 권장 최소 터치 타겟(48px) 아래로 내려가면
 	# 놓치는 순간이 그대로 피해로 이어진다.
 	pickup_button.custom_minimum_size = Vector2(330, 48)
-	pickup_button.text = "AK-47  길게 눌러 줍기  [F]"
+	pickup_button.text = "AK-47  길게 눌러 줍기" if DisplayServer.is_touchscreen_available() else "AK-47  길게 눌러 줍기  [F]"
 	pickup_button.icon = AK_DROP_TEXTURE
 	pickup_button.expand_icon = true
 	pickup_button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -152,7 +153,7 @@ func build(owner_node: Node) -> void:
 	host.get_node("HUD").add_child(ammo_prompt_panel)
 	ammo_pickup_button = Button.new()
 	ammo_pickup_button.custom_minimum_size = Vector2(330, 48)
-	ammo_pickup_button.text = "7.62mm 탄약 획득  [F]"
+	ammo_pickup_button.text = "7.62mm 탄약 획득" if DisplayServer.is_touchscreen_available() else "7.62mm 탄약 획득  [F]"
 	ammo_pickup_button.icon = AMMO_762_TEXTURE
 	ammo_pickup_button.expand_icon = true
 	ammo_pickup_button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -505,6 +506,7 @@ func build(owner_node: Node) -> void:
 	ammo_notice.add_theme_constant_override("outline_size", 5)
 	ammo_notice.visible = false
 	host.get_node("HUD").add_child(ammo_notice)
+	_build_toast_stack()
 
 	inventory_ui = INVENTORY_UI_SCRIPT.new()
 	inventory_ui.name = "InventoryUI"
@@ -521,6 +523,100 @@ func build(owner_node: Node) -> void:
 	inventory_ui.connect("equipment_changed", Callable(host, "_on_inventory_equipment_changed"))
 	inventory_ui.connect("item_discard_requested", Callable(host, "_on_inventory_item_discard_requested"))
 	host._update_equipment_ui()
+
+
+# ── 토스트 스택 ─────────────────────────────────────────────────
+# 획득·장착·안내 알림의 단일 창구. 슬롯 하나(ammo_notice)를 모두가 나눠 쓰며
+# 서로 덮어쓰던 문제를 끝낸다: 최대 3장이 스택으로 쌓이고, 각자 수명을 갖고,
+# 같은 메시지는 ×N으로 합쳐진다. 등장·퇴장 전부 HudStyle 모션 문법을 탄다 —
+# 툭 나타나는 알림은 없다.
+const TOAST_LIMIT := 3
+
+
+func _build_toast_stack() -> void:
+	toast_stack = VBoxContainer.new()
+	toast_stack.name = "ToastStack"
+	toast_stack.alignment = BoxContainer.ALIGNMENT_END
+	toast_stack.add_theme_constant_override("separation", 6)
+	toast_stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	toast_stack.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	toast_stack.offset_left = -240
+	toast_stack.offset_right = 240
+	toast_stack.offset_top = -560
+	toast_stack.offset_bottom = -300
+	host.get_node("HUD").add_child(toast_stack)
+
+
+func push_toast(message: String, accent: Color = HudStyle.GOLD, duration: float = 2.2) -> void:
+	if toast_stack == null or message.is_empty():
+		return
+	# 같은 메시지 연타는 마지막 장에 ×N으로 합치고 수명을 새로 준다.
+	if toast_stack.get_child_count() > 0:
+		var last := toast_stack.get_child(toast_stack.get_child_count() - 1) as PanelContainer
+		if is_instance_valid(last) and str(last.get_meta("base_text", "")) == message:
+			var repeat := int(last.get_meta("repeat_count", 1)) + 1
+			last.set_meta("repeat_count", repeat)
+			var last_label := last.get_meta("label") as Label
+			if is_instance_valid(last_label):
+				last_label.text = "%s   ×%d" % [message, repeat]
+			var old_life = last.get_meta("life_tween")
+			if old_life is Tween and (old_life as Tween).is_valid():
+				(old_life as Tween).kill()
+			_start_toast_life(last, duration)
+			return
+	var toast := PanelContainer.new()
+	toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	toast.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var style := HudStyle.panel(
+		Color(HudStyle.INK.r, HudStyle.INK.g, HudStyle.INK.b, 0.94),
+		Color(accent, 0.62),
+		HudStyle.RADIUS_CARD
+	)
+	style.content_margin_left = 14.0
+	style.content_margin_right = 14.0
+	style.content_margin_top = 7.0
+	style.content_margin_bottom = 8.0
+	toast.add_theme_stylebox_override("panel", style)
+	var label := Label.new()
+	label.text = message
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_override("font", HudStyle.FONT)
+	label.add_theme_font_size_override("font_size", HudStyle.TYPE_BODY)
+	label.add_theme_color_override("font_color", accent.lerp(HudStyle.TEXT, 0.45))
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if message.length() > 34:
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.custom_minimum_size.x = 430.0
+	toast.add_child(label)
+	toast.set_meta("base_text", message)
+	toast.set_meta("repeat_count", 1)
+	toast.set_meta("label", label)
+	toast_stack.add_child(toast)
+	# 넘치면 가장 오래된 장부터 빠르게 물러난다.
+	while toast_stack.get_child_count() > TOAST_LIMIT:
+		var oldest := toast_stack.get_child(0) as Control
+		if is_instance_valid(oldest):
+			toast_stack.remove_child(oldest)
+			oldest.queue_free()
+	# 등장: 페이드 + 미세 스케일 (스택 안이라 position 트윈 대신 scale).
+	toast.call_deferred("set_pivot_offset", Vector2(240.0, 16.0))
+	toast.modulate.a = 0.0
+	toast.scale = Vector2(0.96, 0.96)
+	var enter_tween := toast.create_tween()
+	enter_tween.set_parallel(true)
+	enter_tween.tween_property(toast, "modulate:a", 1.0, 0.16).set_trans(Tween.TRANS_SINE)
+	enter_tween.tween_property(toast, "scale", Vector2.ONE, 0.18)\
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_start_toast_life(toast, duration)
+
+
+func _start_toast_life(toast: PanelContainer, duration: float) -> void:
+	var life := toast.create_tween()
+	toast.set_meta("life_tween", life)
+	life.tween_interval(maxf(0.6, duration))
+	life.tween_property(toast, "modulate:a", 0.0, 0.22).set_trans(Tween.TRANS_SINE)
+	life.parallel().tween_property(toast, "scale", Vector2(0.97, 0.97), 0.22)
+	life.tween_callback(toast.queue_free)
 
 
 func build_raid_opportunity_hud() -> void:

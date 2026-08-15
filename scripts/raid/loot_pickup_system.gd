@@ -303,21 +303,28 @@ func _collect_nearby_ammo() -> void:
 		int(candidate.get("amount", 1))
 	):
 		_show_bag_full_notice()
+		_open_loot_swap()
 		return
-	host.hud.ammo_notice.add_theme_color_override("font_color", Color("#f2d27a"))
 	host._add_fatigue(FATIGUE_LOOT_GAIN)
 	var loot_type := str(host.nearby_ammo_pickup.get_meta("loot_type", "ammo"))
 	var amount := int(host.nearby_ammo_pickup.get_meta("amount", 1))
+	# 획득 알림은 전부 토스트 스택으로 — 자동 장착(금색·길게)이 탄약 줍기에
+	# 덮여 사라지던 문제를 스택이 해결한다.
+	var toast_text := ""
+	var toast_accent := HudStyle.GOLD
+	var toast_seconds := 2.2
 	match loot_type:
 		"canned_food":
 			GameState.canned_food += amount
-			host.hud.ammo_notice.text = "통조림 +%d   보유 %d" % [amount, GameState.canned_food]
+			toast_text = "통조림 +%d   보유 %d" % [amount, GameState.canned_food]
+			toast_accent = HudStyle.GREEN
 		"churu":
 			GameState.churu += amount
-			host.hud.ammo_notice.text = "희귀 츄르 +%d   보유 %d" % [amount, GameState.churu]
+			toast_text = "희귀 츄르 +%d   보유 %d" % [amount, GameState.churu]
 		"medkit":
 			GameState.medkits += amount
-			host.hud.ammo_notice.text = "구급약 +%d   보유 %d" % [amount, GameState.medkits]
+			toast_text = "구급약 +%d   보유 %d" % [amount, GameState.medkits]
+			toast_accent = HudStyle.GREEN
 		"mod_component":
 			var component_id := str(host.nearby_ammo_pickup.get_meta("component_id", "rubber_gasket"))
 			GameState.add_mod_component(component_id, amount)
@@ -330,7 +337,7 @@ func _collect_nearby_ammo() -> void:
 				if GameState.workbench_lesson_seen or GameState.get_mod_component_count(component_id) > amount
 				else "   → 쉘터 제작대에서 개조에 쓴다"
 			)
-			host.hud.ammo_notice.text = "%s +%d   보유 %d%s" % [
+			toast_text = "%s +%d   보유 %d%s" % [
 				str(host.nearby_ammo_pickup.get_meta("display_name", "총기 부품")),
 				amount,
 				GameState.get_mod_component_count(component_id),
@@ -339,7 +346,7 @@ func _collect_nearby_ammo() -> void:
 		"weapon_mod":
 			var weapon_mod_id := str(host.nearby_ammo_pickup.get_meta("weapon_mod_id", "scope_2x"))
 			GameState.add_weapon_mod(weapon_mod_id, amount)
-			host.hud.ammo_notice.text = "%s +%d" % [
+			toast_text = "%s +%d" % [
 				_raid_item_display_name("mod", weapon_mod_id),
 				amount,
 			]
@@ -348,22 +355,24 @@ func _collect_nearby_ammo() -> void:
 				host.nearby_ammo_pickup.get_meta("progression_item_id", "rifle_blueprint")
 			)
 			GameState.add_progression_item(progression_item_id, amount)
-			host.hud.ammo_notice.text = "%s 획득" % str(
+			toast_text = "%s 획득" % str(
 				host.nearby_ammo_pickup.get_meta("display_name", "진행도 아이템")
 			)
+			toast_seconds = 3.2
 		"weapon":
 			var weapon_id := str(host.nearby_ammo_pickup.get_meta("weapon_id", "ak47"))
 			GameState.add_weapon(weapon_id, amount)
-			host.hud.ammo_notice.text = "%s 보관 +%d" % [
+			toast_text = "%s 보관 +%d" % [
 				str(host.nearby_ammo_pickup.get_meta("display_name", "무기")),
 				amount,
 			]
 		"armor":
 			var equipment_id := str(host.nearby_ammo_pickup.get_meta("equipment_id", "scav_vest"))
 			if GameState.add_equipment(equipment_id, amount):
-				host.hud.ammo_notice.text = _armor_pickup_notice(equipment_id)
+				toast_text = _armor_pickup_notice(equipment_id)
+				toast_seconds = 3.0
 			else:
-				host.hud.ammo_notice.text = "장비 정보를 확인할 수 없습니다."
+				toast_text = "장비 정보를 확인할 수 없습니다."
 		_:
 			var pickup_ammo_id := str(host.nearby_ammo_pickup.get_meta("ammo_id", "762_fmj"))
 			var updated_ammo_count: int = GameState.get_ammo_count(pickup_ammo_id) + amount
@@ -375,13 +384,12 @@ func _collect_nearby_ammo() -> void:
 				ammo_pickup_chain_total = 0
 			ammo_pickup_chain_total += amount
 			ammo_pickup_chain_time = 2.4
-			host.hud.ammo_notice.text = "+%d %s   보유 %d" % [
+			toast_text = "+%d %s   보유 %d" % [
 				amount,
 				str(host.nearby_ammo_pickup.get_meta("display_name", "탄약")),
 				updated_ammo_count,
 			]
-	host.hud.ammo_notice.visible = true
-	host.ammo_notice_time = 2.2
+	host.hud.push_toast(toast_text, toast_accent, toast_seconds)
 	host._update_equipment_ui()
 	host._update_medkit_button()
 	ammo_pickups.erase(host.nearby_ammo_pickup)
@@ -409,11 +417,7 @@ func _armor_pickup_notice(equipment_id: String) -> String:
 
 
 func _show_bag_full_notice() -> void:
-	if host.hud.ammo_notice:
-		host.hud.ammo_notice.text = "가방이 꽉 찼습니다."
-		host.hud.ammo_notice.add_theme_color_override("font_color", Color("#ffad8f"))
-		host.hud.ammo_notice.visible = true
-		host.ammo_notice_time = 2.0
+	host.hud.push_toast("가방이 꽉 찼습니다", HudStyle.WARN, 2.2)
 	# 처음 가방이 찬 순간이 이 게임의 핵심을 가르칠 유일한 자리다.
 	# 조작이 아니라 "무엇을 버릴 것인가"를 가르쳐야 한다.
 	if not GameState.bag_pressure_lesson_seen:
@@ -426,6 +430,98 @@ func _show_bag_full_notice() -> void:
 			+ "살아서 나가야 내 것이 된다."
 		)
 	host._update_equipment_ui()
+
+
+# ── 전리품 교체 UI ──────────────────────────────────────────────
+# 완성된 채 배선이 빠져 한 번도 뜬 적 없던 LootSwapUI를 연결한다.
+# 가방이 차면 토스트 한 줄 대신 "무엇을 버리고 무엇을 실을까"를 가치와
+# 칸 수로 비교하는 교체 화면이 뜬다 — 이 게임 핵심 결정의 전용 UI.
+var loot_swap: LootSwapUI
+
+
+func _ensure_loot_swap_ui() -> void:
+	if loot_swap != null and is_instance_valid(loot_swap):
+		return
+	loot_swap = LootSwapUI.new()
+	loot_swap.name = "LootSwapUI"
+	host.get_node("HUD").add_child(loot_swap)
+	loot_swap.setup(HudStyle.FONT)
+	loot_swap.visible = false
+	loot_swap.discard_requested.connect(_on_loot_swap_discard)
+	loot_swap.claim_requested.connect(_on_loot_swap_claim)
+
+
+func _open_loot_swap() -> void:
+	if not is_instance_valid(host.nearby_ammo_pickup):
+		return
+	_ensure_loot_swap_ui()
+	loot_swap.open(
+		_build_pickup_candidate(host.nearby_ammo_pickup),
+		_build_bag_swap_entries(),
+		GameState.get_raid_bag_used_slots(),
+		GameState.get_raid_bag_capacity()
+	)
+
+
+func _build_bag_swap_entries() -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	for raw_value in GameState.get_raid_bag_entries():
+		var raw := raw_value as Dictionary
+		var item_type := str(raw.get("type", ""))
+		var item_id := str(raw.get("id", ""))
+		var count := int(raw.get("count", 0))
+		var drop_amount := int(raw.get("drop_amount", 1))
+		var slot_cost := GameState.get_raid_item_slot_cost(item_type, item_id, count)
+		var total_value := RAID_ITEM_ECONOMY.get_total_value(
+			item_type, item_id, count, GameState.raid_special_cargo
+		)
+		var drop_value := RAID_ITEM_ECONOMY.get_total_value(
+			item_type, item_id, drop_amount, GameState.raid_special_cargo
+		)
+		entries.append({
+			"type": item_type,
+			"id": item_id,
+			"count": count,
+			"drop_amount": drop_amount,
+			"drop_value": drop_value,
+			"slot_cost": slot_cost,
+			"total_value": total_value,
+			"value_per_slot": float(total_value) / float(maxi(1, slot_cost)),
+			"title": _raid_item_display_name(item_type, item_id),
+			"description": _raid_item_description(item_type, item_id),
+			"texture": _raid_item_texture(item_type, item_id),
+			"protected": RAID_ITEM_ECONOMY.is_protected(item_type, item_id),
+		})
+	return entries
+
+
+func _on_loot_swap_discard(entry: Dictionary) -> void:
+	var item_type := str(entry.get("type", ""))
+	var item_id := str(entry.get("id", ""))
+	var amount := int(entry.get("drop_amount", 1))
+	var removed := GameState.remove_raid_bag_item(item_type, item_id, amount)
+	if removed <= 0:
+		loot_swap.show_feedback("버릴 수 없는 물품입니다.")
+		return
+	_spawn_discarded_raid_item(item_type, item_id, removed)
+	host._update_equipment_ui()
+	loot_swap.show_feedback("%s x%d을 내려놓았다" % [str(entry.get("title", "휴대품")), removed])
+	# 최신 상태로 다시 그린다 — 자리가 났으면 '바로 획득'이 살아난다.
+	if is_instance_valid(host.nearby_ammo_pickup):
+		loot_swap.open(
+			_build_pickup_candidate(host.nearby_ammo_pickup),
+			_build_bag_swap_entries(),
+			GameState.get_raid_bag_used_slots(),
+			GameState.get_raid_bag_capacity()
+		)
+	else:
+		loot_swap.close()
+
+
+func _on_loot_swap_claim() -> void:
+	loot_swap.close()
+	if is_instance_valid(host.nearby_ammo_pickup):
+		_collect_nearby_ammo()
 
 
 func _build_pickup_candidate(pickup: Node3D) -> Dictionary:

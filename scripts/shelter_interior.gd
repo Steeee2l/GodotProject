@@ -1345,6 +1345,13 @@ func _ui_blocks_player() -> bool:
 	)
 
 
+func _interaction_prompt_text(action: String) -> String:
+	# 터치 기기에는 F키가 없다 — 있지도 않은 키를 안내하지 않는다.
+	if DisplayServer.is_touchscreen_available():
+		return action
+	return "[F]  %s" % action
+
+
 var shelter_weapon_card: PanelContainer
 var shelter_weapon_card_icon: TextureRect
 var shelter_weapon_card_label: Label
@@ -3021,19 +3028,19 @@ func _update_nearby_station() -> void:
 		prompt_label.text = ""
 	elif current_station == "module" and is_instance_valid(current_module):
 		# 기계가 사라진 지금 이 그룹에는 침대만 남아 있다.
-		prompt_label.text = "[F]  %s" % str(current_module.call("get_interaction_prompt"))
+		prompt_label.text = _interaction_prompt_text(str(current_module.call("get_interaction_prompt")))
 		interact_button.text = "휴식"
 		interact_button.icon = UI_ICONS.get_icon("recovery", 32, Color("#dce8e1"))
 	elif current_station == "resident_chat":
-		prompt_label.text = "[F]  주민과 잡담"
+		prompt_label.text = _interaction_prompt_text("주민과 잡담")
 		interact_button.text = "잡담"
 		interact_button.icon = UI_ICONS.get_icon("resident", 32, Color("#9fc9d8"))
 	elif current_station == "merchant_waiting":
-		prompt_label.text = "[F]  누군가와 대화"
+		prompt_label.text = _interaction_prompt_text("누군가와 대화")
 		interact_button.text = "대화"
 		interact_button.icon = UI_ICONS.get_icon("resident", 32, Color("#e4c874"))
 	elif current_station == "merchant_shop":
-		prompt_label.text = "[F]  행상인과 거래하기"
+		prompt_label.text = _interaction_prompt_text("행상인과 거래하기")
 		interact_button.text = "거래"
 		interact_button.icon = UI_ICONS.get_icon("backpack", 32, Color("#e4c874"))
 	elif current_station == "contract_agent":
@@ -3042,20 +3049,20 @@ func _update_nearby_station() -> void:
 			if is_instance_valid(contract_agent) and contract_agent.has_method("get_interaction_prompt")
 			else "사자에게 시설 계약 확인"
 		)
-		prompt_label.text = "[F]  %s" % contract_prompt
+		prompt_label.text = _interaction_prompt_text(contract_prompt)
 		interact_button.text = "대화"
 		interact_button.icon = UI_ICONS.get_icon("collect", 32, Color("#e4c874"))
 	elif current_station == "iron_trainer":
 		var iron_prompt := str(iron_trainer.call("get_interaction_prompt"))
-		prompt_label.text = "[F]  %s" % iron_prompt
+		prompt_label.text = _interaction_prompt_text(iron_prompt)
 		interact_button.text = "훈련"
 		interact_button.icon = UI_ICONS.get_icon("fitness", 32, Color("#e4c874"))
 	elif current_station == "juhong":
-		prompt_label.text = "[F]  주홍과 대화하기"
+		prompt_label.text = _interaction_prompt_text("주홍과 대화하기")
 		interact_button.text = "대화"
 		interact_button.icon = UI_ICONS.get_icon("lore", 32, Color("#dc7667"))
 	else:
-		prompt_label.text = "[F]  %s" % _pipe_exit_station()["label"]
+		prompt_label.text = _interaction_prompt_text(str(_pipe_exit_station()["label"]))
 		interact_button.text = "탐색"
 		interact_button.icon = UI_ICONS.get_icon("upgrade", 32, Color("#dce8e1"))
 

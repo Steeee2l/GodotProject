@@ -30,7 +30,8 @@ const MOD_COMPONENTS := {
 const BAG_FILTER_ORDER := ["all", "resource", "gear"]
 
 # 자원 = 쉘터로 가져가는 것, 장비 = 지금 이 출정에서 쓰는 것.
-const BAG_FILTER_RESOURCE_TYPES := ["resource", "progression", "special_cargo"]
+const BAG_FILTER_RESOURCE_TYPES := ["resource", "progression", "special_cargo", "valuable"]
+const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
 const BAG_FILTER_GEAR_TYPES := ["weapon", "equipment", "mod", "component", "ammo"]
 
 const BAG_FILTER_MIN_WIDTH := {
@@ -342,6 +343,9 @@ func _build_inventory_panel() -> Control:
 	secure_expand_button.custom_minimum_size = Vector2(86, 30)
 	secure_expand_button.pressed.connect(_on_secure_expand_pressed)
 	bag_header.add_child(secure_expand_button)
+
+	# 필터 바 — 완성된 채 배선이 빠져 한 번도 화면에 나온 적이 없던 UI.
+	box.add_child(_build_bag_filter_bar())
 
 	inventory_feedback = _label("", 11, Color("#f2d27a"))
 	inventory_feedback.visible = false
@@ -1086,6 +1090,26 @@ func _refresh_contents() -> void:
 				64,
 				Color("#e7c96f")
 			),
+		})
+
+	# 귀중품 — 가방 칸을 차지하면서 목록엔 안 보이던 유령 화물. "남은 0칸인데
+	# 타일 4개"의 정체가 이것이었다. 쉘터 창고에서 고철로 바뀌는 화물임을 명시.
+	var valuable_ids: Array = game_state.valuable_inventory.keys()
+	valuable_ids.sort()
+	for valuable_id_value in valuable_ids:
+		var valuable_id := str(valuable_id_value)
+		var valuable_count := int(game_state.valuable_inventory.get(valuable_id, 0))
+		if valuable_count <= 0:
+			continue
+		var valuable_catalog := LOOT_ECONOMY.ITEM_CATALOG.get(valuable_id, {}) as Dictionary
+		var unit_value := int(valuable_catalog.get("base_value", 0))
+		_add_bag_item({
+			"id": valuable_id,
+			"type": "valuable",
+			"title": str(valuable_catalog.get("display_name", valuable_id)),
+			"description": "귀중품 · 개당 가치 %d — 쉘터 창고에서 고철로 판다." % unit_value,
+			"quantity": valuable_count,
+			"texture": UI_ICONS.get_icon("loot", 64, Color("#e6c979")),
 		})
 
 	var mod_ids: Array = MOD_COMPONENTS.keys()

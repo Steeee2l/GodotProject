@@ -57,6 +57,7 @@ func open() -> void:
 	was_tree_paused = get_tree().paused
 	backdrop.visible = true
 	panel_center.visible = true
+	HudStyle.enter_modal(panel)
 	get_tree().paused = true
 	_apply_layout()
 

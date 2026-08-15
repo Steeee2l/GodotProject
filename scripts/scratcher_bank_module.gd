@@ -186,7 +186,13 @@ func _rebuild_ui() -> void:
 		var seat_id := assigned_ids[seat_index] if seat_index < assigned_ids.size() else ""
 		seat_row.add_child(_portrait_card(seat_id, true, slots))
 
-	body.add_child(_label("대기 주민 · 눌러서 좌석에 앉히기 (우클릭: 특성 재굴림)", 13, Color("#9eaa9f")))
+	body.add_child(_label(
+		"대기 주민 · 눌러서 좌석에 앉히기"
+		if DisplayServer.is_touchscreen_available()
+		else "대기 주민 · 눌러서 좌석에 앉히기 (우클릭: 특성 재굴림)",
+		13,
+		Color("#9eaa9f")
+	))
 	if GameState.resident_cat_ids.is_empty():
 		body.add_child(_empty_resident_state(
 			"구출한 주민이 없습니다.",

@@ -156,6 +156,7 @@ func show_entry(point: Node3D) -> void:
 		LORE_ENTRIES.size(),
 	]
 	ui_layer.visible = true
+	HudStyle.enter_modal(ui_panel)
 	opened.emit()
 
 

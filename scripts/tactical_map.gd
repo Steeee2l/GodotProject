@@ -198,6 +198,8 @@ func toggle() -> void:
 		close()
 		return
 	visible = true
+	# 전투 중 수시로 여닫는 전면 모달 — 툭 나타나지 않게 표준 등장 모션.
+	HudStyle.enter_modal(self)
 	opened_at_msec = Time.get_ticks_msec()
 	tree_was_paused_before_map = get_tree().paused
 	if not tree_was_paused_before_map:
@@ -258,7 +260,16 @@ func _gui_input(event: InputEvent) -> void:
 		should_clear = event.button_index == MOUSE_BUTTON_RIGHT
 	elif event is InputEventScreenTouch and event.pressed:
 		pointer_position = event.position
-		should_mark = true
+		# 터치엔 우클릭이 없다 — 기존 표식 근처를 다시 탭하면 삭제(토글).
+		if (
+			manual_marker_position != Vector3.INF
+			and _world_position_to_map_point(
+				manual_marker_position, last_map_rect, last_map_size
+			).distance_to(pointer_position) < 34.0
+		):
+			should_clear = true
+		else:
+			should_mark = true
 	if should_clear:
 		manual_marker_position = Vector3.INF
 		queue_redraw()
@@ -306,7 +317,12 @@ func _draw() -> void:
 	var panel_rect := Rect2((viewport_size - panel_size) * 0.5, panel_size)
 	draw_style_box(_panel_style(), panel_rect)
 	draw_string(UI_FONT, panel_rect.position + Vector2(28, 40), "현장 전술 지도", HORIZONTAL_ALIGNMENT_LEFT, -1, 25, Color("#e4e1d3"))
-	draw_string(UI_FONT, panel_rect.position + Vector2(28, 65), "이동한 구역만 기록 · 클릭/터치: 개인 표식 · 우클릭: 삭제 · 확인 중 전투 일시정지", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#aebbb4"))
+	var map_hint := (
+		"이동한 구역만 기록 · 탭: 개인 표식 · 표식 다시 탭: 삭제 · 확인 중 전투 일시정지"
+		if DisplayServer.is_touchscreen_available()
+		else "이동한 구역만 기록 · 클릭: 개인 표식 · 우클릭: 삭제 · 확인 중 전투 일시정지"
+	)
+	draw_string(UI_FONT, panel_rect.position + Vector2(28, 65), map_hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#aebbb4"))
 
 	var data: Dictionary = world.call("get_map_snapshot_data")
 	var grid_size := int(data.get("grid_size", 22))
