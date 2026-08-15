@@ -1892,7 +1892,11 @@ func _apply_responsive_layout() -> void:
 		var open_w := clampf(minf(118.0 * ui_scale, viewport_size.x * 0.11), 78.0, 118.0) if not touch else open_h
 		open_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 		open_button.offset_left = -safe.z - open_margin - open_w
-		open_button.offset_top = safe.y + open_margin + clampf(94.0 * ui_scale, 68.0, 106.0)
+		# 필드 우상단 구역 정보(TopRight, top_margin+88)를 절대 침범하지 않도록
+		# 같은 top_margin 수식 기준으로 그 아래 10px에 건다. 세로 720에서
+		# 기존 94*scale 수식이 정보 3줄째와 10px 겹치던 원인.
+		var layout_top_margin := maxf(safe.y, clampf(viewport_size.y * 0.018, 8.0, 26.0))
+		open_button.offset_top = layout_top_margin + 88.0 + 10.0
 		open_button.offset_right = -safe.z - open_margin
 		open_button.offset_bottom = open_button.offset_top + open_h
 		if not touch:

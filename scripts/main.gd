@@ -2523,7 +2523,8 @@ func _layout_mobile_utility_row() -> float:
 			)
 			var bag_margin := clampf(viewport_size.x * 0.02, 8.0, 18.0)
 			var bag_size := clampf(68.0 * bag_scale, 62.0, 76.0)
-			var bag_top := map_safe.y + bag_margin + clampf(94.0 * bag_scale, 68.0, 106.0)
+			# inventory_ui의 가방 top 수식과 동일 — TopRight(88) 아래 10px.
+			var bag_top := maxf(map_safe.y, clampf(viewport_size.y * 0.018, 8.0, 26.0)) + 88.0 + 10.0
 			mobile_map_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 			mobile_map_button.offset_right = -map_safe.z - bag_margin
 			mobile_map_button.offset_left = -map_safe.z - bag_margin - bag_size
