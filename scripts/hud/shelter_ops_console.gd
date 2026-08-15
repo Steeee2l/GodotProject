@@ -18,6 +18,7 @@ const FACILITIES := [
 var host: Node
 var dock: VBoxContainer
 var header_label: Label
+var buttons_box: BoxContainer
 var facility_buttons: Dictionary = {}
 
 
@@ -39,6 +40,13 @@ func build_dock(hud_layer: CanvasLayer) -> void:
 	header_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	header.add_child(header_label)
 
+	# 버튼 줄은 방향에 따라 세로 레일(가로 화면) ↔ 가로 탭바(세로 화면)로 변신.
+	buttons_box = BoxContainer.new()
+	buttons_box.name = "OpsButtons"
+	buttons_box.vertical = true
+	buttons_box.add_theme_constant_override("separation", 5)
+	dock.add_child(buttons_box)
+
 	for entry in FACILITIES:
 		var facility_id := str(entry["id"])
 		var button := Button.new()
@@ -56,7 +64,7 @@ func build_dock(hud_layer: CanvasLayer) -> void:
 		HudStyle.style_button(button, entry["accent"] as Color)
 		if not DisplayServer.is_touchscreen_available():
 			button.pressed.connect(open_facility.bind(facility_id))
-		dock.add_child(button)
+		buttons_box.add_child(button)
 		facility_buttons[facility_id] = button
 	refresh()
 
@@ -64,11 +72,42 @@ func build_dock(hud_layer: CanvasLayer) -> void:
 func apply_layout(safe: Vector4) -> void:
 	if dock == null:
 		return
-	# 가방 버튼(우상단) 아래에 세로 레일로 붙는다. 시야 중앙은 비워 둔다.
-	dock.offset_right = -14.0 - safe.z
-	dock.offset_left = dock.offset_right - 128.0
-	dock.offset_top = 176.0 + safe.y
-	dock.offset_bottom = dock.offset_top + 320.0
+	var viewport_size: Vector2 = host.get_viewport().get_visible_rect().size
+	var portrait := viewport_size.y > viewport_size.x
+	if portrait and DisplayServer.is_touchscreen_available():
+		# 세로 모바일: 우상단 세로 레일은 엄지가 못 닿는다 — 하단 컨트롤 바로
+		# 위의 가로 탭바로 내려온다. 관리의 주 진입점은 손이 닿는 곳에 있어야 한다.
+		buttons_box.vertical = false
+		buttons_box.add_theme_constant_override("separation", 6)
+		for facility_id in facility_buttons:
+			var button := facility_buttons[facility_id] as Button
+			button.custom_minimum_size = Vector2(0, 84)
+			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+			button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+			button.add_theme_constant_override("icon_max_width", 28)
+		dock.set_anchors_preset(Control.PRESET_BOTTOM_WIDE, true)
+		dock.offset_left = 10.0 + safe.x
+		dock.offset_right = -10.0 - safe.z
+		# 하단 조이스틱·상호작용 버튼 줄(약 210px) 위에 얹는다.
+		dock.offset_bottom = -218.0 - safe.w
+		dock.offset_top = dock.offset_bottom - 118.0
+	else:
+		buttons_box.vertical = true
+		buttons_box.add_theme_constant_override("separation", 5)
+		for facility_id in facility_buttons:
+			var button := facility_buttons[facility_id] as Button
+			button.custom_minimum_size = Vector2(128, 52)
+			button.size_flags_horizontal = Control.SIZE_FILL
+			button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
+			button.add_theme_constant_override("icon_max_width", 24)
+		# 가방 버튼(우상단) 아래에 세로 레일로 붙는다. 시야 중앙은 비워 둔다.
+		dock.set_anchors_preset(Control.PRESET_TOP_RIGHT, true)
+		dock.offset_right = -14.0 - safe.z
+		dock.offset_left = dock.offset_right - 128.0
+		dock.offset_top = 176.0 + safe.y
+		dock.offset_bottom = dock.offset_top + 350.0
 
 
 func refresh() -> void:

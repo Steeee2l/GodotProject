@@ -1848,7 +1848,7 @@ func _apply_responsive_layout() -> void:
 		var open_margin := clampf(viewport_size.x * 0.02, 8.0, 18.0)
 		var touch := DisplayServer.is_touchscreen_available()
 		# 모바일은 원형이라 정사각으로 잡는다.
-		var open_h := clampf(minf(46.0 * ui_scale, viewport_size.y * 0.08), 32.0, 48.0) if not touch else clampf(60.0 * ui_scale, 52.0, 68.0)
+		var open_h := clampf(minf(46.0 * ui_scale, viewport_size.y * 0.08), 32.0, 48.0) if not touch else clampf(68.0 * ui_scale, 62.0, 76.0)
 		var open_w := clampf(minf(118.0 * ui_scale, viewport_size.x * 0.11), 78.0, 118.0) if not touch else open_h
 		open_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 		open_button.offset_left = -safe.z - open_margin - open_w

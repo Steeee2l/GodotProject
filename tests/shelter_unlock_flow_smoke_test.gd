@@ -53,8 +53,10 @@ func _run() -> void:
 	# 운영 독: 시설 5종 버튼이 항상 떠 있고 잠금 상태를 보여준다.
 	var ops_dock := root.find_child("ShelterOpsDock", true, false) as VBoxContainer
 	assert(ops_dock != null)
-	assert(ops_dock.get_node_or_null("OpsButton_scratcher_bank") is Button)
-	assert((ops_dock.get_node("OpsButton_scratcher_bank") as Button).text.contains("잠김"))
+	# 버튼들은 방향 반응형 컨테이너(OpsButtons) 아래로 이사했다 — 경로 대신 탐색.
+	var ops_button := ops_dock.find_child("OpsButton_scratcher_bank", true, false) as Button
+	assert(ops_button is Button)
+	assert(ops_button.text.contains("잠김"))
 	first_shelter.queue_free()
 	await process_frame
 

@@ -2515,7 +2515,7 @@ func _layout_mobile_utility_row() -> float:
 				1.25
 			)
 			var bag_margin := clampf(viewport_size.x * 0.02, 8.0, 18.0)
-			var bag_size := clampf(60.0 * bag_scale, 52.0, 68.0)
+			var bag_size := clampf(68.0 * bag_scale, 62.0, 76.0)
 			var bag_top := map_safe.y + bag_margin + clampf(94.0 * bag_scale, 68.0, 106.0)
 			mobile_map_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 			mobile_map_button.offset_right = -map_safe.z - bag_margin
