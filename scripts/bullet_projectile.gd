@@ -281,11 +281,28 @@ func _apply_hit(body: Object, trajectory_origin: Vector3 = Vector3.INF) -> bool:
 			damaged = true
 	processed_body_ids[body_id] = true
 	_spawn_impact_flash()
+	if damaged and not hostile:
+		_report_player_hit(body)
 	if damaged and not hostile and penetrations_remaining > 0:
 		penetrations_remaining -= 1
 		return true
 	queue_free()
 	return false
+
+
+func _report_player_hit(body: Object) -> void:
+	# 히트마커: 내 탄이 무언가를 맞힌 순간을 HUD에 알린다. 처치면 X로 커진다.
+	var scene := get_tree().get_first_node_in_group("raid_host")
+	if scene == null:
+		scene = get_tree().current_scene
+	if scene == null or not scene.has_method("notify_player_projectile_hit"):
+		return
+	if body is Node3D:
+		scene.call(
+			"notify_player_projectile_hit",
+			(body as Node3D).global_position,
+			bool(body.get("dying"))
+		)
 
 
 func _shares_source_faction(body: Object) -> bool:

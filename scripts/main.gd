@@ -822,6 +822,7 @@ func _physics_process(delta: float) -> void:
 	stealth._update_stealth_takedown_prompt()
 	can_throw.update(delta)
 	_update_fire_button_context()
+	_update_combat_feedback_overlay()
 	if perception_system:
 		perception_system.call("set_aim_direction", _get_perception_aim_direction())
 		if perception_system.has_method("set_aim_expanded"):
@@ -3255,6 +3256,52 @@ func _on_fire_button_down() -> void:
 		_try_melee_attack()
 	if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
 		Input.vibrate_handheld(18)
+
+
+func notify_player_projectile_hit(world_position: Vector3, killed: bool) -> void:
+	# 히트마커 — 시야 안개로 적이 흐릿해도 "맞았다"는 확답을 준다.
+	if hud.combat_feedback == null or camera.is_position_behind(world_position):
+		return
+	hud.combat_feedback.add_hit_marker(
+		camera.unproject_position(world_position + Vector3(0, 0.45, 0)),
+		killed
+	)
+
+
+func _update_combat_feedback_overlay() -> void:
+	if hud.combat_feedback == null:
+		return
+	# ① 오토에임 타깃 브래킷 (터치 전용) — 발사 버튼이 지금 누굴 겨누는가.
+	var target = weapon_combat.mobile_assist_target
+	if (
+		DisplayServer.is_touchscreen_available()
+		and is_instance_valid(target)
+		and not bool(target.get("dying"))
+		and target.visible
+		and not camera.is_position_behind(target.global_position)
+	):
+		var center := camera.unproject_position(target.global_position + Vector3(0, 0.45, 0))
+		var top := camera.unproject_position(target.global_position + Vector3(0, 1.1, 0))
+		var half := clampf(center.distance_to(top) * 0.9, 18.0, 46.0)
+		hud.combat_feedback.set_bracket(center, half)
+	else:
+		hud.combat_feedback.clear_bracket()
+	# ③ 재장전 링 — 발사 버튼 테두리가 진행바다.
+	if (
+		weapon_reloading
+		and DisplayServer.is_touchscreen_available()
+		and hud.fire_button != null
+		and hud.fire_button.visible
+	):
+		var total := maxf(0.1, float(weapon_stats.get("reload_time", 2.15)))
+		var button_rect := hud.fire_button.get_global_rect()
+		hud.combat_feedback.set_reload(
+			1.0 - clampf(reload_timer / total, 0.0, 1.0),
+			button_rect.get_center(),
+			button_rect.size.x * 0.5 - 5.0
+		)
+	else:
+		hud.combat_feedback.clear_reload()
 
 
 func _update_fire_button_context() -> void:

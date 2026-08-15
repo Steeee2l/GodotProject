@@ -65,6 +65,7 @@ var aim_canvas: CanvasLayer
 var aim_reticle: Control
 var ammo_notice: Label
 var toast_stack: VBoxContainer
+var combat_feedback: CombatFeedbackOverlay
 var ammo_pickup_button: Button
 var ammo_prompt_panel: PanelContainer
 var dash_button: Button
@@ -507,6 +508,9 @@ func build(owner_node: Node) -> void:
 	ammo_notice.visible = false
 	host.get_node("HUD").add_child(ammo_notice)
 	_build_toast_stack()
+	combat_feedback = CombatFeedbackOverlay.new()
+	combat_feedback.name = "CombatFeedbackOverlay"
+	host.get_node("HUD").add_child(combat_feedback)
 
 	inventory_ui = INVENTORY_UI_SCRIPT.new()
 	inventory_ui.name = "InventoryUI"
