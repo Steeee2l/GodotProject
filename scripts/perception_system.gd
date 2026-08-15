@@ -1,14 +1,10 @@
 class_name PerceptionSystem
 extends CanvasLayer
 
-const MAX_OCCLUDERS := 24
-const FOV_HALF_ANGLE_DEGREES := 58.0
 const VISION_WORLD_RANGE := 11.5
 
 var player: CharacterBody3D
 var camera: Camera3D
-var fog_rect: ColorRect
-var fog_material: ShaderMaterial
 var aim_world_direction := Vector3(1, 0, 1).normalized()
 var vision_world_range := VISION_WORLD_RANGE
 var aim_expanded := false

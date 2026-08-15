@@ -12,7 +12,6 @@ const FIELD_INTERACTION_DISTANCE := 2.8
 const FIELD_MISSION_ACTIVE_RADIUS := 22.0
 const FIELD_MISSION_CATALOG := preload("res://scripts/field_mission_catalog.gd")
 const FIELD_MISSION_COUNT := 6
-const FIELD_MISSION_ENEMY_MAX_SITE_DISTANCE := 34.0
 const FIELD_MISSION_ENEMY_MIN_PLAYER_DISTANCE := 16.0
 const FIELD_MISSION_ENEMY_MIN_SITE_DISTANCE := 23.0
 const FIELD_MISSION_FAIL_RADIUS := 72.0
@@ -755,6 +754,9 @@ func _grant_field_mission_reward(reward: Dictionary) -> String:
 
 
 func _set_field_mission_site_state(site: Node3D, state: String) -> void:
+	# 시각만 바꾸고 meta를 안 써서 objective_scent_guidance의 status 분기
+	# (preparing/active 게이트)가 영원히 "waiting"만 보던 사문을 고친다.
+	site.set_meta("status", state)
 	var color := Color("#5eb9ad")
 	var label_text := str(site.get_meta("title", "현장 임무"))
 	match state:

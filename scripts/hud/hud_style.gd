@@ -36,8 +36,6 @@ const RADIUS_CHIP := 5
 const RADIUS_CARD := 7
 const RADIUS_MODAL := 10
 
-# ── 타이포 스케일 ──────────────────────────────────────────────
-const TYPE_TITLE := 24      # 모달 제목
 const TYPE_HEADING := 16    # 섹션 제목·주 행동
 const TYPE_BODY := 14       # 본문
 const TYPE_CAPTION := 12    # 보조 라벨

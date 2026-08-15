@@ -12,9 +12,6 @@ const CATNIP_SCRAPER_MODULE_SCRIPT := preload("res://scripts/catnip_scraper_modu
 const STORAGE_MODULE_SCRIPT := preload("res://scripts/shelter_storage_module.gd")
 const TRAINING_MODULE_SCRIPT := preload("res://scripts/shelter_training_module.gd")
 const SHELTER_OPS_CONSOLE_SCRIPT := preload("res://scripts/hud/shelter_ops_console.gd")
-const DORMITORY_RACK_TEXTURE := preload(
-	"res://assets/interiors/modules/dormitory_rack_v1.png"
-)
 const SHELTER_RESIDENT_SCRIPT := preload("res://scripts/shelter_resident_cat.gd")
 const SHELTER_MERCHANT_SCRIPT := preload("res://scripts/shelter_merchant.gd")
 const SHELTER_CONTRACT_TRAINER_SCRIPT := preload("res://scripts/shelter_contract_trainer.gd")

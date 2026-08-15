@@ -31,7 +31,6 @@ const PRESSURE_PER_SECOND := 0.62
 const PRESSURE_PER_KILL := 22.0
 const PRESSURE_PER_GUNSHOT := 2.2
 const PRESSURE_PER_SUPPRESSED_GUNSHOT := 0.55
-const PRESSURE_PER_LOOT_VALUE := 0.022
 const PRESSURE_PER_ALARM := 45.0
 # 웅크려 숨어 있으면 도시가 조금씩 잊는다. 잠입 플레이에 보상을 준다.
 # 감쇠가 수동 축적(0.62/s)보다 크면 긴장도는 순수 배수 상태가 되어

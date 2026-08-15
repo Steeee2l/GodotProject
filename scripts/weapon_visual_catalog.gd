@@ -35,15 +35,6 @@ const CATALOG := {
 	},
 }
 
-const FUTURE_CATALOG := {
-	"rifle_bullpup": "res://assets/weapons/catalog/rifle_bullpup.png",
-	"rifle_ar_platform": "res://assets/weapons/catalog/rifle_ar_platform.png",
-	"smg_uzi": "res://assets/weapons/catalog/smg_uzi.png",
-	"rifle_ak_grenadier": "res://assets/weapons/catalog/rifle_ak_grenadier.png",
-	"smg_compact": "res://assets/weapons/catalog/smg_compact.png",
-	"rifle_coil_mod": "res://assets/weapons/catalog/rifle_coil_mod.png",
-	"shotgun_tactical": "res://assets/weapons/catalog/shotgun_tactical.png",
-}
 
 
 static func has_weapon_texture(weapon_id: String) -> bool:

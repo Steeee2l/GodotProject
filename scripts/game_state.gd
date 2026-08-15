@@ -572,7 +572,6 @@ const RESIDENT_REROLL_MAX_COST := 5
 const CATNIP_BOOST_COST := 900
 const CATNIP_BOOST_DURATION_SECONDS := 600
 const CATNIP_BOOST_MULTIPLIER := 10.0
-const BASE_SCRAP_PER_WORKER_HOUR := 72.0
 const BASE_CATNIP_PER_WORKER_SECOND := 1.0
 # 통조림 1개 = 주민 1명(식성 1.0) 30분 노동. 6시간이던 시절에는 한 판의
 # 통조림이 이틀치 연료가 되어 출정이 심부름으로 전락했다. 판당 25개면
@@ -2934,13 +2933,6 @@ func has_any_weapon() -> bool:
 	return false
 
 
-# ── 비상 지급 ─────────────────────────────────────────────────
-# 사망으로 무기를 전부 잃으면 맨손으로 나가야 하고, 맨손으로는 무기를
-# 구하기 어렵다. 진행이 멈추는 구간이 생긴다.
-# 사자가 창고 바닥을 긁어 권총 한 자루를 내어 준다. 공짜지만 최소한이다.
-const EMERGENCY_WEAPON_ID := "m1911"
-const EMERGENCY_AMMO_ID := "45_fmj"
-const EMERGENCY_AMMO_COUNT := 24
 
 
 func get_weapon_enhancement_level(weapon_id: String) -> int:

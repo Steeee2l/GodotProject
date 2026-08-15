@@ -34,20 +34,10 @@ const BAG_FILTER_RESOURCE_TYPES := ["resource", "progression", "special_cargo", 
 const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
 const BAG_FILTER_GEAR_TYPES := ["weapon", "equipment", "mod", "component", "ammo"]
 
-const BAG_FILTER_MIN_WIDTH := {
-	"all": 62,
-	"resource": 74,
-	"gear": 74,
-}
 const BAG_FILTER_TITLES := {
 	"all": "전체",
 	"resource": "자원",
 	"gear": "장비",
-}
-const BAG_FILTER_ICON := {
-	"all": "",
-	"resource": "",
-	"gear": "",
 }
 
 var font_ref: Font

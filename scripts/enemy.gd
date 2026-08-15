@@ -35,7 +35,6 @@ const ENEMY_DIRECTION_STATES := {
 	"w": "left",
 	"nw": "up_left",
 }
-const ENEMY_FRAME_COUNT := 4
 const SPRITE_BASE_POSITION := Vector3(0, 0.48, 0)
 const HEALTH_BAR_Y := 1.68
 const THREAT_MARKER_Y := 1.98
@@ -133,9 +132,6 @@ var weapon_visual: Sprite3D
 var weapon_random := RandomNumberGenerator.new()
 var current_weapon_spread := 1.0
 var player_visibility_factor := 1.0
-var vision_fan: MeshInstance3D
-var vision_fan_material: StandardMaterial3D
-var vision_fan_range := 0.0
 var health_bar_background: Sprite3D
 var health_bar_damage_trail: Sprite3D
 var health_bar_fill: Sprite3D

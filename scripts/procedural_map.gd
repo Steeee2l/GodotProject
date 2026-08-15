@@ -98,13 +98,7 @@ const OPEN_LOT_TEXTURE_PATHS := [
 	"res://assets/tiles/open_lot_courtyard_generated.png",
 ]
 const OUTER_GROUND_TEXTURE_PATH := "res://assets/backgrounds/apocalypse_seoul_outer_ground_v2.png"
-const PERIMETER_FENCE_STRIP_A_PATH := "res://assets/props/perimeter_fence_strip_v1.png"
-const PERIMETER_FENCE_STRIP_B_PATH := "res://assets/props/perimeter_fence_strip_b_v1.png"
-const PERIMETER_FENCE_CORNER_PATH := "res://assets/props/perimeter_fence_corner_v1.png"
 const OUTER_BACKDROP_SIZE := 1040.0
-const PERIMETER_FENCE_SEGMENTS_PER_EDGE := 4
-const PERIMETER_FENCE_WORLD_LENGTH := 132.0
-const PERIMETER_FENCE_VISUAL_OUTSET := 8.0
 const FIELD_RETURN_CELL := Vector2i(2, 2)
 const MAX_ENTERABLE_BUILDINGS := 3
 

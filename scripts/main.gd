@@ -135,12 +135,9 @@ const FATIGUE_ROLL_GAIN := 0.45
 const FATIGUE_DAMAGE_PER_POINT := 0.045
 const FATIGUE_SPEED_MIN := 0.58
 const ESCORT_SPEED_PENALTY := 0.07
-const FIELD_MISSION_TRIGGER_RADIUS := 4.6
 const LORE_CLUE_COUNT := 6
 const RAID_PRESSURE_REVEAL_SECONDS := 3.4
 const RAID_PRESSURE_REWARD_MULTIPLIERS := [1.0, 1.15, 1.35, 1.65]
-const DYNAMIC_INCIDENT_DELAY_MIN := 55.0
-const DYNAMIC_INCIDENT_DELAY_MAX := 85.0
 const LORE_ENTRIES := preload("res://scripts/lore_catalog.gd").ENTRIES
 const DIRECTION_VECTORS := {
 	"n": Vector2(0, -1),
@@ -208,8 +205,6 @@ var roll_afterimages: Array[Sprite2D] = []
 var unarmed_sprite_frames: SpriteFrames
 var field_loot_containers: Array[Node3D] = []
 var ammo_notice_time := 0.0
-var last_field_notice := ""
-var repeated_field_notice_count := 0
 var auto_paused_for_background := false
 var nearby_ammo_pickup: Node3D
 var perception_system: CanvasLayer
