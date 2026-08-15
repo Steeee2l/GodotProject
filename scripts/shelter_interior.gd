@@ -3649,11 +3649,16 @@ func _open_raid_zone_select() -> void:
 	raid_zone_launch_button.pressed.connect(_launch_selected_raid_zone, CONNECT_DEFERRED)
 	detail_column.add_child(raid_zone_launch_button)
 
+	# 재출정 마찰 줄이기: 지난번에 갔던 구역을 기억해 미리 선택해 둔다.
+	# 브리핑을 열면 바로 '선택 구역으로 출정'만 누르면 된다.
 	var initial_zone_id := ""
-	for zone_id in zone_ids:
-		if GameState.is_raid_zone_unlocked(str(zone_id)):
-			initial_zone_id = str(zone_id)
-			break
+	if GameState.is_raid_zone_unlocked(GameState.selected_raid_zone):
+		initial_zone_id = GameState.selected_raid_zone
+	if initial_zone_id.is_empty():
+		for zone_id in zone_ids:
+			if GameState.is_raid_zone_unlocked(str(zone_id)):
+				initial_zone_id = str(zone_id)
+				break
 	if initial_zone_id.is_empty() and not zone_ids.is_empty():
 		initial_zone_id = str(zone_ids[0])
 	_select_raid_zone_preview(initial_zone_id)

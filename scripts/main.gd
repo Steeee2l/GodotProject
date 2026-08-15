@@ -389,6 +389,9 @@ var raid_reward_multiplier := 1.0
 # 긴장도 패널은 상시 표시하면 다른 스무 개와 같은 목소리가 되어 아무도 안 읽는다.
 # 단계가 실제로 바뀌는 순간에만 잠깐 띄운다. 이 게임에서 가장 중요한 숫자다.
 var raid_pressure_reveal_time := 0.0
+# 잭팟(격리 신호) 배너는 단계가 바뀔 때만 잠깐 떠오른다. 상시 점유는
+# 순간 알림(긴장도 승급 등)을 밀어내는 우선순위 역전이었다.
+var jackpot_banner_reveal_time := 0.0
 var raid_hotspots_opened := 0
 var dynamic_incident_site: Node3D
 var dynamic_incident_state := "scheduled"
@@ -688,6 +691,10 @@ func _physics_process(delta: float) -> void:
 	if raid_pressure_reveal_time > 0.0:
 		raid_pressure_reveal_time = maxf(0.0, raid_pressure_reveal_time - delta)
 		if raid_pressure_reveal_time <= 0.0:
+			_layout_center_top_banners()
+	if jackpot_banner_reveal_time > 0.0:
+		jackpot_banner_reveal_time = maxf(0.0, jackpot_banner_reveal_time - delta)
+		if jackpot_banner_reveal_time <= 0.0:
 			_layout_center_top_banners()
 	_update_melee_attack(delta)
 	aim_hold_time = maxf(0.0, aim_hold_time - delta)
@@ -2569,16 +2576,17 @@ func _layout_center_top_banners() -> void:
 			clampf(74.0 * ui_scale, 64.0, 84.0),
 		],
 		[
-			hud.jackpot_hud,
-			hud.jackpot_hud != null and not hud_blocked,
-			clampf(viewport_size.x * 0.38, 310.0, 430.0),
-			clampf(62.0 * ui_scale, 58.0, 68.0),
-		],
-		[
 			hud.dynamic_incident_hud,
 			dynamic_incident_state == "active" and not hud_blocked,
 			clampf(viewport_size.x * 0.46, 330.0, 500.0),
 			clampf(76.0 * ui_scale, 68.0, 84.0),
+		],
+		# 잭팟 배너는 최하위 — 순간 알림들이 슬롯을 먼저 가져간다.
+		[
+			hud.jackpot_hud,
+			hud.jackpot_hud != null and jackpot_banner_reveal_time > 0.0 and not hud_blocked,
+			clampf(viewport_size.x * 0.38, 310.0, 430.0),
+			clampf(62.0 * ui_scale, 58.0, 68.0),
 		],
 	]:
 		var banner := entry[0] as Control

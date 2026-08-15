@@ -93,6 +93,9 @@ func _set_jackpot_step(title: String, detail: String, step: int) -> void:
 	host.hud.jackpot_step_label.text = title
 	host.hud.jackpot_detail_label.text = detail
 	host.hud.jackpot_progress.value = clampi(step, 0, 4)
+	# 단계 갱신 순간에만 10초 노출. 화물 운반 중(4/4)엔 탈출 안내라 상시 유지.
+	host.jackpot_banner_reveal_time = 999999.0 if step >= 4 else 10.0
+	host.call_deferred("_layout_center_top_banners")
 	host.hud.jackpot_hud.modulate.a = 0.35
 	var tween := host.create_tween()
 	tween.tween_property(host.hud.jackpot_hud, "modulate:a", 1.0, 0.25)
