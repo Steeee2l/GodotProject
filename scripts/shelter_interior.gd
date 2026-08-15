@@ -178,6 +178,7 @@ var contract_story_title_label: Label
 var contract_story_body_label: Label
 var contract_story_progress_label: Label
 var contract_story_next_button: Button
+var contract_story_skip_button: Button
 var contract_story_lines: Array[String] = []
 var contract_story_index := 0
 var contract_story_open := false
@@ -1101,6 +1102,11 @@ func _open_contract_story(
 	var actions := HBoxContainer.new()
 	actions.alignment = BoxContainer.ALIGNMENT_END
 	text_box.add_child(actions)
+	# 한 줄씩 두 탭(전체 표시→다음)이 기본이라 긴 대화는 스킵이 있어야 한다.
+	contract_story_skip_button = _merchant_button("건너뛰기", false, "close")
+	contract_story_skip_button.custom_minimum_size = Vector2(108 if compact_layout else 132, 46)
+	contract_story_skip_button.pressed.connect(_skip_contract_story)
+	actions.add_child(contract_story_skip_button)
 	contract_story_next_button = _merchant_button("다음", true, "collect")
 	contract_story_next_button.custom_minimum_size = Vector2(132 if compact_layout else 170, 46)
 	contract_story_next_button.pressed.connect(_advance_contract_story)
@@ -1122,11 +1128,38 @@ func _refresh_contract_story() -> void:
 		contract_story_index + 1,
 		contract_story_lines.size(),
 	]
-	contract_story_next_button.text = (
-		"기록 보관"
-		if contract_story_index >= contract_story_lines.size() - 1
-		else "다음"
+	var last_line := contract_story_index >= contract_story_lines.size() - 1
+	contract_story_next_button.text = "기록 보관" if last_line else "다음"
+	if is_instance_valid(contract_story_skip_button):
+		contract_story_skip_button.visible = not last_line
+
+
+func _archive_contract_story() -> void:
+	# '기록 보관' 라벨을 진짜로 만든다 — 끝낸 대화는 기록 보관소에서 다시 읽을 수 있다.
+	if contract_story_lines.is_empty():
+		return
+	var title := (
+		contract_story_title_label.text
+		if is_instance_valid(contract_story_title_label) and not contract_story_title_label.text.is_empty()
+		else "%s의 말" % contract_story_speaker_name
 	)
+	var entry := "%s — %s\n%s" % [
+		contract_story_speaker_name,
+		title,
+		"\n".join(contract_story_lines),
+	]
+	if not GameState.unlocked_contract_lore.has(entry):
+		GameState.unlocked_contract_lore.append(entry)
+
+
+func _skip_contract_story() -> void:
+	# 마지막 줄로 바로 이동 — 종료가 아니라 '기록 보관' 버튼 앞까지만 간다.
+	if not contract_story_open or contract_story_lines.is_empty():
+		return
+	contract_story_index = contract_story_lines.size() - 1
+	_refresh_contract_story()
+	if is_instance_valid(contract_story_typewriter):
+		contract_story_typewriter.skip()
 
 
 func _advance_contract_story() -> void:
@@ -1140,6 +1173,7 @@ func _advance_contract_story() -> void:
 	if contract_story_index < contract_story_lines.size():
 		_refresh_contract_story()
 		return
+	_archive_contract_story()
 	if contract_story_completion_owner == "saja":
 		GameState.mark_shelter_story_event_seen(contract_story_completion_id)
 	elif contract_story_completion_owner == "juhong":
