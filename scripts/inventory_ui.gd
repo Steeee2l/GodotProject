@@ -1376,6 +1376,9 @@ func _refresh_item_detail() -> void:
 			item_action_button.visible = true
 		else:
 			item_detail_description.text += "  ·  장착하면 현재 주무기와 교체됩니다."
+			var weapon_comparison := _format_weapon_comparison(weapon_id)
+			if not weapon_comparison.is_empty():
+				item_detail_description.text += "\n" + weapon_comparison
 			item_action_button.text = "장착"
 			item_action_button.icon = UI_ICONS.get_icon("upgrade", 28, Color("#bce6ca"))
 			item_action_button.visible = true
@@ -1601,6 +1604,43 @@ func _format_equipment_stats(definition: Dictionary) -> String:
 	if scent_percent != 0:
 		stats.append("냄새 흔적 %s%d%%" % ["+" if scent_percent > 0 else "", scent_percent])
 	return "  ·  ".join(stats)
+
+
+func _format_weapon_comparison(weapon_id: String) -> String:
+	# 장비 비교와 같은 문법 — "지금 든 것 대비 뭐가 얼마나 달라지나"만 말한다.
+	# 파츠는 무기를 따라가지 않으므로 강화 수치만 반영한 순정 스탯으로 비교.
+	if not has_weapon_state:
+		return ""
+	var equipped_id := str(game_state.equipped_weapon_id)
+	if equipped_id.is_empty() or equipped_id == weapon_id:
+		return ""
+	var no_mods: Array[String] = []
+	var mine: Dictionary = WEAPON_SYSTEM.build_stats(
+		equipped_id, no_mods, game_state.get_weapon_enhancement_level(equipped_id)
+	)
+	var other: Dictionary = WEAPON_SYSTEM.build_stats(
+		weapon_id, no_mods, game_state.get_weapon_enhancement_level(weapon_id)
+	)
+	var differences: Array[String] = []
+	var damage_delta := roundi(float(other.get("damage", 0))) - roundi(float(mine.get("damage", 0)))
+	if damage_delta != 0:
+		differences.append("피해 %+d" % damage_delta)
+	var mine_rate := 1.0 / maxf(0.01, float(mine.get("fire_interval", 0.2)))
+	var other_rate := 1.0 / maxf(0.01, float(other.get("fire_interval", 0.2)))
+	if absf(other_rate - mine_rate) >= 0.1:
+		differences.append("연사 %+.1f/s" % (other_rate - mine_rate))
+	var magazine_delta := int(other.get("magazine_size", 0)) - int(mine.get("magazine_size", 0))
+	if magazine_delta != 0:
+		differences.append("장탄 %+d" % magazine_delta)
+	var reload_delta := float(other.get("reload_time", 0.0)) - float(mine.get("reload_time", 0.0))
+	if absf(reload_delta) >= 0.05:
+		differences.append("장전 %+.1fs" % reload_delta)
+	if differences.is_empty():
+		return ""
+	return "현재 %s 대비  %s" % [
+		str(mine.get("display_name", equipped_id)),
+		"  ·  ".join(differences),
+	]
 
 
 func _format_equipment_comparison(equipment_id: String, definition: Dictionary) -> String:
