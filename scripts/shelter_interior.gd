@@ -1750,6 +1750,7 @@ func _open_contract_ui() -> void:
 	dim.color = Color(0.004, 0.007, 0.009, 0.82)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	root_control.add_child(dim)
+	ModalDismiss.install(contract_ui_layer, dim, _close_contract_ui)
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root_control.add_child(center)
@@ -2242,6 +2243,8 @@ func _open_merchant_shop() -> void:
 	dim.color = Color(0.004, 0.007, 0.009, 0.82)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	root_control.add_child(dim)
+	# 상점은 구경 UI라 닫아도 안전하다. 입장 카드(수락/거절)는 의도적 선택이라 제외.
+	ModalDismiss.install(merchant_ui_layer, dim, _close_merchant_ui)
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root_control.add_child(center)
