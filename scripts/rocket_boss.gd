@@ -25,6 +25,11 @@ const MINE_PATTERN_RETREAT_DURATION := 0.5
 const MINE_DEPLOY_INTERVAL := 0.14
 const MINE_DAMAGE := 38
 const MINE_BLAST_RADIUS := 3.1
+# 강인도: 매 피격 경직 대신, 최대 체력 대비 누적 피해가 문턱을 넘을 때만
+# 길게 그로기(보상 창). 총만 있으면 스턴락으로 무력화되던 문제의 해법.
+const POISE_BREAK_RATIO := 0.16
+const POISE_GROGGY_TIME := 1.15
+const ENRAGE_HEALTH_RATIO := 0.4
 
 var boss_action := "combat"
 var boss_action_elapsed := 0.0
@@ -39,6 +44,8 @@ var mine_deploy_count := 0
 var mines_deployed_this_pattern := 0
 var mines_deployed_total := 0
 var mine_target_snapshot := Vector3.ZERO
+var poise_damage_accumulated := 0.0
+var enrage_triggered := false
 
 
 func configure_rocket_boss(target_body: CharacterBody3D, initial_threat: float) -> void:
@@ -48,7 +55,23 @@ func configure_rocket_boss(target_body: CharacterBody3D, initial_threat: float) 
 	magazine_size = ROCKET_MAGAZINE_SIZE
 	magazine_ammo = ROCKET_MAGAZINE_SIZE
 	reload_duration = ROCKET_RELOAD_DURATION
-	var boss_health := roundi(320.0 + clampf(initial_threat, 0.0, 1.0) * 280.0)
+	# 체력은 존 티어를 따라 오른다 — 플레이어 장비에 반응하는 게 아니라,
+	# 더 깊은 도시의 보스가 더 단단할 뿐이다(러버밴딩 금지 원칙).
+	# GameState는 식별자 대신 런타임 조회 — preload 기반 테스트에서
+	# 오토로드 등록 전 컴파일 캐스케이드가 나는 함정 회피.
+	var zone_tier := 1
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree != null:
+		var game_state := tree.root.get_node_or_null("GameState")
+		if game_state != null:
+			var zone := game_state.call(
+				"get_raid_zone", str(game_state.get("selected_raid_zone"))
+			) as Dictionary
+			zone_tier = clampi(int(zone.get("stage_tier", 1)), 1, 5)
+	var tier_multiplier := 1.0 + float(zone_tier - 1) * 0.45
+	var boss_health := roundi(
+		(520.0 + clampf(initial_threat, 0.0, 1.0) * 360.0) * tier_multiplier
+	)
 	health = boss_health
 	max_health = boss_health
 	health_ratio = 1.0
@@ -200,15 +223,58 @@ func _physics_process(delta: float) -> void:
 	elif distance <= 18.0:
 		var side := Vector3(-direction.z, 0.0, direction.x)
 		movement_direction = (side * (1.0 if boss_rng.randf() > 0.5 else -1.0) + direction * 0.12).normalized()
-	velocity = _steer_around_obstacles(movement_direction) * 2.35
+	velocity = _steer_around_obstacles(movement_direction) * (2.8 if _boss_enraged() else 2.35)
 	_set_motion_state("walk" if velocity.length_squared() > 0.05 else "idle")
 	move_and_slide()
+
+
+func _absorbs_hit_stagger(amount: int) -> bool:
+	# 탄환 한 발마다 비틀거리지 않는다. 누적 피해가 문턱(최대 체력 16%)을
+	# 넘는 순간에만 길게 그로기 — 퍼붓기의 보상이 '무력화'가 아니라
+	# '보상 창'이 되도록. 그로기 중 진행하던 패턴은 취소된다.
+	poise_damage_accumulated += float(amount)
+	var threshold := maxf(60.0, float(max_health) * POISE_BREAK_RATIO)
+	if poise_damage_accumulated < threshold:
+		_check_enrage()
+		return true
+	poise_damage_accumulated = 0.0
+	boss_action = "combat"
+	boss_action_elapsed = 0.0
+	threat_marker.visible = false
+	if reload_indicator != null:
+		reload_indicator.visible = false
+	combat_state = "stagger"
+	state_timer = POISE_GROGGY_TIME
+	stagger_velocity *= 0.55
+	_set_motion_state("hit")
+	_spawn_hit_burst(-facing_world_direction, Color("#ffd23e"), 16, 0.5)
+	_check_enrage()
+	return true
+
+
+func _boss_enraged() -> bool:
+	return health <= roundi(float(max_health) * ENRAGE_HEALTH_RATIO)
+
+
+func _check_enrage() -> void:
+	# 체력 40% 이하: 조준이 빨라지고 지뢰·대시 간격이 줄어든다. 마무리
+	# 구간이 소모전이 아니라 가장 위험한 구간이 되도록.
+	if enrage_triggered or not _boss_enraged():
+		return
+	enrage_triggered = true
+	_spawn_hit_burst(Vector3.UP, Color("#ff4d2e"), 22, 0.7)
+	threat_marker.text = "!!"
+	threat_marker.modulate = Color("#ff4d2e")
+	threat_marker.visible = true
+	threat_marker.scale = Vector3.ONE * 2.0
+	mine_pattern_cooldown = minf(mine_pattern_cooldown, 1.6)
+	boss_dash_cooldown = minf(boss_dash_cooldown, 0.8)
 
 
 func _start_rocket_aim() -> void:
 	boss_action = "aim"
 	boss_action_elapsed = 0.0
-	boss_action_duration = ROCKET_AIM_TIME
+	boss_action_duration = ROCKET_AIM_TIME * (0.72 if _boss_enraged() else 1.0)
 	velocity = Vector3.ZERO
 	_set_motion_state("attack")
 	threat_marker.text = "!"
@@ -292,7 +358,9 @@ func _start_boss_dash(direction: Vector3, distance: float) -> void:
 	boss_dash_start = global_position
 	boss_dash_end = global_position + direction.normalized() * distance
 	boss_dash_end.y = global_position.y
-	boss_dash_cooldown = boss_rng.randf_range(2.4, 3.6)
+	boss_dash_cooldown = (
+		boss_rng.randf_range(1.5, 2.3) if _boss_enraged() else boss_rng.randf_range(2.4, 3.6)
+	)
 	_set_facing_from_world_direction(direction)
 	_set_motion_state("walk")
 
@@ -300,9 +368,11 @@ func _start_boss_dash(direction: Vector3, distance: float) -> void:
 func _start_mine_pattern(direction: Vector3, distance: float) -> void:
 	mine_target_snapshot = target.global_position + target.velocity * 0.34
 	mine_target_snapshot.y = 0.1
-	mine_deploy_count = boss_rng.randi_range(4, 6)
+	mine_deploy_count = boss_rng.randi_range(5, 7) if _boss_enraged() else boss_rng.randi_range(4, 6)
 	mines_deployed_this_pattern = 0
-	mine_pattern_cooldown = boss_rng.randf_range(8.5, 11.5)
+	mine_pattern_cooldown = (
+		boss_rng.randf_range(5.5, 7.5) if _boss_enraged() else boss_rng.randf_range(8.5, 11.5)
+	)
 	boss_action = "mine_approach"
 	boss_action_elapsed = 0.0
 	boss_action_duration = MINE_PATTERN_APPROACH_DURATION

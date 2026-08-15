@@ -766,6 +766,12 @@ static func roll_container(
 			random
 		)
 		if not item_id.is_empty():
+			# 스마트 탄약: 상자에서 탄약이 나오면 55%는 장착 무기 구경으로
+			# 치환. "탄약은 나오는데 내 총 탄은 없다"는 좌절을 줄인다.
+			if item_id.begins_with("ammo_") and random.randf() < 0.55:
+				var matched_ammo_id := _equipped_ammo_item_id(stage)
+				if not matched_ammo_id.is_empty():
+					item_id = matched_ammo_id
 			results.append(_materialize_item(item_id, stage, random))
 	# 맨손 회복: 이번 컨테이너에서 무기가 하나도 안 나왔다면 절반 확률로 기본
 	# 권총을 끼워 준다. 돌아다니며 상자만 몇 개 열어도 다시 무장하게 된다.
@@ -829,13 +835,20 @@ static func roll_enemy_drop(
 		return {}
 	var roll := random.randf()
 	if enemy_kind != "melee":
-		if roll < 0.20:
+		if roll < 0.26:
+			# 70%는 장착 무기 탄약으로 기울인다. 매칭 탄은 낱개(3~8발)가
+			# 아니라 정상 스택으로 떨어져 "죽이면 계속 쏠 수 있다"가 성립.
+			var matched_ammo_id := ""
+			if random.randf() < 0.7:
+				matched_ammo_id = _equipped_ammo_item_id(stage)
+			if not matched_ammo_id.is_empty():
+				return _materialize_item(matched_ammo_id, stage, random, false)
 			var ammo_item_id := _enemy_ammo_item_id(enemy_weapon_id, stage, random)
 			if not ammo_item_id.is_empty():
 				return _materialize_item(ammo_item_id, stage, random, true)
-		if roll < 0.52:
+		if roll < 0.56:
 			return _materialize_item("canned_food", stage, random)
-		if roll < 0.60:
+		if roll < 0.64:
 			return _materialize_item("medkit", stage, random)
 		if roll < 0.92:
 			return _materialize_item(
@@ -1196,6 +1209,26 @@ static func _roll_ammo_amount(
 			return random.randi_range(5, 10)
 		_:
 			return random.randi_range(6, 12)
+
+
+static func _equipped_ammo_item_id(stage: int) -> String:
+	# 스마트 탄약: 판 안에서 재무장→쓸어버리기 파워커브가 살려면 "내 총에
+	# 맞는 탄"이 나와야 한다. 장착 무기의 탄약을 조회해 드랍을 기울인다.
+	# (난이도 러버밴딩이 아니라 편의 보정 — 적·위협은 그대로다.)
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
+		return ""
+	var game_state := tree.root.get_node_or_null("GameState")
+	if game_state == null or not bool(game_state.get("has_ak")):
+		return ""
+	var ammo_id := str(game_state.get("equipped_ammo_id"))
+	if ammo_id.is_empty():
+		return ""
+	var item_id := "ammo_%s" % ammo_id
+	var definition := ITEM_CATALOG.get(item_id, {}) as Dictionary
+	if definition.is_empty() or not _item_allowed(definition, stage):
+		return ""
+	return item_id
 
 
 static func _enemy_ammo_item_id(

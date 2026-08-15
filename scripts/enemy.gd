@@ -2634,9 +2634,17 @@ func take_hit(amount: int, hit_direction: Vector3, is_critical: bool = false, hi
 	if health <= 0:
 		_start_death(knockback_direction)
 		return
+	if _absorbs_hit_stagger(amount):
+		return
 	combat_state = "stagger"
 	state_timer = HIT_STAGGER_TIME
 	_set_motion_state("hit")
+
+
+func _absorbs_hit_stagger(_amount: int) -> bool:
+	# 강인도 개체(보스)가 재정의한다. true를 돌려주면 이번 피격의 경직을 생략 —
+	# 연사 무기로 피격 경직을 무한 갱신해 패턴을 봉인하는 스턴락을 막는 장치.
+	return false
 
 
 func _spawn_damage_number(

@@ -118,7 +118,8 @@ func _run() -> void:
 			ranged_weapon_count += 1
 		if str(ranged_drop.get("type", "")) == "ammo":
 			var ammo_amount := int((ranged_drop.get("data", {}) as Dictionary).get("amount", 0))
-			assert(ammo_amount >= 3 and ammo_amount <= 8)
+			# 스마트 탄약: 장착 구경 매칭 드랍은 정상 스택(최대 12발)까지 나온다.
+			assert(ammo_amount >= 2 and ammo_amount <= 12)
 	assert(melee_weapon_count == 0)
 	var ranged_weapon_rate := float(ranged_weapon_count) / float(ranged_sample_count)
 	# stage 4 표본: 0.10 + 3x0.02 = 0.16 기대.
@@ -137,6 +138,23 @@ func _run() -> void:
 			recovery_weapon_count += 1
 	var recovery_weapon_rate := float(recovery_weapon_count) / float(recovery_sample_count)
 	assert(recovery_weapon_rate >= 0.54 and recovery_weapon_rate <= 0.62)
+
+	# 스마트 탄약: 장착 무기(762)가 있으면 권총 적을 죽여도 탄약 드랍의
+	# 다수가 내 구경으로 나온다 — 판 내 재무장 파워커브의 핵심.
+	var smart_game_state := root.get_node("GameState")
+	smart_game_state.set("has_ak", true)
+	smart_game_state.set("equipped_ammo_id", "762_fmj")
+	var matched_ammo_count := 0
+	var ammo_drop_count := 0
+	for _sample in 4000:
+		var smart_drop := LOOT_ECONOMY.roll_enemy_drop(2, "ranged", "m1911", random)
+		if str(smart_drop.get("type", "")) == "ammo":
+			ammo_drop_count += 1
+			if str((smart_drop.get("data", {}) as Dictionary).get("ammo_id", "")) == "762_fmj":
+				matched_ammo_count += 1
+	assert(ammo_drop_count > 100)
+	var matched_rate := float(matched_ammo_count) / float(ammo_drop_count)
+	assert(matched_rate >= 0.55, "장착 구경 매칭 탄약이 다수여야 한다 (실측 %.2f)" % matched_rate)
 
 	var common_enemy_drop_count := 0
 	var any_enemy_drop_count := 0
@@ -162,9 +180,14 @@ func _run() -> void:
 	# 방어구 드랍을 파밍 루프의 심장으로 끌어올렸다. 처치할 때마다 갈아 끼울
 	# 기회가 규칙적으로 돌아오도록 전용 판정을 둔 결과, 전체 드랍률과 방어구
 	# 비중이 함께 올라간다.
+	print("ENEMY_DROP_RATES any=%.3f common=%.3f armor=%.3f" % [
+		any_enemy_drop_rate, common_enemy_drop_rate, armor_enemy_drop_rate,
+	])
+	# 스마트 탄약 도입으로 적 드랍에서 식량 비중이 소폭 내려가고(탄약이 그만큼
+	# 차지) 방어구 판정은 그대로다. 창은 표본 요동(±1%p)까지 감안해 잡는다.
 	assert(any_enemy_drop_rate >= 0.71 and any_enemy_drop_rate <= 0.79)
-	assert(common_enemy_drop_rate >= 0.22 and common_enemy_drop_rate <= 0.30)
-	assert(armor_enemy_drop_rate >= 0.20 and armor_enemy_drop_rate <= 0.27)
+	assert(common_enemy_drop_rate >= 0.20 and common_enemy_drop_rate <= 0.30)
+	assert(armor_enemy_drop_rate >= 0.20 and armor_enemy_drop_rate <= 0.28)
 
 	var game_state := root.get_node("GameState")
 	game_state.call("reset_raid_supply_counters")

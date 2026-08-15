@@ -84,6 +84,23 @@ func _run() -> void:
 	await process_frame
 	assert(mine.get_node_or_null("MineVisual/MineBody") is MeshInstance3D)
 	assert(mine.get_node_or_null("ProximityRing") is MeshInstance3D)
+	# 강인도: 낱발 피격은 경직을 만들지 못하고, 누적 문턱(최대 체력 16%)을
+	# 넘는 순간에만 그로기가 온다 — 연사 스턴락 봉인 검증.
+	boss.set("boss_action", "combat")
+	var health_before := int(boss.get("health"))
+	assert(health_before >= 520, "보스 체력은 티어 스케일 하한(520) 이상이어야 한다")
+	boss.call("take_hit", 40, Vector3.RIGHT)
+	assert(str(boss.get("combat_state")) != "stagger", "낱발 피격이 보스를 경직시키면 안 된다")
+	assert(int(boss.get("health")) == health_before - 40)
+	var groggy_seen := false
+	for _hit_index in 12:
+		boss.call("take_hit", 40, Vector3.RIGHT)
+		if str(boss.get("combat_state")) == "stagger":
+			groggy_seen = true
+			break
+	assert(groggy_seen, "누적 피해가 문턱을 넘으면 그로기가 와야 한다")
+	assert(float(boss.get("state_timer")) > 0.5, "그로기는 일반 경직보다 길어야 한다")
+
 	boss.queue_free()
 	await process_frame
 	target.global_position = mine.global_position
