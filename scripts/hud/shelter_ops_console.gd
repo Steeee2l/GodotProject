@@ -15,6 +15,9 @@ const FACILITIES := [
 	{"id": "storage", "label": "창고", "icon": "secure", "accent": Color("#d8b46a")},
 ]
 
+# 터치 없는 PC에서 세로+터치 분기를 검증하기 위한 프로브 전용 스위치.
+static var force_touch_layout := false
+
 var host: Node
 var dock: VBoxContainer
 var header_label: Label
@@ -74,7 +77,7 @@ func apply_layout(safe: Vector4) -> void:
 		return
 	var viewport_size: Vector2 = host.get_viewport().get_visible_rect().size
 	var portrait := viewport_size.y > viewport_size.x
-	if portrait and DisplayServer.is_touchscreen_available():
+	if portrait and (DisplayServer.is_touchscreen_available() or force_touch_layout):
 		# 세로 모바일: 우상단 세로 레일은 엄지가 못 닿는다 — 하단 컨트롤 바로
 		# 위의 가로 탭바로 내려온다. 관리의 주 진입점은 손이 닿는 곳에 있어야 한다.
 		buttons_box.vertical = false
@@ -178,6 +181,16 @@ func _facility_badge(facility_id: String) -> String:
 				GameState.get_active_catnip_workers(),
 				GameState.get_catnip_worker_slots(),
 			]
+		"workbench":
+			# 지금 만들 수 있는 게 있으면 알려준다 — 열어봐야 아는 정보는 죽은 정보다.
+			var module := (host.get("facility_logic") as Dictionary).get("workbench") as Node
+			if module != null:
+				var craftable := int(module.call("get_craftable_count"))
+				if craftable > 0:
+					return "가능 %d" % craftable
+		"storage":
+			if GameState.get_storage_used_slots() >= GameState.get_storage_capacity():
+				return "만재"
 	return ""
 
 

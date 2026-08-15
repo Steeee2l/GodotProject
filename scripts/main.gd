@@ -2618,7 +2618,8 @@ func _apply_hud_layout() -> void:
 	var bottom_margin := maxf(safe_margins.w, clampf(viewport_size.y * 0.018, 8.0, 26.0))
 	var side_margin := maxf(maxf(safe_margins.x, safe_margins.z), clampf(viewport_size.x * 0.02, 10.0, 26.0))
 	var safe_left_width := clampf(viewport_size.x * 0.33 * ui_scale, 205.0, 460.0)
-	var status_height := clampf(88.0 * ui_scale, 80.0, 108.0)
+	# Stats 텍스트 줄 삭제 후 이름+체력바만 남아 얇아졌다.
+	var status_height := clampf(64.0 * ui_scale, 58.0, 78.0)
 	var objective_line_count := objective_label.text.count("\n") + 1
 	var objective_height := clampf(
 		24.0 + float(objective_line_count) * 21.0 * ui_scale,
@@ -2629,11 +2630,8 @@ func _apply_hud_layout() -> void:
 
 	lore_reader.apply_layout(viewport_size)
 	var health_bar := top_left_status_panel.get_node_or_null("Margin/VBox/Health")
-	var status_stats := top_left_status_panel.get_node_or_null("Margin/VBox/Stats")
 	if health_bar is ProgressBar:
 		(health_bar as ProgressBar).custom_minimum_size.x = maxf(182.0, safe_left_width - 56.0)
-	if status_stats is Label:
-		(status_stats as Label).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 	top_left_status_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	top_left_status_panel.offset_left = side_margin
@@ -3494,19 +3492,8 @@ func _update_equipment_ui() -> void:
 
 
 func _refresh_top_status_label() -> void:
-	var top_stats := get_node_or_null("HUD/TopLeft/Margin/VBox/Stats") as Label
-	if top_stats == null:
-		return
-	var magazine_size := int(weapon_stats.get("magazine_size", 30))
-	top_stats.text = "체력 %d/%d  피로 %d%%  총알 %d/%d +%d  구급약 %d" % [
-		player_health,
-		GameState.get_max_health(),
-		roundi(fatigue),
-		magazine_ammo if has_ak else 0,
-		magazine_size if has_ak else 0,
-		reserve_ammo if has_ak else 0,
-		GameState.medkits,
-	]
+	# Stats 한 줄(체력·피로·총알·구급약 텍스트)은 체력바·피로 게이지·탄약 패널·
+	# 구급약 버튼과 전부 중복이라 삭제됐다. 갱신 훅은 구급약 버튼만 남는다.
 	_update_medkit_button()
 
 

@@ -208,6 +208,9 @@ var selected_recipe_id := "scope_lens"
 var recipe_list: VBoxContainer
 var detail_box: VBoxContainer
 var resource_value_labels: Dictionary = {}
+# 제작 직후 상세 패널에 잠깐 띄우는 성공 피드백(리빌드에서 살아남도록 상태로 보관).
+var craft_feedback_text := ""
+var craft_feedback_until_msec := 0
 
 
 func _ready() -> void:
@@ -580,6 +583,29 @@ func _refresh_detail_panel() -> void:
 	)
 	detail_box.add_child(craft)
 
+	# 버튼이 죽어 있으면 이유를 말한다 — 회색 버튼만 보여주는 건 UX가 아니다.
+	if craft.disabled:
+		var reason := _recipe_list_subtitle(recipe)
+		if not reason.is_empty():
+			var reason_label := _label("잠긴 이유: %s" % reason, 14, Color("#e68576"))
+			reason_label.name = "WorkbenchBlockedReason"
+			detail_box.add_child(reason_label)
+
+	# 제작 직후 성공 피드백 — 리빌드 후에도 잠깐 남아 스르륵 사라진다.
+	if not craft_feedback_text.is_empty() and Time.get_ticks_msec() < craft_feedback_until_msec:
+		var feedback := _label(craft_feedback_text, 16, Color("#9fdcae"))
+		feedback.name = "WorkbenchCraftFeedback"
+		detail_box.add_child(feedback)
+		feedback.pivot_offset = Vector2(0.0, 12.0)
+		feedback.scale = Vector2(0.94, 0.94)
+		feedback.modulate.a = 0.0
+		var tween := feedback.create_tween()
+		tween.set_parallel(true)
+		tween.tween_property(feedback, "modulate:a", 1.0, 0.18).set_trans(Tween.TRANS_SINE)
+		tween.tween_property(feedback, "scale", Vector2.ONE, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tween.chain().tween_interval(2.2)
+		tween.chain().tween_property(feedback, "modulate:a", 0.0, 0.45).set_trans(Tween.TRANS_SINE)
+
 func _selected_recipe() -> Dictionary:
 	for recipe_raw in _recipes_for_category(selected_category):
 		var recipe: Dictionary = recipe_raw
@@ -641,25 +667,33 @@ func _craft(recipe: Dictionary) -> void:
 		GameState.workbench_repair_active = true
 		GameState.workbench_repair_weapon_id = GameState.equipped_weapon_id
 		GameState.save_persistent_state()
+		_set_craft_feedback("정비 시작 — 다음 출정 복귀까지 수리됩니다")
 		_refresh_after_change()
 		return
 	if bool(result.get("workbench_upgrade", false)):
 		if GameState.try_upgrade_workbench():
 			GameState.save_persistent_state()
+			_set_craft_feedback("작업대 확장 완료 · Lv.%d" % GameState.shelter_workbench_level)
 		_refresh_after_change()
 		return
 	if bool(result.get("artisan", false)):
 		var artisan_result := GameState.roll_artisan_weapon()
 		if not artisan_result.is_empty():
 			selected_recipe_id = "artisan_roll"
+			_set_craft_feedback("장인의 손길 — 결과를 확인하세요")
 		_refresh_after_change()
 		return
 	if bool(result.get("enhance", false)):
 		GameState.try_enhance_weapon(GameState.equipped_weapon_id)
+		_set_craft_feedback("강화 완료 · %s +%d" % [
+			GameState.equipped_weapon_id.to_upper(),
+			GameState.get_weapon_enhancement_level(GameState.equipped_weapon_id),
+		])
 		_refresh_after_change()
 		return
 	if result.has("enhance_mod"):
 		GameState.try_enhance_mod(str(result["enhance_mod"]))
+		_set_craft_feedback("파츠 강화 완료")
 		_refresh_after_change()
 		return
 	var cost: Dictionary = _effective_cost(recipe)
@@ -679,7 +713,23 @@ func _craft(recipe: Dictionary) -> void:
 	elif result.has("repair"):
 		GameState.weapon_durability = minf(100.0, GameState.weapon_durability + float(result["repair"]))
 	GameState.save_persistent_state()
+	_set_craft_feedback("제작 완료 · %s" % str(recipe.get("name", "")))
 	_refresh_after_change()
+
+
+func _set_craft_feedback(message: String) -> void:
+	craft_feedback_text = message
+	craft_feedback_until_msec = Time.get_ticks_msec() + 3000
+
+
+func get_craftable_count() -> int:
+	# 운영 독 배지용 — 지금 당장 만들 수 있는 레시피 수.
+	var count := 0
+	for category in RECIPES.keys():
+		for recipe_raw in _recipes_for_category(str(category)):
+			if _can_craft(recipe_raw as Dictionary):
+				count += 1
+	return count
 
 
 func _effective_cost(recipe: Dictionary) -> Dictionary:

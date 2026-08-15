@@ -3683,12 +3683,14 @@ func _build_catnip_buff_row() -> Control:
 		var button := Button.new()
 		button.name = "CatnipBuff_%s" % buff_id
 		button.toggle_mode = true
-		button.text = str(definition.get("title", buff_id))
+		# 효과는 버튼 본문에 직접 쓴다 — 터치엔 툴팁이 없다.
+		var effect := str(definition.get("description", "")).replace("이번 출정 동안 ", "")
+		button.text = "%s\n%s" % [str(definition.get("title", buff_id)), effect]
 		button.tooltip_text = "%s · 캣닢 %s" % [
 			str(definition.get("description", "")),
 			GameState.format_compact_number(GameState.get_catnip_field_buff_cost()),
 		]
-		button.custom_minimum_size = Vector2(0, 38)
+		button.custom_minimum_size = Vector2(0, 54)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.icon = UI_ICONS.get_icon(str(definition.get("icon", "catnip")), 18, Color("#aeea78"))
 		button.expand_icon = true
