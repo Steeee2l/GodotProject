@@ -59,6 +59,10 @@ func _open_ui() -> void:
 	dim.color = Color(0.004, 0.006, 0.006, 0.84)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	modal.add_child(dim)
+	ModalDismiss.install(ui_layer, dim, func() -> void:
+		if is_instance_valid(ui_layer):
+			ui_layer.queue_free()
+	)
 	var viewport_size := get_viewport().get_visible_rect().size
 	var safe := UISafeArea.get_margins(viewport_size)
 	var available_size := Vector2(

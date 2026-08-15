@@ -239,6 +239,12 @@ func _exit_tree() -> void:
 		get_tree().paused = tree_was_paused_before_map
 
 
+func _notification(what: int) -> void:
+	# 안드로이드 뒤로가기 = 지도 닫기.
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST and visible:
+		close()
+
+
 func _process(delta: float) -> void:
 	visit_update_timer -= delta
 	if visit_update_timer <= 0.0:

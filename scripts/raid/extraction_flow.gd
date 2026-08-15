@@ -297,6 +297,7 @@ func _show_extraction_result(rescued_count: int) -> void:
 	if not next_goal.is_empty():
 		lines.append(next_goal)
 	lines.append("획득품은 가방에 보존됩니다.")
+	lines.append("탭하면 쉘터로 복귀")
 	host.hud.extraction_result_summary.text = "\n".join(lines)
 	var new_xp := int(pending_extraction_xp_result.get("new_xp", GameState.player_xp))
 	var old_xp := int(pending_extraction_xp_result.get("old_xp", new_xp))
@@ -317,16 +318,42 @@ func _show_extraction_result(rescued_count: int) -> void:
 	if GameState.pending_level_choices > 0:
 		host._show_level_reward_choices()
 	else:
-		# 정산은 이번 판의 보상 순간이다. 예전 1.25초 자동 닫힘은 7줄짜리 요약을
-		# 읽기도 전에 지워 버렸다. 충분히 보여주고 닫는다 — 첫 탈출일수록
-		# "내가 뭘 벌었는지"가 다음 판의 동기가 된다.
+		# 정산은 이번 판의 보상 순간이다. 읽는 속도는 사람마다 다르니 시간을
+		# 강요하지 않는다: 탭/클릭/스페이스로 즉시 복귀, 무입력이면 8초 폴백.
+		# 40판째 유저가 벽을 보며 4.5초씩 기다리던 마찰 제거.
 		var wait_tween := host.create_tween()
 		wait_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
-		wait_tween.tween_interval(4.5)
+		wait_tween.tween_interval(8.0)
 		wait_tween.tween_callback(_finish_extraction_to_shelter)
+		extraction_result_dismissable_msec = Time.get_ticks_msec() + 700
+		host.hud.extraction_result_panel.gui_input.connect(_on_extraction_result_input)
+
+
+var extraction_result_dismissable_msec := 0
+var extraction_result_finished := false
+
+
+func _on_extraction_result_input(event: InputEvent) -> void:
+	# 등장 직후 0.7초는 오탭 보호 — 탈출 홀드 중 남은 터치가 바로 닫아버리지 않게.
+	if Time.get_ticks_msec() < extraction_result_dismissable_msec:
+		return
+	var confirmed: bool = (
+		(event is InputEventMouseButton and event.pressed)
+		or (event is InputEventScreenTouch and event.pressed)
+		or (
+			event is InputEventKey and event.pressed
+			and (event as InputEventKey).keycode in [KEY_SPACE, KEY_ENTER]
+		)
+	)
+	if confirmed and not extraction_result_finished:
+		extraction_result_finished = true
+		_finish_extraction_to_shelter()
 
 
 func _finish_extraction_to_shelter() -> void:
+	if extraction_result_finished and not host.get_tree().paused:
+		return
+	extraction_result_finished = true
 	host.get_tree().paused = false
 	GameState.returning_from_shelter = false
 	GameState.register_shelter_return()

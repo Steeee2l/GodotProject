@@ -252,6 +252,10 @@ func _build_modal() -> void:
 	dim.color = Color(0.006, 0.009, 0.012, 0.82)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	modal.add_child(dim)
+	ModalDismiss.install(modal, dim, func() -> void:
+		if opened:
+			set_open(false)
+	)
 
 	var safe_margin := _margin(16, 16, 16, 16)
 	safe_margin.name = "InventorySafeMargin"
