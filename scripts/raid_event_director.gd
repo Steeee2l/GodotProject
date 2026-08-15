@@ -181,13 +181,6 @@ static func get_level_progress(pressure: float) -> float:
 	return clampf((pressure - current) / maxf(1.0, next - current), 0.0, 1.0)
 
 
-static func get_pressure_to_next_level(pressure: float) -> float:
-	var level := resolve_level(pressure)
-	if level >= LEVEL_THRESHOLDS.size() - 1:
-		return 0.0
-	return maxf(0.0, float(LEVEL_THRESHOLDS[level + 1]) - pressure)
-
-
 static func pick_event(
 	level: int,
 	elapsed_seconds: float,
@@ -223,17 +216,6 @@ static func pick_event(
 		if roll <= 0.0:
 			return candidates[index]
 	return candidates[candidates.size() - 1]
-
-
-static func get_enemy_alert_multiplier(level: int) -> float:
-	match level:
-		LEVEL_ALERT:
-			return 1.15
-		LEVEL_HUNT:
-			return 1.45
-		LEVEL_LOCKDOWN:
-			return 1.75
-	return 1.0
 
 
 static func is_stealth_decay_allowed(seconds_since_noise: float) -> bool:

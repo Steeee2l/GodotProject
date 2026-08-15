@@ -68,7 +68,3 @@ static func get_inventory_textures() -> Dictionary:
 	for weapon_id in CATALOG:
 		textures[weapon_id] = get_weapon_texture(weapon_id)
 	return textures
-
-
-static func get_future_texture_paths() -> Dictionary:
-	return FUTURE_CATALOG.duplicate()

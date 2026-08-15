@@ -160,19 +160,6 @@ static func keycap() -> StyleBoxFlat:
 	return style
 
 
-static func raised_panel(
-	background: Color, border: Color, radius: int = 8, shadow: float = 18.0
-) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
-	style.border_color = border
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(radius)
-	style.shadow_color = Color(0, 0, 0, 0.72)
-	style.shadow_size = roundi(shadow)
-	return style
-
-
 static func label(text: String, size: int, color: Color) -> Label:
 	var result := Label.new()
 	result.text = text

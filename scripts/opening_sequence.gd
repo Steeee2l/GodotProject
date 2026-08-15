@@ -702,37 +702,6 @@ func _add_fire(world_position: Vector3, scale_multiplier: float) -> void:
 	root.add_child(smoke)
 
 
-func _add_mist() -> void:
-	var material := StandardMaterial3D.new()
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.vertex_color_use_as_albedo = true
-	material.albedo_color = Color(0.66, 0.72, 0.73, 0.11)
-	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	var quad := QuadMesh.new()
-	quad.size = Vector2(3.8, 1.2)
-	quad.material = material
-	var process := ParticleProcessMaterial.new()
-	process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
-	process.emission_box_extents = Vector3(7, 1.2, 34)
-	process.direction = Vector3(0.5, 0, -0.08)
-	process.spread = 12.0
-	process.initial_velocity_min = 0.08
-	process.initial_velocity_max = 0.22
-	process.gravity = Vector3.ZERO
-	process.scale_min = 0.7
-	process.scale_max = 1.8
-	var mist := GPUParticles3D.new()
-	mist.position = Vector3(0, 1.1, 0)
-	mist.amount = 70
-	mist.lifetime = 12.0
-	mist.randomness = 1.0
-	mist.visibility_aabb = AABB(Vector3(-10, -2, -40), Vector3(20, 8, 80))
-	mist.process_material = process
-	mist.draw_pass_1 = quad
-	add_child(mist)
-
-
 func _build_camera() -> void:
 	camera_rig = Node3D.new()
 	camera_rig.name = "OpeningCameraRig"

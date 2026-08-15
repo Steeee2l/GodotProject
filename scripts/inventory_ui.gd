@@ -656,13 +656,6 @@ func _bag_filter_matches_item(filter_id: String, item_type: String) -> bool:
 	return str(item_type) == filter_id
 
 
-func _bag_filter_button_label(filter_id: String) -> String:
-	var title := _get_filter_display_name(filter_id)
-	var icon := str(BAG_FILTER_ICON.get(filter_id, ""))
-	var base := icon + " " + title if icon != "" else title
-	return base
-
-
 func _format_bag_filter_count(count: int) -> String:
 	if count <= 0:
 		return "0"

@@ -659,15 +659,6 @@ func _find_reinforcement_position() -> Vector3:
 	return Vector3.INF
 
 
-func _spawn_zone_boss(world: ProceduralCityMap, spawn_index: int, zone_threat: float) -> void:
-	var boss_position := _find_distributed_enemy_position(world, spawn_index, spawn_index + 1)
-	_spawn_rocket_boss_at(
-		boss_position,
-		maxf(0.5, zone_threat),
-		"RaidBoss_%s" % GameState.selected_raid_zone
-	)
-
-
 func _spawn_rocket_boss_at(
 	spawn_position: Vector3,
 	boss_threat: float,

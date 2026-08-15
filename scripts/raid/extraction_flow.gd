@@ -450,10 +450,6 @@ func _create_extraction_beacon(world_position: Vector3, index: int) -> Node3D:
 	return site
 
 
-func _update_extraction_prompt() -> void:
-	host._update_field_interactions(0.0)
-
-
 func _update_extraction_discovery() -> void:
 	for site in host.extraction_sites:
 		if not is_instance_valid(site) or bool(site.get_meta("map_discovered", false)):

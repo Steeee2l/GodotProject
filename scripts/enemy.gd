@@ -695,10 +695,6 @@ func _is_target_concealed_by_loaf(distance: float) -> bool:
 	)
 
 
-func _get_close_detection_radius() -> float:
-	return DETECTION_CLOSE_RADIUS * _get_target_visibility_multiplier()
-
-
 func _get_disengage_distance() -> float:
 	return MELEE_DISENGAGE_DISTANCE if enemy_kind == "melee" else RANGED_DISENGAGE_DISTANCE
 
@@ -949,16 +945,6 @@ func _update_search_behavior(delta: float) -> void:
 			search_look_timer = 0.8
 	if search_time_remaining <= 0.0:
 		_clear_alert()
-
-
-func _setup_vision_fan() -> void:
-	# Detection remains directional, but its debug fan is intentionally hidden in play.
-	vision_fan = null
-	vision_fan_material = null
-
-
-func _update_vision_fan(radius: float, force_rebuild: bool = false) -> void:
-	vision_fan_range = radius
 
 
 func _update_vision_fan_visual() -> void:
@@ -2262,10 +2248,6 @@ func _get_weapon_range_profile() -> Vector3:
 		"m1911": return Vector3(17.0, 34.0, 0.42)
 		"ak47": return Vector3(25.0, 46.0, 0.58)
 	return Vector3(16.0, 34.0, 0.35)
-
-
-func _fire_pistol(direction: Vector3) -> void:
-	_fire_weapon(direction)
 
 
 func _setup_enemy_audio() -> void:

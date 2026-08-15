@@ -2206,11 +2206,6 @@ func get_weapon_mod_count(mod_id: String) -> int:
 	return int(weapon_mod_inventory.get(mod_id, 0))
 
 
-func get_supported_worker_count() -> int:
-	_ensure_resident_records()
-	return resident_cat_ids.size()
-
-
 func get_resident_capacity() -> int:
 	return int(SHELTER_CAPACITY_BY_TIER.get(shelter_tier, 5))
 
@@ -2256,29 +2251,6 @@ func get_active_catnip_workers() -> int:
 func get_resident_trait(worker_id: String) -> Dictionary:
 	_ensure_resident_records()
 	return (resident_traits.get(worker_id, RESIDENT_TRAIT_PRESETS[4]) as Dictionary).duplicate(true)
-
-
-func get_resident_trait_label(worker_id: String) -> String:
-	var trait_data := get_resident_trait(worker_id)
-	return "%s · 꾹꾹이 +%d%% · 캣닢 +%d%%" % [
-		str(trait_data.get("name", "평범한 주민")),
-		roundi((float(trait_data.get("kneading", 1.0)) - 1.0) * 100.0),
-		roundi((float(trait_data.get("catnip", 1.0)) - 1.0) * 100.0),
-	]
-
-
-func get_kneading_efficiency_total() -> float:
-	var total := 0.0
-	for worker_id in assigned_worker_ids:
-		total += float(get_resident_trait(worker_id).get("kneading", 1.0))
-	return total
-
-
-func get_catnip_efficiency_total() -> float:
-	var total := 0.0
-	for worker_id in assigned_catnip_worker_ids:
-		total += float(get_resident_trait(worker_id).get("catnip", 1.0))
-	return total
 
 
 func get_worker_production_per_second(worker_id: String, production_kind: String) -> float:
@@ -2806,10 +2778,6 @@ func get_active_contract_progress_text() -> String:
 	]
 
 
-func get_churu_buff_definition(buff_id: String) -> Dictionary:
-	return (CHURU_BUFFS.get(buff_id, {}) as Dictionary).duplicate(true)
-
-
 func is_churu_buff_active(buff_id: String) -> bool:
 	return active_churu_buffs.has(buff_id)
 
@@ -2851,10 +2819,6 @@ func get_catnip_boost_cost() -> int:
 	return maxi(CATNIP_BOOST_COST, roundi(get_catnip_per_second() * 60.0 * 30.0))
 
 
-func get_catnip_buff_definition(buff_id: String) -> Dictionary:
-	return (CATNIP_FIELD_BUFFS.get(buff_id, {}) as Dictionary).duplicate(true)
-
-
 func is_catnip_buff_active(buff_id: String) -> bool:
 	return active_catnip_buff == buff_id
 
@@ -2892,18 +2856,6 @@ func get_shelter_stall_reason() -> String:
 	return ""
 
 
-func consume_offline_progress_notice() -> Dictionary:
-	var notice := {
-		"scrap": shelter_offline_scrap_pending,
-		"catnip": shelter_offline_catnip_pending,
-		"repair": shelter_offline_repair_pending,
-	}
-	shelter_offline_scrap_pending = 0
-	shelter_offline_catnip_pending = 0
-	shelter_offline_repair_pending = 0.0
-	return notice
-
-
 func get_shelter_upgrade_cost() -> Dictionary:
 	return (SHELTER_UPGRADE_COSTS.get(shelter_tier + 1, {}) as Dictionary).duplicate(true)
 
@@ -2925,25 +2877,11 @@ func try_upgrade_shelter_tier() -> bool:
 	return true
 
 
-func get_workbench_slot_limit() -> int:
-	if shelter_workbench_level >= 5:
-		return 6
-	if shelter_workbench_level >= 3:
-		return 5
-	return 4
-
-
 func get_workbench_upgrade_cost() -> Dictionary:
 	var next_level := shelter_workbench_level + 1
 	if next_level > 5:
 		return {}
 	return {"scrap": int(WORKBENCH_UPGRADE_COSTS.get(next_level, 0))}
-
-
-func can_mod_weapon(weapon_id: String) -> bool:
-	if shelter_workbench_level >= 3:
-		return true
-	return ["m1911", "mp5"].has(weapon_id)
 
 
 func try_upgrade_workbench() -> bool:
@@ -3003,27 +2941,6 @@ func has_any_weapon() -> bool:
 const EMERGENCY_WEAPON_ID := "m1911"
 const EMERGENCY_AMMO_ID := "45_fmj"
 const EMERGENCY_AMMO_COUNT := 24
-
-
-func needs_emergency_weapon() -> bool:
-	return not has_any_weapon()
-
-
-func grant_emergency_weapon() -> Dictionary:
-	if has_any_weapon():
-		return {"ok": false, "reason": "already_armed"}
-	add_weapon(EMERGENCY_WEAPON_ID, 1)
-	set_ammo_count(EMERGENCY_AMMO_ID, get_ammo_count(EMERGENCY_AMMO_ID) + EMERGENCY_AMMO_COUNT)
-	equipped_weapon_id = EMERGENCY_WEAPON_ID
-	equipped_ammo_id = EMERGENCY_AMMO_ID
-	has_ak = true
-	weapon_durability = 100.0
-	save_persistent_state()
-	return {
-		"ok": true,
-		"weapon_id": EMERGENCY_WEAPON_ID,
-		"ammo": EMERGENCY_AMMO_COUNT,
-	}
 
 
 func get_weapon_enhancement_level(weapon_id: String) -> int:

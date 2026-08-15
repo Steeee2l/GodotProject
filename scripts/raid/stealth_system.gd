@@ -314,32 +314,6 @@ func _is_aim_vision_expanded() -> bool:
 	return host.laser_aim_held or DisplayServer.is_touchscreen_available()
 
 
-func _enemy_is_in_player_vision(enemy: Node3D, visible_radius: float) -> bool:
-	if not is_instance_valid(enemy) or camera.is_position_behind(enemy.global_position):
-		return false
-	var viewport_rect := host.get_viewport().get_visible_rect()
-	var enemy_screen := camera.unproject_position(enemy.global_position + Vector3(0, 0.45, 0))
-	if not viewport_rect.grow(24.0).has_point(enemy_screen):
-		return false
-	var player_screen := camera.unproject_position(player.global_position + Vector3(0, 0.22, 0))
-	if player_screen.distance_to(enemy_screen) > visible_radius:
-		return false
-	var facing_screen := camera.unproject_position(player.global_position + host._get_perception_aim_direction() * 5.0)
-	var facing_screen_direction: Vector2 = (facing_screen - player_screen).normalized()
-	var enemy_screen_direction := (enemy_screen - player_screen).normalized()
-	var near_radius := lerpf(112.0, 64.0, host.night_intensity)
-	var fan_cos := lerpf(0.06, 0.34, host.night_intensity)
-	if _is_aim_vision_expanded() and player_screen.distance_to(enemy_screen) > near_radius and enemy_screen_direction.dot(facing_screen_direction) < fan_cos:
-		return false
-	var query := PhysicsRayQueryParameters3D.create(
-		player.global_position + Vector3(0, 0.42, 0),
-		enemy.global_position + Vector3(0, 0.42, 0),
-		COLLISION_PROFILES.WORLD_ONLY_SIGHT_MASK
-	)
-	query.exclude = [player.get_rid(), enemy.get_rid()]
-	return player.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
-
-
 func _setup_stealth_takedown_prompt(font: Font) -> void:
 	stealth_takedown_prompt = PanelContainer.new()
 	stealth_takedown_prompt.name = "StealthTakedownPrompt"

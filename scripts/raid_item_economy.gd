@@ -40,16 +40,6 @@ static func get_total_value(
 	return maxi(0, amount) * maxi(0, int(definition.get("base_value", 0)))
 
 
-static func get_value_per_slot(
-	item_type: String,
-	item_id: String,
-	amount: int,
-	slot_cost: int,
-	special_data: Dictionary = {}
-) -> float:
-	return float(get_total_value(item_type, item_id, amount, special_data)) / float(maxi(1, slot_cost))
-
-
 static func is_protected(item_type: String, item_id: String) -> bool:
 	if item_type in ["progression", "special_cargo"]:
 		return true

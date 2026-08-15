@@ -231,13 +231,6 @@ func _factory_line_z() -> float:
 	return -_room_half_extents().y + 1.55
 
 
-func _has_production_facility() -> bool:
-	for facility_id in ["scratcher_bank", "catnip_scraper", "storage"]:
-		if GameState.is_shelter_facility_unlocked(facility_id):
-			return true
-	return false
-
-
 func _player_bed_position() -> Vector3:
 	return Vector3(-_room_half_extents().x + 1.95, 0.0, -5.4)
 
@@ -2719,10 +2712,6 @@ func _build_meter_row(parent: Node, icon_name: String, title: String, color: Col
 	return value_label
 
 
-func _toggle_stats_panel() -> void:
-	_set_stats_panel_expanded(not stats_panel_expanded)
-
-
 func _set_stats_panel_expanded(expanded: bool) -> void:
 	stats_panel_expanded = expanded
 	if is_instance_valid(stats_body_box):
@@ -3767,73 +3756,6 @@ func _on_catnip_buff_toggled(pressed: bool, buff_id: String) -> void:
 				(raid_catnip_buff_buttons[other_id] as Button).set_pressed_no_signal(false)
 	elif raid_catnip_buff_choice == buff_id:
 		raid_catnip_buff_choice = ""
-
-
-func _build_raid_zone_row(zone_id: String) -> Control:
-	var zone := GameState.get_raid_zone(zone_id)
-	var unlocked := GameState.is_raid_zone_unlocked(zone_id)
-	var row := PanelContainer.new()
-	row.custom_minimum_size = Vector2(0, 92)
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_theme_stylebox_override("panel", _panel_style(
-		Color(0.055, 0.063, 0.061, 0.94) if unlocked else Color(0.025, 0.028, 0.03, 0.72),
-		Color("#667e70") if unlocked else Color(0.34, 0.36, 0.36, 0.45)
-	))
-	var margin := MarginContainer.new()
-	for margin_name in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
-		margin.add_theme_constant_override(margin_name, 12)
-	row.add_child(margin)
-	var content := HBoxContainer.new()
-	content.add_theme_constant_override("separation", 14)
-	margin.add_child(content)
-	var zone_icon := TextureRect.new()
-	zone_icon.custom_minimum_size = Vector2(56, 56)
-	zone_icon.texture = UI_ICONS.get_icon("raid", 56, Color("#d3b86b") if unlocked else Color("#5f6964"))
-	zone_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	zone_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	content.add_child(zone_icon)
-	var info := VBoxContainer.new()
-	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content.add_child(info)
-	var name_label := Label.new()
-	name_label.text = "%s  ·  위협 %d%%" % [str(zone.get("name", zone_id)), roundi(float(zone.get("threat", 0.0)) * 100.0)]
-	name_label.add_theme_font_override("font", FONT)
-	name_label.add_theme_font_size_override("font_size", 20)
-	name_label.add_theme_color_override("font_color", Color("#f0e6c8") if unlocked else Color("#737b77"))
-	info.add_child(name_label)
-	var description := Label.new()
-	description.text = str(zone.get("description", ""))
-	description.add_theme_font_override("font", FONT)
-	description.add_theme_font_size_override("font_size", 13)
-	description.add_theme_color_override("font_color", Color("#b7c8bf") if unlocked else Color("#676d69"))
-	info.add_child(description)
-	var reward := Label.new()
-	reward.text = "주요 보상: %s" % str(zone.get("reward", "-"))
-	reward.add_theme_font_override("font", FONT)
-	reward.add_theme_font_size_override("font_size", 13)
-	reward.add_theme_color_override("font_color", Color("#d3b86b") if unlocked else Color("#67645b"))
-	info.add_child(reward)
-	var launch := Button.new()
-	launch.custom_minimum_size = Vector2(130, 58)
-	var required_tier := int(zone.get("required_tier", 1))
-	var needs_keycard := (
-		required_tier >= 4
-		and GameState.shelter_tier >= required_tier
-		and GameState.get_progression_item_count("sealed_zone_keycard") <= 0
-	)
-	launch.text = (
-		"출정"
-		if unlocked
-		else ("키카드 필요" if needs_keycard else "Tier %d 필요" % required_tier)
-	)
-	launch.icon = UI_ICONS.get_icon("upgrade" if not unlocked else "raid", 30, Color("#e6d8ae"))
-	launch.expand_icon = true
-	launch.disabled = not unlocked
-	launch.add_theme_font_override("font", FONT)
-	launch.add_theme_font_size_override("font_size", 14)
-	launch.pressed.connect(func() -> void: _launch_raid_zone(zone_id))
-	content.add_child(launch)
-	return row
 
 
 func _build_raid_zone_map_marker(zone_id: String, zone_index: int) -> Control:

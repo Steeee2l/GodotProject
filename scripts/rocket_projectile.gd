@@ -94,10 +94,6 @@ func _has_blast_line_of_sight(body: CollisionObject3D) -> bool:
 	return hit.is_empty() or hit.get("collider") == body
 
 
-func get_flight_progress() -> float:
-	return clampf(flight_elapsed / FLIGHT_DURATION, 0.0, 1.0)
-
-
 func _build_target_marker() -> void:
 	target_marker = Node3D.new()
 	target_marker.name = "RocketImpactTelegraph"

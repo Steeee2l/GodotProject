@@ -44,12 +44,6 @@ func get_interaction_radius() -> float:
 	return 2.15
 
 
-func get_face_texture() -> AtlasTexture:
-	var frame_width := float(MERCHANT_TEXTURE.get_width()) / float(FRAME_COUNT)
-	var face_width := frame_width * 0.56
-	return _atlas_region(Rect2(frame_width * 0.20, 12.0, face_width, 112.0))
-
-
 func _build_idle_frames() -> SpriteFrames:
 	var frames := SpriteFrames.new()
 	frames.remove_animation("default")

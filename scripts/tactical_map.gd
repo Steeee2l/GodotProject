@@ -91,10 +91,6 @@ func seal_extraction(index: int) -> void:
 	queue_redraw()
 
 
-func is_extraction_sealed(index: int) -> bool:
-	return bool(sealed_extraction_indices.get(index, false))
-
-
 func set_extraction_profiles(profiles: Array[Dictionary]) -> void:
 	extraction_profiles.assign(profiles)
 	queue_redraw()

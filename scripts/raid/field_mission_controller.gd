@@ -114,18 +114,6 @@ func _get_field_mission_fail_radius() -> float:
 	return maxf(FIELD_MISSION_FAIL_RADIUS, _get_field_mission_active_radius() * 3.0)
 
 
-func _get_field_mission_rules(site: Node3D) -> String:
-	return FIELD_MISSION_CATALOG.build_rules(
-		str(site.get_meta("type", "defense")),
-		bool(site.get_meta("silence_required", false)),
-		_get_field_mission_fail_radius()
-	)
-
-
-func _format_field_mission_reward(reward: Dictionary) -> String:
-	return FIELD_MISSION_CATALOG.format_reward(reward)
-
-
 func _build_field_mission_marker(site: Node3D) -> void:
 	var mission_type := str(site.get_meta("type", "defense"))
 	var marker_color := Color("#5eb9ad")

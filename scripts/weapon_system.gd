@@ -304,12 +304,3 @@ static func is_ammo_compatible(magazine_id: String, ammo_id: String) -> bool:
 
 static func validate_ammo_loadout(weapon_id: String, magazine_id: String, ammo_id: String) -> bool:
 	return is_magazine_compatible(weapon_id, magazine_id) and is_ammo_compatible(magazine_id, ammo_id)
-
-
-static func get_mod_names(mod_ids: Array[String]) -> Array[String]:
-	var names: Array[String] = []
-	for mod_id in mod_ids:
-		var definition := get_mod(mod_id)
-		if not definition.is_empty():
-			names.append(str(definition["display_name"]))
-	return names

@@ -270,25 +270,6 @@ func _rebuild_ui() -> void:
 	actions.add_child(overclock)
 
 
-func _worker_slot(index: int, active_workers: int, slots: int) -> PanelContainer:
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(168, 72)
-	var active := index < active_workers
-	var unlocked := index < slots
-	var bg := Color(0.035, 0.04, 0.033, 0.92)
-	var border := Color("#80b887") if active else (Color("#635847") if unlocked else Color("#333333"))
-	panel.add_theme_stylebox_override("panel", _panel_style(bg, border))
-	var label := _label(
-		"작업 중" if active else ("대기 슬롯" if unlocked else "잠김"),
-		15,
-		Color("#dff0c2") if active else Color("#8f978f")
-	)
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	panel.add_child(label)
-	return panel
-
-
 func _portrait_card(resident_id: String, is_seat: bool, slots: int) -> Button:
 	# 초상화가 주인공인 세로 카드. 좌석(위)과 벤치(아래)가 같은 카드를 쓰므로
 	# "고양이를 옮겨 앉힌다"는 감각이 유지된다.

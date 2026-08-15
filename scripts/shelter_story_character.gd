@@ -102,24 +102,12 @@ func get_interaction_prompt() -> String:
     return interaction_prompt
 
 
-func set_interaction_prompt(next_prompt: String) -> void:
-    interaction_prompt = next_prompt
-
-
 func get_interaction_radius() -> float:
     return 2.45
 
 
 func get_portrait_texture() -> Texture2D:
     return load("%s/down_idle-frame-0.png" % animation_root) as Texture2D
-
-
-func get_display_name() -> String:
-    return display_name
-
-
-func get_role_name() -> String:
-    return role_name
 
 
 func _build_visual() -> void:

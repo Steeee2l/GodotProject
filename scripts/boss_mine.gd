@@ -422,11 +422,3 @@ func _spawn_smoke_particles() -> void:
 	smoke.draw_pass_1 = smoke_quad
 	add_child(smoke)
 	smoke.emitting = true
-
-
-func force_trigger() -> void:
-	_trigger()
-
-
-func is_armed() -> bool:
-	return mine_state in ["armed", "triggered"]

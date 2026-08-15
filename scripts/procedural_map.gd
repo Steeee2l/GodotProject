@@ -394,26 +394,6 @@ func _first_adjacent_road(cell: Vector2i) -> Vector2i:
 	return Vector2i(-1, -1)
 
 
-func _select_apartment_complex_site() -> void:
-	# The estate is deliberately outside the north map boundary. Its main gate
-	# continues one of the city's vertical roads, while five edge cells reserve
-	# a clear frontage for the walls and guardhouse.
-	var gate_road_candidates: Array[int] = []
-	for road_x in vertical_roads:
-		if road_x < 2 or road_x > GRID_SIZE - 3:
-			continue
-		if absi(road_x - river_center_x) <= 3:
-			continue
-		gate_road_candidates.append(road_x)
-	if gate_road_candidates.is_empty():
-		return
-	gate_road_candidates.shuffle()
-	var gate_road_x := gate_road_candidates[0]
-	apartment_origin = Vector2i(gate_road_x - 2, 0)
-	for x_offset in range(5):
-		apartment_cells.append(apartment_origin + Vector2i(x_offset, 0))
-
-
 func _select_planned_landmarks(eligible_cells: Array[Vector2i]) -> void:
 	var shuffled := eligible_cells.duplicate()
 	shuffled.shuffle()
@@ -609,33 +589,6 @@ func _build_perimeter_fences() -> void:
 	_add_perimeter_collision()
 
 
-func _spawn_perimeter_fence_sprite(
-	node_name: String,
-	texture: Texture2D,
-	position: Vector3,
-	yaw: float,
-	flip_h: bool,
-	flip_v: bool,
-	scale_factor: float = 1.0
-) -> void:
-	var sprite := Sprite3D.new()
-	sprite.name = node_name
-	sprite.texture = texture
-	sprite.position = position
-	sprite.rotation.y = yaw
-	sprite.pixel_size = (PERIMETER_FENCE_WORLD_LENGTH * scale_factor) / float(texture.get_width())
-	sprite.offset.y = texture.get_height() * 0.22
-	sprite.billboard = BaseMaterial3D.BILLBOARD_DISABLED
-	sprite.transparent = true
-	sprite.shaded = false
-	sprite.no_depth_test = false
-	sprite.render_priority = -10
-	sprite.flip_h = flip_h
-	sprite.flip_v = flip_v
-	sprite.add_to_group("outer_perimeter_fence")
-	add_child(sprite)
-
-
 func _add_perimeter_collision() -> void:
 	var edge := MAP_SIZE * 0.5 + 1.4
 	var length := MAP_SIZE + 8.0
@@ -787,58 +740,6 @@ func _build_zoned_lots() -> void:
 	for cell in open_cells:
 		_build_open_lot(cell)
 	_build_district_props()
-
-
-func _build_apartment_complex() -> void:
-	if apartment_cells.size() != 5:
-		return
-	var definition := LANDMARK_CATALOG.get_definition("apartment_complex")
-	var footprint_modules: Vector2i = definition.get("footprint_modules", Vector2i.ZERO)
-	var module_world_size := CELL_SIZE / float(LANDMARK_CATALOG.MODULES_PER_CELL)
-	var footprint_depth := footprint_modules.y * module_world_size
-	var gate_cell := apartment_origin + Vector2i(2, 0)
-	# The generated art's entrance is its low screen anchor. Placing the estate
-	# north-west of the camera-facing city makes that entrance point inward while
-	# the towers recede off map instead of covering the inner road network.
-	var center := Vector3(
-		_cell_center(gate_cell).x,
-		0.0,
-		-MAP_SIZE * 0.5 - footprint_depth * 0.5 + 22.0
-	)
-	var apartment := _spawn_landmark_at(center, "apartment_complex", "site_%d_%d" % [apartment_origin.x, apartment_origin.y])
-	if apartment == null:
-		return
-	apartment.add_to_group("urban_apartment_complex")
-	apartment.add_to_group("camera_occluder")
-	apartment.set_meta("site_origin", apartment_origin)
-	apartment.set_meta("site_size_cells", Vector2i(5, 1))
-	apartment.set_meta("resident_capacity", 640)
-	apartment.set_meta("map_edge_attached", true)
-	apartment.set_meta("off_map_extension", true)
-	apartment.set_meta("collision_world_size", Vector3(5.0 * CELL_SIZE, 8.0, footprint_depth))
-	apartment.set_meta("occlusion_lateral_limit", 46.0)
-	apartment.set_meta("occlusion_depth_limit", 92.0)
-	var gate_local_position := Vector3(0.0, 1.6, footprint_depth * 0.5 - 0.8)
-	# The estate texture is intentionally much larger than the viewport. Anchor
-	# its screen visibility to the entrance so a remote tower corner cannot stay
-	# on screen after the actual destination has moved well outside the camera.
-	apartment.set_meta("overlay_focus_local", gate_local_position)
-	apartment.set_meta("overlay_focus_fade_pixels", Vector2(32.0, 150.0))
-	var apartment_sprite := apartment.get_node_or_null("LandmarkSprite") as Sprite3D
-	if apartment_sprite:
-		apartment_sprite.name = "BuildingSprite"
-		# _spawn_landmark_at is also used by single-cell landmarks and offsets their
-		# art from a cell origin. This landmark is supplied by its true centre.
-		apartment_sprite.position.x = 1.5
-		apartment_sprite.position.z = footprint_depth * 0.5
-	_add_apartment_portal_site(apartment, gate_local_position, Vector3(12.0, 3.2, 2.4))
-	_add_plane(
-		"ApartmentEntranceApron",
-		Vector3(center.x, 0.0, -MAP_SIZE * 0.5 + 28.0),
-		Vector2(12.0, 4.0),
-		asphalt_material,
-		0.055
-	)
 
 
 func _add_apartment_portal_site(parent: Node3D, local_position: Vector3, size: Vector3) -> void:
@@ -1658,10 +1559,6 @@ func get_map_snapshot_data() -> Dictionary:
 	}
 
 
-func get_region_profile() -> Dictionary:
-	return region_profile.duplicate(true)
-
-
 func get_region_id() -> String:
 	return raid_zone_id
 
@@ -1918,10 +1815,6 @@ func set_collision_debug_enabled(enabled: bool) -> void:
 func toggle_collision_debug() -> bool:
 	set_collision_debug_enabled(not collision_debug_enabled)
 	return collision_debug_enabled
-
-
-func get_generated_overlap_report() -> Array[Dictionary]:
-	return generated_overlap_report.duplicate(true)
 
 
 func _configure_profiled_collision(

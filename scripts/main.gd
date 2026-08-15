@@ -3723,25 +3723,6 @@ func _find_squad_member_position(
 	return fallback
 
 
-func _get_random_armor_drop(seed_hint: int = 0) -> Dictionary:
-	# 계열(어떤 장비인가)은 도시가 정하고, 레벨은 공통 분포로 굴린다.
-	# 계열 배열은 [몸, 머리, 발] 순서라 슬롯 롤과 1:1 대응한다.
-	var equipment_slot_roll := posmod(seed_hint + spawn_random.randi(), 3)
-	var zone: Dictionary = GameState.RAID_ZONES.get(GameState.selected_raid_zone, {})
-	var pool: Array = LOOT_ECONOMY.armor_pool_for_stage(int(zone.get("stage_tier", 1)))
-	var equipment_id := GameState.roll_equipment_drop_id(str(pool[equipment_slot_roll]))
-	var definition := GameState.get_equipment_definition(equipment_id)
-	return {
-		"amount": 1,
-		"equipment_id": equipment_id,
-		"display_name": str(definition.get("display_name", "Armor")),
-	}
-
-
-# ── 동시 사격 상한 ─────────────────────────────────────────────
-# 몇 마리가 몰려와도 실제로 방아쇠를 당기는 건 동시에 2마리뿐이다. 나머지는
-# 포위·이동한다. "다굴 = 즉사"를 "다굴 = 바쁘지만 뚫을 수 있음"으로 바꾸는
-# 고전 기법. 보스와 근접·수류탄(예비동작이 길어 읽힘)은 상한 밖이다.
 const MAX_CONCURRENT_SHOOTERS := 2
 const MAX_CONCURRENT_MELEE := 2
 var enemy_fire_tokens: Dictionary = {}
@@ -4394,17 +4375,6 @@ func _is_player_inside_sprite_screen_rect(sprite: Sprite3D) -> bool:
 		clampi(floori(uv.y * mask.get_height()), 0, mask.get_height() - 1)
 	)
 	return mask.get_pixelv(pixel).a > 0.1
-
-
-func _safe_map_position(requested_position: Vector3) -> Vector3:
-	var world := get_node_or_null("World") as ProceduralCityMap
-	if world == null:
-		return requested_position
-	return world.find_nearest_open_position(requested_position)
-
-
-func _scale_map_position(position: Vector3) -> Vector3:
-	return Vector3(position.x * MAP_CONTENT_SCALE, position.y, position.z * MAP_CONTENT_SCALE)
 
 
 func _setup_raid_opportunities(world: ProceduralCityMap) -> void:

@@ -102,10 +102,6 @@ func _ready() -> void:
 	_play_animation()
 
 
-func set_assignment(is_assigned: bool, next_target: Vector3, next_work_focus: Vector3, snap := false) -> void:
-	set_work_assignment("kneading" if is_assigned else "waiting", next_target, next_work_focus, snap)
-
-
 func set_work_assignment(next_kind: String, next_target: Vector3, next_work_focus: Vector3, snap := false) -> void:
 	var previous_kind := assignment_kind
 	assignment_kind = next_kind

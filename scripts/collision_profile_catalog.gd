@@ -108,28 +108,6 @@ static func get_profile(profile_id: String, base_size: Vector3) -> Dictionary:
 	}
 
 
-static func orient_size(size: Vector3, along_z: bool) -> Vector3:
-	return Vector3(size.z, size.y, size.x) if along_z else size
-
-
-# ── 화면 각도 ↔ 월드 yaw 변환 ──────────────────────────────────
-#
-# 아이소메트릭 카메라(월드 (1,1,1)에서 원점을 바라봄)에서 바닥 위 방향은
-# 화면에 이렇게 맺힌다.
-#
-#   월드 +X  →  화면 오른쪽·아래 (-30°)
-#   월드 +Z  →  화면 왼쪽·아래  (210°)
-#
-# 두 축이 화면상 대칭이라 "화면에서 N도 기울었으니 월드에서도 N도" 같은
-# 단순 덧셈은 성립하지 않는다. 빌보드 스프라이트를 화면에서 기울여 놓고
-# 충돌 상자를 같은 각도만큼 yaw 시키면 반드시 어긋난다.
-#
-# 카메라 기저벡터로 유도한 정확한 역변환:
-#   화면 우측 벡터  right = ( 1/√2, 0, -1/√2)
-#   화면 상단 벡터  up    = (-1/√6, 2/√6, -1/√6)
-# 월드 방향 (cos φ, 0, sin φ)의 화면 각도 α에 대해
-#   φ = atan2(-sin α/|up.x| - cos α/|right.x|,  cos α/|right.x| - sin α/|up.x|)
-
 const SCREEN_RIGHT_AXIS_SCALE := 1.4142135623730951  # 1 / (1/√2)
 const SCREEN_UP_AXIS_SCALE := 2.449489742783178      # 1 / (1/√6)
 

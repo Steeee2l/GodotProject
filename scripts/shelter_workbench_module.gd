@@ -784,16 +784,6 @@ func _consume_resource(key: String, amount: int) -> void:
 			GameState.catnip = maxi(0, GameState.catnip - amount)
 
 
-func _cost_short_text(recipe: Dictionary) -> String:
-	var parts: Array[String] = []
-	for key in _effective_cost(recipe).keys():
-		parts.append("%s %s" % [
-			_resource_name(str(key)),
-			GameState.format_compact_number(int(_effective_cost(recipe)[key])),
-		])
-	return " / ".join(parts)
-
-
 func _recipe_list_subtitle(recipe: Dictionary) -> String:
 	var required_blueprint := str(recipe.get("required_blueprint", ""))
 	if (
@@ -815,15 +805,6 @@ func _recipe_list_subtitle(recipe: Dictionary) -> String:
 	if bool(result.get("workbench_upgrade", false)):
 		return "최고 레벨" if GameState.shelter_workbench_level >= 5 else ("확장 가능" if _can_craft(recipe) else "재료 부족")
 	return "제작 가능" if _can_craft(recipe) else "재료 부족"
-
-
-func _blueprint_name(item_id: String) -> String:
-	match item_id:
-		"rifle_blueprint":
-			return "소총 제작 청사진"
-		"shotgun_blueprint":
-			return "산탄총 제작 청사진"
-	return item_id
 
 
 func _result_text(recipe: Dictionary) -> String:
