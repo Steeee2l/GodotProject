@@ -1594,11 +1594,16 @@ func get_backpack_storage_count(item_type: String, item_id: String) -> int:
 		"component":
 			return get_mod_component_count(item_id)
 		"mod":
-			return get_weapon_mod_count(item_id)
+			# 총에 박아 넣은 부착물은 총의 일부다 — 가방 칸을 먹지 않는다.
+			var mod_count := get_weapon_mod_count(item_id)
+			if equipped_weapon_mods.has(item_id):
+				mod_count -= 1
+			return maxi(0, mod_count)
 		"medkit":
 			return medkits
 		"progression":
 			# 창고에 넣은 진행 아이템은 가방 몫이 아니다 — 원장(dict)만 센다.
+			# (가방 '칸'은 안 먹는다 — get_raid_item_slot_cost에서 0으로 친다.)
 			return maxi(0, int(progression_item_inventory.get(item_id, 0)))
 		"food":
 			return maxi(
@@ -1702,6 +1707,10 @@ func get_raid_item_stack_limit(item_type: String) -> int:
 func get_raid_item_slot_cost(item_type: String, _item_id: String, amount: int) -> int:
 	if amount <= 0:
 		return 0
+	# 청사진·키카드는 버릴 수도 쓸 수도 없는 쉘터 자산이다. 칸만 먹던
+	# 문제(유저 신고) — 보유는 유지하되 가방 칸은 차지하지 않는다.
+	if item_type == "progression":
+		return 0
 	# 제작 재료는 부피가 있다 — 한 개가 한 칸. 재료를 쓸어 담으면 가방이
 	# 실제로 차야 '무엇을 두고 갈까'라는 이 게임의 심장이 재료에도 뛴다.
 	if item_type in ["weapon", "equipment", "component"]:
@@ -1750,10 +1759,12 @@ func get_raid_bag_used_slots() -> int:
 			get_backpack_storage_count("progression", str(progression_id))
 		)
 	for mod_id in weapon_mod_inventory.keys():
+		# 장착분 제외는 get_backpack_storage_count가 안다 — 총에 박힌
+		# 부착물이 가방 칸을 계속 먹던 문제(유저 신고)의 지점.
 		used += get_raid_item_slot_cost(
 			"mod",
 			str(mod_id),
-			get_weapon_mod_count(str(mod_id))
+			get_backpack_storage_count("mod", str(mod_id))
 		)
 	for weapon_id in weapon_inventory.keys():
 		var weapon_count := get_backpack_storage_count("weapon", str(weapon_id))

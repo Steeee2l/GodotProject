@@ -142,7 +142,10 @@ func apply_layout(safe: Vector4) -> void:
 		dock.offset_left = 10.0 + safe.x
 		dock.offset_right = -10.0 - safe.z
 		# 하단 조이스틱·상호작용 버튼 줄(약 210px) 위에 얹는다.
-		dock.offset_bottom = -218.0 - safe.w
+		# 하단 조이스틱·상호작용 줄과 우하단 무기 카드 중 더 높이 올라온 쪽
+		# 위에 얹는다. 카드가 바닥 196px에 붙는 터치 기기에서 탭바가 카드를
+		# 덮던 문제(실기기 신고)를 여기서 끊는다.
+		dock.offset_bottom = -maxf(218.0 + safe.w, _weapon_card_reserved_height(viewport_size, safe))
 		# 피버 카드(버튼+게이지 약 52px)가 아래로 밀려 잘리지 않도록 높이를 넓힌다.
 		dock.offset_top = dock.offset_bottom - 174.0
 	else:
@@ -150,16 +153,23 @@ func apply_layout(safe: Vector4) -> void:
 		# 우하단 무기 카드와 겹치고 스크롤이 생겼다 — 남는 높이에 맞춰
 		# 버튼 높이를 압축해 '항상 한 화면에' 들어가게 한다.
 		var top_margin := 176.0 + safe.y
-		# 우하단 무기 카드(약 78px)와 하단 여백을 미리 비워 둔다.
-		var reserved_bottom := 96.0 + safe.w
+		# 우하단 무기 카드 자리를 비워 둔다. 터치 기기에서는 이 카드가
+		# 하단 조작 줄을 피해 바닥에서 196px 위에 붙으므로(PC는 16px),
+		# 예약 높이도 그만큼 커야 한다 — 실기기에서 겹친 원인.
+		# 카드 실물이 있으면 그 위치를 그대로 믿는다(수치 추정은 어긋난다).
+		var reserved_bottom := _weapon_card_reserved_height(viewport_size, safe)
 		var available_height := maxf(180.0, viewport_size.y - top_margin - reserved_bottom)
 		var header_height := 30.0
-		var fever_height := 58.0 if fever_card != null and fever_card.visible else 0.0
+		# 피버 카드 실측 높이를 쓴다. 58 고정값이 실제(64)보다 작아 레일이
+		# 계산보다 길어지며 무기 카드를 6px 침범했다.
+		var fever_height := 0.0
+		if fever_card != null and fever_card.visible:
+			fever_height = maxf(64.0, fever_card.get_global_rect().size.y) + 6.0
 		var separation := 5.0
 		var slots := float(maxi(1, facility_buttons.size()))
 		var button_height := clampf(
 			(available_height - header_height - fever_height - separation * (slots + 1.0)) / slots,
-			34.0,
+			26.0,
 			52.0
 		)
 		var rail_width := 128.0 if viewport_size.y >= 560.0 else 112.0
@@ -181,10 +191,31 @@ func apply_layout(safe: Vector4) -> void:
 		dock.set_anchors_preset(Control.PRESET_TOP_RIGHT, true)
 		dock.offset_right = -14.0 - safe.z
 		dock.offset_left = dock.offset_right - rail_width
-		dock.offset_top = top_margin
-		dock.offset_bottom = top_margin + header_height + fever_height + (
-			button_height + separation
-		) * slots + separation
+		# 컨테이너의 실제 최소 높이가 내 계산을 덮어쓴다(자식 min size 합).
+		# 계산값 대신 실측 최소 높이로 바닥을 맞춰야 무기 카드를 안 넘는다.
+		var min_height := maxf(
+			dock.get_combined_minimum_size().y,
+			header_height + fever_height + (button_height + separation) * slots + separation
+		)
+		var bottom_limit := viewport_size.y - reserved_bottom
+		var placed_top := minf(top_margin, bottom_limit - min_height)
+		# 가방 버튼(우상단) 아래를 침범하지는 않는다.
+		dock.offset_top = maxf(150.0 + safe.y, placed_top)
+		dock.offset_bottom = dock.offset_top + min_height
+
+
+func _weapon_card_reserved_height(viewport_size: Vector2, safe: Vector4) -> float:
+	# 우하단 무기 카드가 차지하는 '바닥으로부터의 높이' + 숨돌릴 여백.
+	# 실물 노드가 있으면 실제 rect로 계산한다 — 터치/데스크톱에서 카드가
+	# 붙는 높이가 다르고(196 vs 16), 수치를 두 곳에 적으면 반드시 어긋난다.
+	var card := host.get_node_or_null("ShelterHUD/ShelterWeaponCard") as Control
+	if card != null and card.visible:
+		var card_rect := card.get_global_rect()
+		if card_rect.size.y > 1.0:
+			# 카드 위 30px은 비운다 — 피버 게이지가 마지막에 자라도 안 닿게.
+			return maxf(96.0, viewport_size.y - card_rect.position.y + 30.0) + safe.w
+	var touch_layout := DisplayServer.is_touchscreen_available() or force_touch_layout
+	return (196.0 if touch_layout else 16.0) + 82.0 + safe.w
 
 
 func refresh() -> void:
