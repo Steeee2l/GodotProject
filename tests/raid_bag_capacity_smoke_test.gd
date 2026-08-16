@@ -44,8 +44,10 @@ func _run() -> void:
     assert(int(state.get_raid_bag_used_slots()) == 5, "Each unequipped weapon must use one slot.")
     state.add_equipment("scav_vest", 2)
     assert(int(state.get_raid_bag_used_slots()) == 7, "Each equipment item must use one slot.")
-    state.add_mod_component("scope_lens", 999)
-    assert(int(state.get_raid_bag_used_slots()) == 8, "One component type must stay in one slot.")
+    state.add_mod_component("scope_lens", 3)
+    # 재료 1개 = 1칸으로 바뀐 뒤(가방 압박 개편)에도 "부품 한 종류 = 1칸"을
+    # 기대하는 옛 어서션이 남아 있었다. 이제 부품 3개면 3칸이다.
+    assert(int(state.get_raid_bag_used_slots()) == 10, "Each component unit must use one bag slot.")
 
     state.weapon_inventory.clear()
     state.ammo_inventory.clear()

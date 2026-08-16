@@ -10,29 +10,59 @@ const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_len
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
 const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/magazine_spring.png")
 
+# 제작대는 "만드는 곳"이지 "재료를 찍어내는 곳"이 아니다. 원자재 3종(렌즈·패킹·
+# 스프링)과 탄약은 필드에서만 나온다 — 고철만 있으면 무엇이든 나오던 시절엔
+# 출정이 심부름이 되고, 도시를 뒤질 이유가 사라졌다(유저 요구).
 const RECIPES := {
-	"parts": [
+	"armor": [
 		{
-			"id": "scope_lens",
-			"name": "스코프 렌즈",
-			"desc": "폐점포 스코프와 정밀 리시버 제작에 쓰는 투명 렌즈 부품.",
-			"cost": {"scrap": 900},
-			"result": {"component": "scope_lens", "amount": 1},
+			"id": "craft_scav_vest",
+			"name": "누더기 방탄 조끼",
+			"desc": "철판을 덧대 꿰맨 생존자 계열 경량 조끼. 첫 방어구로 충분합니다.",
+			"cost": {"scrap": 4000, "rubber_gasket": 1, "canned_food": 4},
+			"result": {"equipment": "scav_vest", "amount": 1},
+			"required_tier": 1,
 		},
 		{
-			"id": "rubber_gasket",
-			"name": "고무 패킹",
-			"desc": "총구 양말, 임시 완충재, 방수 부품에 쓰는 탄성 고무.",
-			"cost": {"scrap": 700},
-			"result": {"component": "rubber_gasket", "amount": 1},
+			"id": "craft_patched_sneakers",
+			"name": "기워 붙인 운동화",
+			"desc": "밑창을 갈아 끼운 생존자 계열 신발. 발소리와 냄새를 줄입니다.",
+			"cost": {"scrap": 3000, "rubber_gasket": 1, "canned_food": 3},
+			"result": {"equipment": "patched_sneakers", "amount": 1},
+			"required_tier": 1,
 		},
 		{
-			"id": "magazine_spring",
-			"name": "탄창 스프링",
-			"desc": "테이프 듀얼 탄창과 급탄 개선 부품에 쓰는 스프링.",
-			"cost": {"scrap": 800},
-			"result": {"component": "magazine_spring", "amount": 1},
+			"id": "craft_riot_vest",
+			"name": "진압대 방탄 조끼",
+			"desc": "진압 계열 중량 조끼. 튼튼한 대신 실루엣이 커집니다.",
+			"cost": {"scrap": 14000, "catnip": 800, "rubber_gasket": 2, "canned_food": 8},
+			"result": {"equipment": "riot_vest", "amount": 1},
+			"required_tier": 2,
+			"required_workbench": 2,
 		},
+		{
+			"id": "craft_tactical_helmet",
+			"name": "전술 방탄 헬멧",
+			"desc": "진압 계열 헬멧. 내피를 새로 짜 넣어야 해 작업대 숙련이 필요합니다.",
+			"cost": {"scrap": 22000, "magazine_spring": 1, "rubber_gasket": 1, "canned_food": 10},
+			"result": {"equipment": "tactical_helmet", "amount": 1},
+			"required_tier": 2,
+			"required_workbench": 3,
+		},
+		{
+			"id": "craft_military_vest",
+			"name": "군납 방탄복",
+			"desc": "봉쇄선 규격을 흉내 낸 최상급 방탄복. 쉘터가 다 커야 손을 댈 수 있습니다.",
+			"cost": {
+				"scrap": 70000, "catnip": 5000, "scope_lens": 1,
+				"rubber_gasket": 3, "canned_food": 22,
+			},
+			"result": {"equipment": "military_vest", "amount": 1},
+			"required_tier": 4,
+			"required_workbench": 4,
+		},
+	],
+	"mods": [
 		{
 			"id": "scope_2x",
 			"name": "폐점포 2x 스코프",
@@ -75,29 +105,6 @@ const RECIPES := {
 			"cost": {"scrap": 25000, "scope_lens": 2},
 			"result": {"weapon_mod": "ak_precision_receiver", "amount": 1},
 			"required_workbench": 5,
-		},
-	],
-	"ammo": [
-		{
-			"id": "762_fmj_pack",
-			"name": "7.62mm 보통탄 x30",
-			"desc": "AK 계열 기본 탄약. 강하지만 총성이 커서 적을 끌어들입니다.",
-			"cost": {"scrap": 500},
-			"result": {"ammo": "762_fmj", "amount": 30},
-		},
-		{
-			"id": "9mm_fmj_pack",
-			"name": "9mm 보통탄 x45",
-			"desc": "기관단총용 기본 탄약. 가볍고 수급이 안정적입니다.",
-			"cost": {"scrap": 350},
-			"result": {"ammo": "9mm_fmj", "amount": 45},
-		},
-		{
-			"id": "12g_buckshot_pack",
-			"name": "12게이지 벅샷 x12",
-			"desc": "근거리 저지력이 높은 산탄. 위기 탈출용으로 좋습니다.",
-			"cost": {"scrap": 700},
-			"result": {"ammo": "12g_buckshot", "amount": 12},
 		},
 	],
 	"weapons": [
@@ -180,21 +187,26 @@ const RECIPES := {
 }
 
 const CATEGORY_NAMES := {
-	"parts": "부품",
-	"ammo": "탄약",
+	"armor": "방어구",
 	"weapons": "무기",
+	"mods": "개조품",
 	"supplies": "보급",
 	"artisan": "장인 제작",
 	"enhance": "+99 강화",
 }
 const CATEGORY_ICONS := {
-	"parts": "parts",
-	"ammo": "ammo",
+	"armor": "armor",
 	"weapons": "weapon",
+	"mods": "mod",
 	"supplies": "repair",
 	"artisan": "craft",
 	"enhance": "upgrade",
 }
+const CATEGORY_ORDER := ["armor", "weapons", "mods", "supplies", "artisan", "enhance"]
+# 레시피 행 상태 색 — 초록=지금 만들 수 있음, 주황=재료만 모자람, 회색=아직 잠김.
+const STATE_COLOR_READY := Color("#8fe0a6")
+const STATE_COLOR_SHORT := Color("#e2a35e")
+const STATE_COLOR_LOCKED := Color("#7e8a86")
 
 @export var interaction_radius := 3.9
 
@@ -203,8 +215,8 @@ const CATEGORY_ICONS := {
 
 var has_focus := false
 var ui_layer: CanvasLayer
-var selected_category := "parts"
-var selected_recipe_id := "scope_lens"
+var selected_category := "armor"
+var selected_recipe_id := "craft_scav_vest"
 var recipe_list: VBoxContainer
 var detail_box: VBoxContainer
 var resource_value_labels: Dictionary = {}
@@ -225,8 +237,8 @@ func _ready() -> void:
 
 
 func get_interaction_prompt() -> String:
-	# 이름만으로는 부품의 행선지를 모른다. 기능을 한 줄로 말한다.
-	return "제작대 · 부품→개조품 · 무기 강화"
+	# 이름만으로는 무엇을 만드는지 모른다. 기능을 한 줄로 말한다.
+	return "제작대 · 방어구·무기 제작 · +99 강화"
 
 
 func get_interaction_radius() -> float:
@@ -340,12 +352,14 @@ func _build_flow_strip() -> Control:
 	strip.add_theme_constant_override("separation", 6)
 	strip.alignment = BoxContainer.ALIGNMENT_CENTER
 	var narrow := get_viewport().get_visible_rect().size.x < 760.0
+	# 부품·탄약은 이제 필드에서만 나온다. 흐름의 첫 칸이 "제작"이 아니라
+	# "필드 수집"이어야 유저가 원자재를 찾아 헤매지 않는다.
 	var steps := [
-		["재료" if narrow else "고철·재료", "parts"],
+		["필드 수집" if narrow else "필드에서 부품 수집", ""],
 		["→", ""],
-		["부품", "parts"],
+		["방어구·무기", "armor"],
 		["→", ""],
-		["개조·무기" if narrow else "개조품·무기", "weapons"],
+		["개조품", "mods"],
 		["→", ""],
 		["+99 강화" if narrow else "장착 후 +99 강화", "enhance"],
 	]
@@ -382,7 +396,7 @@ func _build_header() -> Control:
 	title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title_box.add_child(title)
-	title_box.add_child(_label("설계도를 선택하고 필요한 재료를 조립합니다.", 13, Color("#91a69d")))
+	title_box.add_child(_label("방어구·무기를 조립합니다. 재료는 가방과 창고에서 함께 씁니다.", 13, Color("#91a69d")))
 
 	var close := _close_button()
 	close.pressed.connect(func() -> void:
@@ -428,7 +442,7 @@ func _build_tabs() -> Control:
 	tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tabs.add_theme_constant_override("h_separation", 8)
 	tabs.add_theme_constant_override("v_separation", 8)
-	for category in ["parts", "ammo", "weapons", "supplies", "artisan", "enhance"]:
+	for category in CATEGORY_ORDER:
 		var tab := _button(str(CATEGORY_NAMES[category]), str(CATEGORY_ICONS[category]))
 		tab.name = "WorkbenchTab_%s" % category
 		tab.toggle_mode = true
@@ -498,11 +512,23 @@ func _build_detail_panel() -> Control:
 
 
 func _refresh_recipe_list() -> void:
+	# UI가 열려 있지 않을 때도 _craft가 호출될 수 있다(프로브·자동화). 조용히 넘긴다.
+	if not is_instance_valid(recipe_list):
+		return
 	_clear(recipe_list)
 	var recipes: Array = _recipes_for_category(selected_category)
 	for recipe_raw in recipes:
 		var recipe: Dictionary = recipe_raw
-		var button := _button("%s\n%s" % [str(recipe["name"]), _recipe_list_subtitle(recipe)])
+		# 상태를 글자로만 말하면 목록을 한 줄씩 읽어야 한다. 색으로 먼저 말한다.
+		var state_color := _recipe_state_color(recipe)
+		var button := _button(
+			"%s\n%s" % [str(recipe["name"]), _recipe_list_subtitle(recipe)],
+			"",
+			state_color
+		)
+		button.name = "WorkbenchRecipeRow_%s" % str(recipe["id"])
+		button.add_theme_color_override("font_color", state_color)
+		button.add_theme_color_override("font_hover_color", state_color.lightened(0.2))
 		button.icon = _recipe_icon(recipe)
 		button.expand_icon = true
 		button.add_theme_constant_override("icon_max_width", 40)
@@ -524,6 +550,8 @@ func _refresh_recipe_list() -> void:
 
 
 func _refresh_detail_panel() -> void:
+	if not is_instance_valid(detail_box):
+		return
 	_clear(detail_box)
 	var recipe := _selected_recipe()
 	if recipe.is_empty():
@@ -573,8 +601,8 @@ func _refresh_detail_panel() -> void:
 		var level := GameState.get_weapon_enhancement_level(GameState.equipped_weapon_id)
 		cost_box.add_child(_label("%s  +%d → +%d" % [GameState.equipped_weapon_id.to_upper(), level, mini(99, level + 1)], 16, Color("#d9c579")))
 
-	var result_label := _label("결과: %s" % _result_text(recipe), 16, Color("#d9c579"))
-	detail_box.add_child(result_label)
+	detail_box.add_child(_section("결과물"))
+	detail_box.add_child(_build_result_preview(recipe))
 
 	var craft := _button(_craft_action_text(recipe), _craft_action_icon(recipe))
 	craft.name = "WorkbenchCraftButton"
@@ -729,6 +757,9 @@ func _craft(recipe: Dictionary) -> void:
 		GameState.set_ammo_count(ammo_id, GameState.get_ammo_count(ammo_id) + int(result.get("amount", 1)))
 	elif result.has("weapon"):
 		GameState.add_weapon(str(result["weapon"]), int(result.get("amount", 1)))
+	elif result.has("equipment"):
+		# 제작품은 항상 기본 레벨(접미사 없음 = Lv.1)이다. 레벨 굴림은 필드 드랍의 몫.
+		GameState.add_equipment(str(result["equipment"]), int(result.get("amount", 1)))
 	elif result.has("canned_food"):
 		GameState.canned_food += int(result["canned_food"])
 	elif result.has("repair"):
@@ -781,28 +812,73 @@ func _refresh_header_resources() -> void:
 
 
 func _owned_resource(key: String) -> int:
+	# 보유 = 가방 + 창고. 복귀 정산이 재료를 창고로 보내는데 제작대가 가방만
+	# 본다면, 매번 창고에서 꺼내 오는 심부름이 제작의 전부가 된다(유저 요구).
+	return _bag_resource(key) + _stored_resource(key)
+
+
+func _bag_resource(key: String) -> int:
 	match key:
 		"scrap":
 			return GameState.scrap
 		"rubber_gasket", "scope_lens", "magazine_spring":
 			return GameState.get_mod_component_count(key)
 		"canned_food":
+			# 통조림은 쉘터 전체 재고가 곧 보유량이다(창고 보관분도 이미 포함).
 			return GameState.canned_food
 		"catnip":
 			return GameState.catnip
 	return 0
 
 
+func _stored_resource(key: String) -> int:
+	match key:
+		"rubber_gasket", "scope_lens", "magazine_spring":
+			return GameState.get_stored_storage_count("component", key)
+	return 0
+
+
 func _consume_resource(key: String, amount: int) -> void:
+	# 가방 몫을 먼저 태우고, 모자란 만큼만 창고에서 덜어낸다.
+	var remaining := maxi(0, amount)
 	match key:
 		"scrap":
-			GameState.scrap = maxi(0, GameState.scrap - amount)
+			GameState.scrap = maxi(0, GameState.scrap - remaining)
 		"rubber_gasket", "scope_lens", "magazine_spring":
-			GameState.mod_component_inventory[key] = maxi(0, GameState.get_mod_component_count(key) - amount)
+			var from_bag := mini(remaining, GameState.get_mod_component_count(key))
+			if from_bag > 0:
+				GameState.mod_component_inventory[key] = maxi(
+					0, GameState.get_mod_component_count(key) - from_bag
+				)
+				remaining -= from_bag
+			if remaining > 0:
+				GameState.remove_stored_storage_item("component", key, remaining)
 		"canned_food":
-			GameState.canned_food = maxi(0, GameState.canned_food - amount)
+			GameState.canned_food = maxi(0, GameState.canned_food - remaining)
 		"catnip":
-			GameState.catnip = maxi(0, GameState.catnip - amount)
+			GameState.catnip = maxi(0, GameState.catnip - remaining)
+
+
+func _is_recipe_locked(recipe: Dictionary) -> bool:
+	# 잠금(티어·작업대·청사진)과 단순 재료 부족은 다른 상태다. 전자는 회색으로
+	# "아직 네 차례가 아니다", 후자는 주황으로 "조금만 더 모으면 된다"를 말한다.
+	if GameState.shelter_tier < int(recipe.get("required_tier", 1)):
+		return true
+	if GameState.shelter_workbench_level < int(recipe.get("required_workbench", 1)):
+		return true
+	var required_blueprint := str(recipe.get("required_blueprint", ""))
+	return (
+		not required_blueprint.is_empty()
+		and GameState.get_progression_item_count(required_blueprint) <= 0
+	)
+
+
+func _recipe_state_color(recipe: Dictionary) -> Color:
+	if _is_recipe_locked(recipe):
+		return STATE_COLOR_LOCKED
+	if _can_craft(recipe):
+		return STATE_COLOR_READY
+	return STATE_COLOR_SHORT
 
 
 func _recipe_list_subtitle(recipe: Dictionary) -> String:
@@ -842,6 +918,11 @@ func _result_text(recipe: Dictionary) -> String:
 		return "%s x%d" % [_resource_name(str(result["ammo"])), int(result.get("amount", 1))]
 	if result.has("weapon"):
 		return "%s x%d" % [_resource_name(str(result["weapon"])), int(result.get("amount", 1))]
+	if result.has("equipment"):
+		return "%s x%d" % [
+			_equipment_display_name(str(result["equipment"])),
+			int(result.get("amount", 1)),
+		]
 	if result.has("canned_food"):
 		return "통조림 x%d" % int(result["canned_food"])
 	if result.has("repair"):
@@ -878,6 +959,11 @@ func _recipe_icon(recipe: Dictionary) -> Texture2D:
 		return AMMO_TEXTURE
 	if result.has("component"):
 		return _resource_icon(str(result["component"]))
+	if result.has("equipment"):
+		var equipment_texture := _equipment_texture(str(result["equipment"]))
+		if equipment_texture != null:
+			return equipment_texture
+		return UI_ICONS.get_icon("armor", 72, Color("#a8c6bb"))
 	if result.has("weapon_mod"):
 		return UI_ICONS.get_icon("mod", 72, Color("#e2a962"))
 	if result.has("canned_food"):
@@ -949,24 +1035,141 @@ func _resource_row(key: String, owned: int, needed: int, color: Color) -> Contro
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	row.add_child(icon)
+	var name_box := VBoxContainer.new()
+	name_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	name_box.add_theme_constant_override("separation", 0)
+	row.add_child(name_box)
 	var name_label := _label(_resource_name(key), 16, Color("#d9ded8"))
 	name_label.name = "ResourceName"
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	row.add_child(name_label)
-	var amount_label := _label("%s / %s" % [
+	name_box.add_child(name_label)
+	# 어디에 있는 재료인지 밝힌다 — "창고에 있는데 왜 못 만드나"를 없앤다.
+	var stored := _stored_resource(key)
+	if stored > 0:
+		var source_label := _label(
+			"가방 %s + 창고 %s" % [
+				GameState.format_compact_number(_bag_resource(key)),
+				GameState.format_compact_number(stored),
+			],
+			12,
+			Color("#8ba49a")
+		)
+		source_label.name = "ResourceSource"
+		source_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+		source_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		name_box.add_child(source_label)
+	# 충족 여부는 체크 표시로 한눈에. 모자란 줄만 붉게 남는다.
+	var amount_label := _label("%s / %s  %s" % [
 		GameState.format_compact_number(owned),
 		GameState.format_compact_number(needed),
+		"✓" if owned >= needed else "✗",
 	], 17, color)
 	amount_label.name = "ResourceAmount"
-	amount_label.custom_minimum_size = Vector2(112, 0)
+	amount_label.custom_minimum_size = Vector2(132, 0)
 	amount_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	amount_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	amount_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	row.add_child(amount_label)
 	return row
+
+
+func _equipment_display_name(equipment_id: String) -> String:
+	var definition: Dictionary = GameState.get_equipment_definition(equipment_id)
+	if definition.is_empty():
+		return equipment_id
+	return str(definition.get("display_name", equipment_id))
+
+
+func _equipment_texture(equipment_id: String) -> Texture2D:
+	var definition: Dictionary = GameState.get_equipment_definition(equipment_id)
+	var path := str(definition.get("texture_path", ""))
+	if path.is_empty() or not ResourceLoader.exists(path):
+		return null
+	return load(path) as Texture2D
+
+
+func _equipment_stat_line(equipment_id: String) -> String:
+	# 방어구는 숫자로 고르는 물건이다. 이름만 보여 주면 무엇이 나은지 모른다.
+	var definition: Dictionary = GameState.get_equipment_definition(equipment_id)
+	if definition.is_empty():
+		return ""
+	var parts: PackedStringArray = []
+	if definition.has("damage_reduction"):
+		parts.append("피해감소 %d%%" % roundi(float(definition["damage_reduction"]) * 100.0))
+	if definition.has("move_speed_bonus"):
+		parts.append("이동 +%d%%" % roundi(float(definition["move_speed_bonus"]) * 100.0))
+	if definition.has("stamina_cost_multiplier"):
+		parts.append(
+			"스태미나 소모 -%d%%"
+			% roundi((1.0 - float(definition["stamina_cost_multiplier"])) * 100.0)
+		)
+	if definition.has("visibility_multiplier"):
+		parts.append("피탐지 +%d%%" % roundi((float(definition["visibility_multiplier"]) - 1.0) * 100.0))
+	return " · ".join(parts)
+
+
+func _build_result_preview(recipe: Dictionary) -> Control:
+	# 제작 버튼 위 결과물 미리보기 — "뭘 만드는 건지"를 버튼 누르기 전에 본다.
+	var card := PanelContainer.new()
+	card.name = "WorkbenchResultPreview"
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.add_theme_stylebox_override(
+		"panel", _panel_style(Color(0.05, 0.062, 0.068, 0.85), Color("#6f9c8b"), 1, 8)
+	)
+	var margin := _margin(12, 10, 12, 10)
+	card.add_child(margin)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	margin.add_child(row)
+	var icon := TextureRect.new()
+	icon.name = "ResultPreviewIcon"
+	icon.custom_minimum_size = Vector2(46, 46)
+	icon.texture = _recipe_icon(recipe)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	row.add_child(icon)
+	var text_box := VBoxContainer.new()
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	text_box.add_theme_constant_override("separation", 2)
+	row.add_child(text_box)
+	var name_label := _label(_result_text(recipe), 17, Color("#f0e6c8"))
+	name_label.name = "ResultPreviewName"
+	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	text_box.add_child(name_label)
+	var stat_line := _result_stat_line(recipe)
+	if not stat_line.is_empty():
+		var stat_label := _label(stat_line, 13, Color("#9fc4b4"))
+		stat_label.name = "ResultPreviewStats"
+		stat_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+		stat_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		text_box.add_child(stat_label)
+	return card
+
+
+func _result_stat_line(recipe: Dictionary) -> String:
+	var result := recipe.get("result", {}) as Dictionary
+	if result.has("equipment"):
+		return _equipment_stat_line(str(result["equipment"]))
+	if result.has("weapon"):
+		var weapon := WeaponSystem.get_weapon(str(result["weapon"])) as Dictionary
+		if weapon.is_empty():
+			return ""
+		var interval := maxf(0.01, float(weapon.get("fire_interval", 0.2)))
+		return "피해 %d · 탄창 %d · 연사 %.1f/s" % [
+			int(weapon.get("damage", 0)),
+			int(weapon.get("magazine_size", 0)),
+			1.0 / interval,
+		]
+	if result.has("weapon_mod"):
+		var mod := WeaponSystem.get_mod(str(result["weapon_mod"])) as Dictionary
+		return str(mod.get("slot", "")).to_upper() if not mod.is_empty() else ""
+	return ""
 
 
 func _resource_name(key: String) -> String:
@@ -997,10 +1200,14 @@ func _resource_name(key: String) -> String:
 			return "더블배럴 참치 헌터"
 		"canned_food":
 			return "통조림"
+	# 방어구 ID는 장비 정의가 이름을 안다(레벨 접미사까지 해석한다).
+	var equipment_definition: Dictionary = GameState.get_equipment_definition(key)
+	if not equipment_definition.is_empty():
+		return str(equipment_definition.get("display_name", key))
 	return key
 
 
-func _button(text: String, icon_name := "") -> Button:
+func _button(text: String, icon_name := "", accent := HudStyle.LINE_FOCUS) -> Button:
 	# 스타일은 디자인 시스템이 정한다. 여기서는 내용(텍스트·아이콘)만.
 	var button := Button.new()
 	button.text = text
@@ -1010,7 +1217,7 @@ func _button(text: String, icon_name := "") -> Button:
 		button.add_theme_constant_override("icon_max_width", 28)
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	return HudStyle.style_button(button, HudStyle.LINE_FOCUS)
+	return HudStyle.style_button(button, accent)
 
 
 func _close_button() -> Button:

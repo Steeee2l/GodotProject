@@ -202,11 +202,20 @@ func _show_extraction_result(rescued_count: int) -> void:
 	var route_definition := RAID_EXTRACTION_POLICY.get_route(selected_extraction_index)
 	var route_color: Color = route_definition.get("color", Color("#d9b44a"))
 	host.hud.extraction_route_icon.texture = UI_ICONS.get_icon("raid", 44, route_color)
-	host.hud.extraction_route_label.text = "%s  ·  정산 배율 ×%.2f\n%s" % [
-		selected_extraction_title,
-		selected_extraction_multiplier,
-		str(route_bonus.get("summary", "경로 보급 보너스 없음")),
-	]
+	# "정산 배율 ×1.40"은 개발자 말이다. 플레이어가 아는 건 "위험한 길로
+	# 나와서 더 받았다"뿐 — 그 문장으로 쓴다.
+	var route_gain_percent := roundi((selected_extraction_multiplier - 1.0) * 100.0)
+	var route_headline := selected_extraction_title
+	if route_gain_percent > 0:
+		route_headline += "  —  위험을 감수해 보상 +%d%%" % route_gain_percent
+	else:
+		route_headline += "  —  안전하게 빠져나왔습니다"
+	var route_supply := str(route_bonus.get("summary", ""))
+	host.hud.extraction_route_label.text = (
+		route_headline
+		if route_supply.is_empty() or route_supply.begins_with("경로 보급 보너스 없음")
+		else "%s\n길에서 주운 것 · %s" % [route_headline, route_supply.replace("경로 보급 · ", "")]
+	)
 	host.hud.extraction_route_label.add_theme_color_override(
 		"font_color",
 		route_color.lightened(0.18)
@@ -226,12 +235,9 @@ func _show_extraction_result(rescued_count: int) -> void:
 	xp_reward += stealth_xp + ghost_xp
 	pending_extraction_xp_result = GameState.add_raid_experience(xp_reward)
 	host.hud.extraction_result_title.text = "탈출 성공 · Lv.%d" % int(pending_extraction_xp_result.get("new_level", GameState.player_level))
-	var mission_summary := "완료한 임무 없음"
+	var mission_summary := ""
 	if not host.completed_mission_titles.is_empty():
-		mission_summary = "완료 임무 · %s · 임무 XP +%d" % [
-			", ".join(host.completed_mission_titles),
-			host.completed_mission_xp,
-		]
+		mission_summary = "현장에서 해낸 일 · %s" % ", ".join(host.completed_mission_titles)
 	var cargo_summary := str(cargo_result.get("summary", "특별 화물 없음"))
 	# 경로 이름·배율·보급 보너스는 바로 위 extraction_route_label이 이미 말한다.
 	# 숫자는 타일/칩이, 문장은 아래 요약 라벨이 맡는다.
@@ -249,23 +255,28 @@ func _show_extraction_result(rescued_count: int) -> void:
 		"위험 정산금",
 		HudStyle.GOLD
 	)
+	# 칩은 "왜 이만큼 벌었는지"의 근거 목록이다. 전문용어 대신 행동으로 쓴다.
 	host.hud.add_result_reward_chip("upgrade", "경험치 +%d" % xp_reward, HudStyle.GREEN)
 	if ghost_scrap > 0:
 		host.hud.add_result_reward_chip(
 			"secure",
-			"유령 침투 — 무발각 · 고철 +%s · XP +%d" % [
+			"끝까지 들키지 않음 · 고철 +%s · 경험치 +%d" % [
 				GameState.format_compact_number(ghost_scrap), ghost_xp,
 			],
 			HudStyle.GOLD
 		)
 	if stealth_xp > 0:
 		host.hud.add_result_reward_chip(
-			"melee", "암살 %d회 · XP +%d" % [host.run_stealth_kills, stealth_xp], HudStyle.GREEN
+			"melee", "몰래 처치 %d회 · 경험치 +%d" % [host.run_stealth_kills, stealth_xp], HudStyle.GREEN
 		)
 	if route_xp_bonus > 0:
-		host.hud.add_result_reward_chip("raid", "경로 보너스 XP +%d" % route_xp_bonus, HudStyle.GOLD)
+		host.hud.add_result_reward_chip(
+			"raid", "위험한 탈출로 선택 · 경험치 +%d" % route_xp_bonus, HudStyle.GOLD
+		)
 	if host.completed_mission_xp > 0:
-		host.hud.add_result_reward_chip("check", "임무 XP +%d" % host.completed_mission_xp, HudStyle.GOLD)
+		host.hud.add_result_reward_chip(
+			"check", "현장 임무 완료 · 경험치 +%d" % host.completed_mission_xp, HudStyle.GOLD
+		)
 	# 도시 의뢰(계약 완주 후 반복 목표) 달성 시 즉시 지급 + 칩으로 보여준다.
 	var commission_payout: Dictionary = GameState.settle_city_commission(
 		host.run_kills,
@@ -285,9 +296,35 @@ func _show_extraction_result(rescued_count: int) -> void:
 	if runtime_seconds > 0.0:
 		host.hud.add_result_reward_chip(
 			"time",
-			"통조림 비축 → 쉘터 가동 %s" % GameState.format_duration_korean(runtime_seconds),
+			"가져온 통조림으로 쉘터가 %s 더 돌아갑니다" % GameState.format_duration_korean(
+				runtime_seconds
+			),
 			HudStyle.GREEN
 		)
+	# 이번 판에 실제로 들고 나온 것 — 숫자보다 이게 먼저 읽혀야 한다.
+	# 종류별로 묶어 칩 하나씩, 쉘터 귀속 규칙(통조림→재화, 재료→창고)과 같은 순서.
+	var haul_food := GameState.get_backpack_storage_count("food", "canned_food")
+	if haul_food > 0:
+		host.hud.add_result_reward_chip("food", "통조림 %d개" % haul_food, HudStyle.GREEN)
+	var haul_components := 0
+	var haul_gear := 0
+	var haul_ammo := 0
+	for entry in GameState.get_raid_bag_entries():
+		var entry_type := str(entry.get("type", ""))
+		var entry_count := int(entry.get("count", 0))
+		match entry_type:
+			"component", "mod":
+				haul_components += entry_count
+			"weapon", "equipment":
+				haul_gear += entry_count
+			"ammo":
+				haul_ammo += entry_count
+	if haul_gear > 0:
+		host.hud.add_result_reward_chip("weapon", "무기·방어구 %d점" % haul_gear, HudStyle.GOLD)
+	if haul_components > 0:
+		host.hud.add_result_reward_chip("parts", "부품 %d개" % haul_components, HudStyle.GOLD)
+	if haul_ammo > 0:
+		host.hud.add_result_reward_chip("ammo", "탄약 %d발" % haul_ammo, HudStyle.TEXT_DIM)
 	var lines: PackedStringArray = [mission_summary]
 	if cargo_summary != "특별 화물 없음":
 		lines.append(cargo_summary)
@@ -295,7 +332,8 @@ func _show_extraction_result(rescued_count: int) -> void:
 	var next_goal := GameState.get_active_contract_progress_text()
 	if not next_goal.is_empty():
 		lines.append(next_goal)
-	lines.append("획득품은 가방에 보존됩니다.")
+	# 귀속 규칙을 여기서 미리 말해 준다 — 쉘터에 도착해서야 알면 늦다.
+	lines.append("통조림은 쉘터 연료로, 재료와 여분 장비는 창고로 들어갑니다.")
 	lines.append("탭하면 쉘터로 복귀")
 	host.hud.extraction_result_summary.text = "\n".join(lines)
 	var new_xp := int(pending_extraction_xp_result.get("new_xp", GameState.player_xp))

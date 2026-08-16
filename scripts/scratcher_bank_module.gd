@@ -242,29 +242,42 @@ func _rebuild_ui() -> void:
 	boost.pressed.connect(_activate_boost)
 	actions.add_child(boost)
 	var upgrade_cost := int(GameState.SCRATCHER_UPGRADE_COSTS.get(GameState.scratcher_bank_level + 1, 0))
+	var upgrade_catnip := int(
+		GameState.SCRATCHER_UPGRADE_CATNIP_COSTS.get(GameState.scratcher_bank_level + 1, 0)
+	)
+	# 두 재화를 함께 보여 준다 — 고철만 보고 눌렀다 막히면 그건 UI의 잘못이다.
 	var upgrade := _button(
 		"최고 레벨"
-		if upgrade_cost == 0 else "고철 x%s · Lv.%d 확장(좌석+1)" % [
+		if upgrade_cost == 0 else "고철 x%s · 캣닢 x%s · Lv.%d 확장(좌석+1)" % [
 			GameState.format_compact_number(upgrade_cost),
+			GameState.format_compact_number(upgrade_catnip),
 			GameState.scratcher_bank_level + 1,
 		],
 		"upgrade" if upgrade_cost == 0 else "scrap"
 	)
-	upgrade.disabled = upgrade_cost == 0 or GameState.scrap < upgrade_cost
+	upgrade.disabled = (
+		upgrade_cost == 0
+		or GameState.scrap < upgrade_cost
+		or GameState.catnip < upgrade_catnip
+	)
 	upgrade.custom_minimum_size = Vector2(0, 40)
 	upgrade.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	upgrade.pressed.connect(_upgrade)
 	actions.add_child(upgrade)
 	# 오버클럭: 고철을 다시 생산에 넣는 복리 사다리. "항상 다음에 살 것"을 만든다.
 	var overclock_cost := GameState.get_overclock_cost()
+	var overclock_catnip := GameState.get_overclock_catnip_cost()
 	var overclock := _button(
-		"오버클럭 Lv.%d · 고철 %s → 시간당 +8%%" % [
+		"오버클럭 Lv.%d · 고철 %s + 캣닢 %s → 시간당 +8%%" % [
 			GameState.scratcher_overclock_level,
 			GameState.format_compact_number(overclock_cost),
+			GameState.format_compact_number(overclock_catnip),
 		],
 		"upgrade"
 	)
-	overclock.disabled = GameState.scrap < overclock_cost
+	overclock.disabled = (
+		GameState.scrap < overclock_cost or GameState.catnip < overclock_catnip
+	)
 	overclock.custom_minimum_size = Vector2(0, 40)
 	overclock.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	overclock.pressed.connect(func() -> void:

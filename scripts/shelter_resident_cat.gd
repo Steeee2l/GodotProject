@@ -44,6 +44,8 @@ var roam_bounds := Rect2(Vector2(-12.0, -4.0), Vector2(24.0, 12.0))
 var wander_wait := 0.0
 var wander_retarget_time := 0.0
 var wander_random := RandomNumberGenerator.new()
+# 캣닢 피버 동안 걸리는 체감 배속(이동·애니메이션·생산 팝업이 함께 빨라진다).
+var fever_speed_scale := 1.0
 
 
 func configure(next_resident_id: String, spawn_position: Vector3) -> void:
@@ -122,7 +124,15 @@ func set_work_assignment(next_kind: String, next_target: Vector3, next_work_focu
 	_update_work_indicator()
 
 
-func _physics_process(delta: float) -> void:
+func set_fever_speed_scale(value: float) -> void:
+	# 피버는 눈으로 먼저 읽혀야 한다 — 생산 수치보다 "다들 미쳐 날뛴다"가 먼저다.
+	fever_speed_scale = clampf(value, 0.1, 6.0)
+	if sprite != null:
+		sprite.speed_scale = fever_speed_scale
+
+
+func _physics_process(raw_delta: float) -> void:
+	var delta := raw_delta * fever_speed_scale
 	if assignment_kind == "waiting":
 		wander_retarget_time -= delta
 		var wander_distance := Vector2(position.x - target_position.x, position.z - target_position.z).length()
@@ -136,7 +146,11 @@ func _physics_process(delta: float) -> void:
 	offset.y = 0.0
 	if offset.length() > 0.18:
 		var direction := offset.normalized()
-		velocity = direction * (WANDER_SPEED if assignment_kind == "waiting" else WALK_SPEED)
+		velocity = (
+			direction
+			* (WANDER_SPEED if assignment_kind == "waiting" else WALK_SPEED)
+			* fever_speed_scale
+		)
 		_set_facing_from_world_direction(direction)
 		_set_motion_state("walk")
 		move_and_slide()

@@ -78,28 +78,8 @@ const ROOM_SIZE_BY_TIER := {
 const BED_MODULE_PLATE_SIZE := Vector2(2.65, 3.45)
 const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const PIPE_EXIT_LABEL := "파이프를 타고 도시로 올라가기"
-const MERCHANT_GOODS := [
-	{
-		"id": "762_fmj", "type": "ammo", "title": "7.62mm 보통탄 상자", "amount": 30,
-		"buy_price": 650, "sell_cans": 2, "icon": "res://assets/items/ammo_762.png",
-		"description": "AK 계열 총기에 사용하는 보통탄 30발입니다.",
-	},
-	{
-		"id": "scope_lens", "type": "component", "title": "스코프 렌즈", "amount": 1,
-		"buy_price": 1200, "sell_cans": 5, "icon": "res://assets/items/mod_components/scope_lens.png",
-		"description": "조준경과 정밀 모듈 제작에 사용하는 온전한 렌즈입니다.",
-	},
-	{
-		"id": "rubber_gasket", "type": "component", "title": "고무 패킹", "amount": 1,
-		"buy_price": 950, "sell_cans": 3, "icon": "res://assets/items/mod_components/rubber_gasket.png",
-		"description": "소음기와 반동 완충 부품 제작에 사용하는 패킹입니다.",
-	},
-	{
-		"id": "magazine_spring", "type": "component", "title": "탄창 스프링", "amount": 1,
-		"buy_price": 1050, "sell_cans": 4, "icon": "res://assets/items/mod_components/magazine_spring.png",
-		"description": "탄창과 전술 부품 제작에 사용하는 복원력 높은 스프링입니다.",
-	},
-]
+# 매대 데이터는 GameState로 이사했다 — 방문마다 굴리고 세이브에 남아야 하므로
+# UI 상수로는 표현할 수 없다(GameState.MERCHANT_AMMO_GOODS / MERCHANT_SUNDRY_GOODS).
 # 행상인 입장 첫마디 — 떠돌이 상인은 떠도는 소문만 안다. 그 이상은 모른다.
 const MERCHANT_ENTRY_LINES := [
 	"“고맙다냥. 요즘 땅 밑에서 이상한 신호가 돈다는 소문이 있다냥… 자, 물건부터 보라냥.”",
@@ -167,6 +147,8 @@ var merchant_shop_mode := "buy"
 var merchant_ui_open := false
 # 이번 방문에서 상점을 열어봤는가 — 행상인 "!" 마커 해제 조건(저장 안 함).
 var merchant_shop_opened_this_visit := false
+# 이번 복귀에 상인이 헛걸음했을 때 복귀 토스트에 덧붙일 한 줄.
+var merchant_missed_notice := ""
 var contract_agent: Node3D
 var iron_trainer: Node3D
 var juhong_character: Node3D
@@ -310,11 +292,21 @@ func _ready() -> void:
 	_apply_shelter_safe_layout()
 	_setup_merchant_visit()
 	_update_stats()
+	# 복귀 정산이 무엇을 어디로 옮겼는지 먼저 말한다 — 가방이 조용히 비면
+	# 플레이어는 잃어버린 줄 안다.
+	var settlement_text := _build_return_settlement_text(GameState.consume_return_settlement())
 	var corpse_notice: Dictionary = GameState.consume_corpse_decay_notice()
+	var return_lines: Array[String] = []
+	if not settlement_text.is_empty():
+		return_lines.append(settlement_text)
 	if not corpse_notice.is_empty():
-		_show_status(_build_corpse_decay_text(corpse_notice))
-	else:
-		_show_status(_build_offline_status_text(offline_notice))
+		return_lines.append(_build_corpse_decay_text(corpse_notice))
+	elif return_lines.is_empty():
+		return_lines.append(_build_offline_status_text(offline_notice))
+	if not merchant_missed_notice.is_empty():
+		return_lines.append(merchant_missed_notice)
+		merchant_missed_notice = ""
+	_show_status("  ·  ".join(return_lines))
 	# 문턱을 넘은 순간은 반드시 보여줘야 한다. 조용히 해금되면
 	# 강해졌다는 감각이 생기지 않는다.
 	var unlocks: Array[Dictionary] = GameState.consume_milestone_unlocks()
@@ -333,6 +325,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if not is_instance_valid(player):
 		return
+	_update_catnip_fever(delta)
 	_update_status_toast(delta)
 	_update_space_hold(delta)
 	if loafing:
@@ -1264,6 +1257,9 @@ func _setup_merchant_visit() -> void:
 			_set_merchant_notice_visible(false)
 		_:
 			_set_merchant_notice_visible(false)
+	# 헛걸음한 복귀도 사건이다. 아무 말이 없으면 유저는 버그로 읽는다.
+	if GameState.consume_merchant_missed_notice():
+		merchant_missed_notice = "행상인은 이번엔 오지 않았습니다."
 
 
 func _build_merchant_waiting_marker() -> void:
@@ -1598,6 +1594,8 @@ func _build_interface() -> void:
 	shelter_upgrade_button = Button.new()
 	shelter_upgrade_button.icon = UI_ICONS.get_icon("upgrade", 28, Color("#d8c47b"))
 	shelter_upgrade_button.expand_icon = true
+	# expand_icon은 반드시 폭 상한과 함께 — 대형 재화 PNG가 버튼을 통째로 삼킨 전례가 있다.
+	shelter_upgrade_button.add_theme_constant_override("icon_max_width", 26)
 	shelter_upgrade_button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	shelter_upgrade_button.add_theme_font_override("font", FONT)
 	shelter_upgrade_button.add_theme_font_size_override("font_size", 13)
@@ -1656,6 +1654,7 @@ func _build_interface() -> void:
 	interact_button.text = "상호작용"
 	interact_button.icon = UI_ICONS.get_icon("interact", 32, Color("#dce8e1"))
 	interact_button.expand_icon = true
+	interact_button.add_theme_constant_override("icon_max_width", 30)
 	interact_button.add_theme_font_override("font", FONT)
 	interact_button.add_theme_font_size_override("font_size", 16)
 	if not DisplayServer.is_touchscreen_available():
@@ -1671,6 +1670,7 @@ func _build_interface() -> void:
 	dash_button.text = "대시"
 	dash_button.icon = UI_ICONS.get_icon("dash", 32, Color("#d8e5de"))
 	dash_button.expand_icon = true
+	dash_button.add_theme_constant_override("icon_max_width", 30)
 	dash_button.add_theme_font_override("font", FONT)
 	dash_button.add_theme_font_size_override("font_size", 16)
 	if not DisplayServer.is_touchscreen_available():
@@ -2433,20 +2433,30 @@ func _refresh_merchant_shop() -> void:
 	(merchant_shop_currency_labels.get("food") as Label).text = "통조림  %s" % GameState.format_compact_number(GameState.canned_food)
 	_update_merchant_tab_styles()
 	var visible_good_count := 0
-	for good_variant in MERCHANT_GOODS:
-		var good: Dictionary = good_variant
+	# 구매는 "이번 방문의 매대"를, 판매는 "항상 받아 주는 목록"을 본다.
+	var listed: Array = (
+		GameState.merchant_stock
+		if merchant_shop_mode == "buy"
+		else GameState.MERCHANT_SELL_GOODS
+	)
+	for index in listed.size():
+		var good: Dictionary = listed[index]
 		if merchant_shop_mode == "sell":
 			var owned := _merchant_item_count(good)
 			if owned <= 0 or int(good.get("sell_cans", 0)) <= 0:
 				continue
-		merchant_shop_list.add_child(_merchant_trade_row(good))
+		merchant_shop_list.add_child(_merchant_trade_row(good, index))
 		visible_good_count += 1
 	if visible_good_count == 0:
 		var empty_label := Label.new()
 		empty_label.name = "MerchantEmptyState"
 		empty_label.custom_minimum_size = Vector2(0, 180)
 		empty_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		empty_label.text = "판매할 수 있는 물품이 없습니다."
+		empty_label.text = (
+			"오늘 상인이 들고 온 물건은 여기까지입니다."
+			if merchant_shop_mode == "buy"
+			else "판매할 수 있는 물품이 없습니다."
+		)
 		empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		empty_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		empty_label.add_theme_font_override("font", FONT)
@@ -2526,7 +2536,7 @@ func _update_merchant_tab_styles() -> void:
 			indicator.visible = selected
 
 
-func _merchant_trade_row(good: Dictionary) -> Button:
+func _merchant_trade_row(good: Dictionary, stock_index: int = -1) -> Button:
 	var buying := merchant_shop_mode == "buy"
 	var price := int(good["buy_price"] if buying else good.get("sell_cans", 0))
 	var owned := _merchant_item_count(good)
@@ -2534,7 +2544,14 @@ func _merchant_trade_row(good: Dictionary) -> Button:
 	var currency_icon := "scrap" if buying else "food"
 	var currency_name := "고철" if buying else "통조림"
 	var currency_color := Color("#d4d9d6") if buying else Color("#e5b55b")
-	var can_trade := GameState.scrap >= price if buying else (price > 0 and owned >= int(good["amount"]))
+	# 재고가 0이면 값이 있어도 못 산다 — 매대는 한 방문에 한 묶음씩만 내놓는다.
+	var stock_left := int(good.get("stock", 0))
+	var sold_out := buying and stock_left <= 0
+	var can_trade := (
+		(GameState.scrap >= price and not sold_out)
+		if buying
+		else (price > 0 and owned >= int(good["amount"]))
+	)
 	var button := _merchant_button("", false)
 	button.name = "MerchantGood_%s" % str(good["id"])
 	button.custom_minimum_size = Vector2(0, 84)
@@ -2584,6 +2601,13 @@ func _merchant_trade_row(good: Dictionary) -> Button:
 	row.add_child(details)
 	var title := Label.new()
 	title.text = "%s  ×%d" % [str(good["title"]), int(good["amount"])]
+	if buying and int(good.get("stock_total", 0)) > 0:
+		# 남은 재고를 제목에 박는다 — 살지 말지의 판단은 "몇 개 남았나"가 절반이다.
+		title.text += "  ·  %s" % (
+			"품절"
+			if sold_out
+			else "재고 %d/%d" % [stock_left, int(good.get("stock_total", 0))]
+		)
 	title.add_theme_font_override("font", FONT)
 	title.add_theme_font_size_override("font_size", 16)
 	title.add_theme_color_override("font_color", Color("#eee6d2"))
@@ -2623,8 +2647,11 @@ func _merchant_trade_row(good: Dictionary) -> Button:
 		currency_color if can_trade else Color("#6f7b75")
 	)
 	row.add_child(action_label)
+	if sold_out:
+		title.add_theme_color_override("font_color", Color("#8d7d74"))
+		action_label.text = "품절"
 	button.disabled = not can_trade
-	button.pressed.connect(func() -> void: _trade_merchant_good(good, buying))
+	button.pressed.connect(func() -> void: _trade_merchant_good(good, buying, stock_index))
 	return button
 
 
@@ -2668,16 +2695,18 @@ func _merchant_trade_chip(
 	return chip
 
 
-func _trade_merchant_good(good: Dictionary, buying: bool) -> void:
+func _trade_merchant_good(good: Dictionary, buying: bool, stock_index: int = -1) -> void:
 	var price := int(good["buy_price"] if buying else good.get("sell_cans", 0))
 	var amount := int(good["amount"])
 	if buying:
-		if GameState.scrap < price:
-			merchant_shop_message_label.text = "고철이 부족합니다."
+		# 재고 차감과 고철 지불은 GameState가 한 번에 처리한다(UI가 장부를 만지지 않는다).
+		var purchase := GameState.buy_merchant_stock(stock_index) as Dictionary
+		if not bool(purchase.get("ok", false)):
+			merchant_shop_message_label.text = str(purchase.get("reason", "구매하지 못했습니다."))
 			return
-		GameState.scrap -= price
 		_add_merchant_item(good, amount)
-		merchant_shop_message_label.text = "%s을(를) 구매했습니다." % str(good["title"])
+		var remaining := int((GameState.merchant_stock[stock_index] as Dictionary).get("stock", 0))
+		merchant_shop_message_label.text = "%s 구매 · 남은 재고 %d개" % [str(good["title"]), remaining]
 	else:
 		if price <= 0:
 			merchant_shop_message_label.text = "이 물건은 매입하지 않습니다."
@@ -2700,6 +2729,10 @@ func _merchant_item_count(good: Dictionary) -> int:
 			return GameState.canned_food
 		"component":
 			return GameState.get_mod_component_count(str(good["id"]))
+		"medkit":
+			return GameState.medkits
+		"equipment":
+			return GameState.get_equipment_count(str(good["id"]))
 	return 0
 
 
@@ -2712,6 +2745,15 @@ func _add_merchant_item(good: Dictionary, amount: int) -> void:
 			GameState.canned_food = maxi(0, GameState.canned_food + amount)
 		"component":
 			GameState.add_mod_component(str(good["id"]), amount)
+		"medkit":
+			GameState.medkits = maxi(0, GameState.medkits + amount)
+		"equipment":
+			if amount > 0:
+				GameState.add_equipment(str(good["id"]), amount)
+			else:
+				GameState.equipment_inventory[str(good["id"])] = maxi(
+					0, GameState.get_equipment_count(str(good["id"])) + amount
+				)
 
 
 func _close_merchant_ui() -> void:
@@ -2734,6 +2776,14 @@ func _merchant_good_fallback_icon(good: Dictionary) -> Texture2D:
 			return UI_ICONS.get_icon("food", 48, Color("#e5b55b"))
 		"component":
 			return UI_ICONS.get_icon("mod", 48, Color("#84cbb9"))
+		"medkit":
+			return UI_ICONS.get_icon("medkit", 48, Color("#e0857c"))
+		"equipment":
+			var definition: Dictionary = GameState.get_equipment_definition(str(good.get("id", "")))
+			var path := str(definition.get("texture_path", ""))
+			if not path.is_empty() and ResourceLoader.exists(path):
+				return load(path) as Texture2D
+			return UI_ICONS.get_icon("armor", 48, Color("#a8c6bb"))
 	return UI_ICONS.get_icon("all", 48, Color("#aebdb5"))
 
 
@@ -2938,6 +2988,7 @@ func _merchant_button(text: String, accent: bool, icon_name := "") -> Button:
 	if not icon_name.is_empty():
 		button.icon = UI_ICONS.get_icon(icon_name, 28, Color("#e8dfcb"))
 		button.expand_icon = true
+		button.add_theme_constant_override("icon_max_width", 26)
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	# 주 행동(accent)은 골드 보더 + 큰 글씨, 보조는 표준. 4상태 전부 시스템이 정의.
 	return HudStyle.style_button(button, HudStyle.GOLD if accent else HudStyle.LINE_FOCUS, accent)
@@ -3223,7 +3274,149 @@ const RESIDENT_CHAT_LINES := [
 ]
 
 
-func _spawn_resident_chat_bubble(resident: Node3D) -> void:
+# ── 캣닢 피버 ─────────────────────────────────────────────────
+# 캣닢을 부어 게이지를 채우고, 꽉 차는 순간 쉘터 전체가 취한다. 이름은 「캣닢
+# 피버」로 갔다 — "광란"은 공포에 가깝고 "냥생 최고의 순간"은 길어서 배지·버튼에
+# 안 들어간다. 피버는 리듬게임·파칭코가 30년간 다듬은 "지금이 그 순간이다"라는
+# 관용어라, 처음 보는 유저도 게이지와 함께 즉시 읽는다.
+const CATNIP_FEVER_LINES := [
+	"머리가 핑 도는데 기분은 최고다냥!",
+	"오늘은 발톱이 저절로 움직여!",
+	"세상이 초록색으로 보인다냥…",
+	"고철이 스스로 걸어오는 것 같아!",
+	"이 냄새… 이 냄새를 평생 기억할 거야!",
+	"손이 안 멈춰! 아무도 날 못 막아!",
+	"꾹꾹, 꾹꾹, 꾹꾹— 아 좋다냥!",
+	"나비야, 우리 오늘 밤은 부자다!",
+	"이게 행복이구나. 이게 행복이야.",
+	"조금만 더… 조금만 더 주라냥!",
+]
+
+var catnip_fever_speed_applied := false
+var catnip_fever_refresh_time := 0.0
+
+
+func _charge_catnip_fever() -> void:
+	var result: Dictionary = GameState.try_charge_catnip_fever()
+	if not bool(result.get("ok", false)):
+		_show_status(str(result.get("reason", "캣닢 피버를 충전하지 못했습니다.")))
+		return
+	if bool(result.get("activated", false)):
+		_play_catnip_fever_intro()
+		return
+	_show_status("캣닢 피버 충전 · 게이지 %d%% (캣닢 -%s)" % [
+		roundi(float(result.get("ratio", 0.0)) * 100.0),
+		GameState.format_compact_number(int(result.get("cost", 0))),
+	])
+
+
+func _update_catnip_fever(delta: float) -> void:
+	if GameState.catnip_fever_active:
+		if not catnip_fever_speed_applied:
+			_apply_catnip_fever_speed(3.0)
+		var ended: bool = GameState.tick_catnip_fever(delta)
+		# 게이지 표시는 초당 5번이면 충분하다 — refresh()는 아이콘까지 다시 만든다.
+		catnip_fever_refresh_time += delta
+		if catnip_fever_refresh_time >= 0.2:
+			catnip_fever_refresh_time = 0.0
+			if ops_console != null:
+				ops_console.refresh()
+		if ended:
+			_end_catnip_fever()
+	elif catnip_fever_speed_applied:
+		_end_catnip_fever()
+
+
+func _apply_catnip_fever_speed(scale: float) -> void:
+	catnip_fever_speed_applied = scale > 1.0
+	for resident in get_tree().get_nodes_in_group("shelter_resident"):
+		if resident.has_method("set_fever_speed_scale"):
+			resident.call("set_fever_speed_scale", scale)
+
+
+func _end_catnip_fever() -> void:
+	_apply_catnip_fever_speed(1.0)
+	_show_status("캣닢 피버 종료 · 쉘터가 숨을 고릅니다.")
+	if is_instance_valid(shelter_camera):
+		var settle := shelter_camera.create_tween()
+		settle.tween_property(shelter_camera, "size", 25.0, 0.18).set_trans(Tween.TRANS_SINE)
+		settle.tween_property(shelter_camera, "size", 27.0, 0.5).set_trans(Tween.TRANS_SINE)
+	if ops_console != null:
+		ops_console.refresh()
+
+
+func _play_catnip_fever_intro() -> void:
+	# 발동은 사건이다. 숫자가 오르는 것보다 "지금 뭔가 벌어졌다"가 먼저 읽혀야 한다.
+	_apply_catnip_fever_speed(3.0)
+	var layer := CanvasLayer.new()
+	layer.name = "CatnipFeverLayer"
+	layer.layer = 96
+	add_child(layer)
+	var flash := ColorRect.new()
+	flash.name = "CatnipFeverFlash"
+	flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	flash.color = Color(0.44, 0.88, 0.32, 0.0)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(flash)
+	var title := Label.new()
+	title.name = "CatnipFeverTitle"
+	title.text = "캣닢 피버!"
+	title.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title.add_theme_font_override("font", FONT)
+	title.add_theme_font_size_override("font_size", 92)
+	title.add_theme_color_override("font_color", Color("#d8f5a8"))
+	title.add_theme_color_override("font_outline_color", Color(0.03, 0.09, 0.02, 0.95))
+	title.add_theme_constant_override("outline_size", 18)
+	layer.add_child(title)
+	var subtitle := Label.new()
+	subtitle.name = "CatnipFeverSubtitle"
+	subtitle.text = "모든 생산 %.0f배 · %.0f초" % [
+		GameState.get_catnip_fever_multiplier(),
+		GameState.get_catnip_fever_duration(),
+	]
+	subtitle.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	subtitle.offset_top = 84.0
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	subtitle.add_theme_font_override("font", FONT)
+	subtitle.add_theme_font_size_override("font_size", 26)
+	subtitle.add_theme_color_override("font_color", Color("#aeea78"))
+	subtitle.add_theme_color_override("font_outline_color", Color(0.03, 0.09, 0.02, 0.9))
+	subtitle.add_theme_constant_override("outline_size", 8)
+	layer.add_child(subtitle)
+	title.pivot_offset = title.size * 0.5
+	title.scale = Vector2(0.4, 0.4)
+	title.modulate.a = 0.0
+	var show := title.create_tween()
+	show.set_parallel(true)
+	show.tween_property(title, "modulate:a", 1.0, 0.16).set_trans(Tween.TRANS_SINE)
+	show.tween_property(title, "scale", Vector2(1.12, 1.12), 0.26).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	show.tween_property(flash, "color:a", 0.55, 0.1).set_trans(Tween.TRANS_SINE)
+	show.chain().tween_property(flash, "color:a", 0.0, 0.55).set_trans(Tween.TRANS_SINE)
+	show.chain().tween_property(title, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_SINE)
+	show.chain().tween_interval(1.1)
+	show.chain().tween_property(title, "modulate:a", 0.0, 0.4).set_trans(Tween.TRANS_SINE)
+	show.parallel().tween_property(subtitle, "modulate:a", 0.0, 0.4)
+	show.chain().tween_callback(layer.queue_free)
+	# 줌 펀치 — 카메라가 한 번 훅 들어왔다 물러난다.
+	if is_instance_valid(shelter_camera):
+		var punch := shelter_camera.create_tween()
+		punch.tween_property(shelter_camera, "size", 21.5, 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		punch.tween_property(shelter_camera, "size", 27.0, 0.62).set_trans(Tween.TRANS_SINE)
+	# 주민 전원이 동시에 취한 소리를 낸다 — 피버의 주인공은 숫자가 아니라 고양이다.
+	var line_pool := CATNIP_FEVER_LINES.duplicate()
+	for resident in get_tree().get_nodes_in_group("shelter_resident"):
+		var line := str(line_pool[resident_chat_random.randi_range(0, line_pool.size() - 1)])
+		_spawn_resident_chat_bubble(resident as Node3D, line)
+	if ops_console != null:
+		ops_console.refresh()
+
+
+func _spawn_resident_chat_bubble(resident: Node3D, forced_line := "") -> void:
 	if not is_instance_valid(resident):
 		return
 	var previous := resident.get_node_or_null("ChatBubble")
@@ -3231,7 +3424,11 @@ func _spawn_resident_chat_bubble(resident: Node3D) -> void:
 		previous.queue_free()
 	var label := Label3D.new()
 	label.name = "ChatBubble"
-	label.text = RESIDENT_CHAT_LINES[resident_chat_random.randi_range(0, RESIDENT_CHAT_LINES.size() - 1)]
+	label.text = (
+		forced_line
+		if not forced_line.is_empty()
+		else RESIDENT_CHAT_LINES[resident_chat_random.randi_range(0, RESIDENT_CHAT_LINES.size() - 1)]
+	)
 	label.font = FONT
 	# 30pt는 PC·모바일 모두 안 읽혔다(스크린샷 확인) — 2배로 키우고 외곽선도
 	# 비례 강화. font_size를 키우면 텍스처 해상도가 함께 올라 선명함도 산다.
@@ -3761,8 +3958,6 @@ func _open_raid_zone_select() -> void:
 	raid_zone_detail_requirement.add_theme_color_override("font_color", Color("#d78371"))
 	raid_zone_detail_requirement.visible = false
 	detail_box.add_child(raid_zone_detail_requirement)
-	# 캣닢 급여 택1 — 착즙 라인이 곧 전투 준비라는 등식을 여기서 만든다.
-	detail_column.add_child(_build_catnip_buff_row())
 	raid_zone_resupply_button = _merchant_button("창고에서 빠른 보충", false, "backpack")
 	raid_zone_resupply_button.name = "RaidZoneResupplyButton"
 	raid_zone_resupply_button.custom_minimum_size.y = 44
@@ -3788,95 +3983,6 @@ func _open_raid_zone_select() -> void:
 	if initial_zone_id.is_empty() and not zone_ids.is_empty():
 		initial_zone_id = str(zone_ids[0])
 	_select_raid_zone_preview(initial_zone_id)
-
-
-var raid_catnip_buff_choices: Array[String] = []
-var raid_catnip_buff_buttons: Dictionary = {}
-
-
-func _build_catnip_buff_row() -> Control:
-	# 출정 전에 캣닢 한 줌 = 한 판짜리 체질 보정. 세 개 중 하나만 고를 수 있다.
-	raid_catnip_buff_choices.clear()
-	raid_catnip_buff_buttons.clear()
-	var box := VBoxContainer.new()
-	box.name = "CatnipBuffRow"
-	box.add_theme_constant_override("separation", 5)
-	var title := Label.new()
-	title.add_theme_font_override("font", FONT)
-	title.add_theme_font_size_override("font_size", 12)
-	title.add_theme_color_override("font_color", Color("#9db3a9"))
-	box.add_child(title)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	box.add_child(row)
-	for buff_id in GameState.CATNIP_FIELD_BUFFS:
-		var definition: Dictionary = GameState.CATNIP_FIELD_BUFFS[buff_id]
-		var button := Button.new()
-		button.name = "CatnipBuff_%s" % buff_id
-		button.toggle_mode = true
-		# 효과는 버튼 본문에 직접 쓴다 — 터치엔 툴팁이 없다.
-		var effect := str(definition.get("description", "")).replace("이번 출정 동안 ", "")
-		button.text = "%s\n%s" % [str(definition.get("title", buff_id)), effect]
-		button.tooltip_text = "%s · 캣닢 %s" % [
-			str(definition.get("description", "")),
-			GameState.format_compact_number(GameState.get_catnip_field_buff_cost()),
-		]
-		button.custom_minimum_size = Vector2(0, 54)
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.icon = UI_ICONS.get_icon(str(definition.get("icon", "catnip")), 18, Color("#aeea78"))
-		button.expand_icon = true
-		button.add_theme_constant_override("icon_max_width", 18)
-		HudStyle.style_button(button, Color("#7fb069"))
-		button.toggled.connect(_on_catnip_buff_toggled.bind(str(buff_id)))
-		row.add_child(button)
-		raid_catnip_buff_buttons[str(buff_id)] = button
-	_refresh_catnip_buff_row(title)
-	box.set_meta("title_label", title)
-	return box
-
-
-func _selected_catnip_buff_total_cost(count: int) -> int:
-	var total := 0
-	for index in count:
-		total += GameState.get_catnip_field_buff_cost(index)
-	return total
-
-
-func _refresh_catnip_buff_row(title: Label) -> void:
-	# 버프는 최대 3종까지 겹치고 가격은 누진(20분치→1시간치→3시간치).
-	# 커진 착즙 라인의 잉여가 '풀버프 출정'으로 빠져나간다.
-	var selected := raid_catnip_buff_choices.size()
-	var next_cost := GameState.get_catnip_field_buff_cost(selected)
-	var committed := _selected_catnip_buff_total_cost(selected)
-	for buff_id in raid_catnip_buff_buttons:
-		var button := raid_catnip_buff_buttons[buff_id] as Button
-		if raid_catnip_buff_choices.has(str(buff_id)):
-			button.disabled = false
-		else:
-			button.disabled = selected >= 3 or GameState.catnip < committed + next_cost
-	if selected >= 3:
-		title.text = "캣닢 급여 · 풀버프 (합계 %s) · 보유 %s" % [
-			GameState.format_compact_number(committed),
-			GameState.format_compact_number(GameState.catnip),
-		]
-	else:
-		title.text = "캣닢 급여 · 겹칠수록 비쌈 · 다음 %s (보유 %s)" % [
-			GameState.format_compact_number(next_cost),
-			GameState.format_compact_number(GameState.catnip),
-		]
-
-
-func _on_catnip_buff_toggled(pressed: bool, buff_id: String) -> void:
-	# 다중 선택 — 실제 소비는 출정 확정 순간에 선택 순서대로 이뤄진다.
-	if pressed and not raid_catnip_buff_choices.has(buff_id):
-		raid_catnip_buff_choices.append(buff_id)
-	elif not pressed:
-		raid_catnip_buff_choices.erase(buff_id)
-	var row := raid_catnip_buff_buttons.get(buff_id) as Button
-	if row != null and row.get_parent() != null:
-		var title := row.get_parent().get_parent().get_meta("title_label", null) as Label
-		if title != null:
-			_refresh_catnip_buff_row(title)
 
 
 func _build_raid_zone_map_marker(zone_id: String, zone_index: int) -> Control:
@@ -4204,12 +4310,6 @@ func _confirm_launch_raid_zone(zone_id: String) -> void:
 	if is_instance_valid(raid_zone_launch_button):
 		raid_zone_launch_button.disabled = true
 		raid_zone_launch_button.text = "출정 준비 중..."
-	# 캣닢 급여는 확정 순간에만 소비된다 — 브리핑에서 고르기만 하고 취소하면 무료.
-	for chosen_buff_id in raid_catnip_buff_choices:
-		# 선택 순서대로 누진 가격 — 캣닢이 모자라면 거기서 멈춘다.
-		if not GameState.try_activate_catnip_field_buff(str(chosen_buff_id)):
-			break
-	raid_catnip_buff_choices.clear()
 	GameState.confirm_raid_loadout(zone_id)
 	GameState.start_new_raid()
 	# 다음 브리핑에서 "지난 출정 이후"를 계산할 기준점을 여기서 찍는다.
@@ -4363,6 +4463,33 @@ func _show_milestone_unlock_banner(unlocks: Array) -> void:
 	tween.tween_interval(2.6 + 0.6 * float(unlocks.size()))
 	tween.tween_property(panel, "modulate:a", 0.0, 0.5)
 	tween.tween_callback(layer.queue_free)
+
+
+func _build_return_settlement_text(settlement: Dictionary) -> String:
+	# 복귀 정산 한 줄 요약. 아무것도 안 옮겼으면 침묵한다(빈 토스트 금지).
+	if settlement.is_empty():
+		return ""
+	var parts: PackedStringArray = []
+	var food := int(settlement.get("food", 0))
+	if food > 0:
+		parts.append("통조림 %d개 쉘터 귀속" % food)
+	var stored := int(settlement.get("stored", 0))
+	if stored > 0:
+		parts.append("전리품 %d점 창고 입고" % stored)
+	var valuable_count := int(settlement.get("valuable_count", 0))
+	if valuable_count > 0:
+		parts.append("귀중품 %d점 → 고철 +%s" % [
+			valuable_count,
+			GameState.format_compact_number(int(settlement.get("valuable_scrap", 0))),
+		])
+	if parts.is_empty():
+		return ""
+	var text := "복귀 정산 · " + " · ".join(parts)
+	var overflow := int(settlement.get("overflow", 0))
+	if overflow > 0:
+		# 조용한 소실 금지 — 창고가 모자라 가방에 남은 몫은 반드시 알린다.
+		text += "  (창고가 꽉 차 %d점은 가방에 남았습니다)" % overflow
+	return text
 
 
 func _build_corpse_decay_text(notice: Dictionary) -> String:

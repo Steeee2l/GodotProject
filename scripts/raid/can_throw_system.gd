@@ -359,12 +359,16 @@ func _spawn_speech(enemy: Node3D, lines: Array = EATER_LINES) -> void:
 	label.name = "LureSpeech"
 	label.text = lines[randi() % lines.size()]
 	label.font = FONT
-	label.font_size = 26
+	# 26pt는 직교 카메라 거리에서 읽히지 않았다(유저 신고) — 두 배로.
+	label.font_size = 56
+	label.pixel_size = 0.0038
 	label.modulate = Color("#efe3c0")
-	label.outline_size = 7
-	label.position = Vector3(0, 1.62, 0)
+	label.outline_size = 16
+	label.outline_modulate = Color(0.02, 0.03, 0.03, 0.92)
+	label.position = Vector3(0, 1.86, 0)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
+	label.render_priority = 120
 	enemy.add_child(label)
 	var tween := host.create_tween()
 	tween.tween_interval(2.4)

@@ -768,7 +768,10 @@ static func roll_container(
 		if not item_id.is_empty():
 			# 스마트 탄약: 상자에서 탄약이 나오면 장착 무기 구경으로 치환.
 			# 전용 탄약상자는 85% — "탄약상자 = 내 총 보급소"가 직관이 되도록.
-			var matched_chance := 0.85 if container_type == "ammo_case" else 0.55
+			# 일반 상자는 55% → 75%로 올렸다. 제작대의 탄약 레시피가 폐지되면서
+			# 탄약 수급선이 필드 루팅과 상인 구매만 남았다. 상자에서 나온 탄이
+			# 절반은 못 쓰는 구경이면 "주웠는데 못 쏜다"가 반복돼 압박만 커진다.
+			var matched_chance := 0.85 if container_type == "ammo_case" else 0.75
 			if item_id.begins_with("ammo_") and random.randf() < matched_chance:
 				var matched_ammo_id := _equipped_ammo_item_id(stage)
 				if not matched_ammo_id.is_empty():
@@ -817,6 +820,10 @@ static func roll_enemy_drop(
 		if unarmed_recovery
 		else get_enemy_weapon_drop_chance(stage)
 	)
+	# 근접 적은 무기 드랍에서 제외한다 — 야구방망이는 WeaponSystem.WEAPONS와
+	# ITEM_CATALOG 어디에도 정의가 없어(플레이어 근접 무기 체계 자체가 없다)
+	# 드랍시켜 봐야 장착·판매가 안 되는 유령 아이템이 된다. 대신 근접 적은
+	# 아래 방어구 판정과 처치 보장 fallback에서 확정으로 방어구를 내놓는다.
 	if (
 		enemy_kind != "melee"
 		and enemy_weapon_id != "baseball_bat"
@@ -897,13 +904,17 @@ static func roll_guaranteed_equipment_drop(
 ) -> Dictionary:
 	# 처치 보장 드랍 — roll_enemy_drop이 무기도 방어구도 내놓지 않았을 때
 	# enemy_director가 얹는 fallback. "힘들게 죽였는데 장비가 하나도 없다"를
-	# 없앤다(모든 킬 = 무기 or 방어구 최소 1개). 무기 40% / 방어구 60%.
+	# 없앤다(모든 킬 = 무기 or 방어구 최소 1개). 무기 40% → 55%로 올렸다:
+	# 방어구는 이미 남아돌 만큼 나오는데 무기가 안 나온다는 신고가 계속이라
+	# fallback의 무게추를 무기 쪽으로 옮긴다(동반 탄약도 같이 따라온다).
 	# roll_enemy_drop의 기존 분포·시그니처는 건드리지 않으려고 별도 함수로 둔다.
+	# 근접 적(baseball_bat)은 여기서도 방어구 확정 — 야구방망이는 WeaponSystem
+	# WEAPONS에도 ITEM_CATALOG에도 정의가 없어 주워도 장착할 수 없다.
 	var stage := clampi(stage_tier, 1, 5)
 	if (
 		enemy_kind != "melee"
 		and enemy_weapon_id != "baseball_bat"
-		and random.randf() < 0.4
+		and random.randf() < 0.55
 	):
 		var weapon_definition := _find_weapon_definition(enemy_weapon_id)
 		if not weapon_definition.is_empty() and _item_allowed(weapon_definition, stage):
@@ -929,7 +940,10 @@ static func roll_weapon_companion_ammo(
 static func get_enemy_weapon_drop_chance(stage_tier: int) -> float:
 	# 총 든 적을 죽이면 그 총이 나올 수 있어야 한다(타르코프의 손맛). 5%는
 	# 사실상 안 나오는 확률이라 판 내 재무장 파워커브가 죽어 있었다.
-	return 0.10 + float(clampi(stage_tier, 1, 5) - 1) * 0.02
+	# 10%도 여전히 "죽여도 무기가 안 나온다"는 체감이었다(유저 신고) — 1.5배로
+	# 올린다. 초반 15% → 후반 27%. 무기가 떨어지면 동반 탄약까지 따라오므로
+	# 탄약 수급선(제작 폐지분)을 메우는 두 번째 축이기도 하다.
+	return 0.15 + float(clampi(stage_tier, 1, 5) - 1) * 0.03
 
 
 static func get_definition_value(definition: Dictionary) -> int:
@@ -1278,7 +1292,7 @@ static func roll_matched_ammo_recovery(
 ) -> Dictionary:
 	# 호환탄 회수 — 사수 시체에서 내 총에 맞는 탄을 골라 줍는다.
 	# 일반 드랍 테이블과 별개 판정: 테이블 안에서 확률을 키우면 방어구·식량
-	# 비중이 무너지므로, 회수는 독립 드랍으로 얹는다. 스테이지별 5~12발.
+	# 비중이 무너지므로, 회수는 독립 드랍으로 얹는다.
 	var stage := clampi(stage_tier, 1, 5)
 	var item_id := _equipped_ammo_item_id(stage)
 	if item_id.is_empty():
@@ -1287,7 +1301,14 @@ static func roll_matched_ammo_recovery(
 	if definition.is_empty():
 		return {}
 	var data := definition.get("data", {}) as Dictionary
-	data["amount"] = random.randi_range(4, 7) + stage
+	# 회수량 상향: 기존 (4~7)+스테이지는 킬당 회수가 탄창 하나에도 못 미쳐
+	# "쏠수록 가난해진다"는 체감이 남았다(유저 신고). 탄약 제작 레시피가
+	# 폐지돼 필드 회수가 사실상 유일한 보급선이 된 것도 이유다.
+	# 하한은 6으로 고정하고 상한만 스테이지를 따라 늘리되 3스테이지에서 멈춘다 —
+	# 초반에도 한 킬이 탄창 값을 하고, 후반에는 다른 수급선(고티어 탄·무기 동반
+	# 탄약)이 이미 두꺼워서 여기까지 계속 늘리면 탄약 압박 자체가 사라진다.
+	# 실측 기준 킬당 장착 구경 회수 4.2~5.9발(목표 4~6발) 곡선.
+	data["amount"] = random.randi_range(6, 10 + mini(stage, 3))
 	return definition
 
 

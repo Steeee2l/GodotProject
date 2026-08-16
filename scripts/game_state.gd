@@ -50,7 +50,14 @@ var weapon_level: int = 1
 # 루팅(사실상 동전 던지기)이 되고, 사망 화면은 있지도 않던 구급약을 논한다.
 var medkits: int = 1
 # 통조림은 쉘터의 유일한 가동 연료다. 출정에서 가져와 주민 노동을 산다.
+# canned_food는 "쉘터 전체 보유량"이고, 그중 가방에 실제로 들려 칸을 먹는 몫은
+# canned_food - (창고 보관분 + 쉘터 식료 선반)으로 계산한다.
 var canned_food: int = 0
+# 복귀 정산으로 쉘터에 귀속된 통조림. 창고 슬롯을 먹지 않고 가방 칸도 먹지 않는
+# 순수 쉘터 재고다 — "복귀 = 정산"이라 가져온 통조림은 다음 출정 가방을 좀먹지
+# 않아야 한다(유저 요구). 소비(주민 식비)는 canned_food에서 빠지고 이 값은
+# _trim_canned_food_reserves가 뒤따라 줄여 준다.
+var shelter_food_reserve: int = 0
 var catnip: int = 0
 var churu: int = 0
 # 귀중품: 용도가 없고 오직 값어치만 있는 물건. 추출 슈터의 핵심 판단축인
@@ -133,6 +140,9 @@ var catnip_scraper_multiplier: float = 1.0
 var storage_level: int = 1
 var storage_inventory: Array[Dictionary] = []
 var catnip_boost_end_time: int = 0
+# 캣닢 피버 — 게이지(0~100)와 발동 여부. 게이지는 세이브에 남는다.
+var catnip_fever_gauge: float = 0.0
+var catnip_fever_active: bool = false
 var shelter_last_progress_time: int = 0
 var workbench_repair_active: bool = false
 var workbench_repair_weapon_id: String = "ak47"
@@ -147,12 +157,12 @@ var shelter_catnip_fraction: float = 0.0
 var shelter_food_fraction: float = 0.0
 # 이번 출정에만 적용되는 츄르 버프. 출정 종료/사망 시 소멸한다.
 var active_churu_buffs: Array[String] = []
-# 이번 출정에만 적용되는 캣닢 급여(택1). 출정 종료/사망 시 소멸한다.
-var active_catnip_buffs: Array[String] = []
 # 판 도중 강제 종료(Alt+F4) 감시 — 출정 시작에 켜고 정상 복귀에 끈다.
 # 로드 시 켜져 있으면 그 판은 '포기'로 처리된다(사망과 같은 손실, 시체 없음).
 var raid_in_progress := false
 var last_corpse_decay_notice: Dictionary = {}
+# 직전 복귀 정산 결과(통조림·창고 이동·환전·창고 초과분). 쉘터가 한 번 읽고 비운다.
+var last_return_settlement: Dictionary = {}
 # 첫 판에서 "가방이 꽉 찼을 때의 갈등"을 한 번은 반드시 겪게 한다.
 var bag_pressure_lesson_seen: bool = false
 # 첫 출정에서 한 번씩만 뜨는 코칭. 다리 위 튜토리얼은 동사(이동·조준·사격)만
@@ -172,6 +182,110 @@ var survived_return_count: int = 0
 var merchant_last_roll_serial: int = -1
 var merchant_status: String = "away"
 var merchant_decline_count: int = 0
+# 이번 방문의 매대(품목 + 남은 재고). 방문할 때마다 새로 굴린다.
+var merchant_stock: Array[Dictionary] = []
+# 이번 복귀에 상인이 헛걸음했는가 — 쉘터가 한 줄 단서로 알려 준다.
+var merchant_missed_visit: bool = false
+
+# 상인 매대 후보. 탄약은 제작이 폐지돼 필드 루팅과 여기 둘뿐이다.
+const MERCHANT_AMMO_GOODS := [
+	{
+		"id": "762_fmj", "type": "ammo", "title": "7.62mm 보통탄", "amount": 30,
+		"buy_price": 650, "sell_cans": 2, "stock_min": 2, "stock_max": 4,
+		"icon": "res://assets/items/ammo_762.png",
+		"description": "AK 계열 총기에 사용하는 보통탄입니다.",
+	},
+	{
+		"id": "9mm_fmj", "type": "ammo", "title": "9mm 보통탄", "amount": 45,
+		"buy_price": 520, "sell_cans": 2, "stock_min": 2, "stock_max": 4,
+		"icon": "res://assets/items/ammo_762.png",
+		"description": "기관단총과 권총에 두루 쓰는 가벼운 탄약입니다.",
+	},
+	{
+		"id": "45_fmj", "type": "ammo", "title": ".45 ACP 보통탄", "amount": 24,
+		"buy_price": 480, "sell_cans": 2, "stock_min": 2, "stock_max": 3,
+		"icon": "res://assets/items/ammo_762.png",
+		"description": "묵직한 권총탄. 한 발의 무게가 다릅니다.",
+	},
+	{
+		"id": "12g_buckshot", "type": "ammo", "title": "12게이지 벅샷", "amount": 12,
+		"buy_price": 700, "sell_cans": 3, "stock_min": 2, "stock_max": 4,
+		"icon": "res://assets/items/ammo_762.png",
+		"description": "근거리 저지력이 높은 산탄입니다.",
+	},
+]
+const MERCHANT_SUNDRY_GOODS := [
+	{
+		"id": "scope_lens", "type": "component", "title": "스코프 렌즈", "amount": 1,
+		"buy_price": 1200, "sell_cans": 5, "stock_min": 1, "stock_max": 3,
+		"icon": "res://assets/items/mod_components/scope_lens.png",
+		"description": "조준경과 정밀 모듈 제작에 사용하는 온전한 렌즈입니다.",
+	},
+	{
+		"id": "rubber_gasket", "type": "component", "title": "고무 패킹", "amount": 1,
+		"buy_price": 950, "sell_cans": 3, "stock_min": 1, "stock_max": 3,
+		"icon": "res://assets/items/mod_components/rubber_gasket.png",
+		"description": "소음기와 반동 완충 부품 제작에 사용하는 패킹입니다.",
+	},
+	{
+		"id": "magazine_spring", "type": "component", "title": "탄창 스프링", "amount": 1,
+		"buy_price": 1050, "sell_cans": 4, "stock_min": 1, "stock_max": 3,
+		"icon": "res://assets/items/mod_components/magazine_spring.png",
+		"description": "탄창과 전술 부품 제작에 사용하는 복원력 높은 스프링입니다.",
+	},
+	{
+		"id": "medkit", "type": "medkit", "title": "구급약", "amount": 1,
+		"buy_price": 1600, "sell_cans": 0, "stock_min": 1, "stock_max": 2,
+		"icon": "", "description": "출정 중 체력을 회복하는 응급 처치 키트입니다.",
+	},
+	{
+		"id": "scav_vest", "type": "equipment", "title": "누더기 방탄 조끼", "amount": 1,
+		"buy_price": 5200, "sell_cans": 0, "stock_min": 1, "stock_max": 1,
+		"icon": "", "description": "상인이 어디선가 주워 온 생존자 계열 조끼입니다.",
+	},
+	{
+		"id": "patched_helmet", "type": "equipment", "title": "기워 붙인 헬멧", "amount": 1,
+		"buy_price": 4200, "sell_cans": 0, "stock_min": 1, "stock_max": 1,
+		"icon": "", "description": "금 간 안전모를 보강한 머리 보호구입니다.",
+	},
+]
+# 판매(매입) 목록은 매대와 별개다 — 상인이 오늘 뭘 파느냐와 내 물건을 사 주느냐는
+# 다른 문제다. 여기 있는 품목은 방문마다 항상 팔 수 있다.
+const MERCHANT_SELL_GOODS := [
+	{
+		"id": "762_fmj", "type": "ammo", "title": "7.62mm 보통탄", "amount": 30,
+		"buy_price": 650, "sell_cans": 2, "icon": "res://assets/items/ammo_762.png",
+		"description": "AK 계열 총기에 사용하는 보통탄입니다.",
+	},
+	{
+		"id": "9mm_fmj", "type": "ammo", "title": "9mm 보통탄", "amount": 45,
+		"buy_price": 520, "sell_cans": 2, "icon": "res://assets/items/ammo_762.png",
+		"description": "기관단총과 권총에 두루 쓰는 가벼운 탄약입니다.",
+	},
+	{
+		"id": "12g_buckshot", "type": "ammo", "title": "12게이지 벅샷", "amount": 12,
+		"buy_price": 700, "sell_cans": 3, "icon": "res://assets/items/ammo_762.png",
+		"description": "근거리 저지력이 높은 산탄입니다.",
+	},
+	{
+		"id": "scope_lens", "type": "component", "title": "스코프 렌즈", "amount": 1,
+		"buy_price": 1200, "sell_cans": 5,
+		"icon": "res://assets/items/mod_components/scope_lens.png",
+		"description": "조준경과 정밀 모듈 제작에 사용하는 온전한 렌즈입니다.",
+	},
+	{
+		"id": "rubber_gasket", "type": "component", "title": "고무 패킹", "amount": 1,
+		"buy_price": 950, "sell_cans": 3,
+		"icon": "res://assets/items/mod_components/rubber_gasket.png",
+		"description": "소음기와 반동 완충 부품 제작에 사용하는 패킹입니다.",
+	},
+	{
+		"id": "magazine_spring", "type": "component", "title": "탄창 스프링", "amount": 1,
+		"buy_price": 1050, "sell_cans": 4,
+		"icon": "res://assets/items/mod_components/magazine_spring.png",
+		"description": "탄창과 전술 부품 제작에 사용하는 복원력 높은 스프링입니다.",
+	},
+]
 var weapon_enhancement_levels: Dictionary = {"ak47": 0}
 var mod_enhancement_levels: Dictionary = {}
 var artisan_pity: int = 0
@@ -537,6 +651,10 @@ const RAID_ZONES := {
 
 const WORKBENCH_UPGRADE_COSTS := {2: 7500, 3: 40000, 4: 180000, 5: 800000}
 const SCRATCHER_UPGRADE_COSTS := {2: 12000, 3: 60000, 4: 280000, 5: 1300000}
+# 고철 생산기 확장에는 캣닢이 함께 든다. 캣닢은 출정 버프를 잃은 대신
+# "고철 라인을 키우는 재료"가 됐다 — 착즙 라인을 키워야 꾹꾹이 라인이 큰다.
+# 요구량은 대략 해당 시점 착즙 생산 30분~2시간치를 노린 지수 곡선이다.
+const SCRATCHER_UPGRADE_CATNIP_COSTS := {2: 900, 3: 4500, 4: 22000, 5: 110000}
 const CATNIP_SCRAPER_UPGRADE_COSTS := {2: 10000, 3: 50000, 4: 230000, 5: 1000000}
 const STORAGE_GRID_BY_LEVEL := {
 	1: Vector2i(6, 5),
@@ -641,33 +759,6 @@ const CHURU_BUFFS := {
 		"description": "이번 출정 동안 가방 슬롯 +4",
 		"cost": 2,
 		"icon": "loot",
-	},
-}
-
-# ── 캣닢 출정 급여 ─────────────────────────────────────────────
-# 착즙 라인이 곧 전투 준비다. 출정 전에 캣닢 한 줌을 먹이면 한 판짜리
-# 체질 보정이 붙는다 — 츄르 버프와 같은 수명(복귀/사망 시 소멸).
-const CATNIP_FIELD_BUFFS := {
-	"swift_paws": {
-		"title": "잰걸음",
-		"short_title": "이속",
-		"description": "이번 출정 동안 이동 속도 +12%",
-		"cost": 400,
-		"icon": "speed",
-	},
-	"keen_eyes": {
-		"title": "집중",
-		"short_title": "명중",
-		"description": "이번 출정 동안 탄퍼짐 -25%",
-		"cost": 400,
-		"icon": "interact",
-	},
-	"steady_heart": {
-		"title": "끈기",
-		"short_title": "피로",
-		"description": "이번 출정 동안 피로도 증가 -35%",
-		"cost": 400,
-		"icon": "stamina",
 	},
 }
 
@@ -945,11 +1036,12 @@ func clear_carried_raid_inventory_after_death() -> void:
 	weapon_inventory.clear()
 	weapon_mod_loadouts.clear()
 	medkits = 0
-	canned_food = get_stored_storage_count("food", "canned_food")
+	# 죽어도 쉘터 것은 쉘터 것이다 — 창고 보관분과 식료 선반(복귀 정산분)은 남고
+	# 가방에 들려 있던 통조림만 시체와 함께 사라진다.
+	canned_food = get_stored_storage_count("food", "canned_food") + maxi(0, shelter_food_reserve)
 	churu = 0
 	valuable_inventory.clear()
 	clear_churu_buffs()
-	clear_catnip_field_buff()
 	magazine_ammo = 0
 	reserve_ammo = 0
 	has_ak = false
@@ -992,10 +1084,11 @@ func register_shelter_return(survived: bool = true) -> void:
 	player_health = get_max_health()
 	if survived:
 		survived_return_count += 1
+		# 살아 돌아온 판만 정산한다. 사망 귀환은 이미 가방을 통째로 잃었다.
+		last_return_settlement = settle_shelter_return_inventory()
 	clear_confirmed_raid_manifest()
-	# 츄르 버프와 캣닢 급여는 한 판짜리다. 복귀와 동시에 사라진다.
+	# 츄르 버프는 한 판짜리다. 복귀와 동시에 사라진다.
 	clear_churu_buffs()
-	clear_catnip_field_buff()
 	# 남겨 둔 시체는 그동안 남의 손을 탄다.
 	last_corpse_decay_notice = apply_corpse_decay()
 	pending_milestone_unlocks = check_milestone_unlocks()
@@ -1003,6 +1096,61 @@ func register_shelter_return(survived: bool = true) -> void:
 	# 계약을 완주했다면 복귀마다 새 도시 의뢰를 내건다(후반 반복 목표).
 	roll_city_commission()
 	save_persistent_state()
+
+
+# ── 복귀 정산 ─────────────────────────────────────────────────
+# 복귀는 "가방을 든 채 쉘터에 서 있는 것"이 아니라 정산이다. 필드에서 주운
+# 것들이 다음 출정 가방을 그대로 좀먹으면, 매 판 시작이 정리 작업이 된다.
+# 통조림 → 쉘터 재고, 재료·부착물·진행품·여분 장비 → 창고, 귀중품 → 고철.
+# 탄약과 구급약만 가방에 남긴다: 다음 출정의 준비물이고, 창고 인출 UI를 매판
+# 거치게 만드는 건 순수한 마찰이다(보관하고 싶으면 창고에서 직접 넣으면 된다).
+func settle_shelter_return_inventory() -> Dictionary:
+	var report := {
+		"food": 0,
+		"stored": 0,
+		"overflow": 0,
+		"valuable_count": 0,
+		"valuable_scrap": 0,
+	}
+	# 1) 통조림: 가방 몫 전부를 쉘터 식료 선반으로. 창고 슬롯도 가방 칸도 안 먹는다.
+	var carried_food := get_backpack_storage_count("food", "canned_food")
+	if carried_food > 0:
+		shelter_food_reserve += carried_food
+		report["food"] = carried_food
+	# 2) 귀중품: 용도가 없는 물건이다. 쉘터에 오는 순간이 곧 환전이다.
+	var valuable_result := sell_all_valuables()
+	report["valuable_count"] = int(valuable_result.get("count", 0))
+	report["valuable_scrap"] = int(valuable_result.get("scrap", 0))
+	# 3) 나머지 소지품은 창고로. 장착 중인 것은 get_backpack_storage_count가
+	#    이미 제외하므로 몸에 걸친 무기·방어구는 건드리지 않는다.
+	var settlement_targets: Array = [
+		["component", mod_component_inventory],
+		["mod", weapon_mod_inventory],
+		["progression", progression_item_inventory],
+		["weapon", weapon_inventory],
+		["equipment", equipment_inventory],
+	]
+	for target in settlement_targets:
+		var item_type := str(target[0])
+		var inventory := target[1] as Dictionary
+		for item_id_value in inventory.keys():
+			var item_id := str(item_id_value)
+			var carried := get_backpack_storage_count(item_type, item_id)
+			if carried <= 0:
+				continue
+			var result := deposit_storage_item(item_type, item_id, carried, false)
+			var moved := int(result.get("moved", 0))
+			report["stored"] = int(report["stored"]) + moved
+			# 창고가 모자라면 넘치는 만큼만 가방에 남는다. 조용히 버리지 않는다.
+			report["overflow"] = int(report["overflow"]) + (carried - moved)
+	save_persistent_state()
+	return report
+
+
+func consume_return_settlement() -> Dictionary:
+	var settlement := last_return_settlement.duplicate(true)
+	last_return_settlement.clear()
+	return settlement
 
 
 func consume_milestone_unlocks() -> Array[Dictionary]:
@@ -1273,7 +1421,10 @@ func select_raid_zone(zone_id: String) -> bool:
 	return true
 
 
-func roll_merchant_visit(chance: float = 0.38) -> bool:
+# 떠돌이 상인은 약속을 하지 않는다. 매 복귀 65%만 찾아온다(35%는 헛걸음).
+# 늘 있는 상점이면 그건 상인이 아니라 자판기다 — 왔을 때 사 두는 판단이 생긴다.
+func roll_merchant_visit(chance: float = 0.65) -> bool:
+	merchant_missed_visit = false
 	if merchant_status == "inside" or merchant_status == "waiting":
 		return true
 	if shelter_return_serial <= 0 or merchant_last_roll_serial == shelter_return_serial:
@@ -1281,25 +1432,111 @@ func roll_merchant_visit(chance: float = 0.38) -> bool:
 	merchant_last_roll_serial = shelter_return_serial
 	if shelter_return_serial == 1:
 		merchant_status = "waiting"
+		roll_merchant_stock()
 		save_persistent_state()
 		return true
 	var random := RandomNumberGenerator.new()
 	random.seed = int(map_seed) ^ (shelter_return_serial * 982451653) ^ 0x4D455243
 	if random.randf() <= clampf(chance, 0.0, 1.0):
 		merchant_status = "waiting"
+		roll_merchant_stock()
 		save_persistent_state()
 		return true
+	merchant_missed_visit = true
+	merchant_stock.clear()
 	save_persistent_state()
 	return false
 
 
+func roll_merchant_stock() -> Array[Dictionary]:
+	# 방문마다 매대를 새로 짠다. 고정 매대는 "언제든 살 수 있다"는 뜻이라
+	# 지금 사야 할 이유가 없다. 탄약 2~3종 + 잡화 2~3종, 각 품목에 재고가 있다.
+	var random := RandomNumberGenerator.new()
+	random.seed = (
+		int(map_seed)
+		^ (maxi(1, shelter_return_serial) * 2654435761)
+		^ 0x53544F4B
+	)
+	var rolled: Array[Dictionary] = []
+	# 장착 구경은 60% 확률로 매대에 오른다 — 상인이 유일한 "확정" 보급선이라
+	# 내 총알을 아예 안 파는 방문이 이어지면 탄약 경제가 막힌다.
+	var ammo_pool: Array = MERCHANT_AMMO_GOODS.duplicate(true)
+	var equipped_index := -1
+	for index in ammo_pool.size():
+		if str((ammo_pool[index] as Dictionary).get("id", "")) == equipped_ammo_id:
+			equipped_index = index
+			break
+	if equipped_index >= 0 and random.randf() < 0.6:
+		rolled.append(_make_merchant_stock_entry(ammo_pool[equipped_index] as Dictionary, random))
+		ammo_pool.remove_at(equipped_index)
+	var ammo_slots := 2 + random.randi_range(0, 1) - rolled.size()
+	for _slot in maxi(0, ammo_slots):
+		if ammo_pool.is_empty():
+			break
+		var pick := random.randi_range(0, ammo_pool.size() - 1)
+		rolled.append(_make_merchant_stock_entry(ammo_pool[pick] as Dictionary, random))
+		ammo_pool.remove_at(pick)
+	var sundry_pool: Array = MERCHANT_SUNDRY_GOODS.duplicate(true)
+	for _slot in 2 + random.randi_range(0, 1):
+		if sundry_pool.is_empty():
+			break
+		var pick := random.randi_range(0, sundry_pool.size() - 1)
+		rolled.append(_make_merchant_stock_entry(sundry_pool[pick] as Dictionary, random))
+		sundry_pool.remove_at(pick)
+	merchant_stock = rolled
+	return merchant_stock
+
+
+func _make_merchant_stock_entry(good: Dictionary, random: RandomNumberGenerator) -> Dictionary:
+	var entry := good.duplicate(true)
+	var low := int(good.get("stock_min", 1))
+	var high := maxi(low, int(good.get("stock_max", 1)))
+	var stock := random.randi_range(low, high)
+	entry["stock"] = stock
+	entry["stock_total"] = stock
+	return entry
+
+
+func buy_merchant_stock(stock_index: int) -> Dictionary:
+	# 재고는 방문 한 번의 몫이다. 다 팔리면 그 방문에서는 끝이다.
+	if stock_index < 0 or stock_index >= merchant_stock.size():
+		return {"ok": false, "reason": "그 물건은 이미 매대에서 내려갔습니다."}
+	var entry := merchant_stock[stock_index]
+	if int(entry.get("stock", 0)) <= 0:
+		return {"ok": false, "reason": "품절입니다."}
+	var price := int(entry.get("buy_price", 0))
+	if scrap < price:
+		return {"ok": false, "reason": "고철이 부족합니다."}
+	scrap -= price
+	entry["stock"] = int(entry.get("stock", 0)) - 1
+	save_persistent_state()
+	return {
+		"ok": true,
+		"type": str(entry.get("type", "")),
+		"id": str(entry.get("id", "")),
+		"amount": int(entry.get("amount", 1)),
+		"title": str(entry.get("title", "")),
+	}
+
+
 func accept_merchant_visit() -> void:
 	merchant_status = "inside"
+	# 구세이브(매대 개념이 없던 시절)에서 넘어왔거나 재고 기록이 비었으면 지금 굴린다.
+	if merchant_stock.is_empty():
+		roll_merchant_stock()
 
 
 func decline_merchant_visit() -> void:
 	merchant_status = "away"
 	merchant_decline_count += 1
+	# 돌려보낸 상인은 매대를 그대로 지고 떠난다.
+	merchant_stock.clear()
+
+
+func consume_merchant_missed_notice() -> bool:
+	var missed := merchant_missed_visit
+	merchant_missed_visit = false
+	return missed
 
 
 func store_secure_item(item: Dictionary) -> bool:
@@ -1360,8 +1597,16 @@ func get_backpack_storage_count(item_type: String, item_id: String) -> int:
 			return get_weapon_mod_count(item_id)
 		"medkit":
 			return medkits
+		"progression":
+			# 창고에 넣은 진행 아이템은 가방 몫이 아니다 — 원장(dict)만 센다.
+			return maxi(0, int(progression_item_inventory.get(item_id, 0)))
 		"food":
-			return maxi(0, canned_food - get_stored_storage_count("food", "canned_food"))
+			return maxi(
+				0,
+				canned_food
+				- get_stored_storage_count("food", "canned_food")
+				- maxi(0, shelter_food_reserve)
+			)
 	return 0
 
 
@@ -1398,11 +1643,18 @@ func get_overclock_cost() -> int:
 	return roundi(900.0 * pow(1.55, scratcher_overclock_level) / 10.0) * 10
 
 
+func get_overclock_catnip_cost() -> int:
+	# 오버클럭도 고철 단독이 아니다. 캣닢 없이는 꾹꾹이 라인이 한 칸도 못 큰다.
+	return roundi(60.0 * pow(1.6, scratcher_overclock_level) / 5.0) * 5
+
+
 func try_upgrade_scratcher_overclock() -> bool:
 	var cost := get_overclock_cost()
-	if scrap < cost:
+	var catnip_cost := get_overclock_catnip_cost()
+	if scrap < cost or catnip < catnip_cost:
 		return false
 	scrap -= cost
+	catnip -= catnip_cost
 	scratcher_overclock_level += 1
 	save_persistent_state()
 	return true
@@ -1459,10 +1711,8 @@ func get_raid_item_slot_cost(item_type: String, _item_id: String, amount: int) -
 
 func _get_raid_bag_count(item_type: String, item_id: String) -> int:
 	match item_type:
-		"weapon", "equipment", "ammo", "component", "mod", "medkit", "food":
+		"weapon", "equipment", "ammo", "component", "mod", "medkit", "food", "progression":
 			return get_backpack_storage_count(item_type, item_id)
-		"progression":
-			return get_progression_item_count(item_id)
 		"churu":
 			return maxi(0, churu)
 		"valuable":
@@ -1497,7 +1747,7 @@ func get_raid_bag_used_slots() -> int:
 		used += get_raid_item_slot_cost(
 			"progression",
 			str(progression_id),
-			get_progression_item_count(str(progression_id))
+			get_backpack_storage_count("progression", str(progression_id))
 		)
 	for mod_id in weapon_mod_inventory.keys():
 		used += get_raid_item_slot_cost(
@@ -1619,7 +1869,10 @@ func remove_raid_bag_item(item_type: String, item_id: String, amount: int) -> in
 		"mod":
 			weapon_mod_inventory[item_id] = maxi(0, get_weapon_mod_count(item_id) - removable)
 		"progression":
-			progression_item_inventory[item_id] = maxi(0, get_progression_item_count(item_id) - removable)
+			progression_item_inventory[item_id] = maxi(
+				0,
+				int(progression_item_inventory.get(item_id, 0)) - removable
+			)
 		"medkit":
 			medkits = maxi(0, medkits - removable)
 		"food":
@@ -1716,22 +1969,31 @@ func get_stored_storage_count(item_type: String, item_id: String) -> int:
 	return total
 
 
-func deposit_storage_item(item_type: String, item_id: String, amount: int = 1) -> Dictionary:
+func deposit_storage_item(
+	item_type: String,
+	item_id: String,
+	amount: int = 1,
+	persist: bool = true
+) -> Dictionary:
 	_normalize_storage_inventory()
 	var available := get_backpack_storage_count(item_type, item_id)
 	var moved := mini(maxi(amount, 0), available)
 	if moved <= 0:
-		return {"ok": false, "reason": "보관할 수 있는 소지품이 없습니다."}
+		return {"ok": false, "moved": 0, "reason": "보관할 수 있는 소지품이 없습니다."}
 	var stack_limit := _get_storage_stack_limit(item_type)
 	var free_units := 0
 	for entry in storage_inventory:
 		if str(entry.get("type", "")) == item_type and str(entry.get("id", "")) == item_id:
 			free_units += maxi(0, stack_limit - int(entry.get("count", 0)))
 	free_units += maxi(0, get_storage_capacity() - storage_inventory.size()) * stack_limit
-	if free_units < moved:
-		return {"ok": false, "reason": "창고에 빈 슬롯이 부족합니다."}
+	# 자리가 모자라면 들어가는 만큼만 넣는다. 전량 실패로 되돌리면 복귀 정산이
+	# "창고가 반쯤 비었는데 아무것도 안 들어갔다"로 끝난다.
+	var requested := moved
+	moved = mini(moved, free_units)
+	if moved <= 0:
+		return {"ok": false, "moved": 0, "reason": "창고에 빈 슬롯이 부족합니다."}
 	if not _remove_backpack_storage_item(item_type, item_id, moved):
-		return {"ok": false, "reason": "소지품을 창고로 옮기지 못했습니다."}
+		return {"ok": false, "moved": 0, "reason": "소지품을 창고로 옮기지 못했습니다."}
 	var remaining := moved
 	for entry in storage_inventory:
 		if str(entry.get("type", "")) != item_type or str(entry.get("id", "")) != item_id:
@@ -1746,8 +2008,14 @@ func deposit_storage_item(item_type: String, item_id: String, amount: int = 1) -
 		var added := mini(stack_limit, remaining)
 		storage_inventory.append({"type": item_type, "id": item_id, "count": added})
 		remaining -= added
-	save_persistent_state()
-	return {"ok": true, "moved": moved}
+	if persist:
+		save_persistent_state()
+	return {
+		"ok": true,
+		"moved": moved,
+		"partial": moved < requested,
+		"reason": "창고가 가득 차 일부만 보관했습니다." if moved < requested else "",
+	}
 
 
 func withdraw_storage_item(slot_index: int, amount: int = 1) -> Dictionary:
@@ -1806,6 +2074,31 @@ func withdraw_storage_item_by_type(item_type: String, item_id: String, amount: i
 	}
 
 
+func remove_stored_storage_item(item_type: String, item_id: String, amount: int) -> int:
+	# 창고에서 곧바로 덜어낸다(가방을 경유하지 않는다). 제작대가 창고 재료를
+	# 쓰려면 "인출 → 제작 → 다시 보관"이라는 3단 심부름을 강요하지 않아야 한다.
+	# 실제로 뺀 수량을 돌려준다.
+	_normalize_storage_inventory()
+	var remaining := maxi(0, amount)
+	var removed := 0
+	for index in range(storage_inventory.size() - 1, -1, -1):
+		if remaining <= 0:
+			break
+		var entry := storage_inventory[index]
+		if (
+			str(entry.get("type", "")) != item_type
+			or str(entry.get("id", "")) != item_id
+		):
+			continue
+		var taken := mini(remaining, maxi(0, int(entry.get("count", 0))))
+		entry["count"] = int(entry.get("count", 0)) - taken
+		remaining -= taken
+		removed += taken
+		if int(entry.get("count", 0)) <= 0:
+			storage_inventory.remove_at(index)
+	return removed
+
+
 func _get_storage_stack_limit(item_type: String) -> int:
 	match item_type:
 		"ammo":
@@ -1818,6 +2111,10 @@ func _get_storage_stack_limit(item_type: String) -> int:
 			return 5
 		"food":
 			return 20
+		"progression":
+			# 청사진·키카드는 종류별로 한 장이면 충분하지만, 중복 습득이
+			# 창고 슬롯을 계속 갉아먹지 않게 한 슬롯에 겹쳐 쌓는다.
+			return 9
 	return 1
 
 
@@ -1835,6 +2132,11 @@ func _remove_backpack_storage_item(item_type: String, item_id: String, amount: i
 			mod_component_inventory[item_id] = maxi(0, get_mod_component_count(item_id) - amount)
 		"mod":
 			weapon_mod_inventory[item_id] = maxi(0, get_weapon_mod_count(item_id) - amount)
+		"progression":
+			progression_item_inventory[item_id] = maxi(
+				0,
+				int(progression_item_inventory.get(item_id, 0)) - amount
+			)
 		"medkit":
 			medkits = maxi(0, medkits - amount)
 		"food":
@@ -1858,6 +2160,8 @@ func _add_backpack_storage_item(item_type: String, item_id: String, amount: int)
 			add_mod_component(item_id, amount)
 		"mod":
 			add_weapon_mod(item_id, amount)
+		"progression":
+			add_progression_item(item_id, amount)
 		"medkit":
 			medkits += amount
 		"food":
@@ -1894,6 +2198,14 @@ func _trim_stored_canned_food_to_total() -> void:
 			storage_inventory.remove_at(index)
 		else:
 			entry["count"] = kept
+	# 쉘터 식료 선반은 창고 다음 순위로 줄어든다. 주민 식비가 통조림을 태우면
+	# 가방 몫 → 선반 → 창고 순으로 빠지는 셈이라, 복귀 직후 0칸이던 가방이
+	# 소비 때문에 다시 채워지는 역전은 일어나지 않는다.
+	shelter_food_reserve = clampi(
+		shelter_food_reserve,
+		0,
+		maxi(0, canned_food - get_stored_storage_count("food", "canned_food"))
+	)
 
 
 func get_ammo_count(ammo_id: String) -> int:
@@ -2192,7 +2504,13 @@ func add_progression_item(item_id: String, amount: int = 1) -> void:
 
 
 func get_progression_item_count(item_id: String) -> int:
-	return int(progression_item_inventory.get(item_id, 0))
+	# 청사진·키카드는 소모되지 않는 해금 토큰이다. 복귀 정산이 이것들을 창고로
+	# 옮기므로, "보유 판정"은 가방과 창고를 함께 봐야 한다 — 안 그러면 창고에
+	# 넣은 순간 AK 설계도가 사라진 것처럼 제작대가 잠긴다.
+	return (
+		maxi(0, int(progression_item_inventory.get(item_id, 0)))
+		+ get_stored_storage_count("progression", item_id)
+	)
 
 
 func claim_workbench_starter_parts() -> bool:
@@ -2314,6 +2632,79 @@ func is_catnip_boost_active() -> bool:
 	return get_catnip_boost_remaining() > 0
 
 
+# ── 캣닢 피버 ─────────────────────────────────────────────────
+# 캣닢은 출정 버프를 잃은 대신 두 개의 출구를 얻었다: 고철 생산기 확장 재료와
+# 이 피버다. 게이지에 캣닢을 부어 두었다가, 꽉 차는 순간 쉘터 전체가 취한다.
+# 게이지는 저장된다 — 오늘 절반만 채워 두고 내일 마저 채워도 된다.
+const CATNIP_FEVER_GAUGE_MAX := 100.0
+const CATNIP_FEVER_CHARGE_STEP := 25.0
+const CATNIP_FEVER_BASE_MULTIPLIER := 5.0
+const CATNIP_FEVER_BASE_DURATION := 20.0
+
+
+func get_catnip_fever_charge_cost() -> int:
+	# 한 번 누를 때마다 "착즙 10분치". 4번이면 만충이니 한 번의 피버는
+	# 대략 40분치 캣닢을 태운다 — 잉여 캣닢의 스케일 소비처.
+	return maxi(120, roundi(get_base_catnip_per_second() * 60.0 * 10.0))
+
+
+func get_catnip_fever_multiplier() -> float:
+	# 쉘터가 클수록 취기도 크다. Tier 1 = 5배, Tier 5 = 9배.
+	return CATNIP_FEVER_BASE_MULTIPLIER + float(clampi(shelter_tier, 1, 5) - 1)
+
+
+func get_catnip_fever_duration() -> float:
+	# Tier당 +5초. Tier 1 = 20초, Tier 5 = 40초.
+	return CATNIP_FEVER_BASE_DURATION + float(clampi(shelter_tier, 1, 5) - 1) * 5.0
+
+
+func get_catnip_fever_ratio() -> float:
+	return clampf(catnip_fever_gauge / CATNIP_FEVER_GAUGE_MAX, 0.0, 1.0)
+
+
+func get_catnip_fever_remaining_seconds() -> float:
+	if not catnip_fever_active:
+		return 0.0
+	return get_catnip_fever_duration() * get_catnip_fever_ratio()
+
+
+func try_charge_catnip_fever() -> Dictionary:
+	# 발동 중에는 더 부을 수 없다 — 취한 위에 또 취할 수는 없다.
+	if catnip_fever_active:
+		return {"ok": false, "reason": "이미 캣닢 피버가 진행 중입니다."}
+	var cost := get_catnip_fever_charge_cost()
+	if catnip < cost:
+		return {"ok": false, "reason": "캣닢이 부족합니다. (필요 %d)" % cost}
+	catnip -= cost
+	catnip_fever_gauge = minf(CATNIP_FEVER_GAUGE_MAX, catnip_fever_gauge + CATNIP_FEVER_CHARGE_STEP)
+	var activated := catnip_fever_gauge >= CATNIP_FEVER_GAUGE_MAX
+	if activated:
+		# 만충은 곧 발동이다. 다 채워 놓고 또 한 번 눌러야 한다면 그건 절차지 사건이 아니다.
+		catnip_fever_active = true
+		catnip_fever_gauge = CATNIP_FEVER_GAUGE_MAX
+	save_persistent_state()
+	return {"ok": true, "activated": activated, "cost": cost, "ratio": get_catnip_fever_ratio()}
+
+
+func tick_catnip_fever(delta: float) -> bool:
+	# 발동 중에는 게이지가 곧 남은 시간이다. 0이 되면 그대로 끝난다.
+	# 방금 끝났으면 true를 돌려준다(쉘터가 마무리 연출을 켠다).
+	if not catnip_fever_active:
+		return false
+	var duration := maxf(1.0, get_catnip_fever_duration())
+	catnip_fever_gauge -= CATNIP_FEVER_GAUGE_MAX * maxf(0.0, delta) / duration
+	if catnip_fever_gauge > 0.0:
+		return false
+	catnip_fever_gauge = 0.0
+	catnip_fever_active = false
+	save_persistent_state()
+	return true
+
+
+func get_active_catnip_fever_multiplier() -> float:
+	return get_catnip_fever_multiplier() if catnip_fever_active else 1.0
+
+
 func get_production_multiplier() -> float:
 	return CATNIP_BOOST_MULTIPLIER if is_catnip_boost_active() else 1.0
 
@@ -2332,6 +2723,7 @@ func get_scrap_per_hour() -> float:
 	return (
 		get_base_scrap_per_hour()
 		* get_production_multiplier()
+		* get_active_catnip_fever_multiplier()
 		* (1.0 + OVERCLOCK_BONUS_PER_LEVEL * scratcher_overclock_level)
 	)
 
@@ -2359,6 +2751,13 @@ func get_catnip_per_hour() -> float:
 
 
 func get_catnip_per_second() -> float:
+	# 피버는 착즙 라인에도 걸린다 — "모든 생산기"가 함께 취해야 화면이 산다.
+	return get_base_catnip_per_second() * get_active_catnip_fever_multiplier()
+
+
+func get_base_catnip_per_second() -> float:
+	# 피버 배율을 뺀 평상시 생산량. 피버 충전 가격이 피버 중에 부풀지 않게
+	# 가격 계산은 반드시 이쪽을 본다.
 	if not is_shelter_facility_unlocked("catnip_scraper"):
 		return 0.0
 	var total := 0.0
@@ -2573,6 +2972,9 @@ func _consume_worker_food_for_duration(requested_seconds: float) -> float:
 	if consumed > 0:
 		canned_food -= consumed
 		shelter_food_fraction -= float(consumed)
+		# 저장이 꺼진 상태(테스트·디버그)에서도 보관 장부가 총량을 넘지 않도록
+		# 소비 직후 즉시 정리한다 — save_persistent_state에만 맡기면 어긋난다.
+		_trim_stored_canned_food_to_total()
 	return work_seconds
 
 
@@ -2830,52 +3232,9 @@ func get_churu_bag_bonus_slots() -> int:
 	return 4 if is_churu_buff_active("big_pockets") else 0
 
 
-func get_catnip_field_buff_cost(stack_index: int = -1) -> int:
-	# 인크리멘탈 등가 교환 — 언제 가도 "내 생산 20분치"가 한 판 급여 가격이다.
-	# 후반 잉여 캣닢의 스케일 소비처: 버프는 겹칠 수 있고(최대 3종) 겹칠수록
-	# 누진(×3) — 두 번째는 1시간치, 세 번째는 3시간치. '풀버프 출정'이
-	# 커진 착즙 라인의 배출구가 된다.
-	var index := stack_index if stack_index >= 0 else active_catnip_buffs.size()
-	var base := maxi(400, roundi(get_catnip_per_second() * 60.0 * 20.0))
-	return base * int(pow(3.0, clampi(index, 0, 2)))
-
-
 func get_catnip_boost_cost() -> int:
 	# 생산 부스트도 같은 원리 — 생산 30분치.
 	return maxi(CATNIP_BOOST_COST, roundi(get_catnip_per_second() * 60.0 * 30.0))
-
-
-func is_catnip_buff_active(buff_id: String) -> bool:
-	return active_catnip_buffs.has(buff_id)
-
-
-func try_activate_catnip_field_buff(buff_id: String) -> bool:
-	# 같은 버프는 한 번만, 최대 3종까지 겹친다. 가격은 겹칠수록 누진.
-	if (
-		not CATNIP_FIELD_BUFFS.has(buff_id)
-		or active_catnip_buffs.has(buff_id)
-		or active_catnip_buffs.size() >= 3
-	):
-		return false
-	var cost := get_catnip_field_buff_cost()
-	if catnip < cost:
-		return false
-	catnip -= cost
-	active_catnip_buffs.append(buff_id)
-	save_persistent_state()
-	return true
-
-
-func clear_catnip_field_buff() -> void:
-	active_catnip_buffs.clear()
-
-
-func get_catnip_spread_multiplier() -> float:
-	return 0.75 if is_catnip_buff_active("keen_eyes") else 1.0
-
-
-func get_catnip_fatigue_multiplier() -> float:
-	return 0.65 if is_catnip_buff_active("steady_heart") else 1.0
 
 
 func get_shelter_stall_reason() -> String:
@@ -2931,9 +3290,11 @@ func try_upgrade_scratcher_bank() -> bool:
 	if next_level > 5:
 		return false
 	var cost := int(SCRATCHER_UPGRADE_COSTS.get(next_level, 0))
-	if scrap < cost:
+	var catnip_cost := int(SCRATCHER_UPGRADE_CATNIP_COSTS.get(next_level, 0))
+	if scrap < cost or catnip < catnip_cost:
 		return false
 	scrap -= cost
+	catnip -= catnip_cost
 	scratcher_bank_level = next_level
 	# 착즙(1.8ⁿ)과 균형 — 2.2ⁿ은 후반 고철 인플레를 만들었다.
 	scratcher_multiplier = pow(1.9, float(scratcher_bank_level - 1))
@@ -3144,8 +3505,7 @@ func get_move_speed_multiplier() -> float:
 	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
 		if not equipment_id.is_empty():
 			equipment_bonus += float(get_equipment_definition(equipment_id).get("move_speed_bonus", 0.0))
-	var catnip_bonus := 0.12 if is_catnip_buff_active("swift_paws") else 0.0
-	return progression_multiplier * (1.0 + equipment_bonus + catnip_bonus)
+	return progression_multiplier * (1.0 + equipment_bonus)
 
 
 func get_stamina_cost_multiplier() -> float:
@@ -3608,11 +3968,11 @@ func save_persistent_state() -> bool:
 		"scrap": scrap,
 		"medkits": medkits,
 		"canned_food": canned_food,
+		"shelter_food_reserve": shelter_food_reserve,
 		"catnip": catnip,
 		"churu": churu,
 		"valuable_inventory": valuable_inventory,
 		"active_churu_buffs": active_churu_buffs,
-		"active_catnip_buffs": active_catnip_buffs,
 		"raid_in_progress": raid_in_progress,
 		"bag_pressure_lesson_seen": bag_pressure_lesson_seen,
 		"workbench_lesson_seen": workbench_lesson_seen,
@@ -3661,6 +4021,8 @@ func save_persistent_state() -> bool:
 		"storage_inventory": storage_inventory,
 		"storage_food_in_total": true,
 		"catnip_boost_end_time": catnip_boost_end_time,
+		"catnip_fever_gauge": catnip_fever_gauge,
+		"catnip_fever_active": catnip_fever_active,
 		"pre_raid_snapshot": pre_raid_snapshot,
 		"shelter_last_progress_time": shelter_last_progress_time,
 		"workbench_repair_active": workbench_repair_active,
@@ -3679,6 +4041,8 @@ func save_persistent_state() -> bool:
 		"merchant_last_roll_serial": merchant_last_roll_serial,
 		"merchant_status": merchant_status,
 		"merchant_decline_count": merchant_decline_count,
+		"merchant_stock": merchant_stock,
+		"merchant_missed_visit": merchant_missed_visit,
 		"artisan_pity": artisan_pity,
 		"selected_raid_zone": selected_raid_zone,
 		"contract_chain_index": contract_chain_index,
@@ -3714,7 +4078,9 @@ func save_persistent_state() -> bool:
 	file.store_string(JSON.stringify(data))
 	file.flush()
 	file.close()
-	var dir := DirAccess.open("user://")
+	# 세이브가 user:// 밖(테스트의 res://.godot 등)을 가리킬 수도 있다. "user://"를
+	# 통째로 열면 그 경로의 rename이 실패해 저장이 통째로 실패한다.
+	var dir := DirAccess.open(persistence_path.get_base_dir())
 	if dir == null:
 		return false
 	if FileAccess.file_exists(persistence_path):
@@ -3765,15 +4131,11 @@ func load_persistent_state() -> bool:
 	scrap = int(data.get("scrap", scrap))
 	medkits = int(data.get("medkits", medkits))
 	canned_food = int(data.get("canned_food", canned_food))
+	shelter_food_reserve = maxi(0, int(data.get("shelter_food_reserve", 0)))
 	catnip = maxi(0, roundi(float(data.get("catnip", catnip))))
 	churu = int(data.get("churu", churu))
 	valuable_inventory = (data.get("valuable_inventory", {}) as Dictionary).duplicate(true)
 	active_churu_buffs = _to_string_array(data.get("active_churu_buffs", []))
-	# 신형 배열 키 우선, 구형 단일 문자열 키는 배열로 승격.
-	active_catnip_buffs = _to_string_array(data.get("active_catnip_buffs", []))
-	var legacy_catnip_buff := str(data.get("active_catnip_buff", ""))
-	if active_catnip_buffs.is_empty() and not legacy_catnip_buff.is_empty():
-		active_catnip_buffs.append(legacy_catnip_buff)
 	raid_in_progress = bool(data.get("raid_in_progress", false))
 	bag_pressure_lesson_seen = bool(data.get("bag_pressure_lesson_seen", bag_pressure_lesson_seen))
 	workbench_lesson_seen = bool(data.get("workbench_lesson_seen", workbench_lesson_seen))
@@ -3845,6 +4207,12 @@ func load_persistent_state() -> bool:
 		canned_food += get_stored_storage_count("food", "canned_food")
 	_trim_stored_canned_food_to_total()
 	catnip_boost_end_time = int(data.get("catnip_boost_end_time", catnip_boost_end_time))
+	catnip_fever_gauge = clampf(
+		float(data.get("catnip_fever_gauge", 0.0)), 0.0, CATNIP_FEVER_GAUGE_MAX
+	)
+	# 피버는 눈앞에서 벌어지는 사건이다. 로드 직후 오프라인 정산에 5~9배가
+	# 걸리면 껐다 켜는 게 최적 전략이 된다 — 남은 게이지만 들고 멈춘 채 시작한다.
+	catnip_fever_active = false
 	pre_raid_snapshot = data.get("pre_raid_snapshot", {}) as Dictionary
 	shelter_last_progress_time = int(data.get("shelter_last_progress_time", shelter_last_progress_time))
 	workbench_repair_active = bool(data.get("workbench_repair_active", workbench_repair_active))
@@ -3864,6 +4232,8 @@ func load_persistent_state() -> bool:
 	merchant_last_roll_serial = int(data.get("merchant_last_roll_serial", merchant_last_roll_serial))
 	merchant_status = str(data.get("merchant_status", merchant_status))
 	merchant_decline_count = int(data.get("merchant_decline_count", merchant_decline_count))
+	merchant_stock = _to_dictionary_array(data.get("merchant_stock", []))
+	merchant_missed_visit = bool(data.get("merchant_missed_visit", false))
 	artisan_pity = clampi(int(data.get("artisan_pity", artisan_pity)), 0, ARTISAN_PITY_LIMIT - 1)
 	selected_raid_zone = str(data.get("selected_raid_zone", selected_raid_zone))
 	contract_chain_index = int(data.get("contract_chain_index", contract_chain_index))
@@ -3973,11 +4343,12 @@ func reset_run() -> void:
 	weapon_level = 1
 	medkits = 1
 	canned_food = 0
+	shelter_food_reserve = 0
+	last_return_settlement.clear()
 	catnip = 0
 	churu = 0
 	valuable_inventory.clear()
 	active_churu_buffs.clear()
-	active_catnip_buffs.clear()
 	bag_pressure_lesson_seen = false
 	fatigue_lesson_seen = false
 	field_controls_lesson_seen = false
@@ -4055,6 +4426,8 @@ func reset_run() -> void:
 	storage_level = 1
 	storage_inventory.clear()
 	catnip_boost_end_time = 0
+	catnip_fever_gauge = 0.0
+	catnip_fever_active = false
 	shelter_last_progress_time = 0
 	workbench_repair_active = false
 	workbench_repair_weapon_id = "ak47"
@@ -4071,6 +4444,8 @@ func reset_run() -> void:
 	merchant_last_roll_serial = -1
 	merchant_status = "away"
 	merchant_decline_count = 0
+	merchant_stock.clear()
+	merchant_missed_visit = false
 	weapon_enhancement_levels = {"ak47": 0}
 	mod_enhancement_levels.clear()
 	artisan_pity = 0

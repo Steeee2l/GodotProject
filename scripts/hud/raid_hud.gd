@@ -30,6 +30,10 @@ var dynamic_incident_hud: PanelContainer
 var dynamic_incident_title: Label
 var dynamic_incident_detail: Label
 var dynamic_incident_progress: ProgressBar
+var reinforcement_call_panel: PanelContainer
+var reinforcement_call_title: Label
+var reinforcement_call_detail: Label
+var reinforcement_call_bar: ProgressBar
 var extraction_result_panel: PanelContainer
 var extraction_result_title: Label
 var extraction_route_icon: TextureRect
@@ -714,7 +718,85 @@ func build_raid_opportunity_hud() -> void:
 	)
 	incident_row.add_child(dynamic_incident_progress)
 
+	# 증원 호출 예고 배너 — 적이 무전을 잡는 순간 뜨고 남은 시간이 게이지로
+	# 줄어든다. "이 안에 저 녀석을 죽이면 증원이 안 온다"를 화면 하나로 말한다
+	# (유저: "경보가 울리면 게이지바로 충분한 시간을 주고, 다 죽이면 증원 취소").
+	# 배치는 main._layout_center_top_banners의 중앙 상단 스택이 잡는다.
+	reinforcement_call_panel = PanelContainer.new()
+	reinforcement_call_panel.name = "ReinforcementCallPanel"
+	reinforcement_call_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	reinforcement_call_panel.offset_left = -235.0
+	reinforcement_call_panel.offset_top = 18.0
+	reinforcement_call_panel.offset_right = 235.0
+	reinforcement_call_panel.offset_bottom = 92.0
+	reinforcement_call_panel.add_theme_stylebox_override(
+		"panel",
+		HudStyle.panel(Color(0.09, 0.016, 0.014, 0.97), Color("#ff5a45"), 7)
+	)
+	reinforcement_call_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	reinforcement_call_panel.z_index = 85
+	reinforcement_call_panel.visible = false
+	host.get_node("HUD").add_child(reinforcement_call_panel)
+	var call_margin := MarginContainer.new()
+	call_margin.add_theme_constant_override("margin_left", 12)
+	call_margin.add_theme_constant_override("margin_top", 9)
+	call_margin.add_theme_constant_override("margin_right", 12)
+	call_margin.add_theme_constant_override("margin_bottom", 9)
+	reinforcement_call_panel.add_child(call_margin)
+	var call_row := HBoxContainer.new()
+	call_row.add_theme_constant_override("separation", 10)
+	call_margin.add_child(call_row)
+	var call_icon := TextureRect.new()
+	call_icon.name = "ReinforcementCallIcon"
+	call_icon.custom_minimum_size = Vector2(46, 46)
+	call_icon.texture = UI_ICONS.get_icon("alert", 48, Color("#ff7a5f"))
+	call_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	call_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	call_row.add_child(call_icon)
+	var call_copy := VBoxContainer.new()
+	call_copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	call_copy.add_theme_constant_override("separation", 2)
+	call_row.add_child(call_copy)
+	reinforcement_call_title = Label.new()
+	reinforcement_call_title.name = "ReinforcementCallTitle"
+	reinforcement_call_title.text = "적이 증원을 요청 중입니다!"
+	reinforcement_call_title.add_theme_font_override("font", FONT)
+	reinforcement_call_title.add_theme_font_size_override("font_size", 18)
+	reinforcement_call_title.add_theme_color_override("font_color", Color("#ffd0c2"))
+	call_copy.add_child(reinforcement_call_title)
+	reinforcement_call_detail = Label.new()
+	reinforcement_call_detail.name = "ReinforcementCallDetail"
+	reinforcement_call_detail.text = "!! 표식의 적을 처치해 저지하라"
+	reinforcement_call_detail.add_theme_font_override("font", FONT)
+	reinforcement_call_detail.add_theme_font_size_override("font_size", 13)
+	reinforcement_call_detail.add_theme_color_override("font_color", Color("#e5a898"))
+	call_copy.add_child(reinforcement_call_detail)
+	reinforcement_call_bar = ProgressBar.new()
+	reinforcement_call_bar.name = "ReinforcementCallProgress"
+	reinforcement_call_bar.custom_minimum_size = Vector2(118, 14)
+	reinforcement_call_bar.min_value = 0.0
+	reinforcement_call_bar.max_value = 1.0
+	reinforcement_call_bar.value = 1.0
+	reinforcement_call_bar.show_percentage = false
+	reinforcement_call_bar.add_theme_stylebox_override(
+		"background",
+		HudStyle.panel(Color("#1d0d0b"), Color("#5f2a22"), 7)
+	)
+	reinforcement_call_bar.add_theme_stylebox_override(
+		"fill",
+		HudStyle.panel(Color("#ff5f43"), Color("#ffa287"), 7)
+	)
+	call_row.add_child(reinforcement_call_bar)
 
+
+func set_reinforcement_call_progress(remaining: float, duration: float) -> void:
+	# 남은 시간을 게이지 + 초 단위 숫자로. 게이지는 '줄어드는' 방향이다.
+	if reinforcement_call_bar == null:
+		return
+	reinforcement_call_bar.max_value = maxf(0.01, duration)
+	reinforcement_call_bar.value = clampf(remaining, 0.0, maxf(0.01, duration))
+	if reinforcement_call_detail:
+		reinforcement_call_detail.text = "%0.1f초 · !! 표식의 적을 처치해 저지하라" % maxf(0.0, remaining)
 
 
 func add_result_stat(icon_name: String, value: String, caption: String, accent: Color = HudStyle.GOLD) -> void:
@@ -761,6 +843,18 @@ func add_result_reward_chip(icon_name: String, text: String, accent: Color = Hud
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	row.add_child(icon)
 	row.add_child(HudStyle.label(text, HudStyle.TYPE_CAPTION, HudStyle.TEXT))
+	# 칩이 하나씩 톡톡 떨어져 붙는다 — 보상이 쌓이는 감각을 만든다.
+	chip.modulate.a = 0.0
+	chip.pivot_offset = Vector2(60.0, 14.0)
+	chip.scale = Vector2(0.88, 0.88)
+	var order := maxi(0, extraction_reward_flow.get_child_count() - 1)
+	var chip_tween := chip.create_tween()
+	chip_tween.tween_interval(0.09 * float(order))
+	chip_tween.set_parallel(true)
+	chip_tween.tween_property(chip, "modulate:a", 1.0, 0.18).set_trans(Tween.TRANS_SINE)
+	chip_tween.tween_property(chip, "scale", Vector2.ONE, 0.26).set_trans(
+		Tween.TRANS_BACK
+	).set_ease(Tween.EASE_OUT)
 
 
 func clear_result_visuals() -> void:
@@ -868,7 +962,8 @@ func build_extraction_progress_ui() -> void:
 	extraction_xp_label.add_theme_color_override("font_color", Color("#a9bcb2"))
 	content.add_child(extraction_xp_label)
 	extraction_level_choice_title = Label.new()
-	extraction_level_choice_title.text = "Run Summary"
+	# 영문 제목은 이 게임 어디에도 없다. 이 칸이 무엇인지 한국어로 말한다.
+	extraction_level_choice_title.text = "이번 판으로 성장한 것"
 	extraction_level_choice_title.add_theme_font_override("font", FONT)
 	extraction_level_choice_title.add_theme_font_size_override("font_size", 21)
 	extraction_level_choice_title.add_theme_color_override("font_color", Color("#e8d18a"))

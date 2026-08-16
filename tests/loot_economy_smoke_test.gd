@@ -126,8 +126,11 @@ func _run() -> void:
 			assert(ammo_amount >= 2 and ammo_amount <= 12)
 	assert(melee_weapon_count == 0)
 	var ranged_weapon_rate := float(ranged_weapon_count) / float(ranged_sample_count)
-	# stage 4 표본: 0.10 + 3x0.02 = 0.16 기대.
-	assert(ranged_weapon_rate >= 0.14 and ranged_weapon_rate <= 0.19)
+	# stage 4 표본: 0.15 + 3x0.03 = 0.24 기대.
+	# "적을 죽여도 무기가 안 나온다"는 유저 신고로 드랍률을 1.5배 올렸다
+	# (0.10+0.02/스테이지 → 0.15+0.03/스테이지). 무기 드랍은 동반 탄약까지
+	# 끌고 오므로 탄약 제작 폐지분을 메우는 축이기도 하다.
+	assert(ranged_weapon_rate >= 0.21 and ranged_weapon_rate <= 0.27)
 	var recovery_weapon_count := 0
 	var recovery_sample_count := 2000
 	for _sample in recovery_sample_count:
@@ -160,6 +163,42 @@ func _run() -> void:
 	var matched_rate := float(matched_ammo_count) / float(ammo_drop_count)
 	assert(matched_rate >= 0.55, "장착 구경 매칭 탄약이 다수여야 한다 (실측 %.2f)" % matched_rate)
 
+	# 호환탄 회수량 상향: (4~7)+스테이지 → 6~(10+min(스테이지,3)).
+	# 제작대의 탄약 레시피가 폐지돼 필드 회수가 사실상 유일한 보급선이 됐다.
+	# 킬당 회수가 탄창 하나에도 못 미쳐 "쏠수록 가난해진다"는 신고를 받았다.
+	# 상한이 3스테이지에서 멈추는 건 후반 수급선(고티어 탄·무기 동반 탄약)이
+	# 이미 두꺼워서다 — 실측 킬당 4.2~5.9발(목표 4~6발).
+	for recovery_stage in range(1, 6):
+		var recovery_total := 0
+		var recovery_cap := 10 + mini(recovery_stage, 3)
+		for _sample in 2000:
+			var recovery := LOOT_ECONOMY.roll_matched_ammo_recovery(recovery_stage, random)
+			var recovery_amount := int((recovery.get("data", {}) as Dictionary).get("amount", 0))
+			assert(recovery_amount >= 6 and recovery_amount <= recovery_cap)
+			recovery_total += recovery_amount
+		var recovery_average := float(recovery_total) / 2000.0
+		# 기대 평균 = (6 + 상한) / 2.
+		var expected_average := (6.0 + float(recovery_cap)) * 0.5
+		assert(absf(recovery_average - expected_average) <= 0.4)
+
+	# 스마트 탄약 치환률: 일반 상자 55% → 75%. 상자에서 나온 탄의 절반이 못 쓰는
+	# 구경이면 "주웠는데 못 쏜다"만 반복돼 가방 압박만 커진다(유저 신고).
+	var case_ammo_count := 0
+	var case_matched_count := 0
+	for _sample in 4000:
+		for definition in LOOT_ECONOMY.roll_container("weapon_case", 2, "street_mixed", random):
+			if str(definition.get("type", "")) != "ammo":
+				continue
+			case_ammo_count += 1
+			if str((definition.get("data", {}) as Dictionary).get("ammo_id", "")) == "762_fmj":
+				case_matched_count += 1
+	assert(case_ammo_count > 500)
+	var case_matched_rate := float(case_matched_count) / float(case_ammo_count)
+	assert(
+		case_matched_rate >= 0.72,
+		"일반 상자 탄약도 장착 구경 위주여야 한다 (실측 %.2f)" % case_matched_rate
+	)
+
 	var common_enemy_drop_count := 0
 	var any_enemy_drop_count := 0
 	var armor_enemy_drop_count := 0
@@ -189,14 +228,20 @@ func _run() -> void:
 	])
 	# 스마트 탄약 도입으로 적 드랍에서 식량 비중이 소폭 내려가고(탄약이 그만큼
 	# 차지) 방어구 판정은 그대로다. 창은 표본 요동(±1%p)까지 감안해 잡는다.
+	# 무기 드랍률 상향(0.10→0.15)만큼 무기가 앞단에서 더 빠져나가므로 방어구·
+	# 식량 비중은 각각 1%p 남짓 내려간다 — 기존 창 안에 그대로 들어온다.
 	assert(any_enemy_drop_rate >= 0.71 and any_enemy_drop_rate <= 0.79)
-	assert(common_enemy_drop_rate >= 0.20 and common_enemy_drop_rate <= 0.30)
+	# 무기 드랍이 앞단에서 5%p 더 빠져나가면서 실측이 0.24 → 0.21로 내려왔다.
+	# 하한을 0.19로 열어 표본 요동에 바닥이 닿지 않게 한다.
+	assert(common_enemy_drop_rate >= 0.19 and common_enemy_drop_rate <= 0.30)
 	assert(armor_enemy_drop_rate >= 0.20 and armor_enemy_drop_rate <= 0.28)
 
 	# 처치 보장 드랍(2026-08 유저 요구: 모든 킬 = 무기 or 방어구 최소 1개).
 	# roll_enemy_drop의 기존 분포는 그대로 두고(위 어서션 유지), 무기·방어구가
 	# 안 나온 킬에 enemy_director가 이 fallback을 별도 픽업으로 얹는다.
-	# fallback 자체는 항상 장비를 내놓아야 하고, 무기 비율은 40% 부근이어야 한다.
+	# fallback 자체는 항상 장비를 내놓아야 하고, 무기 비율은 55% 부근이어야 한다.
+	# 40%에서 올렸다: 방어구는 이미 남아도는데 무기가 안 나온다는 신고가 이어져
+	# fallback의 무게추를 무기 쪽으로 옮겼다.
 	var guaranteed_weapon_count := 0
 	var guaranteed_sample_count := 2000
 	for _sample in guaranteed_sample_count:
@@ -209,7 +254,7 @@ func _run() -> void:
 	var guaranteed_weapon_rate := (
 		float(guaranteed_weapon_count) / float(guaranteed_sample_count)
 	)
-	assert(guaranteed_weapon_rate >= 0.34 and guaranteed_weapon_rate <= 0.46)
+	assert(guaranteed_weapon_rate >= 0.49 and guaranteed_weapon_rate <= 0.61)
 	# 근접(배트) 적은 무기 fallback이 성립하지 않으니 방어구 확정이어야 한다.
 	for _sample in 200:
 		var melee_guaranteed := LOOT_ECONOMY.roll_guaranteed_equipment_drop(

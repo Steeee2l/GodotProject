@@ -36,6 +36,9 @@ const ITEM_NAMES := {
 	"tactical_boots": "경량 전술화",
 	"medkit": "구급약",
 	"canned_food": "통조림",
+	"rifle_blueprint": "소총 제작 청사진",
+	"shotgun_blueprint": "산탄총 제작 청사진",
+	"sealed_zone_keycard": "봉쇄구역 키카드",
 }
 
 const COMPONENT_TEXTURES := {
@@ -498,6 +501,8 @@ func _get_backpack_entries() -> Array[Dictionary]:
 	_append_dictionary_entries(entries, "ammo", GameState.ammo_inventory)
 	_append_dictionary_entries(entries, "component", GameState.mod_component_inventory)
 	_append_dictionary_entries(entries, "mod", GameState.weapon_mod_inventory)
+	# 청사진·키카드도 복귀 정산으로 창고에 들어간다 — 목록에서 보이고 꺼낼 수 있어야 한다.
+	_append_dictionary_entries(entries, "progression", GameState.progression_item_inventory)
 	if GameState.medkits > 0:
 		entries.append({"type": "medkit", "id": "medkit", "count": GameState.medkits})
 	var carried_food := GameState.get_backpack_storage_count("food", "canned_food")
@@ -624,6 +629,8 @@ func _item_texture(item_type: String, item_id: String, size: int) -> Texture2D:
 			icon_name = "armor"
 		"weapon":
 			icon_name = "weapon"
+		"progression":
+			icon_name = "secure" if item_id == "sealed_zone_keycard" else "craft"
 	return UI_ICONS.get_icon(icon_name, size, Color("#d7c27d"))
 
 

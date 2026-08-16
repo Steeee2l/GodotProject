@@ -1062,8 +1062,10 @@ func _refresh_contents() -> void:
 	progression_item_ids.sort()
 	for progression_item_id_value in progression_item_ids:
 		var progression_item_id := str(progression_item_id_value)
+		# 가방 목록은 "지금 등에 진 것"만 센다. 복귀 정산으로 창고에 귀속된
+		# 청사진까지 보여 주면 가방 칸 수와 목록이 어긋난다.
 		var progression_item_count: int = int(
-			game_state.get_progression_item_count(progression_item_id)
+			game_state.get_backpack_storage_count("progression", progression_item_id)
 		)
 		if progression_item_count <= 0:
 			continue

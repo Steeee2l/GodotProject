@@ -23,6 +23,9 @@ var dock: VBoxContainer
 var header_label: Label
 var buttons_box: BoxContainer
 var facility_buttons: Dictionary = {}
+# 캣닢 피버 — 시설이 아니라 "사건"이라 시설 버튼 줄 아래 별도 카드로 둔다.
+var fever_button: Button
+var fever_gauge: ProgressBar
 
 
 func attach(owner_node: Node) -> void:
@@ -69,6 +72,50 @@ func build_dock(hud_layer: CanvasLayer) -> void:
 			button.pressed.connect(open_facility.bind(facility_id))
 		buttons_box.add_child(button)
 		facility_buttons[facility_id] = button
+	_build_fever_card()
+	refresh()
+
+
+func _build_fever_card() -> void:
+	# 캣닢을 부어 게이지를 채우고, 꽉 차면 쉘터 전체가 취한다.
+	var card := PanelContainer.new()
+	card.name = "CatnipFeverCard"
+	card.add_theme_stylebox_override("panel", HudStyle.chip(Color("#7fb069")))
+	dock.add_child(card)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 3)
+	card.add_child(box)
+	fever_button = Button.new()
+	fever_button.name = "CatnipFeverButton"
+	fever_button.custom_minimum_size = Vector2(128, 40)
+	fever_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	fever_button.add_theme_font_override("font", FONT)
+	fever_button.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION)
+	fever_button.add_theme_constant_override("h_separation", 8)
+	fever_button.expand_icon = true
+	# expand_icon을 켰으면 폭 상한은 필수다 — 대형 재화 PNG가 버튼을 찢는다.
+	fever_button.add_theme_constant_override("icon_max_width", 22)
+	fever_button.clip_text = true
+	HudStyle.style_button(fever_button, Color("#aeea78"))
+	if not DisplayServer.is_touchscreen_available():
+		fever_button.pressed.connect(charge_fever)
+	box.add_child(fever_button)
+	fever_gauge = ProgressBar.new()
+	fever_gauge.name = "CatnipFeverGauge"
+	fever_gauge.custom_minimum_size = Vector2(0, 8)
+	fever_gauge.show_percentage = false
+	fever_gauge.min_value = 0.0
+	fever_gauge.max_value = 100.0
+	fever_gauge.value = 0.0
+	fever_gauge.add_theme_stylebox_override("background", HudStyle.panel(HudStyle.INK, HudStyle.LINE, 3))
+	fever_gauge.add_theme_stylebox_override("fill", HudStyle.panel(Color("#aeea78"), Color("#d8f5a8"), 3))
+	box.add_child(fever_gauge)
+
+
+func charge_fever() -> void:
+	if host == null or bool(host.call("_ui_blocks_player")):
+		return
+	host.call("_charge_catnip_fever")
 	refresh()
 
 
@@ -94,7 +141,8 @@ func apply_layout(safe: Vector4) -> void:
 		dock.offset_right = -10.0 - safe.z
 		# 하단 조이스틱·상호작용 버튼 줄(약 210px) 위에 얹는다.
 		dock.offset_bottom = -218.0 - safe.w
-		dock.offset_top = dock.offset_bottom - 118.0
+		# 피버 카드(버튼+게이지 약 52px)가 아래로 밀려 잘리지 않도록 높이를 넓힌다.
+		dock.offset_top = dock.offset_bottom - 174.0
 	else:
 		buttons_box.vertical = true
 		buttons_box.add_theme_constant_override("separation", 5)
@@ -110,7 +158,7 @@ func apply_layout(safe: Vector4) -> void:
 		dock.offset_right = -14.0 - safe.z
 		dock.offset_left = dock.offset_right - 128.0
 		dock.offset_top = 176.0 + safe.y
-		dock.offset_bottom = dock.offset_top + 350.0
+		dock.offset_bottom = dock.offset_top + 412.0
 
 
 func refresh() -> void:
@@ -138,6 +186,39 @@ func refresh() -> void:
 			if unlocked
 			else "잠김 · %s" % str(host.LOCKED_FACILITY_HINTS.get(facility_id, "계약으로 해금"))
 		)
+	_refresh_fever_card()
+
+
+func _refresh_fever_card() -> void:
+	if fever_button == null or fever_gauge == null:
+		return
+	var unlocked: bool = GameState.is_shelter_facility_unlocked("catnip_scraper")
+	fever_gauge.value = GameState.get_catnip_fever_ratio() * 100.0
+	if GameState.catnip_fever_active:
+		fever_button.text = "피버! %.0fx  %.0f초" % [
+			GameState.get_catnip_fever_multiplier(),
+			GameState.get_catnip_fever_remaining_seconds(),
+		]
+		fever_button.disabled = true
+		fever_button.tooltip_text = "캣닢 피버 진행 중 — 모든 생산이 폭주합니다."
+	else:
+		var cost: int = GameState.get_catnip_fever_charge_cost()
+		fever_button.text = "캣닢 피버 %d%%" % roundi(GameState.get_catnip_fever_ratio() * 100.0)
+		fever_button.disabled = not unlocked or GameState.catnip < cost
+		fever_button.tooltip_text = (
+			"잠김 · 착즙기를 해금해야 합니다."
+			if not unlocked
+			else "캣닢 %s를 부어 게이지 %d%% 충전 · 만충 시 %.0f배 생산 %.0f초" % [
+				GameState.format_compact_number(cost),
+				roundi(GameState.CATNIP_FEVER_CHARGE_STEP),
+				GameState.get_catnip_fever_multiplier(),
+				GameState.get_catnip_fever_duration(),
+			]
+		)
+	fever_button.icon = UI_ICONS.get_icon(
+		"catnip", 22, Color("#aeea78") if unlocked else HudStyle.TEXT_FAINT
+	)
+	fever_button.modulate = Color.WHITE if unlocked else Color(0.62, 0.66, 0.64, 0.78)
 
 
 func open_facility(facility_id: String) -> void:
@@ -164,6 +245,14 @@ func handle_touch(screen_position: Vector2) -> bool:
 		if button.visible and button.get_global_rect().has_point(screen_position):
 			open_facility(str(facility_id))
 			return true
+	if (
+		fever_button != null
+		and fever_button.visible
+		and not fever_button.disabled
+		and fever_button.get_global_rect().has_point(screen_position)
+	):
+		charge_fever()
+		return true
 	return false
 
 

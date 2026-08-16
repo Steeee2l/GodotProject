@@ -95,11 +95,24 @@ func _run() -> void:
 	if not is_instance_valid(call_indicator) or not call_indicator.visible:
 		_fail("enemy loudspeaker call indicator is not visible")
 		return
+	var call_marker: Label3D = ranged_enemy.get("reinforcement_call_marker")
+	if not is_instance_valid(call_marker) or not call_marker.visible:
+		_fail("enemy reinforcement caller marker is not visible")
+		return
 	main.get("enemy_director").set("active_reinforcement_caller", ranged_enemy)
 	var enemy_count_before := (main.get("enemies") as Array).size()
+	var alerted_before := int(main.get("enemy_director").call("count_alerted_enemies"))
 	ranged_enemy.call("_update_reinforcement_call", 1.1)
-	if (main.get("enemies") as Array).size() < enemy_count_before + 6:
-		_fail("completed enemy call did not spawn reinforcements")
+	# 증원 규모는 동시 교전 상한(MAX_CONCURRENT_ALERTED)의 남은 자리만큼이다.
+	# 예전 고정 +6 기대치는 상한 도입 뒤로 성립하지 않는다 — 이미 교전 중인
+	# 적 수만큼 깎여서 온다.
+	var spawned := (main.get("enemies") as Array).size() - enemy_count_before
+	var expected := int(main.get("enemy_director").MAX_CONCURRENT_ALERTED) - alerted_before
+	if spawned <= 0 or spawned != expected:
+		_fail("completed enemy call spawned %d reinforcements (expected %d)" % [spawned, expected])
+		return
+	if call_marker.visible:
+		_fail("reinforcement caller marker survived the completed call")
 		return
 
 	print("THREAT_EXTRACTION_SMOKE: PASS")

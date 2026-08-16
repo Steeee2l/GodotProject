@@ -381,6 +381,10 @@ var raid_pressure_reveal_time := 0.0
 # 잭팟(격리 신호) 배너는 단계가 바뀔 때만 잠깐 떠오른다. 상시 점유는
 # 순간 알림(긴장도 승급 등)을 밀어내는 우선순위 역전이었다.
 var jackpot_banner_reveal_time := 0.0
+# 증원 호출 예고 배너의 남은 시간. 0보다 크면 중앙 상단 스택에 자리를 잡는다.
+# 시간은 enemy_director가 호출자의 실제 경과로 매 프레임 밀어 넣는다.
+var reinforcement_call_alert_remaining := 0.0
+var reinforcement_call_alert_duration := 0.0
 var raid_hotspots_opened := 0
 var dynamic_incident_site: Node3D
 var dynamic_incident_state := "scheduled"
@@ -2540,6 +2544,14 @@ func _layout_center_top_banners() -> void:
 			boss_alert_active and not hud_blocked,
 			clampf(viewport_size.x * 0.5, 340.0, 560.0),
 			clampf(96.0 * ui_scale, 84.0, 104.0),
+		],
+		# 증원 호출 예고는 보스 경고 바로 다음 — 남은 시간이 흐르는 동안에만
+		# 존재하고, 그 시간 안에 행동해야 결과가 바뀌는 유일한 배너다.
+		[
+			hud.reinforcement_call_panel,
+			reinforcement_call_alert_remaining > 0.0 and not hud_blocked,
+			clampf(viewport_size.x * 0.46, 330.0, 510.0),
+			clampf(78.0 * ui_scale, 68.0, 88.0),
 		],
 		[
 			hud.raid_pressure_panel,
@@ -5066,6 +5078,10 @@ func _is_tactical_map_open() -> bool:
 func _show_level_reward_choices() -> void:
 	hud.extraction_level_choice_title.visible = true
 	hud.extraction_level_choice_row.visible = true
+	# 이 칸이 '고르는 곳'인 줄 몰라 그냥 지나치던 문제 — 제목이 지시한다.
+	hud.extraction_level_choice_title.text = "레벨 업 — 하나를 고르세요 (남은 선택 %d)" % maxi(
+		1, GameState.pending_level_choices
+	)
 	for child in hud.extraction_level_choice_row.get_children():
 		child.queue_free()
 	var choice_seed := GameState.map_seed + run_kills * 101 + GameState.pending_level_choices * 17
@@ -5075,10 +5091,13 @@ func _show_level_reward_choices() -> void:
 		var card := Button.new()
 		card.custom_minimum_size = Vector2(0, 132)
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		card.text = "%s\n%s\n현재 %d단계" % [
+		var current_rank := int(GameState.player_stat_levels.get(stat_id, 0))
+		card.text = "%s\n%s\n%s" % [
 			str(definition.get("title", stat_id)),
 			str(definition.get("description", "")),
-			int(GameState.player_stat_levels.get(stat_id, 0)),
+			"처음 배웁니다" if current_rank <= 0 else "%d단계 → %d단계" % [
+				current_rank, current_rank + 1
+			],
 		]
 		card.icon = UI_ICONS.get_icon(str(definition.get("icon", "upgrade")), 54, Color("#e4cc7c"))
 		card.expand_icon = true
@@ -6544,7 +6563,7 @@ func _add_fatigue(amount: float) -> void:
 		return
 	fatigue = clampf(
 		fatigue
-		+ amount * GameState.get_fatigue_gain_multiplier() * GameState.get_catnip_fatigue_multiplier(),
+		+ amount * GameState.get_fatigue_gain_multiplier(),
 		0.0,
 		FATIGUE_MAX
 	)
@@ -7125,6 +7144,36 @@ func _trigger_fatigue_boss_event() -> void:
 
 func _update_reinforcement_call(delta: float, effective_threat: float) -> void:
 	enemy_director._update_reinforcement_call(delta, effective_threat)
+
+
+func _show_reinforcement_call_banner(duration: float) -> void:
+	# 호출 시작. 배너를 띄우고 게이지를 가득 채운 상태에서 출발시킨다.
+	reinforcement_call_alert_duration = maxf(0.1, duration)
+	reinforcement_call_alert_remaining = reinforcement_call_alert_duration
+	if hud != null:
+		hud.set_reinforcement_call_progress(
+			reinforcement_call_alert_remaining, reinforcement_call_alert_duration
+		)
+	_layout_center_top_banners()
+
+
+func _update_reinforcement_call_banner(remaining: float) -> void:
+	if reinforcement_call_alert_remaining <= 0.0:
+		return
+	reinforcement_call_alert_remaining = clampf(
+		remaining, 0.0001, reinforcement_call_alert_duration
+	)
+	if hud != null:
+		hud.set_reinforcement_call_progress(
+			reinforcement_call_alert_remaining, reinforcement_call_alert_duration
+		)
+
+
+func _hide_reinforcement_call_banner() -> void:
+	if reinforcement_call_alert_remaining <= 0.0:
+		return
+	reinforcement_call_alert_remaining = 0.0
+	_layout_center_top_banners()
 
 # 전리품 픽업은 scripts/raid/loot_pickup_system.gd 로 옮겨졌다. call() 계약 유지용.
 

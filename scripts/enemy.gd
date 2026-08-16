@@ -148,9 +148,14 @@ var magazine_ammo := 1
 var reload_duration := 1.8
 var reload_elapsed := 0.0
 var reinforcement_call_indicator: Sprite3D
+# 호출 중인 적을 판 위에서 즉시 골라낼 수 있게 하는 두 장치.
+# 머리 위 "!!"(threat_marker는 매 프레임 꺼지는 로직이 있어 별도 노드로 둔다)와
+# 발밑 링 — "저 녀석을 죽여라"가 화살표·지도 없이 읽혀야 한다.
+var reinforcement_call_marker: Label3D
+var reinforcement_call_ring: Sprite3D
 var reinforcement_call_active := false
 var reinforcement_call_elapsed := 0.0
-var reinforcement_call_duration := 4.6
+var reinforcement_call_duration := 8.0
 var tactical_waypoint := Vector3.INF
 var tactical_repath_timer := 0.0
 var hold_position_timer := 0.0
@@ -186,6 +191,7 @@ static var reload_texture_cache: Dictionary = {}
 static var detection_texture_cache: Dictionary = {}
 static var lost_target_texture: Texture2D
 static var reinforcement_call_texture_cache: Dictionary = {}
+static var reinforcement_ring_texture: Texture2D
 static var enemy_gunshot_stream_cache: AudioStreamWAV
 
 
@@ -1081,6 +1087,58 @@ func _setup_reinforcement_call_indicator() -> void:
 	reinforcement_call_indicator.visible = false
 	add_child(reinforcement_call_indicator)
 
+	reinforcement_call_marker = Label3D.new()
+	reinforcement_call_marker.name = "ReinforcementCallMarker"
+	reinforcement_call_marker.text = "!!"
+	reinforcement_call_marker.position = Vector3(0, REINFORCEMENT_ICON_Y + 0.62, 0)
+	# 폰트를 안 박으면 웹 기본 폰트로 떨어진다(threat_marker와 같은 이유).
+	reinforcement_call_marker.font = DAMAGE_FONT
+	reinforcement_call_marker.font_size = 82
+	reinforcement_call_marker.outline_size = 20
+	reinforcement_call_marker.modulate = Color("#ff3b2f")
+	reinforcement_call_marker.outline_modulate = Color(0.14, 0.006, 0.004, 1.0)
+	reinforcement_call_marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	reinforcement_call_marker.no_depth_test = true
+	reinforcement_call_marker.render_priority = 127
+	reinforcement_call_marker.visible = false
+	add_child(reinforcement_call_marker)
+
+	reinforcement_call_ring = Sprite3D.new()
+	reinforcement_call_ring.name = "ReinforcementCallRing"
+	reinforcement_call_ring.texture = _get_reinforcement_ring_texture()
+	reinforcement_call_ring.position = Vector3(0, 0.06, 0)
+	# 바닥에 눕힌다 — 빌보드로 두면 벽처럼 서서 링으로 안 읽힌다.
+	reinforcement_call_ring.axis = Vector3.AXIS_Y
+	reinforcement_call_ring.pixel_size = 0.017
+	reinforcement_call_ring.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	reinforcement_call_ring.shaded = false
+	reinforcement_call_ring.transparent = true
+	reinforcement_call_ring.no_depth_test = true
+	reinforcement_call_ring.render_priority = 118
+	reinforcement_call_ring.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
+	reinforcement_call_ring.visible = false
+	add_child(reinforcement_call_ring)
+
+
+func _get_reinforcement_ring_texture() -> Texture2D:
+	# 발밑 붉은 링 한 장. 전 개체가 같은 텍스처를 공유한다.
+	if reinforcement_ring_texture != null:
+		return reinforcement_ring_texture
+	var image := Image.create(96, 96, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	var center := Vector2(47.5, 47.5)
+	for y in 96:
+		for x in 96:
+			var radius := (Vector2(x, y) - center).length()
+			if radius >= 33.0 and radius <= 46.0:
+				# 바깥으로 갈수록 옅어지는 두꺼운 테두리.
+				var edge := clampf(1.0 - absf(radius - 38.0) / 9.0, 0.0, 1.0)
+				image.set_pixel(x, y, Color(1.0, 0.24, 0.18, 0.28 + edge * 0.62))
+			elif radius < 33.0 and radius >= 30.0:
+				image.set_pixel(x, y, Color(1.0, 0.42, 0.3, 0.22))
+	reinforcement_ring_texture = ImageTexture.create_from_image(image)
+	return reinforcement_ring_texture
+
 
 func _get_reinforcement_call_texture(step: int) -> Texture2D:
 	step = clampi(step, 0, 24)
@@ -1117,7 +1175,7 @@ func _get_reinforcement_call_texture(step: int) -> Texture2D:
 	return texture
 
 
-func start_reinforcement_call(duration: float = 4.6) -> bool:
+func start_reinforcement_call(duration: float = 8.0) -> bool:
 	if dying or reinforcement_call_active or not alerted or combat_state != "normal":
 		return false
 	reinforcement_call_active = true
@@ -1128,8 +1186,17 @@ func start_reinforcement_call(duration: float = 4.6) -> bool:
 	velocity = Vector3.ZERO
 	reinforcement_call_indicator.texture = _get_reinforcement_call_texture(0)
 	reinforcement_call_indicator.visible = true
+	_set_reinforcement_call_emphasis(true)
 	_set_motion_state("idle")
 	return true
+
+
+func _set_reinforcement_call_emphasis(active: bool) -> void:
+	# 머리 위 "!!"와 발밑 링을 함께 켜고 끈다.
+	if reinforcement_call_marker:
+		reinforcement_call_marker.visible = active
+	if reinforcement_call_ring:
+		reinforcement_call_ring.visible = active
 
 
 func _update_reinforcement_call(delta: float) -> void:
@@ -1139,9 +1206,18 @@ func _update_reinforcement_call(delta: float) -> void:
 	reinforcement_call_indicator.visible = true
 	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.018) * 0.055
 	reinforcement_call_indicator.scale = Vector3.ONE * pulse
+	# 남은 시간이 줄수록 "!!"와 링이 빨라지고 커진다 — 배너 게이지와 같은 박자.
+	if reinforcement_call_marker:
+		var urgency := 0.012 + progress * 0.016
+		reinforcement_call_marker.visible = true
+		reinforcement_call_marker.scale = Vector3.ONE * (1.0 + sin(Time.get_ticks_msec() * urgency) * 0.12)
+	if reinforcement_call_ring:
+		reinforcement_call_ring.visible = true
+		reinforcement_call_ring.scale = Vector3.ONE * (1.0 + progress * 0.35)
 	if progress >= 1.0:
 		reinforcement_call_active = false
 		reinforcement_call_indicator.visible = false
+		_set_reinforcement_call_emphasis(false)
 		combat_state = "normal"
 		attack_cooldown = 0.45
 		reinforcement_called.emit(self)
@@ -1151,6 +1227,7 @@ func _cancel_reinforcement_call() -> void:
 	reinforcement_call_active = false
 	if reinforcement_call_indicator:
 		reinforcement_call_indicator.visible = false
+	_set_reinforcement_call_emphasis(false)
 	if combat_state == "reinforcement_call":
 		combat_state = "normal"
 

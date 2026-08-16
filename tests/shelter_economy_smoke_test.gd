@@ -214,22 +214,41 @@ func _run() -> void:
 		or workbench_recipe_panel.size.x < 260.0
 	):
 		_fail("workbench panel exceeds or collapses inside the viewport")
-	workbench.set("selected_category", "ammo")
-	workbench.set("selected_recipe_id", "762_fmj_pack")
+	# 탄약 제작은 폐지됐다(탄약은 필드 루팅 + 상인 구매 전용). 대신 신설된
+	# 방어구 카테고리로 같은 레이아웃 불변식을 검사한다.
+	if workbench.RECIPES.has("ammo") or workbench.RECIPES.has("parts"):
+		_fail("workbench must no longer craft ammo or raw parts")
+	workbench.set("selected_category", "armor")
+	workbench.set("selected_recipe_id", "craft_scav_vest")
 	workbench.call("_rebuild_ui")
 	await process_frame
-	var ammo_title := workbench_layer.find_child("WorkbenchRecipeTitle", true, false) as Label
-	var ammo_tab := workbench_layer.find_child("WorkbenchTab_ammo", true, false) as Button
-	var ammo_detail_scroll := workbench_layer.find_child("WorkbenchDetailScroll", true, false) as ScrollContainer
+	var armor_title := workbench_layer.find_child("WorkbenchRecipeTitle", true, false) as Label
+	var armor_tab := workbench_layer.find_child("WorkbenchTab_armor", true, false) as Button
+	var armor_detail_scroll := workbench_layer.find_child("WorkbenchDetailScroll", true, false) as ScrollContainer
 	if (
-		ammo_title == null
-		or ammo_title.autowrap_mode != TextServer.AUTOWRAP_OFF
-		or ammo_tab == null
-		or not ammo_tab.button_pressed
-		or ammo_detail_scroll == null
-		or ammo_detail_scroll.size.y < 120.0
+		armor_title == null
+		or armor_title.autowrap_mode != TextServer.AUTOWRAP_OFF
+		or armor_tab == null
+		or not armor_tab.button_pressed
+		or armor_detail_scroll == null
+		or armor_detail_scroll.size.y < 120.0
 	):
-		_fail("ammo selection breaks the workbench detail layout")
+		_fail("armor selection breaks the workbench detail layout")
+	# 결과물 미리보기(이름 + 핵심 스탯 1줄)는 제작 버튼 위에 항상 있어야 한다.
+	var result_preview := workbench_layer.find_child("WorkbenchResultPreview", true, false) as PanelContainer
+	var preview_stats := workbench_layer.find_child("ResultPreviewStats", true, false) as Label
+	if result_preview == null or preview_stats == null or not preview_stats.text.contains("피해감소"):
+		_fail("armor recipes must preview their damage reduction before crafting")
+	# 제작대는 창고 재료도 보유로 친다 — 가방 0개 + 창고 2개면 "2"가 보여야 한다.
+	game_state.set("mod_component_inventory", {"rubber_gasket": 0, "scope_lens": 0, "magazine_spring": 0})
+	(game_state.get("storage_inventory") as Array).append({
+		"type": "component", "id": "rubber_gasket", "count": 2
+	})
+	if int(workbench.call("_owned_resource", "rubber_gasket")) != 2:
+		_fail("workbench must count storage components as owned materials")
+	workbench.call("_consume_resource", "rubber_gasket", 1)
+	if int(game_state.call("get_stored_storage_count", "component", "rubber_gasket")) != 1:
+		_fail("workbench must draw missing materials straight from storage")
 	if (
 		_find_button_with_text(workbench_layer, "시간제 수리") != null
 		or _find_button_with_text(workbench_layer, "업그레이드") != null
@@ -254,8 +273,10 @@ func _run() -> void:
 	var workbench_resource_row := workbench_layer.find_child("ResourceCost_scrap", true, false) as HBoxContainer
 	if workbench_resource_row == null:
 		_fail("workbench resource cost row is missing")
-	var workbench_resource_name := workbench_resource_row.get_node_or_null("ResourceName") as Label
-	var workbench_resource_amount := workbench_resource_row.get_node_or_null("ResourceAmount") as Label
+	# 재료 행은 이름 아래 "가방 N + 창고 M" 출처 줄을 갖게 되어 이름표가
+	# VBox 안으로 한 단계 들어갔다 — 직계 자식 조회 대신 재귀 탐색.
+	var workbench_resource_name := workbench_resource_row.find_child("ResourceName", true, false) as Label
+	var workbench_resource_amount := workbench_resource_row.find_child("ResourceAmount", true, false) as Label
 	if (
 		workbench_resource_name == null
 		or workbench_resource_amount == null

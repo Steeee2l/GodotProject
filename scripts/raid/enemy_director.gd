@@ -64,8 +64,14 @@ const RAID_EVENT_DIRECTOR := preload("res://scripts/raid_event_director.gd")
 const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
 const RAID_LOSS_MANAGER := preload("res://scripts/raid_loss_manager.gd")
 const REINFORCEMENT_CALL_COOLDOWN := 38.0
-const REINFORCEMENT_CALL_DURATION := 4.6
+# 4.6초 → 8.0초. 예고 배너가 뜨는 순간부터 호출자를 찾아 접근하고 쏘아 죽이기까지
+# 4.6초는 "보기도 전에 끝나는" 시간이었다 — 저지가 실력이 아니라 운이었다.
+# 유저 요구: "게이지바로 충분한 시간을 주고, 그 안에 다 죽이면 증원이 안 오게".
+const REINFORCEMENT_CALL_DURATION := 8.0
 const REINFORCEMENT_CALL_TRIGGER_TIME := 30.0
+# 저지 성공 보상 — 킬 하나(22 XP)보다 살짝 위. "안 싸우고 도망치는 것보다
+# 지금 저 녀석을 잡는 게 이득"이라는 신호를 준다.
+const REINFORCEMENT_BLOCK_XP := 25
 const REINFORCEMENT_HIDDEN_TRIGGER_TIME := 14.0
 # 전투 중 추가 유입 상한 — 동시에 교전(alerted) 중인 적이 이 수 이상이면
 # 증원 호출·긴장도 대응 스쿼드·잭팟 웨이브의 추가 스폰을 건너뛰거나 미룬다.
@@ -102,6 +108,8 @@ var sustained_combat_time := 0.0
 var concealed_combat_time := 0.0
 var reinforcement_call_cooldown := 0.0
 var active_reinforcement_caller: CharacterBody3D
+# 예고 배너가 화면에 떠 있는가. 저지 보상을 한 번만 주기 위한 단일 관문이기도 하다.
+var reinforcement_call_banner_active := false
 var run_boss_kills := 0
 var fatigue_boss_event_triggered := false
 
@@ -429,10 +437,9 @@ func _on_enemy_died(enemy: CharacterBody3D) -> void:
 		host._play_boss_defeat_sequence(enemy)
 		if GameState.subway_story_stage == 1:
 			host._advance_basic_mission("subway_boss")
+	# 저지 성공 (a) — 무전을 잡은 녀석을 시간 안에 처치했다.
 	if enemy == active_reinforcement_caller:
-		active_reinforcement_caller = null
-		sustained_combat_time = REINFORCEMENT_CALL_TRIGGER_TIME * 0.2
-		concealed_combat_time = 0.0
+		_resolve_reinforcement_block()
 	_spawn_enemy_loot(enemy)
 	host.enemies.erase(enemy)
 	host.reinforcement_timer = minf(host.reinforcement_timer, 2.5)
@@ -494,9 +501,11 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 				boss_ammo_data
 			)
 		return boss_drop
-	# 호환탄 회수 — 사수 시체는 45% 확률로 장착 구경 탄약을 별도로 남긴다.
+	# 호환탄 회수 — 사수 시체는 60% 확률로 장착 구경 탄약을 별도로 남긴다.
 	# 일반 드랍(방어구·식량·부품) 테이블과 독립이라 그쪽 비중은 안 건드린다.
-	if str(enemy.get("enemy_kind")) != "melee" and spawn_random.randf() < 0.45:
+	# 45%에서 올렸다: 킬당 회수량이 탄창 하나에도 못 미쳐 "쏠수록 가난해진다"는
+	# 체감이 남았다(유저 신고). 탄약 제작이 폐지돼 필드 회수가 유일한 보급선이다.
+	if str(enemy.get("enemy_kind")) != "melee" and spawn_random.randf() < 0.60:
 		var ammo_recovery: Dictionary = LOOT_ECONOMY.roll_matched_ammo_recovery(
 			stage_tier, spawn_random
 		)
@@ -577,17 +586,61 @@ func _on_enemy_reinforcement_called(caller: CharacterBody3D) -> void:
 	active_reinforcement_caller = null
 	reinforcement_call_cooldown = REINFORCEMENT_CALL_COOLDOWN
 	concealed_combat_time = 0.0
+	# 저지 실패 — 배너는 내리고 증원이 실제로 온다.
+	_hide_reinforcement_call_banner()
 	_spawn_called_reinforcements()
+
+
+func _show_reinforcement_call_banner(duration: float) -> void:
+	reinforcement_call_banner_active = true
+	host._show_reinforcement_call_banner(duration)
+
+
+func _hide_reinforcement_call_banner() -> void:
+	if not reinforcement_call_banner_active:
+		return
+	reinforcement_call_banner_active = false
+	host._hide_reinforcement_call_banner()
+
+
+func _resolve_reinforcement_block() -> void:
+	# 저지 성공. 배너를 내리고 초록 토스트 + XP로 "네가 막았다"를 확실히 말한다.
+	# 배너가 떠 있을 때만 통과하므로 보상이 두 번 나갈 수 없다.
+	if not reinforcement_call_banner_active:
+		return
+	_hide_reinforcement_call_banner()
+	if is_instance_valid(active_reinforcement_caller):
+		active_reinforcement_caller.call("_cancel_reinforcement_call")
+	active_reinforcement_caller = null
+	sustained_combat_time = 0.0
+	concealed_combat_time = 0.0
+	# 막아 놓고 3초 뒤에 옆 적이 또 무전을 잡으면 저지한 감각이 남지 않는다.
+	reinforcement_call_cooldown = maxf(
+		reinforcement_call_cooldown, REINFORCEMENT_CALL_COOLDOWN * 0.5
+	)
+	if host.hud != null and host.hud.has_method("push_toast"):
+		host.hud.push_toast("증원 저지! +%d XP" % REINFORCEMENT_BLOCK_XP, Color("#7fc79e"), 2.6)
+	GameState.add_raid_experience(REINFORCEMENT_BLOCK_XP)
 
 
 func _update_reinforcement_call(delta: float, effective_threat: float) -> void:
 	reinforcement_call_cooldown = maxf(0.0, reinforcement_call_cooldown - delta)
 	if active_reinforcement_caller != null and not is_instance_valid(active_reinforcement_caller):
 		active_reinforcement_caller = null
+		_hide_reinforcement_call_banner()
 	elif active_reinforcement_caller != null and not bool(active_reinforcement_caller.get("reinforcement_call_active")):
+		# 피격 등으로 호출이 끊긴 경우. 배너만 내린다 — 저지 보상은 '처치'에만
+		# 준다(스치는 한 발마다 XP가 나오면 보상이 의미를 잃는다).
 		active_reinforcement_caller = null
 		sustained_combat_time = REINFORCEMENT_CALL_TRIGGER_TIME * 0.2
 		concealed_combat_time = 0.0
+		_hide_reinforcement_call_banner()
+	elif active_reinforcement_caller != null:
+		# 진행 중 — 남은 시간을 배너 게이지에 그대로 흘려보낸다.
+		host._update_reinforcement_call_banner(
+			float(active_reinforcement_caller.get("reinforcement_call_duration"))
+			- float(active_reinforcement_caller.get("reinforcement_call_elapsed"))
+		)
 	var alerted_count := 0
 	var visual_contact_count := 0
 	for enemy in host.enemies:
@@ -597,6 +650,11 @@ func _update_reinforcement_call(delta: float, effective_threat: float) -> void:
 			alerted_count += 1
 			if bool(enemy.get("has_current_line_of_sight")):
 				visual_contact_count += 1
+	# 저지 성공 (b): 호출이 진행 중인데 교전 중인 적이 하나도 안 남았다 =
+	# 제한 시간 안에 그 무리를 전부 정리했다. 호출자만 콕 집어 죽이지 않아도
+	# "다 죽이면 증원이 안 온다"가 성립해야 한다(유저 요구).
+	if reinforcement_call_banner_active and alerted_count <= 0:
+		_resolve_reinforcement_block()
 	if visual_contact_count > 0:
 		sustained_combat_time += delta
 		concealed_combat_time = maxf(0.0, concealed_combat_time - delta * 2.0)
@@ -635,6 +693,7 @@ func _update_reinforcement_call(delta: float, effective_threat: float) -> void:
 		active_reinforcement_caller = caller
 		sustained_combat_time = 0.0
 		concealed_combat_time = 0.0
+		_show_reinforcement_call_banner(REINFORCEMENT_CALL_DURATION)
 
 
 func count_alerted_enemies() -> int:

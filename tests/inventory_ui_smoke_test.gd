@@ -46,7 +46,16 @@ func _run() -> void:
 	assert(not ui.weapon_panel.visible, "Weapon detail must stay hidden until the weapon is selected.")
 	assert(ui.equipped_grid.get_child_count() == 4, "Primary, body, head, and footwear equipment slots should be visible.")
 	assert(int(state.call("get_raid_bag_used_slots")) == 3, "The spare MP5 and two stackable item types must use three slots.")
-	assert(ui.bag_slot_usage_label.text == "남은 슬롯 12 / 15", "The bag header must expose remaining slots.")
+	# 용량 상수(RAID_BAG_CAPACITY)는 밸런스로 바뀐다 — 하드코딩한 "15"가 남아
+	# 테스트만 옛 숫자를 붙들고 있었다. 기대값을 실제 용량에서 만든다.
+	var expected_bag_usage := "남은 슬롯 %d / %d" % [
+		int(state.call("get_raid_bag_capacity")) - int(state.call("get_raid_bag_used_slots")),
+		int(state.call("get_raid_bag_capacity")),
+	]
+	assert(
+		ui.bag_slot_usage_label.text == expected_bag_usage,
+		"The bag header must expose remaining slots."
+	)
 	for equipment in ui.equipped_grid.get_children():
 		assert(((equipment as Control).size_flags_horizontal & Control.SIZE_EXPAND) != 0, "Equipment slots must share the full panel width.")
 		assert(not (equipment as Button).text.contains("하수구"), "Extraction objectives do not belong in equipment.")
@@ -67,9 +76,12 @@ func _run() -> void:
 	assert(ui.weapon_panel.visible, "Selecting the equipped weapon must open its detail panel.")
 	assert(ui.weapon_stats.text.contains("24 / 30"), "Weapon detail must show current rounds against magazine capacity.")
 	assert(ui.weapon_stats.text.contains("완전 탄창 3개 + 낱탄 5발"), "Weapon detail must translate reserve rounds into magazines and loose rounds.")
-	var equipped_weapon_card := ui.bag_grid.get_node_or_null("BagItem_ak47") as Button
-	assert(equipped_weapon_card != null, "The equipped weapon must remain visible in the physical bag grid.")
-	assert(equipped_weapon_card.get_node_or_null("EquippedBadge") is Label, "Equipped bag items need a visible E badge.")
+	# 장착 중인 1정은 위쪽 장비 슬롯이 이미 보여준다 — 가방 목록에 또 나오면
+	# 가방 칸을 먹는 것처럼 읽혀서 뺐다(inventory_ui의 주석 참조). 2정째부터가 가방 몫이다.
+	assert(
+		ui.bag_grid.get_node_or_null("BagItem_ak47") == null,
+		"The equipped weapon belongs to the equipment slot, not the bag grid."
+	)
 	assert(ui.bag_grid.get_node_or_null("BagItem_mp5") is Button, "Unequipped owned weapons must remain selectable in the bag.")
 	assert(ui.weapon_panel.get_node_or_null("OwnedModList") == null, "Weapon details must not duplicate the bag attachment list.")
 	await get_tree().process_frame
