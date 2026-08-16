@@ -24,6 +24,7 @@ var header_label: Label
 var buttons_box: BoxContainer
 var facility_buttons: Dictionary = {}
 # 캣닢 피버 — 시설이 아니라 "사건"이라 시설 버튼 줄 아래 별도 카드로 둔다.
+var fever_card: PanelContainer
 var fever_button: Button
 var fever_gauge: ProgressBar
 
@@ -80,6 +81,7 @@ func _build_fever_card() -> void:
 	# 캣닢을 부어 게이지를 채우고, 꽉 차면 쉘터 전체가 취한다.
 	var card := PanelContainer.new()
 	card.name = "CatnipFeverCard"
+	fever_card = card
 	card.add_theme_stylebox_override("panel", HudStyle.chip(Color("#7fb069")))
 	dock.add_child(card)
 	var box := VBoxContainer.new()
@@ -144,21 +146,45 @@ func apply_layout(safe: Vector4) -> void:
 		# 피버 카드(버튼+게이지 약 52px)가 아래로 밀려 잘리지 않도록 높이를 넓힌다.
 		dock.offset_top = dock.offset_bottom - 174.0
 	else:
+		# 가로(특히 모바일 가로)는 세로 공간이 귀하다. 레일이 고정 높이면
+		# 우하단 무기 카드와 겹치고 스크롤이 생겼다 — 남는 높이에 맞춰
+		# 버튼 높이를 압축해 '항상 한 화면에' 들어가게 한다.
+		var top_margin := 176.0 + safe.y
+		# 우하단 무기 카드(약 78px)와 하단 여백을 미리 비워 둔다.
+		var reserved_bottom := 96.0 + safe.w
+		var available_height := maxf(180.0, viewport_size.y - top_margin - reserved_bottom)
+		var header_height := 30.0
+		var fever_height := 58.0 if fever_card != null and fever_card.visible else 0.0
+		var separation := 5.0
+		var slots := float(maxi(1, facility_buttons.size()))
+		var button_height := clampf(
+			(available_height - header_height - fever_height - separation * (slots + 1.0)) / slots,
+			34.0,
+			52.0
+		)
+		var rail_width := 128.0 if viewport_size.y >= 560.0 else 112.0
 		buttons_box.vertical = true
-		buttons_box.add_theme_constant_override("separation", 5)
+		buttons_box.add_theme_constant_override("separation", roundi(separation))
 		for facility_id in facility_buttons:
 			var button := facility_buttons[facility_id] as Button
-			button.custom_minimum_size = Vector2(128, 52)
+			button.custom_minimum_size = Vector2(rail_width, button_height)
 			button.size_flags_horizontal = Control.SIZE_FILL
 			button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
-			button.add_theme_constant_override("icon_max_width", 24)
+			button.add_theme_constant_override(
+				"icon_max_width", 24 if button_height >= 44.0 else 18
+			)
+			button.add_theme_font_size_override(
+				"font_size", HudStyle.TYPE_CAPTION if button_height >= 42.0 else HudStyle.TYPE_FOOTNOTE
+			)
 		# 가방 버튼(우상단) 아래에 세로 레일로 붙는다. 시야 중앙은 비워 둔다.
 		dock.set_anchors_preset(Control.PRESET_TOP_RIGHT, true)
 		dock.offset_right = -14.0 - safe.z
-		dock.offset_left = dock.offset_right - 128.0
-		dock.offset_top = 176.0 + safe.y
-		dock.offset_bottom = dock.offset_top + 412.0
+		dock.offset_left = dock.offset_right - rail_width
+		dock.offset_top = top_margin
+		dock.offset_bottom = top_margin + header_height + fever_height + (
+			button_height + separation
+		) * slots + separation
 
 
 func refresh() -> void:
