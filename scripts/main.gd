@@ -398,6 +398,11 @@ func _ready() -> void:
 			or extraction_transition_active
 		), "종료 (판 진행은 사라짐)")
 	raid_zone_data = GameState.get_raid_zone()
+	# 판 시작을 세이브에 새긴다 — 추출 없이 강제 종료하면 로드 시 포기 처리.
+	# 오프닝(튜토리얼)은 제외: 새 유저의 첫 이탈에 벌을 주지 않는다.
+	if GameState.opening_completed:
+		GameState.raid_in_progress = true
+		GameState.save_persistent_state()
 	active_zone_rule = str(raid_zone_data.get("zone_rule", ""))
 	world_time_hours = GameState.world_time_hours
 	night_intensity = _get_night_intensity(world_time_hours)
@@ -2072,6 +2077,9 @@ func _begin_player_death_sequence() -> void:
 	_refresh_pointer_mode()
 	_update_combat_overlay_visibility()
 	var corpse_loot := RAID_LOSS_MANAGER.store_death_corpse(player.global_position)
+	# 페널티는 사망 '순간'에 원자적으로 확정한다. 예전엔 사망 화면을 닫는
+	# 시점에 적용해서, 화면에서 Alt+F4하면 페널티 없이 시체(이득)만 남았다.
+	_clear_carried_inventory_after_death()
 	fire_button_held = false
 	mouse_fire_held = false
 	laser_aim_held = false
@@ -2116,7 +2124,7 @@ func _continue_after_death() -> void:
 	tween.tween_property(game_over_screen.fade, "color:a", 1.0, 0.35)
 	tween.tween_callback(func() -> void:
 		Engine.time_scale = 1.0
-		_clear_carried_inventory_after_death()
+		# 페널티는 사망 순간에 이미 확정됐다(_begin_player_death_sequence).
 		# 사망 귀환은 "살아 돌아온" 게 아니다 — 생환 전용 서사가 열리지 않게 한다.
 		GameState.register_shelter_return(false)
 		SceneTransition.transition_to("res://scenes/shelter_interior.tscn")

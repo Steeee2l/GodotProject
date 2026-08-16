@@ -149,6 +149,9 @@ var shelter_food_fraction: float = 0.0
 var active_churu_buffs: Array[String] = []
 # 이번 출정에만 적용되는 캣닢 급여(택1). 출정 종료/사망 시 소멸한다.
 var active_catnip_buffs: Array[String] = []
+# 판 도중 강제 종료(Alt+F4) 감시 — 출정 시작에 켜고 정상 복귀에 끈다.
+# 로드 시 켜져 있으면 그 판은 '포기'로 처리된다(사망과 같은 손실, 시체 없음).
+var raid_in_progress := false
 var last_corpse_decay_notice: Dictionary = {}
 # 첫 판에서 "가방이 꽉 찼을 때의 갈등"을 한 번은 반드시 겪게 한다.
 var bag_pressure_lesson_seen: bool = false
@@ -966,8 +969,22 @@ func finish_corpse_recovery_attempt() -> void:
 		clear_pending_corpse_recovery()
 
 
+func apply_raid_abandonment() -> void:
+	# 판 도중 강제 종료 후 재접속 — 추출 없이 나간 판은 '포기'다.
+	# 사망과 같은 손실이되 회수할 시체가 없다: 강제 종료가 사망보다
+	# 이득이 되는 순간 그게 정식 전략이 되기 때문이다.
+	clear_carried_raid_inventory_after_death()
+	var loss_manager := load("res://scripts/raid_loss_manager.gd")
+	loss_manager.restore_secure_items_after_death()
+	player_health = mini(82, get_max_health())
+	raid_in_progress = false
+	save_persistent_state()
+
+
 func register_shelter_return(survived: bool = true) -> void:
 	shelter_return_serial += 1
+	# 정상 경로(추출·사망 정산)로 돌아왔다 — 판 포기 감시 해제.
+	raid_in_progress = false
 	if survived:
 		survived_return_count += 1
 	clear_confirmed_raid_manifest()
@@ -3591,6 +3608,7 @@ func save_persistent_state() -> bool:
 		"valuable_inventory": valuable_inventory,
 		"active_churu_buffs": active_churu_buffs,
 		"active_catnip_buffs": active_catnip_buffs,
+		"raid_in_progress": raid_in_progress,
 		"bag_pressure_lesson_seen": bag_pressure_lesson_seen,
 		"workbench_lesson_seen": workbench_lesson_seen,
 		"field_controls_lesson_seen": field_controls_lesson_seen,
@@ -3750,6 +3768,7 @@ func load_persistent_state() -> bool:
 	var legacy_catnip_buff := str(data.get("active_catnip_buff", ""))
 	if active_catnip_buffs.is_empty() and not legacy_catnip_buff.is_empty():
 		active_catnip_buffs.append(legacy_catnip_buff)
+	raid_in_progress = bool(data.get("raid_in_progress", false))
 	bag_pressure_lesson_seen = bool(data.get("bag_pressure_lesson_seen", bag_pressure_lesson_seen))
 	workbench_lesson_seen = bool(data.get("workbench_lesson_seen", workbench_lesson_seen))
 	field_controls_lesson_seen = bool(data.get("field_controls_lesson_seen", field_controls_lesson_seen))
@@ -3889,6 +3908,10 @@ func load_persistent_state() -> bool:
 	_ensure_resident_records()
 	player_health = clampi(player_health, 0, get_max_health())
 	reserve_ammo = get_ammo_count(equipped_ammo_id)
+	# 모든 복원이 끝난 '마지막'에 판 포기 검사 — 중간에 하면 이후 복원이
+	# 정리분을 도로 덮어쓴다.
+	if raid_in_progress:
+		apply_raid_abandonment()
 	return true
 
 
