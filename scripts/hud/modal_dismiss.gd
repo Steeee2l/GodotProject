@@ -6,6 +6,10 @@ extends Node
 # 사용: ModalDismiss.install(ui_layer, dim, close_callable)
 
 var close_action: Callable
+# 딤 위에서 '누름'을 실제로 본 적이 있는가. 떼는 것만 보고 닫으면, 모달을 여는
+# 그 탭의 '떼기'가 새로 생긴 딤에 떨어져 열자마자 닫힌다 — 운영 독 버튼을 눌러도
+# 창고가 안 열리던 진짜 원인이 이것이었다(실터치 프로브로 확인).
+var _press_seen := false
 
 
 static func install(layer_node: Node, dim: Control, close_action_value: Callable) -> ModalDismiss:
@@ -15,12 +19,22 @@ static func install(layer_node: Node, dim: Control, close_action_value: Callable
 	layer_node.add_child(relay)
 	if dim != null:
 		dim.gui_input.connect(func(event: InputEvent) -> void:
-			var released: bool = (
-				(event is InputEventMouseButton and not event.pressed
+			var pressed: bool = (
+				(event is InputEventMouseButton and (event as InputEventMouseButton).pressed
 					and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT)
-				or (event is InputEventScreenTouch and not event.pressed)
+				or (event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed)
 			)
-			if released:
+			if pressed:
+				relay._press_seen = true
+				return
+			var released: bool = (
+				(event is InputEventMouseButton and not (event as InputEventMouseButton).pressed
+					and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT)
+				or (event is InputEventScreenTouch and not (event as InputEventScreenTouch).pressed)
+			)
+			# 바깥 탭은 '누르고 뗀' 한 쌍이어야 한다.
+			if released and relay._press_seen:
+				relay._press_seen = false
 				relay._close()
 		)
 	return relay

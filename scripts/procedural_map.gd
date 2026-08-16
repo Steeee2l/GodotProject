@@ -121,6 +121,10 @@ var apartment_origin := Vector2i(-1, -1)
 var apartment_cells: Array[Vector2i] = []
 var cell_zones := {}
 var building_type_by_cell := {}
+# cell_zones 는 "그 칸이 무슨 성격인가"만 담는다. 여기에는 "계획된 지구 중심
+# 반경 안에 들어온 칸인가"를 따로 담는다. street_mixed 처럼 기본값과 이름이
+# 겹치는 지구를 앵커로 쓰면, 이게 없으면 지도 전체에 지구 가중치가 새어나간다.
+var planned_district_by_cell := {}
 var district_anchors := {}
 var district_signature_road_cells := {}
 var cell_risk_bands := {}
@@ -212,14 +216,23 @@ func _generate_layout() -> void:
 			"open_space_edge": 0.24,
 			"service_interior": 0.34,
 		}.get(zone, 0.42)) * float(region_profile.get("building_chance_multiplier", 1.0))
-		building_chance = clampf(building_chance, 0.08, 0.92)
+		# 예전에는 여기가 (0.08, 0.92) 고정이라, 배수를 아무리 흔들어도 모든
+		# 구역의 건물 밀도가 같은 구간으로 눌려 지도가 똑같아 보였다. 이제는
+		# 구역이 직접 밀도 구간을 정한다 — 남대문은 거의 꽉 차고(0.55~0.98)
+		# 용산·남산은 텅 빈다(0.04~0.42).
+		var chance_range: Vector2 = region_profile.get("building_chance_range", Vector2(0.08, 0.92))
+		building_chance = clampf(building_chance, chance_range.x, chance_range.y)
 		if district_anchors.values().has(cell) or rng.randf() < building_chance:
 			building_cells[cell] = true
 
+	# open_spread_radius: 건물 주변 몇 칸까지를 "공터"로 확정할지. 예전에는 1로
+	# 고정이라 어느 구역이든 빈칸의 대부분이 공터가 되고 주차장 비율이 눌렸다.
+	# -1 이면 규칙 자체를 꺼서 건물 사이까지 차량 집결지가 파고든다(용산).
+	var open_spread_radius := int(region_profile.get("open_spread_radius", 1))
 	for cell in eligible_cells:
 		if building_cells.has(cell):
 			continue
-		if _has_building_within(cell, 1):
+		if open_spread_radius >= 0 and _has_building_within(cell, open_spread_radius):
 			open_cells[cell] = true
 		elif _distance_to_cells(cell, subway_cells) <= 1:
 			open_cells[cell] = true
@@ -244,6 +257,7 @@ func _clear_layout_state() -> void:
 	apartment_cells.clear()
 	cell_zones.clear()
 	building_type_by_cell.clear()
+	planned_district_by_cell.clear()
 	district_anchors.clear()
 	district_signature_road_cells.clear()
 	cell_risk_bands.clear()
@@ -290,6 +304,7 @@ func _assign_zoning_districts(eligible_cells: Array[Vector2i]) -> void:
 		var planned_district := _planned_district_for_cell(cell)
 		if not planned_district.is_empty():
 			zone = planned_district
+			planned_district_by_cell[cell] = planned_district
 		elif _distance_to_cells(cell, playground_cells) <= 1:
 			zone = "open_space_edge"
 		elif _distance_to_cells(cell, apartment_cells) <= 2:
@@ -301,22 +316,37 @@ func _assign_zoning_districts(eligible_cells: Array[Vector2i]) -> void:
 		cell_zones[cell] = zone
 
 
+const DEFAULT_DISTRICT_PLAN := [
+	{"name": "luxury_core", "require_intersection": true, "avoid_intersection": false},
+	{"name": "market_lane", "require_intersection": false, "avoid_intersection": true},
+	{"name": "multi_family", "require_intersection": false, "avoid_intersection": false},
+]
+
+
 func _select_district_anchors(eligible_cells: Array[Vector2i]) -> void:
 	district_anchors.clear()
 	district_signature_road_cells.clear()
-	var luxury_anchor := _pick_district_anchor(eligible_cells, [], true, false)
-	if luxury_anchor.x >= 0:
-		district_anchors["luxury_core"] = luxury_anchor
+	# 예전에는 luxury_core / market_lane / multi_family 세 이름이 코드에
+	# 박혀 있어서 남산 오염 핵심부에도 "명품 상권"이 생겼다. 이제 지구 구성은
+	# 구역 프로필이 정한다. 앵커 칸에는 그 지구 태그를 가진 건물만 서므로,
+	# 프로필의 allowed_buildings 안에 태그 보유 건물이 반드시 있어야 한다.
+	var plan: Array = region_profile.get("district_plan", DEFAULT_DISTRICT_PLAN)
 	var occupied: Array[Vector2i] = []
-	if luxury_anchor.x >= 0:
-		occupied.append(luxury_anchor)
-	var market_anchor := _pick_district_anchor(eligible_cells, occupied, false, true)
-	if market_anchor.x >= 0:
-		district_anchors["market_lane"] = market_anchor
-		occupied.append(market_anchor)
-	var residential_anchor := _pick_district_anchor(eligible_cells, occupied, false, false)
-	if residential_anchor.x >= 0:
-		district_anchors["multi_family"] = residential_anchor
+	for entry_variant in plan:
+		var entry: Dictionary = entry_variant
+		var district_name := str(entry.get("name", ""))
+		if district_name.is_empty() or district_anchors.has(district_name):
+			continue
+		var anchor := _pick_district_anchor(
+			eligible_cells,
+			occupied,
+			bool(entry.get("require_intersection", false)),
+			bool(entry.get("avoid_intersection", false))
+		)
+		if anchor.x < 0:
+			continue
+		district_anchors[district_name] = anchor
+		occupied.append(anchor)
 
 	for district_name in district_anchors:
 		var anchor: Vector2i = district_anchors[district_name]
@@ -370,9 +400,7 @@ func _planned_district_for_cell(cell: Vector2i) -> String:
 	var closest_district := ""
 	var district_radius := int(region_profile.get("district_radius", DISTRICT_RADIUS_CELLS))
 	var closest_distance := district_radius + 1
-	for district_name in ["market_lane", "luxury_core", "multi_family"]:
-		if not district_anchors.has(district_name):
-			continue
+	for district_name in district_anchors:
 		var distance := _block_distance(cell, district_anchors[district_name])
 		if distance <= district_radius and distance < closest_distance:
 			closest_distance = distance
@@ -381,11 +409,19 @@ func _planned_district_for_cell(cell: Vector2i) -> String:
 
 
 func _first_adjacent_road(cell: Vector2i) -> Vector2i:
+	# 교차로 칸은 횡단보도만 깔리고 시그니처 차량이 서지 않는다. 지구 대표
+	# 도로는 되도록 교차로가 아닌 칸을 골라야 명품 세단 같은 표식이 확실히
+	# 나타난다. 도로 밴드가 적은 구역일수록 이 차이가 커진다.
+	var fallback := Vector2i(-1, -1)
 	for direction in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
 		var candidate: Vector2i = cell + Vector2i(direction)
-		if _is_road_cell(candidate):
+		if not _is_road_cell(candidate):
+			continue
+		if fallback.x < 0:
+			fallback = candidate
+		if not (vertical_roads.has(candidate.x) and horizontal_roads.has(candidate.y)):
 			return candidate
-	return Vector2i(-1, -1)
+	return fallback
 
 
 func _select_planned_landmarks(eligible_cells: Array[Vector2i]) -> void:
@@ -493,7 +529,9 @@ func _build_materials() -> void:
 	)
 	sidewalk_edge_material = _color_material(Color("#64645f"))
 	marking_material = _color_material(marking_tint)
-	curb_material = _color_material(Color("#8b8981"))
+	# 연석·주차장·공터는 화면에서 차지하는 면적이 큰데 예전에는 구역과 무관한
+	# 고정색이었다. 여기까지 구역 색을 밀어야 지면 전체가 그 동네 색이 된다.
+	curb_material = _color_material(sidewalk_tint.darkened(0.18))
 	if ResourceLoader.exists(RIVER_TEXTURE_PATH):
 		water_material = _texture_material(load(RIVER_TEXTURE_PATH) as Texture2D, Color("#b9dce2"))
 	else:
@@ -501,7 +539,7 @@ func _build_materials() -> void:
 	water_material.metallic = 0.12
 	water_material.roughness = 0.38
 	if ResourceLoader.exists(PARKING_TEXTURE_PATH):
-		parking_material = _texture_material(load(PARKING_TEXTURE_PATH) as Texture2D)
+		parking_material = _texture_material(load(PARKING_TEXTURE_PATH) as Texture2D, asphalt_tint)
 	else:
 		parking_material = asphalt_material
 	riverbank_material = _color_material(Color("#4f5146"))
@@ -517,7 +555,7 @@ func _build_materials() -> void:
 	bridge_rail_material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
 	for texture_path in OPEN_LOT_TEXTURE_PATHS:
 		if ResourceLoader.exists(texture_path):
-			open_lot_materials.append(_texture_material(load(texture_path) as Texture2D))
+			open_lot_materials.append(_texture_material(load(texture_path) as Texture2D, lot_tint.lightened(0.22)))
 	if open_lot_materials.is_empty():
 		open_lot_materials.append(lot_material)
 	if ResourceLoader.exists(OUTER_GROUND_TEXTURE_PATH):
@@ -532,6 +570,31 @@ func _build_materials() -> void:
 	vehicle_collision_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	vehicle_collision_material.no_depth_test = true
 	vehicle_collision_material.render_priority = 120
+
+
+func _zone_tint(profile_key: String) -> Color:
+	# 스프라이트는 전부 SHADING_MODE_UNSHADED + shaded=false 라 DirectionalLight
+	# 이 전혀 먹지 않는다. 구역 색을 입힐 수단은 modulate 와 안개뿐이므로,
+	# 모든 스프라이트 스포너가 이 값을 통과시킨다.
+	return region_profile.get(profile_key, Color.WHITE)
+
+
+# main.gd 가 _update_day_night_visuals() 안에서 이 값을 읽어 WorldEnvironment 에
+# 섞는 계약. main.gd 는 다른 담당이 관리하므로 여기서 값만 공개한다.
+#
+#   fog_light_color   : 이 구역 공기의 기준 색. 밤 색과 lerp 해서 쓰면 된다.
+#   fog_density_scale : 기존 밤낮 fog_density(0.008~0.014)에 곱할 배수.
+#   fog_energy_scale  : 기존 fog_light_energy 에 곱할 배수.
+#   ambient_color     : 이 구역의 기준 환경광 색.
+#
+# 예) environment.fog_density = lerpf(0.008, 0.014, night) * atmosphere.fog_density_scale
+func get_zone_atmosphere() -> Dictionary:
+	return {
+		"fog_light_color": region_profile.get("fog_light_color", Color("#5c6663")) as Color,
+		"fog_density_scale": float(region_profile.get("fog_density_scale", 1.0)),
+		"fog_energy_scale": float(region_profile.get("fog_energy_scale", 1.0)),
+		"ambient_color": region_profile.get("ambient_color", Color("#8e968f")) as Color,
+	}
 
 
 func _build_outer_city_backdrop() -> void:
@@ -665,9 +728,11 @@ func _is_road_cover_clearance_cell(cell: Vector2i, vertical: bool) -> bool:
 
 
 func _road_district(cell: Vector2i) -> String:
+	# 계획 지구 반경 안의 칸만 인정한다. street_mixed 를 앵커로 쓰는 구역에서
+	# 기본값 지구가 통째로 "계획 지구"로 오인되는 것을 막는다.
 	for direction in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
-		var zone := str(cell_zones.get(cell + direction, ""))
-		if zone in ["market_lane", "luxury_core", "multi_family"]:
+		var zone := str(planned_district_by_cell.get(cell + direction, ""))
+		if not zone.is_empty():
 			return zone
 	return ""
 
@@ -857,6 +922,7 @@ func _spawn_road_cover_obstacle(cell: Vector2i, center: Vector3, vertical: bool)
 	var sprite := Sprite3D.new()
 	sprite.name = "CoverSprite"
 	sprite.texture = texture
+	sprite.modulate = _zone_tint("prop_tint")
 	var collision_size: Vector3 = definition.get("collision_size", Vector3(4.0, 1.4, 1.4))
 	var footprint_corners: Array = definition.get("footprint_corners_px", [])
 	if footprint_corners.size() >= 4:
@@ -961,15 +1027,22 @@ func _build_district_props() -> void:
 
 
 func _choose_street_prop(district: String) -> String:
+	# 구역별 대표 사물. 프로필이 street_prop_pool 을 주면 그 목록만 후보가 되어
+	# 남대문에는 좌판·천막만, 남산에는 오염 드럼통·격리 천막만 깔린다. 풀이
+	# 없으면 예전처럼 카탈로그 전체에서 지구 태그로만 고른다.
+	var pool: Dictionary = region_profile.get("street_prop_pool", {})
+	var source_ids: Array = pool.keys() if not pool.is_empty() else STREET_PROP_CATALOG.DEFINITIONS.keys()
 	var candidates: Array[Dictionary] = []
 	var total_weight := 0.0
-	for prop_id_variant in STREET_PROP_CATALOG.DEFINITIONS:
+	for prop_id_variant in source_ids:
 		var prop_id := str(prop_id_variant)
 		var definition: Dictionary = STREET_PROP_CATALOG.get_definition(prop_id)
-		var districts: Array = definition.get("districts", [])
-		if not districts.has(district):
+		if definition.is_empty():
 			continue
-		var weight := float(definition.get("weight", 1.0))
+		var districts: Array = definition.get("districts", [])
+		if not districts.is_empty() and not districts.has(district):
+			continue
+		var weight := float(pool.get(prop_id, definition.get("weight", 1.0)))
 		total_weight += weight
 		candidates.append({
 			"id": prop_id,
@@ -1036,6 +1109,7 @@ func _spawn_street_prop(
 	var sprite := Sprite3D.new()
 	sprite.name = "StreetPropSprite"
 	sprite.texture = texture
+	sprite.modulate = _zone_tint("prop_tint")
 	var corners: Array[Vector2] = _texture_space_footprint_corners(definition, texture)
 	var left_corner := corners[0] as Vector2
 	var right_corner := corners[2] as Vector2
@@ -1068,7 +1142,9 @@ func _spawn_street_prop(
 	):
 		body.queue_free()
 		return
-	_configure_profiled_collision(body, collision_size, profile_id, collision_center, -body.position.y)
+	_configure_profiled_collision(
+		body, collision_size, profile_id, collision_center, -body.position.y, "StreetProp"
+	)
 
 
 func _build_market_district_props() -> void:
@@ -1120,6 +1196,7 @@ func _spawn_market_handcart(cell: Vector2i, frontage: String, instance_index: in
 	var sprite := Sprite3D.new()
 	sprite.name = "HandcartSprite"
 	sprite.texture = texture
+	sprite.modulate = _zone_tint("prop_tint")
 	var base_pixel_width := absf(MARKET_HANDCART_FOOTPRINT_CORNERS[2].x - MARKET_HANDCART_FOOTPRINT_CORNERS[0].x)
 	var projected_width := (base_size.x + base_size.z) / sqrt(2.0)
 	sprite.pixel_size = projected_width / base_pixel_width
@@ -1148,7 +1225,9 @@ func _spawn_market_handcart(cell: Vector2i, frontage: String, instance_index: in
 	):
 		body.queue_free()
 		return
-	_configure_profiled_collision(body, collision_size, "handcart", collision_center, -body.position.y)
+	_configure_profiled_collision(
+		body, collision_size, "handcart", collision_center, -body.position.y, "Handcart"
+	)
 
 
 func _build_open_lot(cell: Vector2i) -> void:
@@ -1193,7 +1272,7 @@ func _try_build_building(cell: Vector2i) -> void:
 		elif height_class == "mid" and (open_space_distance <= OPEN_SPACE_MID_RISE_BUFFER_CELLS or (zone == "residential_buffer" and zone != "multi_family")):
 			continue
 		var selection_weight := float(definition.get("density_weight", 1.0))
-		if zone in ["market_lane", "luxury_core", "multi_family"]:
+		if planned_district_by_cell.has(cell):
 			selection_weight *= 5.0 if district_tags.has(zone) else 0.18
 		definitions.append({
 			"id": building_id,
@@ -1281,6 +1360,7 @@ func _spawn_landmark_at(center: Vector3, landmark_id: String, instance_suffix: S
 	var sprite := Sprite3D.new()
 	sprite.name = "LandmarkSprite"
 	sprite.texture = texture
+	sprite.modulate = _zone_tint("building_tint")
 	var corners: Array[Vector2] = _texture_space_footprint_corners(definition, texture)
 	var base_pixel_width := absf((corners[2] as Vector2).x - (corners[0] as Vector2).x)
 	var projected_width := (footprint_world.x + footprint_world.y) / sqrt(2.0)
@@ -1340,6 +1420,7 @@ func _spawn_building(building_id: String, definition: Dictionary, module_origin:
 	var sprite := Sprite3D.new()
 	sprite.name = "BuildingSprite"
 	sprite.texture = texture
+	sprite.modulate = _zone_tint("building_tint")
 	var corners: Array[Vector2] = _texture_space_footprint_corners(definition, texture)
 	var base_pixel_width := absf((corners[2] as Vector2).x - (corners[0] as Vector2).x)
 	var projected_width := (footprint_world.x + footprint_world.y) / sqrt(2.0)
@@ -1354,7 +1435,7 @@ func _spawn_building(building_id: String, definition: Dictionary, module_origin:
 	body.add_child(sprite)
 	var height := float(definition["height_world"]) * WORLD_SCALE
 	var building_collision_size := Vector3(footprint_world.x, height, footprint_world.y)
-	_configure_profiled_collision(body, building_collision_size, "building")
+	_configure_profiled_collision(body, building_collision_size, "building", Vector2.ZERO, 0.0, "Building")
 	body.set_meta("occlusion_lateral_limit", (footprint_world.x + footprint_world.y) / (2.0 * sqrt(2.0)))
 	body.set_meta("occlusion_depth_limit", float(definition["occlusion_depth"]) * WORLD_SCALE)
 	_try_add_building_entrance(body, building_id, definition, footprint_world, road_frontage, module_origin)
@@ -1466,6 +1547,7 @@ func _spawn_vehicle(node_name: String, vehicle_type: String, position: Vector3, 
 	var sprite := Sprite3D.new()
 	sprite.name = "VehicleSprite"
 	sprite.texture = texture
+	sprite.modulate = _zone_tint("vehicle_tint")
 	var corners: Array[Vector2] = _texture_space_footprint_corners(definition, texture)
 	var base_pixel_width := absf((corners[2] as Vector2).x - (corners[0] as Vector2).x)
 	var projected_width := (footprint.x + footprint.z) / sqrt(2.0)
@@ -1816,7 +1898,8 @@ func _configure_profiled_collision(
 	base_size: Vector3,
 	profile_id: String,
 	footprint_center: Vector2 = Vector2.ZERO,
-	ground_local_y: float = 0.0
+	ground_local_y: float = 0.0,
+	collision_node_prefix: String = ""
 ) -> void:
 	var profile := COLLISION_PROFILES.get_profile(profile_id, base_size)
 	var movement_size: Vector3 = profile["movement_size"]
@@ -1831,11 +1914,14 @@ func _configure_profiled_collision(
 	var movement_collision := CollisionShape3D.new()
 	var is_vehicle := profile_id.begins_with("vehicle_")
 	var is_road_cover := profile_id in ["road_barricade", "rubble_wall"]
-	movement_collision.name = "MovementCollision"
-	if is_vehicle:
-		movement_collision.name = "VehicleCollision"
-	elif is_road_cover:
-		movement_collision.name = "CoverCollision"
+	# 충돌 노드 이름은 종류별로 구분해야 한다. 18613c4 에서 프로필 기반 헬퍼로
+	# 합치면서 건물·거리사물·손수레가 전부 "MovementCollision" 이 되어,
+	# BuildingCollision/StreetPropCollision/HandcartCollision 을 찾던 스모크
+	# 테스트가 모두 깨져 있었다. 호출자가 접두어를 넘겨 이름을 되살린다.
+	var name_prefix := collision_node_prefix
+	if name_prefix.is_empty():
+		name_prefix = "Vehicle" if is_vehicle else ("Cover" if is_road_cover else "Movement")
+	movement_collision.name = "%sCollision" % name_prefix
 	var movement_shape := BoxShape3D.new()
 	movement_shape.size = movement_size
 	movement_collision.shape = movement_shape
@@ -1865,11 +1951,7 @@ func _configure_profiled_collision(
 	projectile_body.add_child(projectile_collision)
 
 	var debug_mesh := MeshInstance3D.new()
-	debug_mesh.name = "MovementCollisionDebug"
-	if is_vehicle:
-		debug_mesh.name = "VehicleCollisionDebug"
-	elif is_road_cover:
-		debug_mesh.name = "CoverCollisionDebug"
+	debug_mesh.name = "%sCollisionDebug" % name_prefix
 	debug_mesh.position = Vector3(
 		footprint_center.x,
 		ground_local_y + 0.035,

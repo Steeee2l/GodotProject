@@ -3946,6 +3946,21 @@ func _update_day_night_visuals() -> void:
 		environment.fog_light_energy = lerpf(0.65, 0.18, night_intensity)
 		environment.fog_light_color = Color(0.32, 0.36, 0.38).lerp(Color(0.08, 0.12, 0.2), night_intensity)
 		environment.fog_density = lerpf(0.008, 0.014, night_intensity)
+		# 구역마다 공기 색이 달라야 "여긴 다른 동네다"가 스크린샷 한 장으로 읽힌다.
+		# 낮/밤 값을 매 틱 다시 계산하는 자리라, 구역 보정도 반드시 여기서 겹쳐야
+		# 한다(_ready에서 한 번 칠하면 이 줄들이 바로 덮어쓴다).
+		var city_map := get_node_or_null("World")
+		if is_instance_valid(city_map) and city_map.has_method("get_zone_atmosphere"):
+			var atmosphere: Dictionary = city_map.call("get_zone_atmosphere")
+			if not atmosphere.is_empty():
+				environment.fog_light_color = environment.fog_light_color.lerp(
+					atmosphere.get("fog_light_color", environment.fog_light_color), 0.65
+				)
+				environment.fog_density *= maxf(0.2, float(atmosphere.get("fog_density_scale", 1.0)))
+				environment.fog_light_energy *= maxf(0.2, float(atmosphere.get("fog_energy_scale", 1.0)))
+				environment.ambient_light_color = environment.ambient_light_color.lerp(
+					atmosphere.get("ambient_color", environment.ambient_light_color), 0.5
+				)
 
 
 func _update_time_hud() -> void:
@@ -6717,6 +6732,15 @@ func _release_mobile_held_actions() -> void:
 	context_touch_id = -1
 	fire_button_held = false
 	hud.field_interaction_touch_held = false
+	# 이동 조이스틱 손가락도 같이 놓는다. 지도가 열리면 _input이 터치를 무시해
+	# 그 손가락의 '뗌'을 영영 못 받고 touch_id가 눌린 채로 남았다. 그 상태에서
+	# 지도 닫기 탭은 '두 번째 손가락'이 되어 마우스 에뮬레이션을 못 타고 사라진다
+	# — 지도가 안 닫히던 문제의 뿌리(실터치 프로브로 확인).
+	if touch_id != -1:
+		touch_id = -1
+		touch_vector = Vector2.ZERO
+		if is_instance_valid(touch_stick) and touch_stick.has_method("end_touch"):
+			touch_stick.call("end_touch")
 
 
 func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:

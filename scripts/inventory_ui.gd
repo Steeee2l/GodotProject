@@ -1108,7 +1108,9 @@ func _refresh_contents() -> void:
 		var mod_id := str(mod_id_variant)
 		var cost: Dictionary = MOD_COMPONENTS[mod_id]
 		var component_id := str(cost["component"])
-		var available: int = int(game_state.get_weapon_mod_count(mod_id))
+		# 총에 박아 넣은 부착물은 무기 상세의 부착 슬롯이 보여 준다. 가방 목록에
+		# 또 나오면 칸 계산(장착분 제외)과 목록이 어긋난다.
+		var available: int = int(game_state.get_backpack_storage_count("mod", mod_id))
 		if available <= 0:
 			continue
 		_add_bag_item({
@@ -1178,8 +1180,27 @@ func _refresh_contents() -> void:
 func _add_bag_item(item: Dictionary) -> void:
 	if not _should_show_bag_item(item):
 		return
-	bag_grid.add_child(_bag_item_button(item))
-	visible_bag_items += 1
+	# 가방 격자는 "칸"을 그린다. 무기·장비·재료는 1개가 1칸이므로 4개짜리 더미는
+	# 타일 4장이어야 한다. 더미당 타일 1장만 그리던 탓에 실제로 9칸을 쓰고 있어도
+	# 화면은 4칸만 차 보였고, 유저는 "거의 빈 가방"인데 만재 모달을 만났다.
+	var quantity: int = int(item.get("quantity", 0))
+	var slot_cost: int = int(game_state.get_raid_item_slot_cost(
+		str(item.get("type", "")),
+		str(item.get("id", "")),
+		quantity
+	))
+	# 청사진·키카드는 칸을 먹지 않는 쉘터 자산이다 — 그래도 등에 지고 있으니
+	# 타일 한 장은 보여 주되 "0칸"임을 툴팁으로 밝힌다.
+	var slot_span: int = maxi(1, slot_cost)
+	for slot_index in range(slot_span):
+		var tile := item.duplicate(true)
+		tile["slot_index"] = slot_index
+		tile["slot_span"] = slot_span
+		tile["slot_cost"] = slot_cost
+		# 1개=1칸인 부류는 타일 하나가 딱 1개다 — "x4"를 네 번 찍으면 12개처럼 읽힌다.
+		tile["badge_quantity"] = 1 if slot_span > 1 else quantity
+		bag_grid.add_child(_bag_item_button(tile))
+		visible_bag_items += 1
 
 
 func _update_bag_empty_hint() -> void:
@@ -1998,7 +2019,14 @@ func _bag_item_button(item: Dictionary) -> Button:
 	var has_quantity := quantity > 0
 	var button := _tile_button("", has_quantity)
 	button.disabled = not has_quantity
-	button.name = "BagItem_%s" % str(item.get("id", "item"))
+	# 한 더미가 여러 칸을 쓰면 타일도 여러 장이다 — 이름이 겹치지 않게 칸 번호를 붙인다.
+	var slot_index := int(item.get("slot_index", 0))
+	var slot_span := maxi(1, int(item.get("slot_span", 1)))
+	button.name = (
+		"BagItem_%s" % str(item.get("id", "item"))
+		if slot_span <= 1
+		else "BagItem_%s_%d" % [str(item.get("id", "item")), slot_index]
+	)
 	button.toggle_mode = true
 	button.button_pressed = (
 		not selected_item.is_empty()
@@ -2008,6 +2036,15 @@ func _bag_item_button(item: Dictionary) -> Button:
 	button.custom_minimum_size = Vector2(82, 74)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.tooltip_text = "%s  x%d" % [str(item.get("title", "")), quantity]
+	# 칸 값을 툴팁에 박아 둔다. "재료 4개 = 4칸"이 어디에도 안 적혀 있어
+	# 가방이 왜 차는지 알 길이 없던 것이 만재 오해의 절반이었다.
+	var slot_cost := int(item.get("slot_cost", slot_span))
+	if slot_cost <= 0:
+		button.tooltip_text += " · 0칸 (쉘터 자산 · 가방을 차지하지 않음)"
+	elif slot_cost > 1:
+		button.tooltip_text += " · %d칸 차지" % slot_cost
+	else:
+		button.tooltip_text += " · 1칸"
 	if not has_quantity:
 		button.tooltip_text += " (보유하지 않음)"
 	elif item_type == "component":
@@ -2027,7 +2064,7 @@ func _bag_item_button(item: Dictionary) -> Button:
 	badge.offset_top = -24
 	badge.offset_right = -6
 	badge.offset_bottom = -4
-	badge.text = "x%d" % quantity
+	badge.text = "x%d" % int(item.get("badge_quantity", quantity))
 	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	badge.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	badge.add_theme_font_override("font", font_ref)

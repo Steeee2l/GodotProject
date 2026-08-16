@@ -35,13 +35,17 @@ func _assert_sealed_landmark(city: Node3D, cell: Vector2i, node_prefix: String) 
 	var box := collision.shape as BoxShape3D
 	assert(box != null)
 	assert(box.size == Vector3(16.0, 2.4, 16.0))
-	assert(matching_bodies[0].collision_layer == 1)
+	# 월드 장애물은 18613c4 에서 레이어 1 -> WORLD_MOVEMENT_LAYER(32) 로 옮겼는데
+	# 이 단언만 옛 값 1에 남아 있어 계속 깨지고 있었다. 상수로 맞춘다.
+	assert(matching_bodies[0].collision_layer == COLLISION_PROFILES.WORLD_MOVEMENT_LAYER)
 
 	var center: Vector3 = city.call("_cell_center", cell)
+	# 레이 마스크도 옛 레이어 1이 아니라 WORLD_MOVEMENT_LAYER 여야 랜드마크
+	# 충돌체를 맞힌다. 마스크가 1이면 아무것도 안 맞아 항상 빈 결과였다.
 	var query := PhysicsRayQueryParameters3D.create(
 		center + Vector3(-8.5, 1.0, 0.0),
 		center + Vector3(8.5, 1.0, 0.0),
-		1
+		COLLISION_PROFILES.WORLD_MOVEMENT_LAYER
 	)
 	var hit := city.get_world_3d().direct_space_state.intersect_ray(query)
 	assert(not hit.is_empty())
@@ -215,7 +219,8 @@ func _run() -> void:
 		assert(get_nodes_in_group("market_handcart").size() >= 1)
 		for handcart in get_nodes_in_group("market_handcart"):
 			assert(handcart is StaticBody3D)
-			assert((handcart as StaticBody3D).collision_layer == 1)
+			# 손수레도 같은 이유로 레이어 1이 아니라 WORLD_MOVEMENT_LAYER 다.
+			assert((handcart as StaticBody3D).collision_layer == COLLISION_PROFILES.WORLD_MOVEMENT_LAYER)
 			assert((handcart as Node).get_node_or_null("HandcartCollision") != null)
 		var has_luxury_sedan := false
 		for vehicle in get_nodes_in_group("vehicle_obstacle"):

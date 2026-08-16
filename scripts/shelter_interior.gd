@@ -238,9 +238,10 @@ func _iron_trainer_position() -> Vector3:
 	return Vector3(7.6, 0.78, _north_module_z() + 3.15)
 
 
-func _juhong_position() -> Vector3:
+func _juhong_entry_position() -> Vector3:
+	# 전령이 들어오고 나가는 문턱 — 하수관 바깥 한 걸음.
 	var pipe := _pipe_position()
-	return Vector3(pipe.x - 3.7, 0.78, pipe.z + 2.7)
+	return Vector3(pipe.x + 2.4, 0.78, pipe.z - 1.6)
 
 
 func _pipe_position() -> Vector3:
@@ -313,13 +314,11 @@ func _ready() -> void:
 	if not unlocks.is_empty():
 		call_deferred("_show_milestone_unlock_banner", unlocks)
 	call_deferred("_open_pending_shelter_story")
-	# 주홍 이벤트가 대기 중이고 사자 이벤트가 없다면, 복귀 직후 등장 시네마틱으로
-	# 이어 준다(암전 → 레터박스 → 접근 → 대화).
-	if (
-		is_instance_valid(juhong_character)
-		and GameState.get_pending_shelter_story_event().is_empty()
-	):
-		call_deferred("_play_juhong_entrance_cinematic")
+	# 주홍은 복귀하면 스스로 찾아온다 — 플레이어가 구석까지 걸어가 말을 걸어야
+	# 했던 예전 흐름은 "왜 저기 서 있지?"로 읽혔다. 사자와의 대화가 걸려 있으면
+	# 그 대화가 끝나는 순간 입구에서 걸어 들어온다.
+	if is_instance_valid(juhong_character):
+		call_deferred("_queue_juhong_entrance_cinematic")
 
 
 func _physics_process(delta: float) -> void:
@@ -679,7 +678,10 @@ func _setup_juhong_story_character() -> void:
 		"down_right",
 		0.0105
 	)
-	juhong_character.position = _juhong_position()
+	# 등장 연출이 입구에서 걸어 들어오는 것으로 바뀌었으니, 그전까지는 방 안에
+	# 서 있으면 안 된다. 입구 밖에 숨겨 두고 시네마틱이 켠다.
+	juhong_character.position = _juhong_entry_position()
+	juhong_character.visible = false
 	add_child(juhong_character)
 	juhong_character.call("set_player_target", player)
 
@@ -787,16 +789,36 @@ func _apply_portrait_camera_aspect(target_camera: Camera3D) -> void:
 	target_camera.keep_aspect = Camera3D.KEEP_WIDTH if portrait else Camera3D.KEEP_HEIGHT
 
 
+func _queue_juhong_entrance_cinematic(remaining_tries: int = 40) -> void:
+	# 사자의 이야기가 열려 있으면 그게 끝날 때까지 기다렸다가 등장한다 —
+	# "쉘터 주인과 이야기하고 있는데 전령이 들어온다"가 유저가 기대한 그림이다.
+	# 대기는 유한하다. 사자 이벤트가 어떤 이유로든 안 열리고 남아 있으면
+	# 전령이 영영 안 들어오는 게 더 나쁘다 — 12초 뒤엔 그냥 들어온다.
+	if not is_instance_valid(juhong_character) or not is_instance_valid(player):
+		return
+	if (
+		remaining_tries > 0
+		and (contract_story_open or not GameState.get_pending_shelter_story_event().is_empty())
+	):
+		get_tree().create_timer(0.3).timeout.connect(
+			_queue_juhong_entrance_cinematic.bind(remaining_tries - 1)
+		)
+		return
+	_play_juhong_entrance_cinematic()
+
+
 func _play_juhong_entrance_cinematic(entrance := true) -> void:
 	# 주홍의 모든 대화를 내러티브 이벤트로 연출한다. entrance=true(복귀 직후)는
-	# 암전 속에 이미 와 있다가 밝아지며 걸어오고, false(직접 말 걸기)는 암전 없이
-	# 레터박스만 내려온 뒤 한 걸음 다가와 말을 시작한다.
+	# 레터박스가 내려오는 사이 입구(하수관)에서 걸어 들어와 플레이어 앞에 서고,
+	# false(직접 말 걸기)는 지금 자리에서 반걸음만 다가와 말을 시작한다.
 	# 예전에는 그냥 구석에 서 있는 NPC라 "뜬금없이 나타나 대사만 하고 사라지는"
 	# 인상이었다.
 	if not is_instance_valid(juhong_character) or not is_instance_valid(player):
 		return
 	if get_node_or_null("JuhongCinematicLayer") != null:
 		return
+	# 입구 밖에 숨겨 뒀던 전령을 여기서 켠다.
+	juhong_character.visible = true
 	var cine := CanvasLayer.new()
 	cine.name = "JuhongCinematicLayer"
 	cine.layer = 92
@@ -822,35 +844,57 @@ func _play_juhong_entrance_cinematic(entrance := true) -> void:
 	bar_bottom.offset_top = 0.0
 	bar_bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cine.add_child(bar_bottom)
-	# 등장이라면 "이미 와 있던 것처럼": 플레이어에게서 5.5m 떨어진 자리에 세워
-	# 두고 밝아진 뒤 2.2m까지, 직접 말 걸었다면 지금 자리에서 반걸음만 다가온다.
+	# 등장이라면 입구(하수관) 바깥에서 실제로 걸어 들어온다. 예전에는 플레이어
+	# 옆으로 순간이동시켜 놓고 반걸음만 옮겼던 탓에 "어디서 왔는지" 모를 등장이었다.
+	if entrance:
+		juhong_character.global_position = _juhong_entry_position()
 	var away := juhong_character.global_position - player.global_position
 	away.y = 0.0
 	if away.length_squared() < 0.01:
 		away = Vector3(1.0, 0.0, 1.0)
 	away = away.normalized()
-	if entrance:
-		juhong_character.global_position = player.global_position + away * 5.5
 	var approach_target := player.global_position + away * (2.2 if entrance else 1.6)
+	approach_target.y = juhong_character.global_position.y
+	# 문턱을 넘어 한 번 꺾여 오는 두 박자 경로 — 직선으로 미끄러지면 걷는 게 아니라
+	# 끌려오는 것처럼 보인다.
+	var mid_target := juhong_character.global_position.lerp(approach_target, 0.55)
+	mid_target += Vector3(-away.z, 0.0, away.x) * 1.1
+	mid_target.y = juhong_character.global_position.y
 	var tween := create_tween()
+	# 레터박스는 "지금보다 빠르게"(유저 요청) — 암전 1.0→0.45s, 바 0.8→0.4s.
 	if entrance:
-		tween.tween_property(black, "color:a", 0.0, 1.0).set_trans(Tween.TRANS_SINE)
+		tween.tween_property(black, "color:a", 0.0, 0.45).set_trans(Tween.TRANS_SINE)
 	else:
 		tween.tween_interval(0.05)
-	tween.parallel().tween_property(bar_top, "offset_bottom", 62.0, 0.8).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.parallel().tween_property(bar_bottom, "offset_top", -62.0, 0.8).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(bar_top, "offset_bottom", 62.0, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(bar_bottom, "offset_top", -62.0, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tween.tween_callback(func() -> void:
 		black.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		if is_instance_valid(juhong_character):
-			juhong_character.call("_play_animation", "walk")
+			# 걷는 동안은 플레이어를 쳐다보는 상시 로직을 끄고 진행 방향을 본다.
+			juhong_character.call("begin_scripted_walk")
 	)
-	tween.tween_interval(0.2)
-	tween.tween_property(
-		juhong_character, "global_position", approach_target, 1.4 if entrance else 0.6
-	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_interval(0.1)
+	if entrance:
+		tween.tween_property(
+			juhong_character, "global_position", mid_target, 1.15
+		).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		tween.tween_property(
+			juhong_character, "global_position", approach_target, 0.95
+		).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	else:
+		tween.tween_property(
+			juhong_character, "global_position", approach_target, 0.6
+		).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	tween.tween_callback(func() -> void:
 		if is_instance_valid(juhong_character):
-			juhong_character.call("_play_animation", "idle")
+			juhong_character.call("end_scripted_walk")
+			# 멈춰 선 뒤에는 다시 플레이어를 마주 본다.
+			if is_instance_valid(player):
+				juhong_character.call(
+					"set_facing_from_world_direction",
+					player.global_position - juhong_character.global_position
+				)
 			_spawn_story_emote(juhong_character, "…", Color("#93a89d"))
 		_open_juhong_story()
 		_finish_juhong_cinematic(cine)
@@ -883,20 +927,24 @@ func _play_juhong_exit() -> void:
 			juhong_character.queue_free()
 		return
 	var leaving := juhong_character
-	var away := leaving.global_position - player.global_position
-	away.y = 0.0
-	if away.length_squared() < 0.01:
-		away = Vector3(1.0, 0.0, 1.0)
-	away = away.normalized()
+	# 들어온 문으로 나간다 — 등장이 입구에서 시작한 이상 퇴장도 그리로 가야 길이 닫힌다.
+	var exit_target := _juhong_entry_position()
+	exit_target.y = leaving.global_position.y
+	if exit_target.distance_to(leaving.global_position) < 1.0:
+		var away := leaving.global_position - player.global_position
+		away.y = 0.0
+		if away.length_squared() < 0.01:
+			away = Vector3(1.0, 0.0, 1.0)
+		exit_target = leaving.global_position + away.normalized() * 6.5
 	_spawn_story_emote(leaving, "…", Color("#93a89d"))
 	var tween := create_tween()
 	tween.tween_interval(0.55)
 	tween.tween_callback(func() -> void:
 		if is_instance_valid(leaving):
-			leaving.call("_play_animation", "walk")
+			leaving.call("begin_scripted_walk")
 	)
 	tween.tween_property(
-		leaving, "global_position", leaving.global_position + away * 6.5, 2.4
+		leaving, "global_position", exit_target, 2.4
 	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 	# 걸어가는 마지막 1초 동안 어둠에 녹아든다.
 	var fade := create_tween()
@@ -3141,7 +3189,8 @@ func _update_nearby_station() -> void:
 		if iron_distance <= iron_radius and iron_distance < nearest_distance:
 			nearest = "iron_trainer"
 			nearest_distance = iron_distance
-	if is_instance_valid(juhong_character):
+	# 등장 연출 전까지는 입구 밖에 숨어 있다 — 보이지 않는 상대에게 말을 걸 순 없다.
+	if is_instance_valid(juhong_character) and juhong_character.visible:
 		var juhong_distance := player.global_position.distance_to(juhong_character.global_position)
 		var juhong_radius := (
 			float(juhong_character.call("get_interaction_radius"))
@@ -4665,6 +4714,19 @@ func _input(event: InputEvent) -> void:
 			_unlock_all_facilities_debug()
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
+		# 운영 독을 가장 먼저 본다. 가방 버튼과 독은 둘 다 우상단에 있어 화면이
+		# 좁아지면 사각형이 겹치는데, 가방 판정이 먼저였던 탓에 독의 윗칸을
+		# 눌러도 가방만 열렸다 — 가로에서 창고에 못 들어가던 원인 중 하나.
+		if (
+			touch.pressed
+			and not _ui_blocks_player()
+			and ops_console != null
+			and ops_console.handle_touch(touch.position)
+		):
+			if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
+				Input.vibrate_handheld(16)
+			get_viewport().set_input_as_handled()
+			return
 		if touch.pressed and _is_inventory_button_at(touch.position):
 			inventory_ui.call("toggle")
 			get_viewport().set_input_as_handled()
@@ -4738,10 +4800,7 @@ func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
 		if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
 			Input.vibrate_handheld(16)
 		return true
-	if ops_console != null and ops_console.handle_touch(touch.position):
-		if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
-			Input.vibrate_handheld(16)
-		return true
+	# 운영 독은 _input이 이 함수보다 먼저 직접 처리한다(가방 버튼과의 겹침 때문).
 	return false
 
 

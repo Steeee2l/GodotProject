@@ -42,8 +42,58 @@ func attach(owner_node: Node) -> void:
 	host = owner_node
 
 
+const STORY_CARGO_ID := "seoul_line3_relief_core"
+# 화물을 이미 회수·정산한 뒤에도 같은 신호가 매 판 같은 문구로 뜨던 문제(유저 신고).
+# 스토리가 끝난 도시에서 같은 사건이 무한 반복되면 그건 사건이 아니라 배경이 된다.
+const JACKPOT_REPEAT_CHANCE := 0.35
+
+
+func is_story_cargo_recovered() -> bool:
+	return GameState.recovered_story_cargo_ids.has(STORY_CARGO_ID)
+
+
+func _jackpot_signal_label() -> String:
+	# 지도 마커 문구는 스토리 단계를 따라간다. 매번 "불명 격리 신호"면
+	# 플레이어는 이야기가 한 발도 안 나갔다고 읽는다.
+	if is_story_cargo_recovered():
+		return "잔존 수송 신호"
+	match int(GameState.subway_story_stage):
+		0:
+			return "불명 격리 신호"
+		1:
+			return "지하선 3번 · 격리 수송 기록"
+		2:
+			return "봉인 구역 · 수송 코어 신호"
+		_:
+			return "지하선 잔존 신호"
+
+
+func _jackpot_step_title() -> String:
+	if is_story_cargo_recovered():
+		return "잔존 신호 · 회수 0/4"
+	return "특별 기회 · 격리 신호 0/4"
+
+
+func _should_spawn_jackpot() -> bool:
+	# 아직 회수 전이면 본편 경로다 — 반드시 뜬다.
+	if not is_story_cargo_recovered():
+		return true
+	# 회수 뒤에는 '가끔 잡히는 잔존 신호'로 격이 내려간다. 판마다 같은 씨앗을
+	# 쓰면 같은 판에서 늘 같은 결과가 나오도록 map_seed·raid_serial에 묶는다.
+	var repeat_random := RandomNumberGenerator.new()
+	repeat_random.seed = GameState.map_seed + GameState.raid_serial * 104729
+	return repeat_random.randf() < JACKPOT_REPEAT_CHANCE
+
+
 func _setup_jackpot_event(world: ProceduralCityMap) -> void:
 	host.hud.build_jackpot_hud()
+	if GameState.raid_special_cargo.is_empty() and not _should_spawn_jackpot():
+		# 신호가 안 잡힌 판은 빈손으로 두지 않는다 — 그 자리를 반복 가능한
+		# 수송대 사건이 대신한다. 지도에서 사라진 만큼 다른 것이 채워야 한다.
+		if is_instance_valid(host.hud.jackpot_hud):
+			host.hud.jackpot_hud.visible = false
+		host.incidents._spawn_dynamic_convoy_incident(world)
+		return
 	if not GameState.raid_special_cargo.is_empty():
 		jackpot_state = "carried"
 		_attach_jackpot_cargo_visual()
@@ -79,11 +129,13 @@ func _setup_jackpot_event(world: ProceduralCityMap) -> void:
 		0.95
 	)
 	_set_jackpot_step(
-		"특별 기회 · 격리 신호 0/4",
+		_jackpot_step_title(),
 		"TAB 지도 확인 → 주황 신호의 단말을 조사하세요",
 		0
 	)
-	call_deferred("_register_jackpot_map_marker", "jackpot_clue", clue_position, "불명 격리 신호")
+	call_deferred(
+		"_register_jackpot_map_marker", "jackpot_clue", clue_position, _jackpot_signal_label()
+	)
 
 
 func _set_jackpot_step(title: String, detail: String, step: int) -> void:
@@ -371,9 +423,20 @@ func _restore_jackpot_cargo_presentation() -> void:
 
 
 func _settle_jackpot_cargo() -> Dictionary:
+	# 정산 전에 물어봐야 한다 — complete_story_cargo가 회수 목록에 id를 넣어 버리면
+	# 첫 회수와 재회수를 구분할 수 없다.
+	var repeat_recovery := is_story_cargo_recovered()
 	var cargo := GameState.complete_story_cargo()
 	if cargo.is_empty():
 		return {"xp": 0, "summary": "특별 화물 없음"}
+	if repeat_recovery:
+		# 두 번째부터는 이야기가 아니라 부업이다. 보상도 그만큼만.
+		GameState.canned_food += 3
+		GameState.churu += 1
+		return {
+			"xp": 90,
+			"summary": "잔존 수송 코어 개봉 · 통조림 +3 · 츄르 +1 · XP +90",
+		}
 	GameState.canned_food += 8
 	GameState.churu += 1
 	GameState.add_mod_component("scope_lens", 1)

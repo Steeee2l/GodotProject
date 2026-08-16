@@ -35,6 +35,12 @@ var sprite: AnimatedSprite3D
 var nameplate: Label3D
 var roleplate: Label3D
 var _last_animation := ""
+# 현재 재생 중인 동작. 방향이 바뀔 때마다 무조건 idle로 되돌리면 연출 중 걸어오는
+# 도중에 사지가 얼어붙는다 — 방향만 갈아 끼우고 동작은 유지한다.
+var _current_motion := "idle"
+# 연출용 이동 중에는 플레이어 쪽을 쳐다보는 상시 로직을 끄고, 실제 진행 방향을 본다.
+var _scripted_walk := false
+var _scripted_previous_position := Vector3.ZERO
 
 
 func configure(
@@ -69,6 +75,14 @@ func _ready() -> void:
 
 
 func _physics_process(_delta: float) -> void:
+    if _scripted_walk:
+        # 걸어오는 동안은 "가는 쪽"을 본다. 그래야 옆모습·뒷모습이 제대로 나온다.
+        var step: Vector3 = global_position - _scripted_previous_position
+        step.y = 0.0
+        _scripted_previous_position = global_position
+        if step.length_squared() > 0.000004:
+            set_facing_from_world_direction(step)
+        return
     if not is_instance_valid(player_target):
         return
     var offset: Vector3 = player_target.global_position - global_position
@@ -80,6 +94,22 @@ func _physics_process(_delta: float) -> void:
 
 func set_player_target(target: Node3D) -> void:
     player_target = target
+
+
+func begin_scripted_walk() -> void:
+    # 시네마틱이 global_position을 트윈으로 끌고 가는 동안 호출한다.
+    _scripted_walk = true
+    _scripted_previous_position = global_position
+    play_motion("walk")
+
+
+func end_scripted_walk() -> void:
+    _scripted_walk = false
+    play_motion("idle")
+
+
+func play_motion(motion: String) -> void:
+    _play_animation(motion)
 
 
 func set_facing_from_world_direction(direction: Vector3) -> void:
@@ -95,7 +125,7 @@ func set_facing_from_world_direction(direction: Vector3) -> void:
     if next_direction == facing_direction:
         return
     facing_direction = next_direction
-    _play_animation("idle")
+    _play_animation(_current_motion)
 
 
 func get_interaction_prompt() -> String:
@@ -171,6 +201,7 @@ func _build_sprite_frames() -> SpriteFrames:
 
 
 func _play_animation(motion: String) -> void:
+    _current_motion = motion
     if not is_instance_valid(sprite):
         return
     var animation_name := "%s_%s" % [motion, facing_direction]

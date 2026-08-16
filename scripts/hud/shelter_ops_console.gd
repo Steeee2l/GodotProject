@@ -190,7 +190,11 @@ func apply_layout(safe: Vector4) -> void:
 		# 가방 버튼(우상단) 아래에 세로 레일로 붙는다. 시야 중앙은 비워 둔다.
 		dock.set_anchors_preset(Control.PRESET_TOP_RIGHT, true)
 		dock.offset_right = -14.0 - safe.z
-		dock.offset_left = dock.offset_right - rail_width
+		# 컨테이너의 실제 최소 폭이 rail_width를 덮어쓴다(패널 여백 포함 144px).
+		# offset만 rail_width로 잡아 두면 독이 오른쪽으로 16px 삐져나가 마지막
+		# 버튼 끝이 화면 밖(노치 아래)으로 밀린다 — 실측으로 확인한 지점.
+		var rail_span := maxf(rail_width, dock.get_combined_minimum_size().x)
+		dock.offset_left = dock.offset_right - rail_span
 		# 컨테이너의 실제 최소 높이가 내 계산을 덮어쓴다(자식 min size 합).
 		# 계산값 대신 실측 최소 높이로 바닥을 맞춰야 무기 카드를 안 넘는다.
 		var min_height := maxf(
@@ -279,6 +283,8 @@ func _refresh_fever_card() -> void:
 
 
 func open_facility(facility_id: String) -> void:
+	# 탭 한 번이 터치 라우터와 Button.pressed로 두 번 도착해도 안전하다 — 첫 호출이
+	# 모달을 띄우는 순간 _ui_blocks_player()가 참이 되어 두 번째가 이 줄에서 걸린다.
 	if host == null or bool(host.call("_ui_blocks_player")):
 		return
 	if not GameState.is_shelter_facility_unlocked(facility_id):

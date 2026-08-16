@@ -1767,10 +1767,10 @@ func get_raid_bag_used_slots() -> int:
 			get_backpack_storage_count("mod", str(mod_id))
 		)
 	for weapon_id in weapon_inventory.keys():
+		# 장착 중인 1정은 몸에 있는 것이지 가방에 있는 게 아니다 — 그 차감은
+		# get_backpack_storage_count가 이미 한다. 여기서 한 번 더 빼면 같은 총을
+		# 2정 들고 있을 때 예비 1정이 공짜가 돼 가방이 용량 너머로 부푼다.
 		var weapon_count := get_backpack_storage_count("weapon", str(weapon_id))
-		# 장착 중인 1정은 몸에 있는 것이지 가방에 있는 게 아니다. 슬롯을 먹지 않는다.
-		if has_ak and str(weapon_id) == equipped_weapon_id:
-			weapon_count = maxi(0, weapon_count - 1)
 		used += get_raid_item_slot_cost("weapon", str(weapon_id), weapon_count)
 	for equipment_id in equipment_inventory.keys():
 		used += get_raid_item_slot_cost(
@@ -1807,7 +1807,10 @@ func get_raid_items_added_slot_delta(items: Array[Dictionary]) -> int:
 		var amount: int = maxi(0, int(item.get("amount", 0)))
 		if item_type.is_empty() or item_id.is_empty() or amount <= 0:
 			continue
-		if item_type in ["weapon", "equipment"]:
+		# 개수만큼 칸을 먹는 부류(무기·장비·재료)는 한 상자에서 여러 개가 나와도
+		# 개수만큼 자리가 필요하다. component가 빠져 있어 상자 루팅이 칸을 덜 세고,
+		# 그 결과 "들어간다"고 판정한 뒤 실제로는 가방이 넘치던 어긋남을 막는다.
+		if item_type in ["weapon", "equipment", "component"]:
 			added_slots += amount
 			continue
 		if item_type == "special_cargo":

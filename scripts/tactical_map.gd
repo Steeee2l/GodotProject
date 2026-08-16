@@ -228,6 +228,16 @@ func _input(event: InputEvent) -> void:
 		if key in [KEY_TAB, KEY_ESCAPE]:
 			close()
 			get_viewport().set_input_as_handled()
+		return
+	# 닫기 버튼을 터치로 누르면 아무 일도 안 나던 문제(유저 신고). Button은
+	# InputEventScreenTouch를 처리하지 않고, Godot의 마우스 에뮬레이션은 첫
+	# 손가락만 따라간다 — 조이스틱을 잡은 손가락이 아직 눌린 채면 두 번째
+	# 손가락의 탭은 에뮬레이션도 GUI 포커스도 못 받아 통째로 사라진다.
+	# 그래서 닫기 판정을 GUI가 아니라 여기(_input)에서 직접 한다.
+	if event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed:
+		if _is_close_button_point((event as InputEventScreenTouch).position):
+			close()
+			get_viewport().set_input_as_handled()
 
 
 func _exit_tree() -> void:
@@ -250,8 +260,26 @@ func _process(delta: float) -> void:
 		queue_redraw()
 
 
+func _is_close_button_point(point: Vector2) -> bool:
+	if not is_instance_valid(close_button) or not close_button.visible:
+		return false
+	# 손가락은 픽셀 단위로 정확하지 않다 — 버튼 테두리 바깥 14px까지 닫기로 친다.
+	return close_button.get_rect().grow(14.0).has_point(point)
+
+
 func _gui_input(event: InputEvent) -> void:
-	if not visible or last_map_rect.size.x <= 0.0 or last_map_size <= 0.0:
+	if not visible:
+		return
+	# 닫기 버튼을 '터치'로 누르면 아무 일도 안 나던 문제(유저 신고).
+	# Button은 InputEventScreenTouch를 처리하지 않고, 마우스 에뮬레이션은 첫
+	# 손가락만 따라간다 — 조이스틱을 잡았던 손가락이 걸려 있으면 탭이 통째로
+	# 사라진다. 그래서 닫기 판정을 지도 본체가 직접 한다. 표식 찍기보다 먼저.
+	if event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed:
+		if _is_close_button_point((event as InputEventScreenTouch).position):
+			close()
+			accept_event()
+			return
+	if last_map_rect.size.x <= 0.0 or last_map_size <= 0.0:
 		return
 	var pointer_position := Vector2.ZERO
 	var should_mark := false
@@ -272,6 +300,9 @@ func _gui_input(event: InputEvent) -> void:
 			should_clear = true
 		else:
 			should_mark = true
+	# 닫기 버튼 자리에는 표식을 찍지 않는다 — 닫으려다 표식만 남던 오조작 방지.
+	if (should_mark or should_clear) and _is_close_button_point(pointer_position):
+		return
 	if should_clear:
 		manual_marker_position = Vector3.INF
 		queue_redraw()
