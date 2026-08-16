@@ -183,6 +183,7 @@ var mobile_context_button: Button
 # 레이아웃이 결정한다. 둘을 섞으면 생성 시점 좌표에 유령 버튼이 남는다.
 var mobile_context_wants_visible := false
 var mobile_medkit_button: Button
+var mobile_can_button: Button
 var mobile_reload_button: Button
 var mobile_map_button: Button
 var fire_cooldown := 0.0
@@ -2430,6 +2431,8 @@ func _layout_mobile_utility_row() -> float:
 			mobile_medkit_button.visible = not (
 				_is_inventory_open() or _is_tactical_map_open() or lore_reader.is_open()
 			)
+		if mobile_can_button != null and mobile_medkit_button != null:
+			mobile_can_button.visible = mobile_medkit_button.visible
 		return 0.0
 	var viewport_size := get_viewport().get_visible_rect().size
 	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
@@ -2856,6 +2859,15 @@ func _build_mobile_utility_buttons(font: Font) -> void:
 	# 여기서 visible=true를 박아, 레이아웃이 소유하지 않는 데스크톱/전환 상황에
 	# 버튼이 생성 좌표(화면 하단)에 떠 있었다.
 	mobile_medkit_button.visible = false
+
+	# 통조림 소지·투척 안내(데스크톱 전용) — 몇 개 있는지 보여야 던질지 말지
+	# 판단이 선다. 터치는 can_throw 시스템의 전용 버튼이 담당한다.
+	mobile_can_button = _make_mobile_utility_button_left("CanInfoButton", "CAN", "food", font)
+	mobile_can_button.offset_left = -122
+	mobile_can_button.offset_right = -24
+	if not touch_enabled:
+		mobile_can_button.pressed.connect(func() -> void: can_throw.toggle_aim())
+	mobile_can_button.visible = false
 	_update_medkit_button()
 
 
@@ -2919,6 +2931,12 @@ func _update_medkit_button() -> void:
 		mobile_medkit_button.tooltip_text = "체력이 이미 가득 찼습니다"
 	else:
 		mobile_medkit_button.tooltip_text = "구급약 사용 (Shift)"
+	if mobile_can_button != null:
+		mobile_can_button.text = "T\n통조림 x%d" % GameState.canned_food
+		mobile_can_button.disabled = GameState.canned_food <= 0
+		mobile_can_button.tooltip_text = (
+			"통조림이 없습니다" if GameState.canned_food <= 0 else "통조림 투척 조준 (T) — 적을 유인합니다"
+		)
 
 
 func _on_mobile_context_button_down() -> void:
