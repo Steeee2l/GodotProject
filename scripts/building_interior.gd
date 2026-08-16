@@ -20,6 +20,11 @@ const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_len
 const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/magazine_spring.png")
 const CAT_ANIMATION_ROOT := "res://assets/characters/cat_8way"
 const CAT_ROLL_ANIMATION_ROOT := "res://assets/characters/cat_roll"
+const CAT_MELEE_ANIMATION_ROOT := "res://assets/characters/cat_melee"
+const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
+# raid_hud.gd는 GameState 식별자를 직접 쓰므로 preload하면 오토로드 등록 전에
+# 컴파일되는 헤드리스 테스트에서 깨진다 — 런타임 load()로 늦게 붙인다.
+const RAID_HUD_PATH := "res://scripts/hud/raid_hud.gd"
 const CORRIDOR_TEXTURE_PATH := "res://assets/interiors/office_dungeon/corridor_floor_tile_v1.png"
 const WALL_TEXTURE_PATH := "res://assets/interiors/office_dungeon/office_wall_panel_v1.png"
 const CAT_DIRECTION_STATES := {
@@ -38,9 +43,20 @@ const ROLL_STAMINA_COST := 35.0
 const ROLL_STAMINA_RECOVERY := 28.0
 const ROLL_START_SPEED := 42.0
 const ROLL_END_SPEED := 4.4
-const MELEE_ATTACK_RANGE := 1.65
-const MELEE_ATTACK_DAMAGE := 34
-const MELEE_ATTACK_COOLDOWN := 0.62
+# 근접 전투 수치·연출은 필드(main.gd)와 완전 동일 — 건물 안이라고 배트가
+# 짧아질 이유가 없다(유저: "건물 정보 제외 전부 필드와 동일해야").
+const MELEE_ATTACK_RANGE := 2.2
+const MELEE_ATTACK_DAMAGE := 38
+const MELEE_ATTACK_COOLDOWN := 0.72
+const MELEE_FRAME_COUNT := 4
+const MELEE_ANIMATION_FPS := 8.0
+const MELEE_WINDUP_DURATION := 0.18
+const MELEE_ANIMATION_DURATION := 0.5
+const MELEE_FAN_HALF_ANGLE_DEG := 56.0
+const MELEE_FAN_SEGMENTS := 24
+# 필드와 동일한 카메라 상수(main.gd BASE_CAMERA_SIZE / CAMERA_DIAGONAL_OFFSET).
+const BASE_CAMERA_SIZE := 28.0
+const CAMERA_DIAGONAL_OFFSET := 13.5
 const MOBILE_AIM_ASSIST_MAX_DISTANCE := 30.0
 const MOBILE_AIM_ASSIST_HALF_ANGLE_DEG := 55.0
 const FATIGUE_MAX := 100.0
@@ -57,7 +73,6 @@ var player: CharacterBody3D
 var survivor: AnimatedSprite3D
 var camera: Camera3D
 var prompt_label: Label
-var status_label: Label
 var floor_label: Label
 var health_bar: ProgressBar
 var ammo_label: Label
@@ -102,6 +117,24 @@ var fire_button_held := false
 var aim_world_position := Vector3.ZERO
 var laser_aim_held := false
 var melee_attack_cooldown := 0.0
+# 필드 melee 스윙 상태기 이식(main.gd) — 예비동작→타격 판정→마무리.
+var melee_bat_sprite: Sprite3D
+var melee_attack_active := false
+var melee_attack_elapsed := 0.0
+var melee_attack_direction := Vector3.ZERO
+var melee_hit_resolved := false
+var melee_arc_texture: ImageTexture
+var melee_fan_indicator: MeshInstance3D
+var melee_fan_fill_material: StandardMaterial3D
+var melee_fan_rim_material: StandardMaterial3D
+var melee_fan_tween: Tween
+var camera_shake_time := 0.0
+var camera_shake_strength := 0.0
+var shake_random := RandomNumberGenerator.new()
+# 필드 HUD 모듈(RaidHud) — 토스트 스택만 공유해 같은 위치·같은 스타일의
+# 알림을 쓴다. (전체 공유 리팩터링 대신 구성 통일 우선. 타입은 위 컴파일
+# 순서 문제로 동적으로 둔다.)
+var hud
 var aim_reticle: Control
 var laser_glow_layers: Array[MeshInstance3D] = []
 var laser_glow_meshes: Array[BoxMesh] = []
@@ -125,6 +158,7 @@ var fatigue := 0.0
 var fatigue_panel: PanelContainer
 var fatigue_bar: ProgressBar
 var fatigue_label: Label
+var fatigue_fill_style: StyleBoxFlat
 var collision_debug_enabled := false
 var auto_paused_for_background := false
 @onready var BuildingRunState: Node = get_node("/root/BuildingRunState")
@@ -145,6 +179,7 @@ func _ready() -> void:
 	_build_player()
 	_setup_weapon()
 	_setup_weapon_visual()
+	_setup_melee_weapon()
 	_setup_aim_laser()
 	fatigue = clampf(float(GameState.fatigue), 0.0, FATIGUE_MAX)
 	_build_interface()
@@ -163,6 +198,9 @@ func _physics_process(delta: float) -> void:
 		return
 	fire_cooldown = maxf(0.0, fire_cooldown - delta)
 	melee_attack_cooldown = maxf(0.0, melee_attack_cooldown - delta)
+	camera_shake_time = maxf(0.0, camera_shake_time - delta)
+	camera_shake_strength = move_toward(camera_shake_strength, 0.0, delta * 8.0)
+	_update_melee_attack(delta)
 	if melee_button != null:
 		melee_button.disabled = melee_attack_cooldown > 0.0
 	if dash_button != null:
@@ -191,6 +229,9 @@ func _physics_process(delta: float) -> void:
 	_update_fatigue(delta, direction.length_squared() > 0.01)
 	if roll_active:
 		_update_roll(delta)
+	elif melee_attack_active:
+		# 필드와 동일: 스윙 중에는 이동해도 방향·모션은 melee가 유지된다.
+		player.velocity = Vector3.ZERO
 	elif direction.length_squared() > 0.01:
 		var movement_speed := MOVE_SPEED * _get_fatigue_speed_multiplier()
 		if weapon_reloading:
@@ -210,7 +251,6 @@ func _physics_process(delta: float) -> void:
 	_update_aim_reticle()
 	_update_visibility_fog()
 	_update_enemy_visibility()
-	status_label.modulate.a = move_toward(status_label.modulate.a, 0.0, delta * 0.16)
 
 
 func _input(event: InputEvent) -> void:
@@ -428,11 +468,23 @@ func _build_environment() -> void:
 	camera = Camera3D.new()
 	camera.name = "BuildingCamera"
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.size = 21.5
-	camera.position = Vector3(14.5, 16.5, 14.5)
+	# 필드(main.gd)와 동일한 세팅 이식: 줌 배율(size 28)과 4배 후퇴 거리.
+	# 직교 카메라는 거리와 무관하게 구도가 같고, 4배 뒤로 빼는 이유는 세로
+	# 모드에서 화면 하단이 near 평면 뒤로 넘어가 검게 잘리는 것을 막기 위해서다.
+	camera.size = BASE_CAMERA_SIZE
+	camera.position = Vector3.ONE * (CAMERA_DIAGONAL_OFFSET * 4.0)
 	add_child(camera)
 	camera.look_at(Vector3.ZERO)
 	camera.current = true
+	# 카메라가 멀어지면 3D 오디오가 다 멀어진다 — 리스너는 예전 카메라 자리
+	# (플레이어 근처)에 남겨 소리 거리감을 보존한다. 필드와 동일.
+	var audio_listener := AudioListener3D.new()
+	audio_listener.name = "InteriorAudioListener"
+	camera.add_child(audio_listener)
+	audio_listener.position = Vector3(
+		0.0, 0.0, -(CAMERA_DIAGONAL_OFFSET * 3.0 * sqrt(3.0))
+	)
+	audio_listener.make_current()
 	var light := DirectionalLight3D.new()
 	light.name = "InteriorKeyLight"
 	light.rotation_degrees = Vector3(-57, -42, 0)
@@ -504,7 +556,7 @@ func _setup_weapon_visual() -> void:
 func _update_weapon_visual() -> void:
 	if weapon_sprite == null:
 		return
-	weapon_sprite.visible = _has_equipped_firearm() and weapon_sprite.texture != null and not roll_active
+	weapon_sprite.visible = _has_equipped_firearm() and weapon_sprite.texture != null and not roll_active and not melee_attack_active
 	if not weapon_sprite.visible:
 		return
 	var screen_vectors := {
@@ -523,9 +575,16 @@ func _update_weapon_visual() -> void:
 func _build_interface() -> void:
 	var touch_enabled := DisplayServer.is_touchscreen_available()
 	var canvas := CanvasLayer.new()
-	canvas.name = "BuildingHUD"
+	# 필드와 같은 이름 "HUD" — RaidHud 모듈(토스트 스택)이 이 이름으로 찾는다.
+	canvas.name = "HUD"
 	canvas.layer = 3
 	add_child(canvas)
+	# 필드 HUD의 토스트 스택을 그대로 공유 — 같은 위치·같은 스타일의 알림.
+	var raid_hud_script := load(RAID_HUD_PATH) as GDScript
+	if raid_hud_script != null and raid_hud_script.can_instantiate():
+		hud = raid_hud_script.new()
+		hud.attach(self)
+		hud._build_toast_stack()
 	aim_reticle = AIM_RETICLE_SCRIPT.new()
 	aim_reticle.name = "AimReticle"
 	canvas.add_child(aim_reticle)
@@ -604,16 +663,15 @@ func _build_interface() -> void:
 	building_info_label.add_theme_font_size_override("font_size", 15)
 	building_info_label.modulate = Color("#d6d2bd")
 	canvas.add_child(building_info_label)
+	# 필드 유틸리티 버튼과 같은 원형 프리셋(HudStyle.style_mobile_action).
 	medkit_button = Button.new()
 	medkit_button.name = "MedkitButton"
 	medkit_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	medkit_button.position = Vector2(22, -96)
-	medkit_button.size = Vector2(112, 74)
-	medkit_button.icon = UI_ICONS.get_icon("medkit", 34, Color("#f3eee1"))
-	medkit_button.expand_icon = true
-	medkit_button.add_theme_constant_override("icon_max_width", 34)
-	medkit_button.add_theme_font_override("font", FONT)
-	medkit_button.add_theme_font_size_override("font_size", 12)
+	medkit_button.size = Vector2(98, 76)
+	medkit_button.icon = UI_ICONS.get_icon("medkit", 26, Color("#dbe8df"))
+	medkit_button.z_index = 90
+	HudStyle.style_mobile_action(medkit_button, HudStyle.GREEN, 26)
 	if not touch_enabled:
 		medkit_button.pressed.connect(_use_quick_medkit)
 	canvas.add_child(medkit_button)
@@ -626,26 +684,18 @@ func _build_interface() -> void:
 	prompt_label.add_theme_font_size_override("font_size", 18)
 	prompt_label.modulate = Color("#efe1a4")
 	canvas.add_child(prompt_label)
-	status_label = Label.new()
-	status_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	status_label.position = Vector2(-330, 22)
-	status_label.size = Vector2(660, 40)
-	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status_label.add_theme_font_override("font", FONT)
-	status_label.add_theme_font_size_override("font_size", 17)
-	status_label.modulate = Color("#d8e4dd")
-	canvas.add_child(status_label)
 	_build_shared_combat_hud(canvas)
 	_build_floor_clear_banner(canvas)
+	# 우하단 터치 버튼: 필드(raid_hud/main)와 같은 원형 프리셋·크기(80x80)·배치.
 	fire_button = Button.new()
 	fire_button.name = "FireButton"
 	fire_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	fire_button.position = Vector2(-142, -128)
-	fire_button.size = Vector2(104, 82)
+	fire_button.position = Vector2(-108, -104)
+	fire_button.size = Vector2(80, 80)
 	fire_button.text = "발사"
 	fire_button.icon = UI_ICONS.get_icon("weapon", 36, Color("#ffd29a"))
-	fire_button.expand_icon = true
-	fire_button.add_theme_font_override("font", FONT)
+	fire_button.z_index = 90
+	HudStyle.style_mobile_action(fire_button, Color("#e08a58"), 38, true, HudStyle.TYPE_HEADING)
 	if not touch_enabled:
 		fire_button.button_down.connect(func():
 			fire_button_held = true
@@ -657,61 +707,61 @@ func _build_interface() -> void:
 	melee_button = Button.new()
 	melee_button.name = "MeleeButton"
 	melee_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	melee_button.position = Vector2(-260, -128)
-	melee_button.size = Vector2(104, 82)
+	melee_button.position = Vector2(-198, -104)
+	melee_button.size = Vector2(80, 80)
 	melee_button.text = "근접"
-	melee_button.icon = UI_ICONS.get_icon("melee", 36, Color("#dbe9df"))
-	melee_button.expand_icon = true
-	melee_button.add_theme_font_override("font", FONT)
+	melee_button.icon = UI_ICONS.get_icon("melee", 34, Color("#dbe9df"))
+	melee_button.z_index = 90
+	HudStyle.style_mobile_action(melee_button, HudStyle.LINE_FOCUS, 36, false, HudStyle.TYPE_BODY)
 	if not touch_enabled:
 		melee_button.pressed.connect(_try_melee_forward)
 	canvas.add_child(melee_button)
 	interact_button = Button.new()
 	interact_button.name = "InteractButton"
 	interact_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	interact_button.position = Vector2(-496, -128)
-	interact_button.size = Vector2(104, 82)
+	interact_button.position = Vector2(-378, -104)
+	interact_button.size = Vector2(80, 80)
 	interact_button.text = "상호작용"
-	interact_button.icon = UI_ICONS.get_icon("interact", 36, Color("#c7e2d4"))
-	interact_button.expand_icon = true
-	interact_button.add_theme_font_override("font", FONT)
+	interact_button.icon = UI_ICONS.get_icon("interact", 26, Color("#c7e2d4"))
+	interact_button.z_index = 90
+	HudStyle.style_mobile_action(interact_button, HudStyle.LINE_FOCUS, 26)
 	if not touch_enabled:
 		interact_button.pressed.connect(_interact)
 	canvas.add_child(interact_button)
 	dash_button = Button.new()
 	dash_button.name = "DashButton"
 	dash_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	dash_button.position = Vector2(-378, -128)
-	dash_button.size = Vector2(104, 82)
-	dash_button.text = "대시"
-	dash_button.icon = UI_ICONS.get_icon("dash", 36, Color("#d8e5de"))
-	dash_button.expand_icon = true
-	dash_button.add_theme_font_override("font", FONT)
+	dash_button.position = Vector2(-288, -104)
+	dash_button.size = Vector2(80, 80)
+	dash_button.text = "회피"
+	dash_button.icon = UI_ICONS.get_icon("dash", 34, HudStyle.TEXT)
+	dash_button.z_index = 90
+	HudStyle.style_mobile_action(dash_button, Color("#82a8b8"), 36, false, HudStyle.TYPE_BODY)
 	if not touch_enabled:
 		dash_button.pressed.connect(_try_start_roll)
 	canvas.add_child(dash_button)
 	reload_button = Button.new()
 	reload_button.name = "ReloadButton"
 	reload_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	reload_button.position = Vector2(-260, -218)
-	reload_button.size = Vector2(104, 76)
+	reload_button.position = Vector2(-108, -194)
+	reload_button.size = Vector2(80, 80)
 	reload_button.text = "장전"
-	reload_button.icon = UI_ICONS.get_icon("reload", 34, Color("#d8e5de"))
-	reload_button.expand_icon = true
-	reload_button.add_theme_font_override("font", FONT)
+	reload_button.icon = UI_ICONS.get_icon("reload", 26, Color("#dbe8df"))
+	reload_button.z_index = 90
+	HudStyle.style_mobile_action(reload_button, HudStyle.LINE_FOCUS, 26)
 	if not touch_enabled:
 		reload_button.pressed.connect(_start_reload)
 	canvas.add_child(reload_button)
 	flashlight_button = Button.new()
 	flashlight_button.name = "FlashlightButton"
 	flashlight_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	flashlight_button.position = Vector2(-142, -218)
-	flashlight_button.size = Vector2(104, 76)
+	flashlight_button.position = Vector2(-198, -194)
+	flashlight_button.size = Vector2(80, 80)
 	flashlight_button.text = "후레쉬"
-	flashlight_button.icon = UI_ICONS.get_icon("flashlight", 34, Color("#e8df9f"))
-	flashlight_button.expand_icon = true
+	flashlight_button.icon = UI_ICONS.get_icon("flashlight", 26, Color("#e8df9f"))
 	flashlight_button.toggle_mode = true
-	flashlight_button.add_theme_font_override("font", FONT)
+	flashlight_button.z_index = 90
+	HudStyle.style_mobile_action(flashlight_button, HudStyle.LINE_FOCUS, 26)
 	if not touch_enabled:
 		flashlight_button.toggled.connect(_on_flashlight_toggled)
 	canvas.add_child(flashlight_button)
@@ -780,77 +830,83 @@ func _build_shared_combat_hud(canvas: CanvasLayer) -> void:
 	player_world_health_bar.add_child(player_world_health_fill)
 	canvas.add_child(player_world_health_bar)
 
+	# 필드(raid_hud.gd)의 컴팩트 무기 카드와 같은 수치·프리셋: 204x56,
+	# 작은 총 그림 + [이름·탄약명 / 잔탄 통합 표기] 2줄. 내구도는 그림 색으로.
 	equipment_panel = PanelContainer.new()
 	equipment_panel.name = "EquipmentPanel"
 	equipment_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	equipment_panel.offset_left = -342
-	equipment_panel.offset_top = -136
-	equipment_panel.offset_right = -22
-	equipment_panel.offset_bottom = -24
+	equipment_panel.offset_left = -224
+	equipment_panel.offset_top = -180
+	equipment_panel.offset_right = -20
+	equipment_panel.offset_bottom = -124
 	equipment_panel.z_index = 30
 	equipment_panel.add_theme_stylebox_override(
 		"panel",
-		_make_panel_style(Color(0.012, 0.018, 0.019, 0.96), Color("#8da997"), 8)
+		HudStyle.panel(HudStyle.INK, Color("#8da997"), 7)
 	)
 	canvas.add_child(equipment_panel)
 	var equipment_margin := MarginContainer.new()
-	equipment_margin.add_theme_constant_override("margin_left", 14)
-	equipment_margin.add_theme_constant_override("margin_top", 12)
-	equipment_margin.add_theme_constant_override("margin_right", 14)
-	equipment_margin.add_theme_constant_override("margin_bottom", 12)
+	equipment_margin.add_theme_constant_override("margin_left", 10)
+	equipment_margin.add_theme_constant_override("margin_top", 6)
+	equipment_margin.add_theme_constant_override("margin_right", 12)
+	equipment_margin.add_theme_constant_override("margin_bottom", 6)
 	equipment_panel.add_child(equipment_margin)
 	var equipment_row := HBoxContainer.new()
-	equipment_row.add_theme_constant_override("separation", 13)
+	equipment_row.add_theme_constant_override("separation", 10)
+	equipment_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	equipment_margin.add_child(equipment_row)
 	equipment_weapon_image = TextureRect.new()
-	equipment_weapon_image.custom_minimum_size = Vector2(104, 72)
+	equipment_weapon_image.custom_minimum_size = Vector2(52, 36)
 	equipment_weapon_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	equipment_weapon_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	equipment_weapon_image.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	equipment_row.add_child(equipment_weapon_image)
 	var weapon_text_box := VBoxContainer.new()
 	weapon_text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	weapon_text_box.add_theme_constant_override("separation", 2)
+	weapon_text_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	weapon_text_box.add_theme_constant_override("separation", 1)
 	equipment_row.add_child(weapon_text_box)
+	# 1줄: 총 이름(왼쪽) + 탄약명(오른쪽, 흐리게) — 필드와 동일.
+	var weapon_header := HBoxContainer.new()
+	weapon_header.add_theme_constant_override("separation", 6)
+	weapon_text_box.add_child(weapon_header)
 	equipment_label = Label.new()
+	equipment_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	equipment_label.clip_text = true
 	equipment_label.add_theme_font_override("font", FONT)
-	equipment_label.add_theme_font_size_override("font_size", 16)
-	equipment_label.add_theme_color_override("font_color", Color("#e7e3d2"))
-	weapon_text_box.add_child(equipment_label)
-	var ammo_row := HBoxContainer.new()
-	ammo_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ammo_row.add_theme_constant_override("separation", 8)
-	weapon_text_box.add_child(ammo_row)
+	equipment_label.add_theme_font_size_override("font_size", 12)
+	equipment_label.add_theme_color_override("font_color", Color("#c6d4cb"))
+	weapon_header.add_child(equipment_label)
+	equipment_reserve_ammo_label = Label.new()
+	equipment_reserve_ammo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	equipment_reserve_ammo_label.add_theme_font_override("font", FONT)
+	equipment_reserve_ammo_label.add_theme_font_size_override("font_size", 11)
+	equipment_reserve_ammo_label.add_theme_color_override("font_color", Color("#8fa39a"))
+	weapon_header.add_child(equipment_reserve_ammo_label)
+	# 2줄: 잔탄/탄창 · 예비탄 통합 표기.
 	equipment_ammo_label = Label.new()
 	equipment_ammo_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	equipment_ammo_label.add_theme_font_override("font", FONT)
-	equipment_ammo_label.add_theme_font_size_override("font_size", 22)
-	equipment_ammo_label.add_theme_color_override("font_color", Color("#f1ce70"))
-	ammo_row.add_child(equipment_ammo_label)
-	equipment_reserve_ammo_label = Label.new()
-	equipment_reserve_ammo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	equipment_reserve_ammo_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	equipment_reserve_ammo_label.add_theme_font_override("font", FONT)
-	equipment_reserve_ammo_label.add_theme_font_size_override("font_size", 14)
-	equipment_reserve_ammo_label.add_theme_color_override("font_color", Color("#c5d0c9"))
-	ammo_row.add_child(equipment_reserve_ammo_label)
+	equipment_ammo_label.add_theme_font_size_override("font_size", 19)
+	equipment_ammo_label.add_theme_color_override("font_color", HudStyle.GOLD_TEXT)
+	weapon_text_box.add_child(equipment_ammo_label)
 	equipment_condition_label = Label.new()
-	equipment_condition_label.custom_minimum_size = Vector2(0, 22)
 	equipment_condition_label.clip_text = true
 	equipment_condition_label.add_theme_font_override("font", FONT)
-	equipment_condition_label.add_theme_font_size_override("font_size", 12)
+	equipment_condition_label.add_theme_font_size_override("font_size", 11)
 	equipment_condition_label.add_theme_color_override("font_color", Color("#9fb0a7"))
 	weapon_text_box.add_child(equipment_condition_label)
 	equipment_reload_bar = ProgressBar.new()
-	equipment_reload_bar.custom_minimum_size = Vector2(0, 7)
+	equipment_reload_bar.custom_minimum_size = Vector2(0, 5)
 	equipment_reload_bar.max_value = 1.0
 	equipment_reload_bar.show_percentage = false
 	equipment_reload_bar.add_theme_stylebox_override(
 		"background",
-		_make_panel_style(Color("#171d1b"), Color("#3e4944"), 4)
+		HudStyle.panel(Color("#171d1b"), Color("#3e4944"), 4)
 	)
 	equipment_reload_bar.add_theme_stylebox_override(
 		"fill",
-		_make_panel_style(Color("#d6b653"), Color("#f0d77d"), 4)
+		HudStyle.panel(Color("#d6b653"), Color("#f0d77d"), 4)
 	)
 	weapon_text_box.add_child(equipment_reload_bar)
 
@@ -902,33 +958,67 @@ func _build_floor_clear_banner(canvas: CanvasLayer) -> void:
 
 
 func _build_fatigue_panel(canvas: CanvasLayer) -> void:
+	# 필드(raid_hud.gd)의 피로도 패널과 같은 구성·수치: 좌상단, 아이콘 +
+	# "피로도" 헤더 + 상태 퍼센트 + 190x7 바, HudStyle 색.
 	fatigue_panel = PanelContainer.new()
 	fatigue_panel.name = "FatiguePanel"
-	fatigue_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	fatigue_panel.offset_left = 24
-	fatigue_panel.offset_top = -188
-	fatigue_panel.offset_right = 340
-	fatigue_panel.offset_bottom = -132
+	fatigue_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	fatigue_panel.offset_left = 18
+	fatigue_panel.offset_top = 214
+	fatigue_panel.offset_right = 280
+	fatigue_panel.offset_bottom = 276
 	fatigue_panel.add_theme_stylebox_override(
 		"panel",
-		_make_panel_style(Color(0.015, 0.02, 0.022, 0.9), Color(0.34, 0.4, 0.38, 0.8))
+		HudStyle.panel(HudStyle.INK, Color("#60766a"), 7)
 	)
 	canvas.add_child(fatigue_panel)
+	var fatigue_margin := MarginContainer.new()
+	fatigue_margin.add_theme_constant_override("margin_left", 10)
+	fatigue_margin.add_theme_constant_override("margin_top", 7)
+	fatigue_margin.add_theme_constant_override("margin_right", 10)
+	fatigue_margin.add_theme_constant_override("margin_bottom", 7)
+	fatigue_panel.add_child(fatigue_margin)
+	var fatigue_row := HBoxContainer.new()
+	fatigue_row.add_theme_constant_override("separation", 9)
+	fatigue_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	fatigue_margin.add_child(fatigue_row)
+	var fatigue_icon := TextureRect.new()
+	fatigue_icon.name = "FatigueIcon"
+	fatigue_icon.custom_minimum_size = Vector2(28, 28)
+	fatigue_icon.texture = UI_ICONS.get_icon("stamina", 32, Color("#e3c069"))
+	fatigue_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fatigue_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	fatigue_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	fatigue_row.add_child(fatigue_icon)
 	var fatigue_box := VBoxContainer.new()
+	fatigue_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fatigue_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	fatigue_box.add_theme_constant_override("separation", 3)
-	fatigue_panel.add_child(fatigue_box)
+	fatigue_row.add_child(fatigue_box)
+	var fatigue_header := HBoxContainer.new()
+	fatigue_header.add_theme_constant_override("separation", 6)
+	fatigue_box.add_child(fatigue_header)
+	var fatigue_name := Label.new()
+	fatigue_name.text = "피로도"
+	fatigue_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fatigue_name.add_theme_font_override("font", FONT)
+	fatigue_name.add_theme_font_size_override("font_size", 12)
+	fatigue_name.add_theme_color_override("font_color", Color("#9fb4a9"))
+	fatigue_header.add_child(fatigue_name)
 	fatigue_label = Label.new()
-	fatigue_label.text = "피로  0%"
+	fatigue_label.text = "0%"
 	fatigue_label.add_theme_font_override("font", FONT)
-	fatigue_label.add_theme_font_size_override("font_size", 13)
-	fatigue_label.add_theme_color_override("font_color", Color("#b9c4bb"))
-	fatigue_box.add_child(fatigue_label)
+	fatigue_label.add_theme_font_size_override("font_size", 12)
+	fatigue_label.add_theme_color_override("font_color", Color("#8fc7a8"))
+	fatigue_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	fatigue_header.add_child(fatigue_label)
 	fatigue_bar = ProgressBar.new()
-	fatigue_bar.custom_minimum_size = Vector2(300, 9)
+	fatigue_bar.custom_minimum_size = Vector2(190, 7)
 	fatigue_bar.max_value = FATIGUE_MAX
 	fatigue_bar.show_percentage = false
-	fatigue_bar.add_theme_stylebox_override("background", _make_panel_style(Color("#202622"), Color.TRANSPARENT, 2))
-	fatigue_bar.add_theme_stylebox_override("fill", _make_panel_style(Color("#c8ad62"), Color.TRANSPARENT, 2))
+	fatigue_bar.add_theme_stylebox_override("background", HudStyle.panel(Color("#17201d"), Color("#32443c"), 4))
+	fatigue_fill_style = HudStyle.panel(Color("#78b993"), Color("#a7d6b9"), 4)
+	fatigue_bar.add_theme_stylebox_override("fill", fatigue_fill_style)
 	fatigue_box.add_child(fatigue_bar)
 
 
@@ -1552,7 +1642,9 @@ func _screen_point_to_world(screen_point: Vector2) -> Vector3:
 
 
 func _try_melee_attack(screen_point: Vector2) -> void:
-	if melee_attack_cooldown > 0.0 or roll_active:
+	# 필드(main.gd)와 동일한 스윙 상태기: 예비동작(팬 텔레그래프+배트 트윈) →
+	# 윈드업 후 타격 판정(아크 이펙트+카메라 셰이크) → 마무리.
+	if melee_attack_cooldown > 0.0 or melee_attack_active or roll_active:
 		return
 	melee_attack_cooldown = MELEE_ATTACK_COOLDOWN
 	_add_fatigue(FATIGUE_MELEE_GAIN)
@@ -1565,8 +1657,41 @@ func _try_melee_attack(screen_point: Vector2) -> void:
 		attack_direction = _get_facing_world_direction()
 	attack_direction = attack_direction.normalized()
 	_set_facing_from_world_direction(attack_direction)
-	var closest: CharacterBody3D
-	var closest_distance := INF
+	melee_attack_active = true
+	melee_attack_elapsed = 0.0
+	melee_attack_direction = attack_direction
+	melee_hit_resolved = false
+	motion_state = "melee"
+	_play_animation()
+	_show_melee_fan(attack_direction)
+	_play_bat_swing(attack_direction)
+
+
+func _update_melee_attack(delta: float) -> void:
+	if not melee_attack_active:
+		return
+	melee_attack_elapsed += delta
+	if not melee_hit_resolved and melee_attack_elapsed >= MELEE_WINDUP_DURATION:
+		melee_hit_resolved = true
+		_hide_melee_fan()
+		_spawn_player_melee_arc(melee_attack_direction)
+		_resolve_melee_hit(melee_attack_direction)
+	if melee_attack_elapsed >= MELEE_ANIMATION_DURATION:
+		_finish_melee_attack()
+
+
+func _finish_melee_attack() -> void:
+	if not melee_attack_active:
+		return
+	melee_attack_active = false
+	melee_attack_elapsed = 0.0
+	melee_hit_resolved = false
+	_hide_melee_fan()
+	motion_state = ""
+	_set_motion_state("walk" if player.velocity.length_squared() > 0.1 else "idle")
+
+
+func _resolve_melee_hit(direction: Vector3) -> void:
 	for enemy in enemies:
 		if not is_instance_valid(enemy) or bool(enemy.get("dying")):
 			continue
@@ -1575,14 +1700,211 @@ func _try_melee_attack(screen_point: Vector2) -> void:
 		var distance := offset.length()
 		if distance <= 0.05 or distance > MELEE_ATTACK_RANGE:
 			continue
-		if attack_direction.dot(offset.normalized()) < cos(deg_to_rad(56.0)):
+		if direction.dot(offset.normalized()) < cos(deg_to_rad(MELEE_FAN_HALF_ANGLE_DEG)):
 			continue
-		if distance < closest_distance:
-			closest_distance = distance
-			closest = enemy
-	if closest != null:
-		var backstab := bool(closest.call("is_backstab_from", player.global_position)) if closest.has_method("is_backstab_from") else false
-		closest.call("take_melee_hit", MELEE_ATTACK_DAMAGE, attack_direction, backstab)
+		# 필드와 동일: 벽 너머 타격을 막는 시야 확인.
+		var query := PhysicsRayQueryParameters3D.create(
+			player.global_position + Vector3(0, 0.35, 0),
+			enemy.global_position + Vector3(0, 0.35, 0),
+			COLLISION_PROFILES.ENEMY_LAYER | COLLISION_PROFILES.WORLD_PROJECTILE_LAYER
+		)
+		query.exclude = [player.get_rid()]
+		var hit := player.get_world_3d().direct_space_state.intersect_ray(query)
+		if hit.is_empty() or hit.get("collider") != enemy:
+			continue
+		var backstab := bool(enemy.call("is_backstab_from", player.global_position)) if enemy.has_method("is_backstab_from") else false
+		var melee_damage := MELEE_ATTACK_DAMAGE
+		if GameState.has_method("is_churu_buff_active") and bool(GameState.call("is_churu_buff_active", "sharp_claws")):
+			melee_damage = roundi(float(melee_damage) * 1.4)
+		enemy.call("take_melee_hit", melee_damage, direction, backstab)
+		# 배트가 실제로 맞았을 때만 화면이 울린다 — 헛스윙과 명중의 손맛을 가른다.
+		camera_shake_time = maxf(camera_shake_time, 0.12)
+		camera_shake_strength = maxf(camera_shake_strength, 0.22 if backstab else 0.16)
+
+
+func _setup_melee_weapon() -> void:
+	melee_bat_sprite = Sprite3D.new()
+	melee_bat_sprite.name = "TemporaryBaseballBat"
+	melee_bat_sprite.texture = BASEBALL_BAT_TEXTURE
+	melee_bat_sprite.pixel_size = WEAPON_VISUAL_CATALOG.get_world_pixel_size("baseball_bat", 0.00058)
+	melee_bat_sprite.centered = true
+	melee_bat_sprite.offset = Vector2.ZERO
+	melee_bat_sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	melee_bat_sprite.shaded = false
+	melee_bat_sprite.transparent = true
+	melee_bat_sprite.no_depth_test = true
+	melee_bat_sprite.render_priority = 126
+	melee_bat_sprite.visible = false
+	player.add_child(melee_bat_sprite)
+	_setup_melee_fan_indicator()
+
+
+func _setup_melee_fan_indicator() -> void:
+	melee_fan_fill_material = StandardMaterial3D.new()
+	melee_fan_fill_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	melee_fan_fill_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	melee_fan_fill_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	melee_fan_fill_material.no_depth_test = true
+	melee_fan_fill_material.albedo_color = Color(1.0, 0.46, 0.08, 0.3)
+	melee_fan_fill_material.render_priority = 1
+
+	melee_fan_rim_material = StandardMaterial3D.new()
+	melee_fan_rim_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	melee_fan_rim_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	melee_fan_rim_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	melee_fan_rim_material.no_depth_test = true
+	melee_fan_rim_material.albedo_color = Color(1.0, 0.78, 0.22, 0.88)
+	melee_fan_rim_material.render_priority = 2
+
+	melee_fan_indicator = MeshInstance3D.new()
+	melee_fan_indicator.name = "MeleeFanTelegraph"
+	melee_fan_indicator.mesh = _create_melee_fan_mesh()
+	melee_fan_indicator.position = Vector3(0, -0.735, 0)
+	melee_fan_indicator.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	melee_fan_indicator.visible = false
+	player.add_child(melee_fan_indicator)
+
+
+func _create_melee_fan_mesh() -> ArrayMesh:
+	var fill_vertices := PackedVector3Array()
+	var half_angle := deg_to_rad(MELEE_FAN_HALF_ANGLE_DEG)
+	for segment in MELEE_FAN_SEGMENTS:
+		var angle_a := lerpf(-half_angle, half_angle, float(segment) / MELEE_FAN_SEGMENTS)
+		var angle_b := lerpf(-half_angle, half_angle, float(segment + 1) / MELEE_FAN_SEGMENTS)
+		fill_vertices.append(Vector3.ZERO)
+		fill_vertices.append(Vector3(sin(angle_a), 0, cos(angle_a)) * MELEE_ATTACK_RANGE)
+		fill_vertices.append(Vector3(sin(angle_b), 0, cos(angle_b)) * MELEE_ATTACK_RANGE)
+	var mesh := ArrayMesh.new()
+	var fill_arrays := []
+	fill_arrays.resize(Mesh.ARRAY_MAX)
+	fill_arrays[Mesh.ARRAY_VERTEX] = fill_vertices
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, fill_arrays)
+	mesh.surface_set_material(0, melee_fan_fill_material)
+	var rim_vertices := PackedVector3Array()
+	var inner_radius := MELEE_ATTACK_RANGE - 0.09
+	for segment in MELEE_FAN_SEGMENTS:
+		var angle_a := lerpf(-half_angle, half_angle, float(segment) / MELEE_FAN_SEGMENTS)
+		var angle_b := lerpf(-half_angle, half_angle, float(segment + 1) / MELEE_FAN_SEGMENTS)
+		var outer_a := Vector3(sin(angle_a), 0.004, cos(angle_a)) * MELEE_ATTACK_RANGE
+		var outer_b := Vector3(sin(angle_b), 0.004, cos(angle_b)) * MELEE_ATTACK_RANGE
+		var inner_a := Vector3(sin(angle_a), 0.004, cos(angle_a)) * inner_radius
+		var inner_b := Vector3(sin(angle_b), 0.004, cos(angle_b)) * inner_radius
+		rim_vertices.append(inner_a)
+		rim_vertices.append(outer_a)
+		rim_vertices.append(outer_b)
+		rim_vertices.append(inner_a)
+		rim_vertices.append(outer_b)
+		rim_vertices.append(inner_b)
+	var rim_arrays := []
+	rim_arrays.resize(Mesh.ARRAY_MAX)
+	rim_arrays[Mesh.ARRAY_VERTEX] = rim_vertices
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, rim_arrays)
+	mesh.surface_set_material(1, melee_fan_rim_material)
+	return mesh
+
+
+func _show_melee_fan(direction: Vector3) -> void:
+	if melee_fan_indicator == null:
+		return
+	if melee_fan_tween != null and melee_fan_tween.is_valid():
+		melee_fan_tween.kill()
+	melee_fan_indicator.rotation = Vector3(0, atan2(direction.x, direction.z), 0)
+	melee_fan_indicator.scale = Vector3(0.84, 1.0, 0.84)
+	melee_fan_indicator.transparency = 0.0
+	melee_fan_indicator.visible = true
+	melee_fan_tween = create_tween()
+	melee_fan_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	melee_fan_tween.tween_property(
+		melee_fan_indicator, "scale", Vector3.ONE, MELEE_WINDUP_DURATION
+	)
+
+
+func _hide_melee_fan() -> void:
+	if melee_fan_indicator == null or not melee_fan_indicator.visible:
+		return
+	if melee_fan_tween != null and melee_fan_tween.is_valid():
+		melee_fan_tween.kill()
+	melee_fan_tween = create_tween()
+	melee_fan_tween.tween_property(melee_fan_indicator, "transparency", 1.0, 0.08)
+	melee_fan_tween.tween_callback(func() -> void:
+		if is_instance_valid(melee_fan_indicator):
+			melee_fan_indicator.visible = false
+	)
+
+
+func _play_bat_swing(direction: Vector3) -> void:
+	# 필드의 Sprite3D 배트 스윙 트윈과 동일(2D 오버레이 경로는 필드 전용이라 제외).
+	var player_screen := camera.unproject_position(player.global_position)
+	var target_screen := camera.unproject_position(
+		player.global_position + direction * MELEE_ATTACK_RANGE
+	)
+	var screen_direction := (target_screen - player_screen).normalized()
+	var screen_angle := atan2(screen_direction.y, screen_direction.x)
+	var aligned_angle := screen_angle + PI * 0.25
+	var bat_texture_size := Vector2(
+		BASEBALL_BAT_TEXTURE.get_width(),
+		BASEBALL_BAT_TEXTURE.get_height()
+	)
+	var bat_texture_length := maxf(1.0, bat_texture_size.length())
+	var bat_world_length := bat_texture_length * melee_bat_sprite.pixel_size * 0.9
+	var bat_world_center := maxf(0.3, MELEE_ATTACK_RANGE - bat_world_length * 0.5)
+	melee_bat_sprite.visible = true
+	melee_bat_sprite.flip_h = false
+	melee_bat_sprite.flip_v = false
+	melee_bat_sprite.modulate = Color(1.18, 1.08, 0.92, 1.0)
+	melee_bat_sprite.position = direction * 0.28 + Vector3(0, 0.43, 0)
+	melee_bat_sprite.rotation.z = aligned_angle - deg_to_rad(96.0)
+	melee_bat_sprite.scale = Vector3.ONE * 0.78
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(melee_bat_sprite, "rotation:z", aligned_angle + deg_to_rad(58.0), 0.21).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+	tween.tween_property(melee_bat_sprite, "position", direction * bat_world_center + Vector3(0, 0.45, 0), 0.21)
+	tween.tween_property(melee_bat_sprite, "scale", Vector3.ONE * 0.9, 0.21)
+	tween.chain().tween_property(melee_bat_sprite, "modulate", Color(1.0, 0.82, 0.55, 0.0), 0.13)
+	tween.chain().tween_callback(func() -> void:
+		melee_bat_sprite.visible = false
+	)
+
+
+func _spawn_player_melee_arc(direction: Vector3) -> void:
+	if melee_arc_texture == null:
+		melee_arc_texture = _create_melee_arc_texture()
+	var arc := Sprite3D.new()
+	arc.name = "PlayerMeleeArc"
+	arc.texture = melee_arc_texture
+	arc.pixel_size = 0.012
+	arc.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	arc.shaded = false
+	arc.transparent = true
+	arc.no_depth_test = true
+	arc.render_priority = 125
+	arc.position = player.position + direction * 0.95 + Vector3(0, 0.3, 0)
+	add_child(arc)
+	var player_screen := camera.unproject_position(player.global_position)
+	var target_screen := camera.unproject_position(player.global_position + direction * 2.0)
+	var screen_direction := (target_screen - player_screen).normalized()
+	arc.rotation.z = atan2(screen_direction.y, screen_direction.x)
+	arc.scale = Vector3.ONE * 0.72
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(arc, "scale", Vector3.ONE * 1.28, 0.18)
+	tween.tween_property(arc, "modulate", Color(1.0, 0.52, 0.2, 0.0), 0.2)
+	get_tree().create_timer(0.22).timeout.connect(arc.queue_free)
+
+
+func _create_melee_arc_texture() -> ImageTexture:
+	var image := Image.create(128, 128, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	var center := Vector2(64, 64)
+	for y in 128:
+		for x in 128:
+			var offset := Vector2(x, y) - center
+			var radius := offset.length()
+			var angle := rad_to_deg(atan2(offset.y, offset.x))
+			if radius >= 40.0 and radius <= 57.0 and absf(angle) <= 68.0:
+				var edge_alpha := 1.0 - absf(radius - 48.5) / 8.5
+				image.set_pixel(x, y, Color(1.0, 0.7, 0.32, edge_alpha * 0.72))
+	return ImageTexture.create_from_image(image)
 
 
 func _update_aim_reticle() -> void:
@@ -1690,7 +2012,7 @@ func _update_aim_laser() -> void:
 
 
 func _fire_toward_world(target_position: Vector3) -> void:
-	if not _has_equipped_firearm() or roll_active or weapon_reloading or fire_cooldown > 0.0:
+	if not _has_equipped_firearm() or roll_active or melee_attack_active or weapon_reloading or fire_cooldown > 0.0:
 		return
 	if int(GameState.magazine_ammo) <= 0:
 		_start_reload()
@@ -1810,22 +2132,40 @@ func _update_ammo_label() -> void:
 
 
 func _update_shared_equipment_hud(hud_state: Dictionary) -> void:
+	# 필드 main._update_equipment_ui와 같은 매핑 — 이름+강화, 탄약명, 통합 잔탄,
+	# 내구도는 그림 색, 상태줄은 정말 할 말이 있을 때만.
 	if equipment_panel == null:
 		return
 	var has_weapon := _has_equipped_firearm()
 	var weapon_id := str(GameState.equipped_weapon_id)
 	var weapon_name := str(weapon_stats.get("display_name", "AK-47"))
 	var enhancement_level: int = int(GameState.get_weapon_enhancement_level(weapon_id))
-	equipment_label.text = "%s +%d" % [weapon_name, enhancement_level] if has_weapon else "무기 없음"
+	var short_weapon_name := weapon_name.split("\"")[0].strip_edges()
+	equipment_label.text = (
+		"%s +%d" % [short_weapon_name, enhancement_level]
+		if has_weapon and enhancement_level > 0
+		else (short_weapon_name if has_weapon else "무기 없음")
+	)
+	equipment_label.visible = true
 	equipment_weapon_image.texture = WEAPON_VISUAL_CATALOG.get_weapon_texture(weapon_id)
 	equipment_weapon_image.visible = has_weapon
-	equipment_ammo_label.text = str(hud_state.get("ammo_text", "-- / --"))
+	equipment_weapon_image.modulate = _weapon_condition_tint()
+	equipment_weapon_image.tooltip_text = (
+		"%s +%d" % [weapon_name, enhancement_level] if has_weapon else "무기 없음"
+	)
+	var ammo_name := str(
+		WEAPON_SYSTEM.get_ammo(GameState.equipped_ammo_id).get(
+			"display_name",
+			GameState.equipped_ammo_id
+		)
+	)
+	equipment_reserve_ammo_label.text = ammo_name if has_weapon else ""
+	equipment_reserve_ammo_label.visible = has_weapon
+	equipment_ammo_label.text = str(hud_state.get("ammo_combined_text", "-- / --"))
 	var ammo_color: Color = hud_state.get("ammo_color", Color("#f1ce70"))
 	equipment_ammo_label.add_theme_color_override("font_color", ammo_color)
-	equipment_reserve_ammo_label.text = str(hud_state.get("reserve_text", "예비 없음"))
-	var reserve_color: Color = hud_state.get("reserve_color", Color("#c5d0c9"))
-	equipment_reserve_ammo_label.add_theme_color_override("font_color", reserve_color)
 	equipment_condition_label.text = str(hud_state.get("condition_text", ""))
+	equipment_condition_label.visible = bool(hud_state.get("condition_notable", true))
 	var reload_duration := maxf(0.01, float(weapon_stats.get("reload_time", 2.15)))
 	equipment_reload_bar.value = (
 		1.0 - clampf(reload_timer / reload_duration, 0.0, 1.0)
@@ -1835,8 +2175,25 @@ func _update_shared_equipment_hud(hud_state: Dictionary) -> void:
 	equipment_reload_bar.visible = weapon_reloading and has_weapon
 
 
+func _weapon_condition_tint() -> Color:
+	# 필드와 동일: 내구도를 무기 그림의 색으로 알린다.
+	if not _has_equipped_firearm():
+		return Color(1.0, 1.0, 1.0, 1.0)
+	var durability_value = GameState.get("weapon_durability")
+	var ratio := clampf(
+		(float(durability_value) if durability_value != null else 100.0) / 100.0,
+		0.0,
+		1.0
+	)
+	if ratio >= 0.6:
+		return Color(1.0, 1.0, 1.0, 1.0)
+	if ratio >= 0.3:
+		return Color(1.0, 0.86, 0.62, 1.0)
+	return Color(1.0, 0.62, 0.55, 1.0)
+
+
 func _try_start_roll() -> void:
-	if roll_active or roll_stamina < ROLL_STAMINA_COST:
+	if roll_active or melee_attack_active or roll_stamina < ROLL_STAMINA_COST:
 		return
 	var input_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	if Input.is_key_pressed(KEY_A): input_vector.x -= 1.0
@@ -1895,11 +2252,34 @@ func _add_fatigue(amount: float) -> void:
 
 
 func _update_fatigue_ui() -> void:
+	# 필드 _refresh_fatigue_hud와 같은 단계·색: 35 피곤 / 65 과부하 / 90 탈진.
 	if fatigue_bar != null:
 		fatigue_bar.value = fatigue
+	var status := "안정"
+	var color := Color("#78b993")
+	var warning_band := 0
+	if fatigue >= 90.0:
+		status = "탈진"
+		color = Color("#e06c62")
+		warning_band = 3
+	elif fatigue >= 65.0:
+		status = "과부하"
+		color = Color("#e3ad61")
+		warning_band = 2
+	elif fatigue >= 35.0:
+		status = "피곤"
+		color = Color("#d5c16b")
+		warning_band = 1
 	if fatigue_label != null:
-		var penalty_text := " · 탈진: 이동 저하" if fatigue >= 99.9 else ""
-		fatigue_label.text = "피로  %d%%%s" % [roundi(fatigue), penalty_text]
+		fatigue_label.text = (
+			"%d%%" % roundi(fatigue)
+			if warning_band <= 0
+			else "%d%% · %s" % [roundi(fatigue), status]
+		)
+		fatigue_label.add_theme_color_override("font_color", color)
+	if fatigue_fill_style != null:
+		fatigue_fill_style.bg_color = color
+		fatigue_fill_style.border_color = color.lightened(0.2)
 
 
 func _get_fatigue_speed_multiplier() -> float:
@@ -1914,9 +2294,25 @@ func _set_facing_from_world_direction(direction: Vector3) -> void:
 
 
 func _update_camera(delta: float) -> void:
-	camera_focus = camera_focus.lerp(Vector3(player.position.x, 0, player.position.z), clampf(delta * 5.0, 0, 1))
-	camera.position = camera_focus + Vector3(14.5, 16.5, 14.5)
+	var camera_target := Vector3(player.position.x, 0, player.position.z)
+	# 필드와 동일: 배트가 맞았을 때만 화면이 짧게 울린다.
+	if camera_shake_time > 0.0:
+		var shake_scale := clampf(float(accessibility_settings.camera_shake_scale), 0.0, 1.0)
+		camera_target += Vector3(
+			shake_random.randf_range(-camera_shake_strength, camera_shake_strength) * shake_scale,
+			0.0,
+			shake_random.randf_range(-camera_shake_strength, camera_shake_strength) * shake_scale
+		)
+	camera_focus = camera_focus.lerp(camera_target, clampf(delta * 5.0, 0, 1))
+	camera.position = camera_focus + Vector3.ONE * (CAMERA_DIAGONAL_OFFSET * 4.0)
 	camera.look_at(camera_focus)
+	# 세로 화면 보정 — 필드와 동일하게 매 프레임 강제한다. KEEP_WIDTH로 가로
+	# 시야를 가로모드와 맞추고, 세로에서는 한 걸음 더 물러난다(x1.25).
+	var camera_viewport := get_viewport().get_visible_rect().size
+	var camera_portrait := camera_viewport.y > camera_viewport.x
+	camera.keep_aspect = Camera3D.KEEP_WIDTH if camera_portrait else Camera3D.KEEP_HEIGHT
+	var target_camera_size := BASE_CAMERA_SIZE * (1.25 if camera_portrait else 1.0)
+	camera.size = lerpf(camera.size, target_camera_size, 1.0 - exp(-8.5 * delta))
 
 
 func _update_facing(input_vector: Vector2) -> void:
@@ -1924,12 +2320,18 @@ func _update_facing(input_vector: Vector2) -> void:
 		return
 	var angle := fposmod(rad_to_deg(atan2(input_vector.x, -input_vector.y)), 360.0)
 	var next_facing: String = SCREEN_DIRECTIONS[int(round(angle / 45.0)) % 8]
+	# 스윙 중에는 방향이 잠긴다 — 필드와 동일.
+	if melee_attack_active and next_facing != facing:
+		return
 	if next_facing != facing:
 		facing = next_facing
 		_play_animation()
 
 
 func _set_motion_state(state: String) -> void:
+	# 스윙 애니메이션은 walk/idle로 덮이지 않는다 — 필드와 동일.
+	if melee_attack_active and state != "melee":
+		return
 	if motion_state == state:
 		return
 	motion_state = state
@@ -1961,6 +2363,14 @@ func _create_cat_frames() -> SpriteFrames:
 		for frame_index in 4:
 			var roll_path := "%s/%s_action-frame-%d.png" % [CAT_ROLL_ANIMATION_ROOT, state_prefix, frame_index]
 			if ResourceLoader.exists(roll_path): frames.add_frame(roll_animation, load(roll_path) as Texture2D)
+		# 필드와 동일한 배트 스윙 애니메이션.
+		var melee_animation := "melee_%s" % direction_name
+		frames.add_animation(melee_animation)
+		frames.set_animation_loop(melee_animation, false)
+		frames.set_animation_speed(melee_animation, MELEE_ANIMATION_FPS)
+		for frame_index in MELEE_FRAME_COUNT:
+			var melee_path := "%s/%s_action_%d.png" % [CAT_MELEE_ANIMATION_ROOT, state_prefix, frame_index]
+			if ResourceLoader.exists(melee_path): frames.add_frame(melee_animation, load(melee_path) as Texture2D)
 	return frames
 
 
@@ -2039,10 +2449,11 @@ func _use_quick_medkit() -> void:
 func _update_medkit_button() -> void:
 	if not is_instance_valid(medkit_button):
 		return
+	# 필드 _update_medkit_button과 같은 문구.
 	medkit_button.text = (
 		"구급약\nx%d" % int(GameState.medkits)
 		if DisplayServer.is_touchscreen_available()
-		else "SHIFT\nx%d" % int(GameState.medkits)
+		else "SHIFT\n구급약 x%d" % int(GameState.medkits)
 	)
 	medkit_button.disabled = int(GameState.medkits) <= 0
 
@@ -2050,7 +2461,7 @@ func _update_medkit_button() -> void:
 func _apply_mobile_safe_layout() -> void:
 	var viewport_size := get_viewport().get_visible_rect().size
 	var safe := UISafeArea.get_margins(viewport_size)
-	var vitals := get_node_or_null("BuildingHUD/VitalsPanel") as Control
+	var vitals := get_node_or_null("HUD/VitalsPanel") as Control
 	if vitals:
 		vitals.position = Vector2(18.0 + safe.x, 18.0 + safe.y)
 	if is_instance_valid(building_objective_panel):
@@ -2060,20 +2471,21 @@ func _apply_mobile_safe_layout() -> void:
 	if is_instance_valid(medkit_button):
 		medkit_button.position = Vector2(22.0 + safe.x, -96.0 - safe.w)
 	if is_instance_valid(equipment_panel):
-		equipment_panel.offset_right = -22.0 - safe.z
-		equipment_panel.offset_left = equipment_panel.offset_right - 320.0
-		equipment_panel.offset_bottom = (-318.0 if DisplayServer.is_touchscreen_available() else -24.0) - safe.w
-		equipment_panel.offset_top = equipment_panel.offset_bottom - 112.0
+		# 필드와 같은 204x56 컴팩트 카드. 터치에서는 버튼 두 줄 위로 올린다.
+		equipment_panel.offset_right = -20.0 - safe.z
+		equipment_panel.offset_left = equipment_panel.offset_right - 204.0
+		equipment_panel.offset_bottom = (-292.0 if DisplayServer.is_touchscreen_available() else -124.0) - safe.w
+		equipment_panel.offset_top = equipment_panel.offset_bottom - 56.0
 	if is_instance_valid(floor_clear_banner):
 		floor_clear_banner.offset_top = 82.0 + safe.y
 		floor_clear_banner.offset_bottom = 160.0 + safe.y
 	var right_positions: Array = [
-		[fire_button, Vector2(-142, -128)],
-		[melee_button, Vector2(-260, -128)],
-		[interact_button, Vector2(-496, -128)],
-		[dash_button, Vector2(-378, -128)],
-		[reload_button, Vector2(-260, -218)],
-		[flashlight_button, Vector2(-142, -218)],
+		[fire_button, Vector2(-108, -104)],
+		[melee_button, Vector2(-198, -104)],
+		[interact_button, Vector2(-378, -104)],
+		[dash_button, Vector2(-288, -104)],
+		[reload_button, Vector2(-108, -194)],
+		[flashlight_button, Vector2(-198, -194)],
 	]
 	for entry in right_positions:
 		var button := entry[0] as Button
@@ -2083,10 +2495,10 @@ func _apply_mobile_safe_layout() -> void:
 
 
 func _show_status(message: String) -> void:
-	if status_label == null:
-		return
-	status_label.text = message
-	status_label.modulate.a = 1.0
+	# 필드와 동일한 토스트 스택(RaidHud.push_toast) 경유 — 중앙 상단 한 줄
+	# 라벨을 서로 덮어쓰던 방식은 폐지.
+	if hud != null:
+		hud.push_toast(message)
 
 
 func _material(color: Color) -> StandardMaterial3D:

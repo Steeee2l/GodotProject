@@ -165,6 +165,8 @@ var merchant_buy_tab: Button
 var merchant_sell_tab: Button
 var merchant_shop_mode := "buy"
 var merchant_ui_open := false
+# 이번 방문에서 상점을 열어봤는가 — 행상인 "!" 마커 해제 조건(저장 안 함).
+var merchant_shop_opened_this_visit := false
 var contract_agent: Node3D
 var iron_trainer: Node3D
 var juhong_character: Node3D
@@ -206,8 +208,6 @@ var raid_zone_detail_requirement: Label
 var raid_zone_launch_button: Button
 var raid_zone_resupply_button: Button
 var auto_paused_for_background := false
-var raid_loadout_ui_layer: CanvasLayer
-var raid_loadout_ui_open := false
 var raid_launch_in_progress := false
 var inventory_ui: Control
 
@@ -689,6 +689,71 @@ func _setup_juhong_story_character() -> void:
 	juhong_character.position = _juhong_position()
 	add_child(juhong_character)
 	juhong_character.call("set_player_target", player)
+
+
+# ── NPC 머리 위 "!" 마커 ────────────────────────────────────────
+# 대화·임무·상점이 기다리는 NPC를 방을 훑는 것만으로 알 수 있게 한다.
+# 조건은 0.5초 주기 갱신(_update_live_shelter_income)에 편승한다.
+
+
+func _ensure_npc_alert_marker(npc: Node3D, base_height: float = 2.6) -> Label3D:
+	if not is_instance_valid(npc):
+		return null
+	var existing := npc.get_node_or_null("NpcAlertMarker") as Label3D
+	if existing != null:
+		return existing
+	var marker := Label3D.new()
+	marker.name = "NpcAlertMarker"
+	marker.text = "!"
+	marker.font = FONT
+	marker.font_size = 48
+	marker.pixel_size = 0.0062
+	marker.position = Vector3(0.0, base_height, 0.0)
+	marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	marker.no_depth_test = true
+	marker.render_priority = 127
+	marker.modulate = Color("#e7c26e")
+	marker.outline_modulate = Color(0.08, 0.055, 0.02, 0.96)
+	marker.outline_size = 12
+	marker.visible = false
+	npc.add_child(marker)
+	# 살짝 둥실거리는 루프 — merchant_waiting_marker의 "▼" 화살표와 같은 문법.
+	var bob := marker.create_tween().set_loops()
+	bob.tween_property(marker, "position:y", base_height + 0.22, 0.7)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	bob.tween_property(marker, "position:y", base_height, 0.7)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	return marker
+
+
+func _update_npc_alert_markers() -> void:
+	# 사자: 미확인 스토리 이벤트, 또는 계약을 받거나 보고할 수 있을 때.
+	if is_instance_valid(contract_agent):
+		var saja_marker := _ensure_npc_alert_marker(contract_agent)
+		if saja_marker != null:
+			saja_marker.visible = (
+				not GameState.get_pending_shelter_story_event().is_empty()
+				or (
+					GameState.is_contract_agent_available()
+					and str(GameState.contract_status) in ["available", "complete"]
+				)
+			)
+	# 주홍: 미확인 스토리 방문 이벤트가 있을 때(있을 때만 스폰되긴 한다).
+	if is_instance_valid(juhong_character):
+		var juhong_marker := _ensure_npc_alert_marker(juhong_character)
+		if juhong_marker != null:
+			juhong_marker.visible = not GameState.get_pending_juhong_event().is_empty()
+	# 철근: 임무 수령 가능 / 보상 수령 가능.
+	if is_instance_valid(iron_trainer):
+		var iron_marker := _ensure_npc_alert_marker(iron_trainer)
+		if iron_marker != null:
+			var iron_state: Dictionary = GameState.get_iron_mission_state()
+			iron_marker.visible = str(iron_state.get("status", "")) in ["available", "complete"]
+	# 행상인: 들어와 있는데 아직 이번 방문에 상점을 안 열어봤을 때.
+	if is_instance_valid(merchant):
+		var merchant_marker := _ensure_npc_alert_marker(merchant, 2.4)
+		if merchant_marker != null:
+			merchant_marker.visible = not merchant_shop_opened_this_visit
 
 
 func _open_pending_shelter_story() -> void:
@@ -1238,11 +1303,12 @@ func _build_merchant_waiting_marker() -> void:
 	dialogue.no_depth_test = true
 	dialogue.render_priority = 127
 	dialogue.font = FONT
-	dialogue.font_size = 30
+	# 잡담 말풍선 확대에 맞춰 소폭 상향 — 비율이 어긋나 보이지 않게.
+	dialogue.font_size = 38
 	dialogue.pixel_size = 0.0048
 	dialogue.modulate = Color("#f5e6bd")
 	dialogue.outline_modulate = Color(0.015, 0.02, 0.018, 0.96)
-	dialogue.outline_size = 12
+	dialogue.outline_size = 15
 	merchant_waiting_marker.add_child(dialogue)
 
 func _spawn_merchant() -> void:
@@ -1364,7 +1430,6 @@ func _ui_blocks_player() -> bool:
 		or contract_ui_open
 		or contract_story_open
 		or raid_zone_ui_open
-		or raid_loadout_ui_open
 		or not get_tree().get_nodes_in_group("shelter_modal_ui").is_empty()
 		or (inventory_ui != null and bool(inventory_ui.call("is_open")))
 	)
@@ -2199,9 +2264,31 @@ func _accept_merchant() -> void:
 	_set_merchant_notice_visible(false)
 	_spawn_merchant()
 	_close_merchant_ui()
+	# 게임 전체 최초 입장 1회: 자기소개 내러티브. 이후 입장은 기존 랜덤 한마디.
+	if not GameState.merchant_intro_seen:
+		GameState.merchant_intro_seen = true
+		GameState.save_persistent_state()
+		_open_merchant_intro_story()
+		return
 	_show_status("행상인 · %s" % MERCHANT_ENTRY_LINES[
 		resident_chat_random.randi_range(0, MERCHANT_ENTRY_LINES.size() - 1)
 	])
+
+
+func _open_merchant_intro_story() -> void:
+	# 사자 계약 대화 패널(타자기)을 재사용한다. 떠돌이 소문 장사꾼의 자기소개 —
+	# 세계관 비밀은 소문 수준까지만.
+	var intro_lines: Array[String] = [
+		"처음 보는 얼굴이군냥. 봉쇄선 밖을 도는 행상인이다냥 — 이름은 묻지 마라, 파는 놈한테 이름은 짐일 뿐이다냥.",
+		"고철이면 뭐든 구해 온다냥. 탄이든 부품이든… 어디서 났는지는 서로 묻지 않는 게 오래 사는 법이다냥.",
+		"소문도 판다냥. 요즘 땅 밑에서 이상한 신호가 돈다는 얘기, 첫 거래 기념으로 공짜로 얹어 주지냥. 자, 물건부터 보라냥.",
+	]
+	_open_contract_story(
+		"떠돌이 행상인의 첫 인사",
+		intro_lines,
+		"행상인",
+		_merchant_face_texture()
+	)
 
 
 func _decline_merchant() -> void:
@@ -2217,6 +2304,7 @@ func _decline_merchant() -> void:
 func _open_merchant_shop() -> void:
 	if merchant_ui_open:
 		return
+	merchant_shop_opened_this_visit = true
 	merchant_ui_open = true
 	touch_vector = Vector2.ZERO
 	roll_active = false
@@ -3145,18 +3233,20 @@ func _spawn_resident_chat_bubble(resident: Node3D) -> void:
 	label.name = "ChatBubble"
 	label.text = RESIDENT_CHAT_LINES[resident_chat_random.randi_range(0, RESIDENT_CHAT_LINES.size() - 1)]
 	label.font = FONT
-	label.font_size = 30
+	# 30pt는 PC·모바일 모두 안 읽혔다(스크린샷 확인) — 2배로 키우고 외곽선도
+	# 비례 강화. font_size를 키우면 텍스처 해상도가 함께 올라 선명함도 산다.
+	label.font_size = 60
 	label.pixel_size = 0.0056
-	label.width = 340.0
+	label.width = 680.0
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.position = Vector3(0.0, 1.92, 0.0)
+	label.position = Vector3(0.0, 2.12, 0.0)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
 	label.render_priority = 127
 	label.modulate = Color(0.92, 0.95, 0.93, 0.0)
 	label.outline_modulate = Color(0.015, 0.02, 0.016, 0.98)
-	label.outline_size = 10
+	label.outline_size = 20
 	resident.add_child(label)
 	var fade := label.create_tween()
 	fade.tween_property(label, "modulate:a", 1.0, 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -3445,6 +3535,7 @@ func _update_live_shelter_income(delta: float) -> void:
 		shelter_stats_refresh_time = 0.0
 		_update_stats()
 		_refresh_resident_production_feedback()
+		_update_npc_alert_markers()
 	if gained > 0 and scrap_gain_label:
 		scrap_gain_label.text = "+%s 고철   %s/s" % [
 			GameState.format_compact_number(gained),
@@ -4093,116 +4184,9 @@ func _launch_raid_zone(zone_id: String) -> void:
 			% [used_slots, capacity]
 		)
 		return
-	if _raid_requires_unarmed_confirmation(zone_id):
-		_open_raid_loadout_confirmation(zone_id)
-	else:
-		_confirm_launch_raid_zone(zone_id)
-
-
-func _raid_requires_unarmed_confirmation(zone_id: String) -> bool:
-	var manifest := GameState.build_raid_loadout_manifest(zone_id)
-	return str(manifest.get("weapon_id", "")).is_empty()
-
-
-func _open_raid_loadout_confirmation(zone_id: String) -> void:
-	if raid_loadout_ui_open:
-		return
-	raid_loadout_ui_open = true
-	raid_loadout_ui_layer = CanvasLayer.new()
-	raid_loadout_ui_layer.name = "RaidLoadoutConfirmLayer"
-	raid_loadout_ui_layer.layer = 72
-	add_child(raid_loadout_ui_layer)
-	var dim := ColorRect.new()
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dim.color = Color(0.003, 0.006, 0.007, 0.93)
-	dim.mouse_filter = Control.MOUSE_FILTER_STOP
-	raid_loadout_ui_layer.add_child(dim)
-	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	raid_loadout_ui_layer.add_child(center)
-	var viewport_size := get_viewport().get_visible_rect().size
-	var panel := PanelContainer.new()
-	panel.name = "RaidLoadoutConfirmPanel"
-	panel.custom_minimum_size = Vector2(
-		minf(570.0, viewport_size.x - 28.0),
-		minf(330.0, viewport_size.y - 28.0)
-	)
-	panel.add_theme_stylebox_override(
-		"panel", _rounded_panel_style(Color(0.018, 0.026, 0.026, 0.99), Color("#c56f59"), 7)
-	)
-	center.add_child(panel)
-	var margin := MarginContainer.new()
-	for margin_name in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
-		margin.add_theme_constant_override(margin_name, 24)
-	panel.add_child(margin)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 16)
-	margin.add_child(box)
-
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 12)
-	box.add_child(header)
-	var warning_icon := TextureRect.new()
-	warning_icon.custom_minimum_size = Vector2(52, 52)
-	warning_icon.texture = UI_ICONS.get_icon("alert", 48, Color("#f09a75"))
-	warning_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	warning_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	header.add_child(warning_icon)
-	var heading_box := VBoxContainer.new()
-	heading_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(heading_box)
-	heading_box.add_child(_raid_loadout_label("무기 없이 출정하시겠습니까?", 24, Color("#f0d3a3")))
-	var zone := GameState.get_raid_zone(zone_id)
-	heading_box.add_child(_raid_loadout_label(
-		str(zone.get("name", zone_id)),
-		14,
-		Color("#b6c5bd")
-	))
-	var close := _shelter_close_button()
-	close.pressed.connect(_close_raid_loadout_confirmation)
-	header.add_child(close)
-
-	var manifest := GameState.build_raid_loadout_manifest(zone_id)
-	var recovery_active := bool(manifest.get("corpse_recovery", false))
-	var warning_text := (
-		"현재 주무기가 없습니다. 맨손으로 시작하며 필드에서 무기를 확보해야 합니다."
-	)
-	if recovery_active:
-		warning_text += "\n이 구역에는 한 번 회수할 수 있는 분실 장비가 남아 있습니다."
-	var warning := _raid_loadout_label(
-		warning_text,
-		16,
-		Color("#e7d8c0")
-	)
-	warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	warning.custom_minimum_size.y = 68
-	box.add_child(warning)
-
-	var actions := HBoxContainer.new()
-	actions.alignment = BoxContainer.ALIGNMENT_END
-	actions.add_theme_constant_override("separation", 10)
-	box.add_child(actions)
-	var back_button := _merchant_button("취소", false, "back")
-	back_button.custom_minimum_size = Vector2(140, 50)
-	back_button.pressed.connect(_close_raid_loadout_confirmation)
-	actions.add_child(back_button)
-	var confirm_button := _merchant_button("맨손으로 출정", true, "raid")
-	confirm_button.name = "ConfirmRaidLoadoutButton"
-	confirm_button.custom_minimum_size = Vector2(190, 50)
-	confirm_button.pressed.connect(
-		_confirm_launch_raid_zone.bind(zone_id),
-		CONNECT_DEFERRED
-	)
-	actions.add_child(confirm_button)
-
-
-func _raid_loadout_label(text: String, font_size: int, color: Color) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.add_theme_font_override("font", FONT)
-	label.add_theme_font_size_override("font_size", font_size)
-	label.add_theme_color_override("font_color", color)
-	return label
+	# 맨손이어도 확인 팝업 없이 바로 출정한다 — "무기 없이 출정하시겠습니까?"
+	# 팝업은 유저 요구로 폐지(2026-08). 무장 상태는 출정 브리핑의 장비 줄이 보여준다.
+	_confirm_launch_raid_zone(zone_id)
 
 
 func _confirm_launch_raid_zone(zone_id: String) -> void:
@@ -4248,16 +4232,7 @@ func _show_raid_launch_error(message: String) -> void:
 	_show_status(message)
 
 
-func _close_raid_loadout_confirmation() -> void:
-	raid_loadout_ui_open = false
-	if is_instance_valid(raid_loadout_ui_layer):
-		raid_loadout_ui_layer.queue_free()
-	raid_loadout_ui_layer = null
-
-
 func _close_raid_zone_select() -> void:
-	if raid_loadout_ui_open:
-		_close_raid_loadout_confirmation()
 	raid_zone_ui_open = false
 	if is_instance_valid(raid_zone_ui_layer):
 		raid_zone_ui_layer.queue_free()
@@ -4532,10 +4507,6 @@ func _input(event: InputEvent) -> void:
 	if inventory_ui != null and bool(inventory_ui.call("is_open")):
 		if event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_ESCAPE, KEY_E, KEY_I, KEY_B]:
 			inventory_ui.call("toggle")
-		return
-	if raid_loadout_ui_open:
-		if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
-			_close_raid_loadout_confirmation()
 		return
 	if raid_zone_ui_open:
 		if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:

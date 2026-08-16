@@ -45,12 +45,17 @@ const MELEE_STRIKE_TIME := 0.16
 const MELEE_RECOVERY_TIME := 0.34
 const HIT_STAGGER_TIME := 0.13
 const STEALTH_TAKEDOWN_MAX_RANGE := 2.05
-const MELEE_VISION_RANGE := 20.0
-const RANGED_VISION_RANGE := 20.0
-const GRENADIER_VISION_RANGE := 20.0
+# 상호 인지 원칙: 적 시야는 플레이어의 적 가시 반경(주간 시야 확장 기준
+# 약 16.7u, stealth_system의 fully_visible_radius 430px 환산)을 넘지 않는다.
+# 예전 20.0은 화면에 보이지도 않는 적에게 먼저 읽히는 원인이었다.
+const MELEE_VISION_RANGE := 14.0
+const RANGED_VISION_RANGE := 14.0
+const GRENADIER_VISION_RANGE := 14.0
 const VISION_RANGE_THREAT_BONUS := 1.5
 const VISION_HALF_ANGLE_DEGREES := 60.0
-const NIGHT_VISION_RANGE_MULTIPLIER := 0.72
+# 야간 플레이어 가시 반경(약 7.2u)에 맞춰 0.72 → 0.52. 밤에도 적이 먼저
+# 보는 비대칭을 줄인다.
+const NIGHT_VISION_RANGE_MULTIPLIER := 0.52
 # Every visual detection fills the same gauge. Proximity only shortens fill time.
 const DETECTION_CLOSE_RADIUS := 0.85
 const DETECTION_PROXIMITY_RADIUS := 1.25
@@ -282,15 +287,17 @@ var lure_point: Node3D
 var lure_arrived := false
 
 
-func set_lure_point(point: Node3D) -> void:
+func set_lure_point(point: Node3D) -> bool:
 	# 유인 불가: 죽는 중 / 이미 경계(플레이어든 타 세력이든 교전 중이면
 	# alerted=true) / 기절 / 보스(통조림 앞에 쪼그려 앉는 보스는 위엄이 없다).
+	# 반환값 true = 실제로 반응했다 — can_throw가 반응 연출(말풍선·마커)에 쓴다.
 	if dying or alerted or backstab_stunned or bool(get_meta("raid_boss", false)):
-		return
+		return false
 	if combat_state != "normal":
-		return
+		return false
 	lure_point = point
 	lure_arrived = false
+	return true
 
 
 func is_lure_eating() -> bool:
@@ -813,10 +820,13 @@ func _get_detection_seconds(
 			base_seconds = minf(base_seconds, PROXIMITY_DETECTION_SECONDS_NEAR)
 	if base_seconds < 0.0:
 		return -1.0
+	# 유저 체감상 발각이 즉각적이라 여유 +1.5초 — 점진 감지 전 구간에 일괄로
+	# 더해, 시야에 걸려도 반응·이탈할 시간이 생긴다. (피격 즉시 경계는 별도 경로)
 	return (
 		base_seconds
 		* detection_time_multiplier
 		/ maxf(visibility_multiplier, 0.1)
+		+ 1.5
 	)
 
 

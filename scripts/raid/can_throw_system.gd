@@ -23,6 +23,14 @@ const EATER_LINES := [
 	"오늘 운수 한번 좋군",
 	"뚜껑도 안 땄다고?",
 ]
+# 착지 소리에 '반응하는 순간'의 대사 — 도착해 먹기 전, 던진 즉시 피드백이
+# 있어야 유인이 먹혔는지 알 수 있다.
+const REACT_LINES := [
+	"응? 저 소리는…",
+	"밥 냄새다냥…",
+	"누가 통조림을 흘렸나",
+	"저쪽에서 깡통 소리가 났는데",
+]
 
 var host: Node
 var player: Node3D
@@ -255,8 +263,10 @@ func _on_can_landed(can: Node3D) -> void:
 			continue
 		var offset: Vector3 = enemy.global_position - can.global_position
 		offset.y = 0.0
-		if offset.length() <= NOISE_RADIUS:
-			enemy.call("set_lure_point", can)
+		if offset.length() <= NOISE_RADIUS and bool(enemy.call("set_lure_point", can)):
+			# 반응한 순간 즉시 피드백 — 물음표 마커 + 반응 대사.
+			_spawn_speech(enemy, REACT_LINES)
+			_flash_reaction_marker(enemy)
 
 
 func _update_active_can(delta: float) -> void:
@@ -321,10 +331,33 @@ func _update_gauge() -> void:
 	can_gauge_fill.scale.x = 50.0 * progress
 
 
-func _spawn_speech(enemy: Node3D) -> void:
+func _flash_reaction_marker(enemy: Node3D) -> void:
+	# 머리 위 "?" — 적의 기존 threat_marker(Label3D)를 잠깐 빌려 쓴다.
+	# 경계 연출(◆·★)과 충돌하지 않게, 숨길 때 "?" 상태 그대로인지 확인한다.
+	var marker := enemy.get("threat_marker") as Label3D
+	if marker == null or not is_instance_valid(marker) or bool(enemy.get("alerted")):
+		return
+	marker.text = "?"
+	marker.modulate = Color("#ffb057")
+	marker.visible = true
+	var tween := host.create_tween()
+	tween.tween_interval(1.5)
+	tween.tween_callback(func() -> void:
+		if not is_instance_valid(marker) or not is_instance_valid(enemy):
+			return
+		if marker.text == "?" and not bool(enemy.get("alerted")):
+			marker.visible = false
+	)
+
+
+func _spawn_speech(enemy: Node3D, lines: Array = EATER_LINES) -> void:
+	# 반응 대사가 남아 있을 때 먹기 대사가 겹치지 않게 이전 말풍선은 지운다.
+	var previous := enemy.get_node_or_null("LureSpeech")
+	if previous != null:
+		previous.queue_free()
 	var label := Label3D.new()
 	label.name = "LureSpeech"
-	label.text = EATER_LINES[randi() % EATER_LINES.size()]
+	label.text = lines[randi() % lines.size()]
 	label.font = FONT
 	label.font_size = 26
 	label.modulate = Color("#efe3c0")

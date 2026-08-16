@@ -125,10 +125,11 @@ func _build_visual() -> void:
     sprite.sprite_frames = _build_sprite_frames()
     add_child(sprite)
 
-    nameplate = _label3d(display_name, Vector3(0.0, 2.18, 0.0), 42, Color("#f0d27b"))
+    # 주민 잡담 말풍선 확대(60pt)에 맞춰 소폭 상향 — 화면 전체 라벨 비율 유지.
+    nameplate = _label3d(display_name, Vector3(0.0, 2.22, 0.0), 48, Color("#f0d27b"))
     nameplate.name = "CharacterName"
     add_child(nameplate)
-    roleplate = _label3d(role_name, Vector3(0.0, 1.92, 0.0), 25, Color("#b7d8c8"))
+    roleplate = _label3d(role_name, Vector3(0.0, 1.92, 0.0), 30, Color("#b7d8c8"))
     roleplate.name = "CharacterRole"
     add_child(roleplate)
 

@@ -439,13 +439,27 @@ var loot_swap: LootSwapUI
 func _ensure_loot_swap_ui() -> void:
 	if loot_swap != null and is_instance_valid(loot_swap):
 		return
+	# 전용 최상위 CanvasLayer — HUD 캔버스에 넣으면 시야 안개·다른 HUD 레이어가
+	# 모달 위에 그려져 "묻힌" 화면이 됐다(스크린샷 실측). 일시정지 중에도
+	# 동작해야 하므로 ALWAYS.
+	var swap_layer := CanvasLayer.new()
+	swap_layer.name = "LootSwapLayer"
+	swap_layer.layer = 95
+	swap_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	host.add_child(swap_layer)
 	loot_swap = LootSwapUI.new()
 	loot_swap.name = "LootSwapUI"
-	host.get_node("HUD").add_child(loot_swap)
+	swap_layer.add_child(loot_swap)
 	loot_swap.setup(HudStyle.FONT)
 	loot_swap.visible = false
 	loot_swap.discard_requested.connect(_on_loot_swap_discard)
 	loot_swap.claim_requested.connect(_on_loot_swap_claim)
+
+
+func is_loot_swap_open() -> bool:
+	# main의 수동 입력 라우터(근접 공격·조이스틱)가 모달 위 터치를 삼키지 않도록
+	# 게이트에 쓰는 단일 판정.
+	return loot_swap != null and is_instance_valid(loot_swap) and loot_swap.visible
 
 
 func _open_loot_swap() -> void:

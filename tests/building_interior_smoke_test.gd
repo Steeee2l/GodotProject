@@ -55,12 +55,12 @@ func _initialize() -> void:
 	_assert(get_nodes_in_group("building_room_module").size() >= 7, "한 층은 넓은 사무실 구역 7개 이상으로 구성되어야 합니다.")
 	var floor_root := interior.get_node("Floor01Modules")
 	_assert(interior.get_node_or_null("AimGuideLaserCore") != null, "Building aim laser must exist.")
-	_assert(interior.get_node_or_null("BuildingHUD/FatiguePanel") != null, "Building fatigue HUD must exist.")
-	_assert(interior.get_node_or_null("BuildingHUD/FireButton") != null, "Mobile building HUD must have a fire button.")
-	_assert(interior.get_node_or_null("BuildingHUD/MeleeButton") != null, "Mobile building HUD must have a melee button.")
-	_assert(interior.get_node_or_null("BuildingHUD/DashButton") != null, "Mobile building HUD must have a dash button.")
-	_assert(interior.get_node_or_null("BuildingHUD/ReloadButton") != null, "Mobile building HUD must have a reload button.")
-	_assert(interior.get_node_or_null("BuildingHUD/FlashlightButton") != null, "Mobile building HUD must have a flashlight toggle.")
+	_assert(interior.get_node_or_null("HUD/FatiguePanel") != null, "Building fatigue HUD must exist.")
+	_assert(interior.get_node_or_null("HUD/FireButton") != null, "Mobile building HUD must have a fire button.")
+	_assert(interior.get_node_or_null("HUD/MeleeButton") != null, "Mobile building HUD must have a melee button.")
+	_assert(interior.get_node_or_null("HUD/DashButton") != null, "Mobile building HUD must have a dash button.")
+	_assert(interior.get_node_or_null("HUD/ReloadButton") != null, "Mobile building HUD must have a reload button.")
+	_assert(interior.get_node_or_null("HUD/FlashlightButton") != null, "Mobile building HUD must have a flashlight toggle.")
 	interior.call("_on_flashlight_toggled", true)
 	_assert(bool(interior.get("laser_aim_held")), "Mobile building flashlight must hold the right-click aim state.")
 	interior.call("_on_flashlight_toggled", false)
@@ -76,7 +76,7 @@ func _initialize() -> void:
 	_assert(get_nodes_in_group("building_collision_debug").size() >= 2, "가구 충돌 영역을 확인할 빨간 디버그 표시가 필요합니다.")
 	_assert(interior.get_node_or_null("VisibilityFog") != null, "필드와 동일한 시야 안개 레이어가 실내에도 필요합니다.")
 	_assert(interior.get_node_or_null("BuildingPlayer/EquippedWeapon") != null, "필드에서 장착한 총기 이미지가 실내 플레이어에게도 유지되어야 합니다.")
-	_assert(interior.get_node_or_null("BuildingHUD/ElevatorFloorMenu") != null, "한 개의 엘리베이터에서 층을 선택할 UI가 필요합니다.")
+	_assert(interior.get_node_or_null("HUD/ElevatorFloorMenu") != null, "한 개의 엘리베이터에서 층을 선택할 UI가 필요합니다.")
 	_assert(ResourceLoader.exists("res://assets/interiors/office_dungeon/modules/office_workstation_cluster_v1.png"), "생성된 사무실 가구 이미지가 필요합니다.")
 	_assert(ResourceLoader.exists("res://assets/interiors/office_dungeon/modules/wall_elevator_front_v2.png"), "벽 투영형 엘리베이터 이미지가 필요합니다.")
 	_assert(ResourceLoader.exists("res://assets/interiors/office_dungeon/modules/server_rack_cluster_v1.png"), "서버랙 이미지 모듈이 필요합니다.")
@@ -98,8 +98,8 @@ func _initialize() -> void:
 	_assert(int(BuildingRunState.current_floor) == 2, "현재 층 상태가 전환 결과를 따라야 합니다.")
 	_assert(get_nodes_in_group("building_elevator_module").size() == 1, "2층에서도 층 선택형 엘리베이터는 하나만 있어야 합니다.")
 	interior.call("_show_elevator_menu")
-	_assert(bool(interior.get_node("BuildingHUD/ElevatorFloorMenu").visible), "엘리베이터 상호작용 시 층 선택 버튼이 표시되어야 합니다.")
-	interior.get_node("BuildingHUD/ElevatorFloorMenu").visible = false
+	_assert(bool(interior.get_node("HUD/ElevatorFloorMenu").visible), "엘리베이터 상호작용 시 층 선택 버튼이 표시되어야 합니다.")
+	interior.get_node("HUD/ElevatorFloorMenu").visible = false
 	for loot in get_nodes_in_group("building_loot_module"):
 		_assert(loot.get_node_or_null("GeneratedLootVisual") != null, "루팅 오브젝트는 박스 메시가 아닌 이미지여야 합니다.")
 		var loot_visual := loot.get_node("GeneratedLootVisual") as Sprite3D
@@ -113,6 +113,10 @@ func _initialize() -> void:
 	left_click.position = Vector2(920, 260)
 	interior.call("_input", left_click)
 	_assert(int(game_state.magazine_ammo) == ammo_before, "필드와 동일하게 좌클릭 단독 입력은 근접 공격이어야 합니다.")
+	_assert(bool(interior.get("melee_attack_active")), "필드와 동일한 스윙 상태기(예비동작→타격)가 시작되어야 합니다.")
+	# 필드와 동일하게 스윙 중에는 사격이 잠긴다 — 스윙을 끝내고 조준 사격을 검증한다.
+	interior.call("_update_melee_attack", 0.6)
+	_assert(not bool(interior.get("melee_attack_active")), "스윙은 0.5초 뒤 종료되어야 합니다.")
 	var right_click := InputEventMouseButton.new()
 	right_click.button_index = MOUSE_BUTTON_RIGHT
 	right_click.pressed = true

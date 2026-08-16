@@ -47,7 +47,9 @@ func _run() -> void:
 					(extraction_sites[other_index] as Node3D).global_position
 				) >= 31.5
 			)
-	enemy.global_position = player.global_position + Vector3(0.0, 0.0, 13.0)
+	# 상호 인지 패치(2026-08): 기본 시야 20→14로 줄어 13u는 시야 밖이다.
+	# 감지 검증용 배치는 새 시야 안쪽(9u)으로 옮긴다.
+	enemy.global_position = player.global_position + Vector3(0.0, 0.0, 9.0)
 	var facing_player := player.global_position - enemy.global_position
 	facing_player.y = 0.0
 	enemy.set("target", player)
@@ -58,9 +60,10 @@ func _run() -> void:
 	enemy.set("perception_state", "patrol")
 	enemy.set("patrol_pause", 100.0)
 	var vision_range := float(enemy.call("_get_vision_range"))
-	assert(vision_range >= 19.0 and vision_range <= 23.0)
+	# 기본 시야 20→14(플레이어 가시 반경 이하) 반영: 기존 19~23 창을 갱신.
+	assert(vision_range >= 11.0 and vision_range <= 16.5)
 	var combat_lock_range := float(enemy.call("_get_combat_lock_range"))
-	assert(combat_lock_range >= 20.0)
+	assert(combat_lock_range >= 11.0)
 	assert(combat_lock_range >= float(enemy.call("_get_weapon_engagement_range")) * 0.9)
 	assert(float(enemy.call("_get_search_break_distance")) >= combat_lock_range + 9.9)
 	enemy.set("combat_state", "reloading")
@@ -89,7 +92,7 @@ func _run() -> void:
 	var loaf_detected := bool(enemy.call(
 		"_update_detection_awareness",
 		0.4,
-		13.0,
+		9.0,
 		true,
 		vision_range
 	))
@@ -107,7 +110,13 @@ func _run() -> void:
 	main_scene.call("_set_loafing", false)
 	assert(not bool(player.get_meta("loafing_stealth", false)))
 	enemy.call("_clear_alert")
-	for step in 20:
+	enemy.set("patrol_pause", 100.0)
+	# 점진 감지에 +1.5초 여유가 붙어(2026-08) 발각까지 오래 걸린다 — 순찰 두리번
+	# 회전에 시야 부채꼴이 빗나가지 않게 시선을 고정하고 여유 있게 돈다.
+	var refaced := player.global_position - enemy.global_position
+	refaced.y = 0.0
+	for step in 120:
+		enemy.set("facing_world_direction", refaced.normalized())
 		enemy.call("_physics_process", 0.16)
 		if bool(enemy.get("alerted")):
 			break
@@ -120,7 +129,8 @@ func _run() -> void:
 	enemy.set("facing_world_direction", facing_player.normalized())
 	enemy.set("detection_awareness", 0.0)
 	enemy.set("perception_state", "patrol")
-	for step in 2:
+	# +1.5초 감지 여유로 스텝당 누적이 줄어, 의심 문턱(0.12)까지 4스텝을 준다.
+	for step in 4:
 		enemy.call("_update_detection_awareness", 0.16, 10.0, true, vision_range)
 	assert(str(enemy.get("perception_state")) == "suspicious")
 	assert(not bool(enemy.get("alerted")))
@@ -317,10 +327,8 @@ func _run() -> void:
 	shelter.call("_begin_space_hold")
 	assert(not bool(shelter.get("loafing")))
 	shelter.call("_end_space_hold")
-	assert(not bool(shelter.call("_raid_requires_unarmed_confirmation", "jongno_outskirts")))
 	game_state.set("has_ak", false)
 	game_state.set("equipped_weapon_id", "")
-	assert(bool(shelter.call("_raid_requires_unarmed_confirmation", "jongno_outskirts")))
 	shelter.call("_open_raid_zone_select")
 	await process_frame
 	var operations_map := root.find_child("SeoulOperationsMap", true, false) as TextureRect
@@ -334,14 +342,12 @@ func _run() -> void:
 	shelter.call("_select_raid_zone_preview", "namdaemun_market")
 	assert(str(shelter.get("raid_zone_selected_id")) == "namdaemun_market")
 	shelter.call("_select_raid_zone_preview", "jongno_outskirts")
-	raid_launch_button.pressed.emit()
-	await process_frame
-	var loadout_layer := root.find_child("RaidLoadoutConfirmLayer", true, false) as CanvasLayer
-	assert(is_instance_valid(loadout_layer))
-	var unarmed_confirm := loadout_layer.find_child("ConfirmRaidLoadoutButton", true, false) as Button
-	assert(unarmed_confirm is Button)
-	assert(unarmed_confirm.text == "맨손으로 출정")
-	assert(loadout_layer.find_child("RaidLoadoutConfirmPanel", true, false) is PanelContainer)
+	# 맨손 확인 팝업("무기 없이 출정하시겠습니까?")은 2026-08 유저 요구로 폐지 —
+	# 맨손이어도 확인 없이 바로 출정한다. 여기서는 실제 씬 전환까지 가지 않도록
+	# 팝업 코드가 사라졌는지만 확인한다.
+	assert(not shelter.has_method("_open_raid_loadout_confirmation"))
+	assert(not shelter.has_method("_raid_requires_unarmed_confirmation"))
+	assert(root.find_child("RaidLoadoutConfirmLayer", true, false) == null)
 	shelter.call("_close_raid_zone_select")
 	shelter.queue_free()
 	await process_frame

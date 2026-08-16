@@ -193,6 +193,35 @@ func _run() -> void:
 	assert(common_enemy_drop_rate >= 0.20 and common_enemy_drop_rate <= 0.30)
 	assert(armor_enemy_drop_rate >= 0.20 and armor_enemy_drop_rate <= 0.28)
 
+	# 처치 보장 드랍(2026-08 유저 요구: 모든 킬 = 무기 or 방어구 최소 1개).
+	# roll_enemy_drop의 기존 분포는 그대로 두고(위 어서션 유지), 무기·방어구가
+	# 안 나온 킬에 enemy_director가 이 fallback을 별도 픽업으로 얹는다.
+	# fallback 자체는 항상 장비를 내놓아야 하고, 무기 비율은 40% 부근이어야 한다.
+	var guaranteed_weapon_count := 0
+	var guaranteed_sample_count := 2000
+	for _sample in guaranteed_sample_count:
+		var guaranteed := LOOT_ECONOMY.roll_guaranteed_equipment_drop(
+			4, "ranged", "ak47", random
+		)
+		assert(str(guaranteed.get("type", "")) in ["weapon", "armor"])
+		if str(guaranteed.get("type", "")) == "weapon":
+			guaranteed_weapon_count += 1
+	var guaranteed_weapon_rate := (
+		float(guaranteed_weapon_count) / float(guaranteed_sample_count)
+	)
+	assert(guaranteed_weapon_rate >= 0.34 and guaranteed_weapon_rate <= 0.46)
+	# 근접(배트) 적은 무기 fallback이 성립하지 않으니 방어구 확정이어야 한다.
+	for _sample in 200:
+		var melee_guaranteed := LOOT_ECONOMY.roll_guaranteed_equipment_drop(
+			1, "melee", "baseball_bat", random
+		)
+		assert(str(melee_guaranteed.get("type", "")) == "armor")
+	# 총 드랍 동반 탄약(2026-08 유저 요구): 떨어진 총 구경의 탄이 정상 스택으로 나온다.
+	var companion := LOOT_ECONOMY.roll_weapon_companion_ammo("ak47", 2, random)
+	assert(str(companion.get("type", "")) == "ammo")
+	assert(str((companion.get("data", {}) as Dictionary).get("ammo_id", "")).begins_with("762"))
+	assert(int((companion.get("data", {}) as Dictionary).get("amount", 0)) >= 2)
+
 	var game_state := root.get_node("GameState")
 	game_state.call("reset_raid_supply_counters")
 	var weapon_definition := LOOT_ECONOMY.roll_container(

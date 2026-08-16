@@ -95,6 +95,8 @@ func _set_jackpot_step(title: String, detail: String, step: int) -> void:
 	# 단계 갱신 순간에만 10초 노출. 화물 운반 중(4/4)엔 탈출 안내라 상시 유지.
 	host.jackpot_banner_reveal_time = 999999.0 if step >= 4 else 10.0
 	host.call_deferred("_layout_center_top_banners")
+	# 좌상단 상시 목표 패널에도 단계를 반영한다.
+	host.call_deferred("_refresh_objective_panel")
 	host.hud.jackpot_hud.modulate.a = 0.35
 	var tween := host.create_tween()
 	tween.tween_property(host.hud.jackpot_hud, "modulate:a", 1.0, 0.25)
@@ -244,6 +246,11 @@ func _update_jackpot_event(delta: float) -> void:
 		return
 	jackpot_alarm_wave_timer -= delta
 	if jackpot_alarm_wave_timer > 0.0:
+		return
+	# 전투 중 추가 유입 상한 — 교전 중인 적이 이미 상한이면 웨이브를 미룬다.
+	# 웨이브 수는 소모하지 않고 2초 뒤 재시도한다.
+	if host.enemy_director.count_alerted_enemies() >= EnemyDirector.MAX_CONCURRENT_ALERTED:
+		jackpot_alarm_wave_timer = 2.0
 		return
 	_spawn_jackpot_alarm_wave()
 	jackpot_alarm_waves_spawned += 1

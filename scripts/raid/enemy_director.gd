@@ -67,6 +67,11 @@ const REINFORCEMENT_CALL_COOLDOWN := 38.0
 const REINFORCEMENT_CALL_DURATION := 4.6
 const REINFORCEMENT_CALL_TRIGGER_TIME := 30.0
 const REINFORCEMENT_HIDDEN_TRIGGER_TIME := 14.0
+# 전투 중 추가 유입 상한 — 동시에 교전(alerted) 중인 적이 이 수 이상이면
+# 증원 호출·긴장도 대응 스쿼드·잭팟 웨이브의 추가 스폰을 건너뛰거나 미룬다.
+# (유저: "싸우다 보면 적이 너무 많아져 감당이 안 된다") 판의 총 배치 수
+# (BASE_ENEMY_COUNT)와 기존 쿨다운은 그대로다 — 문제는 '전투 중 유입'이다.
+const MAX_CONCURRENT_ALERTED := 6
 const ROCKET_BOSS_SCRIPT := preload("res://scripts/rocket_boss.gd")
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
 const SCENT_TRAIL_MANAGER_SCRIPT := preload("res://scripts/scent_trail_manager.gd")
@@ -506,29 +511,64 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 				drop_position + Vector3(-0.9, 0.0, 0.5),
 				ammo_data
 			)
+	var enemy_kind := str(enemy.get("enemy_kind"))
 	var definition: Dictionary = LOOT_ECONOMY.roll_enemy_drop(
 		stage_tier,
-		str(enemy.get("enemy_kind")),
+		enemy_kind,
 		enemy_weapon_id,
 		spawn_random,
 		not host.has_ak
 	)
-	if definition.is_empty():
-		return null
-	if not LOOT_ECONOMY.try_register_loot(
-		GameState,
-		definition,
-		"enemy",
-		stage_tier
+	var main_pickup: Node3D = null
+	var main_type := ""
+	if (
+		not definition.is_empty()
+		and LOOT_ECONOMY.try_register_loot(GameState, definition, "enemy", stage_tier)
 	):
-		return null
-	var data := (definition.get("data", {}) as Dictionary).duplicate(true)
-	data["loot_source"] = "enemy"
-	return host._create_loot_pickup(
-		str(definition.get("type", "canned_food")),
-		drop_position,
-		data
-	)
+		main_type = str(definition.get("type", "canned_food"))
+		var data := (definition.get("data", {}) as Dictionary).duplicate(true)
+		data["loot_source"] = "enemy"
+		main_pickup = host._create_loot_pickup(main_type, drop_position, data)
+	var dropped_weapon := main_type == "weapon"
+	# 처치 보장 — 무기도 방어구도 안 나온 킬은 fallback 장비(무기 40%/방어구
+	# 60%)를 확정으로 얹는다. "죽였는데 장비가 하나도 없다"를 없앤다(유저 요구).
+	# 기존 굴림(식량·부품·탄약)은 그대로 두고 별도 픽업으로 스폰한다.
+	if main_type not in ["weapon", "armor"]:
+		var guaranteed: Dictionary = LOOT_ECONOMY.roll_guaranteed_equipment_drop(
+			stage_tier, enemy_kind, enemy_weapon_id, spawn_random
+		)
+		if not guaranteed.is_empty():
+			# 경제 상한(무기 캡 등)에 막혀도 보장이 우선 — 집계는 하되 캡만 무시.
+			if not LOOT_ECONOMY.try_register_loot(GameState, guaranteed, "enemy", stage_tier):
+				LOOT_ECONOMY.try_register_loot(GameState, guaranteed, "enemy", stage_tier, true)
+			var guaranteed_type := str(guaranteed.get("type", "armor"))
+			var guaranteed_data := (guaranteed.get("data", {}) as Dictionary).duplicate(true)
+			guaranteed_data["loot_source"] = "enemy"
+			var guaranteed_pickup: Node3D = host._create_loot_pickup(
+				guaranteed_type,
+				drop_position + Vector3(0.9, 0.0, -0.5),
+				guaranteed_data
+			)
+			dropped_weapon = dropped_weapon or guaranteed_type == "weapon"
+			if main_pickup == null:
+				main_pickup = guaranteed_pickup
+	# 총이 떨어졌으면 그 구경 탄약을 정상 스택으로 100% 동반 — 주운 총을 그
+	# 자리에서 장전해 써 볼 수 있어야 한다(유저 요구).
+	if dropped_weapon:
+		var companion_ammo: Dictionary = LOOT_ECONOMY.roll_weapon_companion_ammo(
+			enemy_weapon_id, stage_tier, spawn_random
+		)
+		if not companion_ammo.is_empty():
+			if not LOOT_ECONOMY.try_register_loot(GameState, companion_ammo, "enemy", stage_tier):
+				LOOT_ECONOMY.try_register_loot(GameState, companion_ammo, "enemy", stage_tier, true)
+			var companion_data := (companion_ammo.get("data", {}) as Dictionary).duplicate(true)
+			companion_data["loot_source"] = "enemy"
+			host._create_loot_pickup(
+				str(companion_ammo.get("type", "ammo")),
+				drop_position + Vector3(0.4, 0.0, 0.9),
+				companion_data
+			)
+	return main_pickup
 
 
 func _on_enemy_reinforcement_called(caller: CharacterBody3D) -> void:
@@ -568,6 +608,10 @@ func _update_reinforcement_call(delta: float, effective_threat: float) -> void:
 		concealed_combat_time = maxf(0.0, concealed_combat_time - delta * 2.5)
 	if active_reinforcement_caller != null or reinforcement_call_cooldown > 0.0:
 		return
+	# 이미 상한까지 교전 중이면 증원 호출 자체를 미룬다(타이머는 유지되므로,
+	# 수가 줄면 그때 호출이 성립한다).
+	if alerted_count >= MAX_CONCURRENT_ALERTED:
+		return
 	var prolonged_firefight := sustained_combat_time >= REINFORCEMENT_CALL_TRIGGER_TIME
 	var prolonged_standoff := concealed_combat_time >= REINFORCEMENT_HIDDEN_TRIGGER_TIME
 	if not prolonged_firefight and not prolonged_standoff:
@@ -593,6 +637,19 @@ func _update_reinforcement_call(delta: float, effective_threat: float) -> void:
 		concealed_combat_time = 0.0
 
 
+func count_alerted_enemies() -> int:
+	# 지금 '전투에 참여 중'인 적 수. 전투 중 추가 스폰 게이트의 단일 기준.
+	var count := 0
+	for enemy in host.enemies:
+		if (
+			is_instance_valid(enemy)
+			and not bool(enemy.get("dying"))
+			and bool(enemy.get("alerted"))
+		):
+			count += 1
+	return count
+
+
 func _spawn_called_reinforcements() -> void:
 	var stage_profile: Dictionary = LOOT_ECONOMY.get_stage_profile(
 		LOOT_ECONOMY.get_stage_for_zone(host.raid_zone_data)
@@ -601,8 +658,13 @@ func _spawn_called_reinforcements() -> void:
 	if remaining_kills <= 0:
 		return
 	var effective_threat := clampf(maxf(0.58, host.night_intensity), 0.0, 1.0)
+	# 증원 규모는 교전 상한의 남은 자리만큼만 — 예전 6~10명 고정 유입이
+	# "무한 누적" 체감의 최대 원인이었다.
+	var reinforcement_budget := MAX_CONCURRENT_ALERTED - count_alerted_enemies()
+	if reinforcement_budget <= 0:
+		return
 	var reinforcement_count := mini(
-		6 + roundi(host.night_intensity * 4.0),
+		mini(6 + roundi(host.night_intensity * 4.0), reinforcement_budget),
 		remaining_kills
 	)
 	var world := host.get_node("World") as ProceduralCityMap

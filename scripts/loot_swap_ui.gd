@@ -22,6 +22,7 @@ var auto_discard_button: Button
 var feedback_label: Label
 var candidate_data: Dictionary = {}
 var lowest_value_entry: Dictionary = {}
+var dismiss_relay: Node
 
 
 func setup(font: Font) -> void:
@@ -30,6 +31,9 @@ func setup(font: Font) -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	z_as_relative = false
 	z_index = 4050
+	# 모달이 떠 있는 동안 트리를 멈추므로, 모달 자신(과 하위 트윈·버튼)은
+	# 일시정지와 무관하게 동작해야 한다.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build_ui()
 	get_viewport().size_changed.connect(_apply_layout)
 	visible = false
@@ -42,12 +46,28 @@ func open(candidate: Dictionary, entries: Array[Dictionary], used: int, capacity
 	feedback_label.text = ""
 	_refresh(candidate, entries, used, capacity)
 	_apply_layout()
+	# 고민하는 동안 적이 때려죽이던 문제 — 교체 화면은 게임을 멈춘 채 연다.
+	get_tree().paused = true
+	# ESC·안드로이드 뒤로가기. 모달이 닫힌 뒤에도 ESC를 삼키지 않도록
+	# 열려 있는 동안만 장착한다. (딤 탭 닫기는 _build_ui에서 상시 연결)
+	if dismiss_relay == null or not is_instance_valid(dismiss_relay):
+		dismiss_relay = ModalDismiss.install(self, null, close)
 
 
 func close() -> void:
 	visible = false
 	candidate_data.clear()
+	get_tree().paused = false
+	if is_instance_valid(dismiss_relay):
+		dismiss_relay.queue_free()
+	dismiss_relay = null
 	closed.emit()
+
+
+func _exit_tree() -> void:
+	# 모달이 열린 채 씬이 바뀌어도 게임이 멈춘 채 남지 않게.
+	if visible and is_inside_tree():
+		get_tree().paused = false
 
 
 func _build_ui() -> void:
@@ -56,6 +76,16 @@ func _build_ui() -> void:
 	backdrop.color = Color(0.0, 0.0, 0.0, 0.78)
 	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(backdrop)
+	# 딤(패널 바깥) 탭 = 닫기 — ModalDismiss와 같은 판정(뗄 때).
+	backdrop.gui_input.connect(func(event: InputEvent) -> void:
+		var released: bool = (
+			(event is InputEventMouseButton and not event.pressed
+				and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT)
+			or (event is InputEventScreenTouch and not event.pressed)
+		)
+		if released:
+			close()
+	)
 
 	panel = PanelContainer.new()
 	panel.name = "LootSwapPanel"
@@ -80,9 +110,17 @@ func _build_ui() -> void:
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 10)
 	content.add_child(header)
+	var title_box := VBoxContainer.new()
+	title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_box.add_theme_constant_override("separation", 2)
+	header.add_child(title_box)
 	var title := _label("전리품 교체", 27, Color("#f1d287"))
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(title)
+	title_box.add_child(title)
+	# 이 화면이 왜 떴는지 한 줄로 — 처음 보는 유저의 혼란을 줄인다.
+	var subtitle := _label(
+		"가방이 가득 — 버릴 것을 골라 새 전리품과 교체하세요", 14, Color("#9eb5aa")
+	)
+	title_box.add_child(subtitle)
 	var close_button := Button.new()
 	close_button.custom_minimum_size = Vector2(46, 42)
 	close_button.icon = UI_ICONS.get_icon("close", 28, Color("#d8dfda"))
@@ -131,6 +169,16 @@ func _build_ui() -> void:
 	candidate_copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	candidate_copy.alignment = BoxContainer.ALIGNMENT_CENTER
 	candidate_row.add_child(candidate_copy)
+	# "새 전리품" 배지 — 이 카드가 '지금 주우려는 것'임을 못 박는다.
+	var badge := PanelContainer.new()
+	badge.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	badge.add_theme_stylebox_override(
+		"panel",
+		_panel_style(Color("#2a2113"), Color("#e5ad54"), 4)
+	)
+	var badge_label := _label("새 전리품", 11, Color("#eec87c"))
+	badge.add_child(badge_label)
+	candidate_copy.add_child(badge)
 	candidate_title = _label("", 21, Color("#f3dfad"))
 	candidate_copy.add_child(candidate_title)
 	candidate_detail = _label("", 14, Color("#c6b991"))
@@ -155,7 +203,8 @@ func _build_ui() -> void:
 	value_summary_label = _label("교체 후 가치 변화", 14, Color("#9eb5aa"))
 	content.add_child(value_summary_label)
 
-	var section := _label("탭하여 바닥에 내려놓기", 16, Color("#b8c8c0"))
+	# 캡션 스타일 — 버튼처럼 보여 눌러 보게 만들던 문구를 안내 문장으로 낮춘다.
+	var section := _label("아래 휴대품을 탭하면 바닥에 내려놓습니다", 12, Color("#8fa79b"))
 	content.add_child(section)
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(0, 250)

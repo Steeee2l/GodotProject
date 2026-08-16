@@ -191,6 +191,8 @@ var shelter_facility_unlocks: Dictionary = {
 }
 var contract_agent_intro_seen: bool = false
 var saja_intro_seen: bool = false
+# 행상인 최초 입장 자기소개(게임 전체 1회) 노출 여부.
+var merchant_intro_seen: bool = false
 var saja_second_run_intro_seen: bool = false
 var saja_seen_resident_count: int = 0
 var saja_seen_boss_kills: int = 0
@@ -3687,6 +3689,7 @@ func save_persistent_state() -> bool:
 		"shelter_facility_unlocks": shelter_facility_unlocks,
 		"contract_agent_intro_seen": contract_agent_intro_seen,
 		"saja_intro_seen": saja_intro_seen,
+		"merchant_intro_seen": merchant_intro_seen,
 		"saja_second_run_intro_seen": saja_second_run_intro_seen,
 		"saja_seen_resident_count": saja_seen_resident_count,
 		"saja_seen_boss_kills": saja_seen_boss_kills,
@@ -3890,6 +3893,7 @@ func load_persistent_state() -> bool:
 		}
 	contract_agent_intro_seen = bool(data.get("contract_agent_intro_seen", shelter_return_serial >= CONTRACT_AGENT_UNLOCK_RETURN))
 	saja_intro_seen = bool(data.get("saja_intro_seen", false))
+	merchant_intro_seen = bool(data.get("merchant_intro_seen", false))
 	saja_second_run_intro_seen = bool(data.get("saja_second_run_intro_seen", false))
 	saja_seen_resident_count = maxi(0, int(data.get("saja_seen_resident_count", 0)))
 	saja_seen_boss_kills = maxi(0, int(data.get("saja_seen_boss_kills", 0)))
@@ -4086,6 +4090,7 @@ func reset_run() -> void:
 	}
 	contract_agent_intro_seen = false
 	saja_intro_seen = false
+	merchant_intro_seen = false
 	saja_second_run_intro_seen = false
 	saja_seen_resident_count = 0
 	saja_seen_boss_kills = 0

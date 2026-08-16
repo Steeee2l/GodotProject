@@ -397,6 +397,7 @@ func _ready() -> void:
 			or _is_tactical_map_open()
 			or lore_reader.is_open()
 			or extraction_transition_active
+			or loot_system.is_loot_swap_open()
 		), "종료 (판 진행은 사라짐)")
 	raid_zone_data = GameState.get_raid_zone()
 	# 판 시작을 세이브에 새긴다 — 추출 없이 강제 종료하면 로드 시 포기 처리.
@@ -4581,6 +4582,10 @@ func _spawn_raid_event_squad(level: int) -> void:
 	var world := $World as ProceduralCityMap
 	if world == null:
 		return
+	# 전투 중 추가 유입 상한 — 이미 상한까지 교전 중이면 압박 스쿼드는 건너뛴다.
+	# (이벤트 쿨다운은 소모된 채 넘어가므로 '나중에 몰아서' 오지도 않는다.)
+	if enemy_director.count_alerted_enemies() >= EnemyDirector.MAX_CONCURRENT_ALERTED:
+		return
 	var spawn_position := enemy_director._find_event_position_near_player(world, 26.0, 38.0)
 	# 삼항으로 고른 배열 리터럴은 무타입 Array가 돼 Array[String] 대입에서 런타임
 	# 오류를 낸다(전투 중 실제 발생). 분기로 명시해 타입을 지킨다.
@@ -5500,6 +5505,12 @@ func _refresh_objective_panel() -> void:
 	if objective_panel == null or objective_label == null:
 		return
 	var lines: Array[String] = []
+	# 주 목표(격리 신호)는 좌상단에서 항상 인지돼야 한다(유저 피드백) —
+	# 배너는 순간 알림용이고, 상시 인지는 이 패널의 몫이다.
+	if hud != null and is_instance_valid(hud.jackpot_hud):
+		var jackpot_title := str(hud.jackpot_step_label.text)
+		if not jackpot_title.is_empty():
+			lines.append(jackpot_title)
 	if not field_objective_title.is_empty():
 		lines.append(field_objective_title)
 		var detail_lines := field_objective_detail.split("\n", false)
@@ -5535,22 +5546,11 @@ func _refresh_objective_panel() -> void:
 
 
 func _update_objective_reveal(delta: float) -> void:
-	# 목표는 항상 떠 있지 않는다. 미션 스팟 근처에 진입하면 스윽 드러나고, 멀어지면
-	# 사라진다. 진행 중인 현장 미션이 있을 땐 계속 보인다. 상시 목표 UI가 화면을
-	# 덮던 문제와 시작 문구 중복을 함께 줄인다.
+	# 목표는 좌상단에 상시 표시한다. 근접 리빌 방식은 "지금 뭘 해야 하지"를
+	# 가렸다(유저 피드백) — 내용이 있으면 항상 보인다.
 	if objective_panel == null or not objective_panel.visible:
 		return
-	var reveal := is_instance_valid(active_field_mission)
-	if not reveal:
-		for point in field_interactions:
-			if not is_instance_valid(point):
-				continue
-			if str(point.get_meta("interaction_type", "")) in OBJECTIVE_REVEAL_TYPES:
-				if player.global_position.distance_to(point.global_position) <= OBJECTIVE_REVEAL_RADIUS:
-					reveal = true
-					break
-	var target_alpha := 1.0 if reveal else 0.0
-	objective_reveal_alpha = move_toward(objective_reveal_alpha, target_alpha, delta * 3.5)
+	objective_reveal_alpha = move_toward(objective_reveal_alpha, 1.0, delta * 3.5)
 	objective_panel.modulate.a = objective_reveal_alpha
 
 
@@ -6827,6 +6827,7 @@ func _input(event: InputEvent) -> void:
 			or _is_tactical_map_open()
 			or lore_reader.is_open()
 			or extraction_transition_active
+			or loot_system.is_loot_swap_open()
 		):
 			return
 		if key_event.pressed and key == KEY_F5:
@@ -6878,6 +6879,9 @@ func _input(event: InputEvent) -> void:
 			or _is_tactical_map_open()
 			or lore_reader.is_open()
 			or extraction_transition_active
+			# 전리품 교체 모달 위에서는 좌클릭이 근접 공격으로 새지 않게 —
+			# GUI(닫기 X 버튼 등)가 이벤트를 받아야 한다.
+			or loot_system.is_loot_swap_open()
 		):
 			return
 		var mouse_event := event as InputEventMouseButton
@@ -6897,6 +6901,7 @@ func _input(event: InputEvent) -> void:
 			or _is_tactical_map_open()
 			or lore_reader.is_open()
 			or extraction_transition_active
+			or loot_system.is_loot_swap_open()
 		):
 			return
 		if _handle_mobile_action_touch(touch):
@@ -6929,6 +6934,7 @@ func _input(event: InputEvent) -> void:
 			or _is_tactical_map_open()
 			or lore_reader.is_open()
 			or extraction_transition_active
+			or loot_system.is_loot_swap_open()
 		):
 			return
 		if drag.index == fire_touch_id:

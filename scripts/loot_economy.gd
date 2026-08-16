@@ -889,6 +889,43 @@ static func _roll_enemy_armor_id(stage: int, random: RandomNumberGenerator) -> S
 	return str(pool[random.randi_range(0, pool.size() - 1)])
 
 
+static func roll_guaranteed_equipment_drop(
+	stage_tier: int,
+	enemy_kind: String,
+	enemy_weapon_id: String,
+	random: RandomNumberGenerator
+) -> Dictionary:
+	# 처치 보장 드랍 — roll_enemy_drop이 무기도 방어구도 내놓지 않았을 때
+	# enemy_director가 얹는 fallback. "힘들게 죽였는데 장비가 하나도 없다"를
+	# 없앤다(모든 킬 = 무기 or 방어구 최소 1개). 무기 40% / 방어구 60%.
+	# roll_enemy_drop의 기존 분포·시그니처는 건드리지 않으려고 별도 함수로 둔다.
+	var stage := clampi(stage_tier, 1, 5)
+	if (
+		enemy_kind != "melee"
+		and enemy_weapon_id != "baseball_bat"
+		and random.randf() < 0.4
+	):
+		var weapon_definition := _find_weapon_definition(enemy_weapon_id)
+		if not weapon_definition.is_empty() and _item_allowed(weapon_definition, stage):
+			return _materialize_item(enemy_weapon_id, stage, random)
+	return _materialize_item(_roll_enemy_armor_id(stage, random), stage, random)
+
+
+static func roll_weapon_companion_ammo(
+	weapon_id: String,
+	stage_tier: int,
+	random: RandomNumberGenerator
+) -> Dictionary:
+	# 총이 드랍되면 그 구경 탄약을 정상 스택으로 반드시 동반시킨다 — 주운 총을
+	# 그 자리에서 장전해 써 볼 수 있어야 드랍이 의미가 있다(유저 요구).
+	var ammo_item_id := _enemy_ammo_item_id(
+		weapon_id, clampi(stage_tier, 1, 5), random
+	)
+	if ammo_item_id.is_empty():
+		return {}
+	return _materialize_item(ammo_item_id, clampi(stage_tier, 1, 5), random, false)
+
+
 static func get_enemy_weapon_drop_chance(stage_tier: int) -> float:
 	# 총 든 적을 죽이면 그 총이 나올 수 있어야 한다(타르코프의 손맛). 5%는
 	# 사실상 안 나오는 확률이라 판 내 재무장 파워커브가 죽어 있었다.
