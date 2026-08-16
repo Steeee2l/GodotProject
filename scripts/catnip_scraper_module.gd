@@ -108,7 +108,11 @@ func _open_ui() -> void:
 	content = VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.custom_minimum_size.x = maxf(300.0, panel.custom_minimum_size.x - inner_margin * 2.0 - 12.0)
+	# 패널이 이미 화면 폭에 맞춰 줄어든 뒤다 — 여기서 원본 기준 최소폭을
+	# 다시 강제하면 세로 화면에서 내용이 잘린다.
+	content.custom_minimum_size.x = maxf(
+		280.0, panel.custom_minimum_size.x - float(inner_margin) * 2.0 - 12.0
+	)
 	content.add_theme_constant_override("separation", 10 if viewport_size.y < 640.0 else 14)
 	panel_scroll.add_child(content)
 	_rebuild_ui()
@@ -330,7 +334,8 @@ func _button(text: String, icon_name := "") -> Button:
 	button.text = text
 	if not icon_name.is_empty():
 		button.icon = UI_ICONS.get_icon(icon_name, 28, HudStyle.TEXT)
-		button.expand_icon = true
+		# 대형 재화 PNG가 버튼 전체로 부풀지 않게 폭을 못 박는다.
+		button.add_theme_constant_override("icon_max_width", 26)
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	return HudStyle.style_button(button, HudStyle.LINE_FOCUS)
 

@@ -390,7 +390,8 @@ func _button(text: String, icon_name: String = "") -> Button:
 	button.text = text
 	if not icon_name.is_empty():
 		button.icon = UI_ICONS.get_icon(icon_name, 28, HudStyle.TEXT)
-		button.expand_icon = true
+		# 대형 재화 PNG가 버튼 전체로 부풀지 않게 폭을 못 박는다.
+		button.add_theme_constant_override("icon_max_width", 26)
 	return HudStyle.style_button(button, HudStyle.LINE_FOCUS)
 
 

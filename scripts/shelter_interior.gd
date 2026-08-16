@@ -3411,6 +3411,11 @@ func _refresh_inventory_state() -> void:
 
 func _on_inventory_open_state_changed(is_open: bool) -> void:
 	if is_open:
+		# 시설 모달(제작대 등)이 열린 채로 가방을 열면 가방이 그 아래에 깔려
+		# "안 열린다"로 보였다(유저 신고). 가방이 열릴 땐 시설 모달을 닫는다.
+		for modal in get_tree().get_nodes_in_group("shelter_modal_ui"):
+			if is_instance_valid(modal) and modal is CanvasLayer:
+				(modal as CanvasLayer).queue_free()
 		_refresh_inventory_state()
 		touch_vector = Vector2.ZERO
 		player.velocity = Vector3.ZERO

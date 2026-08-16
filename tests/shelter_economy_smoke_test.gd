@@ -67,8 +67,9 @@ func _run() -> void:
 	var resident_nodes := get_nodes_in_group("shelter_resident")
 	if resident_nodes.size() != 4:
 		_fail("rescued residents were not instantiated in the shelter")
-	if shelter.find_child("PlayerBed", true, false) == null:
-		_fail("the single player bed is missing")
+	# 침대는 폐지됐다 — 복귀 자체가 완전 회복이다.
+	if shelter.find_child("PlayerBed", true, false) != null:
+		_fail("the obsolete player bed is still present")
 	if shelter.find_children("BedModule*", "Node3D", true, false).size() > 0:
 		_fail("obsolete resident beds are still present")
 	# 바닥 슬롯 플레이트(장식)는 제거됐다. 워커는 _scratcher/_catnip_work_position

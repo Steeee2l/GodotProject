@@ -16,6 +16,7 @@ var candidate_icon: TextureRect
 var candidate_title: Label
 var candidate_detail: Label
 var value_summary_label: Label
+var instruction_label: Label
 var item_grid: GridContainer
 var claim_button: Button
 var auto_discard_button: Button
@@ -200,6 +201,9 @@ func _build_ui() -> void:
 	claim_button.pressed.connect(func() -> void: claim_requested.emit())
 	candidate_row.add_child(claim_button)
 
+	# 행동 지시 — 이 창에서 가장 큰 글자여야 한다("몇 칸을 비워라").
+	instruction_label = _label("", 16, Color("#ffb08f"))
+	content.add_child(instruction_label)
 	value_summary_label = _label("교체 후 가치 변화", 14, Color("#9eb5aa"))
 	content.add_child(value_summary_label)
 
@@ -265,7 +269,17 @@ func _refresh(candidate: Dictionary, entries: Array[Dictionary], used: int, capa
 		value_per_slot,
 	]
 	claim_button.disabled = used + required > capacity
-	claim_button.text = "바로 획득" if not claim_button.disabled else "%d칸 부족" % (used + required - capacity)
+	var missing_slots := maxi(0, used + required - capacity)
+	claim_button.text = "바로 획득" if not claim_button.disabled else "%d칸 부족" % missing_slots
+	# 지시문 한 줄로 "지금 무엇을 해야 하는지"를 못 박는다. 이 창의 혼란은
+	# 정보가 없어서가 아니라 행동 지시가 없어서였다.
+	if instruction_label != null:
+		if missing_slots > 0:
+			instruction_label.text = "%d칸을 비워야 합니다 — 아래에서 버릴 물건을 고르세요" % missing_slots
+			instruction_label.add_theme_color_override("font_color", Color("#ffb08f"))
+		else:
+			instruction_label.text = "바로 획득할 수 있습니다"
+			instruction_label.add_theme_color_override("font_color", Color("#8fd8a4"))
 
 	for child in item_grid.get_children():
 		child.queue_free()

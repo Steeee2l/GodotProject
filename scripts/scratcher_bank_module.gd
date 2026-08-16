@@ -110,7 +110,11 @@ func _open_ui() -> void:
 	content = VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.custom_minimum_size.x = maxf(300.0, panel.custom_minimum_size.x - inner_margin * 2.0 - 12.0)
+	# 패널이 이미 화면에 맞춰 줄어든 뒤다 — 여기서 960 기준 최소폭을 다시
+	# 강제하면 세로 화면에서 내용이 폭을 넘어 잘린다. 실제 패널 폭을 따른다.
+	content.custom_minimum_size.x = maxf(
+		280.0, panel.custom_minimum_size.x - float(inner_margin) * 2.0 - 12.0
+	)
 	content.add_theme_constant_override("separation", 10 if viewport_size.y < 640.0 else 16)
 	panel_scroll.add_child(content)
 	_rebuild_ui()
@@ -367,7 +371,12 @@ func _button(text: String, icon_name := "") -> Button:
 	if not icon_name.is_empty():
 		button.icon = UI_ICONS.get_icon(icon_name, 28, HudStyle.TEXT)
 		button.expand_icon = true
+		# 재화 아이콘(고철·캣닢)은 대형 생성 PNG다. 폭 상한을 안 걸면
+		# 세로 여백이 남는 순간 아이콘이 버튼 전체로 부풀어 레이아웃이
+		# 무너진다(모바일 세로에서 실제 발생). 상한을 못 박는다.
+		button.add_theme_constant_override("icon_max_width", 26)
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.expand_icon = false
 	return HudStyle.style_button(button, HudStyle.LINE_FOCUS)
 
 

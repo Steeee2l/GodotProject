@@ -339,7 +339,8 @@ func _build_inventory_panel() -> Control:
 	bag_header.add_child(secure_expand_button)
 
 	# 필터 바 — 완성된 채 배선이 빠져 한 번도 화면에 나온 적이 없던 UI.
-	box.add_child(_build_bag_filter_bar())
+	# 필터 바는 폐지됐다(유저: "하나도 이해를 못 하겠다"). 가방은 12칸짜리라
+	# 전부 한눈에 들어오고, 필터가 오히려 "왜 안 보이지"를 만들었다.
 
 	inventory_feedback = _label("", 11, Color("#f2d27a"))
 	inventory_feedback.visible = false

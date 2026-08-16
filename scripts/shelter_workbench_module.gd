@@ -253,6 +253,7 @@ func _open_ui() -> void:
 	ui_layer.name = "WorkbenchUILayer"
 	# 다른 시설 모달(80~90)과 같은 대역 — HUD 액세서리 위에 확실히 얹힌다.
 	ui_layer.layer = 84
+	# 가방(inventory_ui)이 열릴 때 이 그룹을 보고 시설 모달을 닫는다.
 	ui_layer.add_to_group("shelter_modal_ui")
 	var ui_parent := get_tree().current_scene if get_tree().current_scene != null else get_tree().root
 	ui_parent.add_child(ui_layer)
@@ -504,6 +505,7 @@ func _refresh_recipe_list() -> void:
 		var button := _button("%s\n%s" % [str(recipe["name"]), _recipe_list_subtitle(recipe)])
 		button.icon = _recipe_icon(recipe)
 		button.expand_icon = true
+		button.add_theme_constant_override("icon_max_width", 40)
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.custom_minimum_size = Vector2(0, 72)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -539,6 +541,7 @@ func _refresh_detail_panel() -> void:
 	detail_box.add_child(description)
 
 	var icon_card := PanelContainer.new()
+	icon_card.name = "WorkbenchResultCard"
 	icon_card.custom_minimum_size = Vector2(170, 118)
 	icon_card.add_theme_stylebox_override("panel", _panel_style(Color(0.07, 0.082, 0.088, 0.8), Color("#8ac2a7"), 1, 8))
 	var icon_margin := _margin(12, 10, 12, 10)
@@ -595,6 +598,7 @@ func _refresh_detail_panel() -> void:
 	if not craft_feedback_text.is_empty() and Time.get_ticks_msec() < craft_feedback_until_msec:
 		var feedback := _label(craft_feedback_text, 16, Color("#9fdcae"))
 		feedback.name = "WorkbenchCraftFeedback"
+		feedback.add_theme_font_size_override("font_size", 20)
 		detail_box.add_child(feedback)
 		feedback.pivot_offset = Vector2(0.0, 12.0)
 		feedback.scale = Vector2(0.94, 0.94)
@@ -605,6 +609,23 @@ func _refresh_detail_panel() -> void:
 		tween.tween_property(feedback, "scale", Vector2.ONE, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		tween.chain().tween_interval(2.2)
 		tween.chain().tween_property(feedback, "modulate:a", 0.0, 0.45).set_trans(Tween.TRANS_SINE)
+		# 결과 카드가 튀어오르고 초록빛이 번쩍 — "만들어졌다"를 몸으로 알린다.
+		# 문자열 한 줄만으로는 제작 성공을 알아채기 어려웠다(유저 신고).
+		if is_instance_valid(icon_card):
+			icon_card.pivot_offset = icon_card.custom_minimum_size * 0.5
+			var pop := icon_card.create_tween()
+			pop.tween_property(icon_card, "scale", Vector2(1.16, 1.16), 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			pop.parallel().tween_property(icon_card, "modulate", Color(1.6, 2.1, 1.7, 1.0), 0.14)
+			pop.tween_property(icon_card, "scale", Vector2.ONE, 0.26).set_trans(Tween.TRANS_SINE)
+			pop.parallel().tween_property(icon_card, "modulate", Color.WHITE, 0.34)
+		# 상단 재화 줄도 함께 깜빡여 "재료가 빠지고 결과가 들어왔다"를 잇는다.
+		for key_value in resource_value_labels.keys():
+			var resource_label := resource_value_labels[key_value] as Label
+			if not is_instance_valid(resource_label):
+				continue
+			var flash := resource_label.create_tween()
+			flash.tween_property(resource_label, "modulate", Color(1.5, 1.9, 1.5, 1.0), 0.12)
+			flash.tween_property(resource_label, "modulate", Color.WHITE, 0.4)
 
 func _selected_recipe() -> Dictionary:
 	for recipe_raw in _recipes_for_category(selected_category):
@@ -985,7 +1006,8 @@ func _button(text: String, icon_name := "") -> Button:
 	button.text = text
 	if not icon_name.is_empty():
 		button.icon = UI_ICONS.get_icon(icon_name, 30, HudStyle.TEXT)
-		button.expand_icon = true
+		# 대형 재화 PNG가 버튼 전체로 부풀지 않게 폭을 못 박는다.
+		button.add_theme_constant_override("icon_max_width", 28)
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return HudStyle.style_button(button, HudStyle.LINE_FOCUS)
