@@ -6334,7 +6334,7 @@ func _complete_field_interaction(point: Node3D) -> void:
 		"rescue":
 			_add_fatigue(FATIGUE_RESCUE_GAIN)
 			_add_rescued_follower(point.global_position)
-			_show_field_notice("피난민 구조 · 호송 중 이동 속도가 감소합니다.")
+			_show_field_notice("생존자 구조 · 호송 중 이동 속도가 감소합니다.")
 		"corpse_recovery":
 			_recover_previous_corpse()
 	field_loot_containers.erase(point)

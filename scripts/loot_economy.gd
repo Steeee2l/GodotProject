@@ -766,9 +766,10 @@ static func roll_container(
 			random
 		)
 		if not item_id.is_empty():
-			# 스마트 탄약: 상자에서 탄약이 나오면 55%는 장착 무기 구경으로
-			# 치환. "탄약은 나오는데 내 총 탄은 없다"는 좌절을 줄인다.
-			if item_id.begins_with("ammo_") and random.randf() < 0.55:
+			# 스마트 탄약: 상자에서 탄약이 나오면 장착 무기 구경으로 치환.
+			# 전용 탄약상자는 85% — "탄약상자 = 내 총 보급소"가 직관이 되도록.
+			var matched_chance := 0.85 if container_type == "ammo_case" else 0.55
+			if item_id.begins_with("ammo_") and random.randf() < matched_chance:
 				var matched_ammo_id := _equipped_ammo_item_id(stage)
 				if not matched_ammo_id.is_empty():
 					item_id = matched_ammo_id

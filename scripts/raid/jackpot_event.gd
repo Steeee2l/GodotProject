@@ -279,8 +279,8 @@ func _spawn_jackpot_alarm_wave() -> void:
 func _attempt_take_jackpot_cargo(point: Node3D) -> void:
 	var cargo := {
 		"id": "seoul_line3_relief_core",
-		"title": "서울 지하선 3번 보급 코어",
-		"description": "인간 격리 당시 보호소 이송 명부와 냉각 보급품이 함께 봉인된 대형 화물입니다.",
+		"title": "서울 지하선 3번 봉인 화물",
+		"description": "격리 수송 당시의 봉인이 그대로 남은 대형 화물입니다. 안쪽에서 낮은 진동이 느껴집니다. 탈출해야 내용물을 확인할 수 있습니다.",
 	}
 	if not GameState.can_add_raid_item("special_cargo", str(cargo.id), 1):
 		host._show_bag_full_notice()
@@ -293,8 +293,8 @@ func _claim_jackpot_cargo(point: Node3D) -> void:
 		return
 	var cargo := {
 		"id": "seoul_line3_relief_core",
-		"title": "서울 지하선 3번 보급 코어",
-		"description": "인간 격리 당시 보호소 이송 명부와 냉각 보급품이 함께 봉인된 대형 화물입니다.",
+		"title": "서울 지하선 3번 봉인 화물",
+		"description": "격리 수송 당시의 봉인이 그대로 남은 대형 화물입니다. 안쪽에서 낮은 진동이 느껴집니다. 탈출해야 내용물을 확인할 수 있습니다.",
 	}
 	if not GameState.try_take_story_cargo(cargo):
 		host._show_bag_full_notice()

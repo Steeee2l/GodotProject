@@ -976,7 +976,8 @@ func apply_raid_abandonment() -> void:
 	clear_carried_raid_inventory_after_death()
 	var loss_manager := load("res://scripts/raid_loss_manager.gd")
 	loss_manager.restore_secure_items_after_death()
-	player_health = mini(82, get_max_health())
+	# 벌칙은 전리품 손실로 충분하다 — 쉘터에 있는 이상 체력은 가득.
+	player_health = get_max_health()
 	raid_in_progress = false
 	save_persistent_state()
 
@@ -985,6 +986,8 @@ func register_shelter_return(survived: bool = true) -> void:
 	shelter_return_serial += 1
 	# 정상 경로(추출·사망 정산)로 돌아왔다 — 판 포기 감시 해제.
 	raid_in_progress = false
+	# 쉘터 복귀 = 완전 회복. 침대·수면 절차는 폐지됐다.
+	player_health = get_max_health()
 	if survived:
 		survived_return_count += 1
 	clear_confirmed_raid_manifest()
@@ -1110,9 +1113,9 @@ func get_pending_shelter_story_event() -> Dictionary:
 			"title": "쇳내 나는 가방",
 			"lines": [
 				"가방에서 쇳내가 난다. 스프링, 렌즈, 고무… 그거 행상인에게 팔 생각부터 하지 마라.",
-				"북쪽 벽의 제작대로 가져가. 부품 몇 개면 조준경이 되고, 스프링은 급탄 개조가 된다.",
+				"작업대로 가져가. 부품 몇 개면 조준경이 되고, 스프링은 급탄 개조가 된다.",
 				"만든 개조품은 무기에 끼워라. 같은 총이라도 전혀 다른 물건이 된다.",
-				"고철이 남아돌면 제작대에서 무기 영구 강화도 된다. 도시에서 주워 온 모든 것에는 자리가 있어.",
+				"고철이 남아돌면 작업대에서 무기 영구 강화도 된다. 도시에서 주워 온 모든 것에는 자리가 있어.",
 			],
 		}
 	if rescued_workers > saja_seen_resident_count:

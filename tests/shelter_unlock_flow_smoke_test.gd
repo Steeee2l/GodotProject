@@ -16,7 +16,8 @@ func _run() -> void:
 	await process_frame
 	await physics_frame
 	var initial_modules := first_shelter.get_node("StageOneModules") as Node3D
-	assert(initial_modules.get_node_or_null("PlayerBed") != null)
+	# 침대는 폐지 — 복귀 자체가 완전 회복이다.
+	assert(initial_modules.get_node_or_null("PlayerBed") == null)
 	assert(str(first_shelter.call("_build_offline_status_text", {})).is_empty())
 	# 창고는 시작부터 열려 있다(전리품 보관 학습). 나머지는 계약/복귀로 해금.
 	assert(initial_modules.get_node_or_null("ShelterStorage") != null)
@@ -42,11 +43,12 @@ func _run() -> void:
 	await process_frame
 	var shelter_medkit_button := root.find_child("ShelterMedkitButton", true, false) as Button
 	assert(shelter_medkit_button != null)
-	assert(shelter_medkit_button.visible)
 	assert(shelter_medkit_button.text.contains("SHIFT"))
 	game_state.set("player_health", 50)
 	game_state.set("medkits", 1)
 	first_shelter.call("_update_shelter_medkit_button")
+	# 만피가 아닐 때만 보인다 — 복귀 완충 이후 쉘터 구급약은 예외 상황 전용.
+	assert(shelter_medkit_button.visible)
 	first_shelter.call("_use_shelter_medkit")
 	assert(int(game_state.get("player_health")) == 88)
 	assert(int(game_state.get("medkits")) == 0)

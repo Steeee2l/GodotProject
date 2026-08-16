@@ -100,6 +100,12 @@ const MERCHANT_GOODS := [
 		"description": "탄창과 전술 부품 제작에 사용하는 복원력 높은 스프링입니다.",
 	},
 ]
+# 행상인 입장 첫마디 — 떠돌이 상인은 떠도는 소문만 안다. 그 이상은 모른다.
+const MERCHANT_ENTRY_LINES := [
+	"“고맙다냥. 요즘 땅 밑에서 이상한 신호가 돈다는 소문이 있다냥… 자, 물건부터 보라냥.”",
+	"“살아 있는 쉘터는 냄새부터 다르다냥. 남쪽 봉쇄선 쪽은 요즘 아무도 안 다닌다냥.”",
+	"“좋은 물건만 골라 왔다냥. 소문은 덤이고, 값은 고철로 받는다냥.”",
+]
 var player: CharacterBody3D
 var survivor: AnimatedSprite3D
 var shelter_camera: Camera3D
@@ -496,14 +502,7 @@ func _build_stage_one_modules() -> void:
 	module_root.set_meta("cat_capacity", GameState.get_resident_capacity())
 	module_root.set_meta("module_grid_size", BED_MODULE_PLATE_SIZE)
 	add_child(module_root)
-	var bed_position := _player_bed_position()
-	_build_module_plate(module_root, bed_position, 1, 90.0)
-	var bed := BED_MODULE_SCENE.instantiate() as Node3D
-	bed.name = "PlayerBed"
-	bed.position = bed_position
-	bed.rotation_degrees.y = 90.0
-	bed.set("bed_index", 1)
-	module_root.add_child(bed)
+	# 침대는 제거됐다 — 복귀 자체가 완전 회복이라 잘 이유가 없다.
 	_refresh_unlocked_facilities(module_root, false)
 
 
@@ -2200,7 +2199,9 @@ func _accept_merchant() -> void:
 	_set_merchant_notice_visible(false)
 	_spawn_merchant()
 	_close_merchant_ui()
-	_show_status("행상인이 쉘터에 들어왔습니다. 말을 걸어 거래할 수 있습니다.")
+	_show_status("행상인 · %s" % MERCHANT_ENTRY_LINES[
+		resident_chat_random.randi_range(0, MERCHANT_ENTRY_LINES.size() - 1)
+	])
 
 
 func _decline_merchant() -> void:
@@ -3122,7 +3123,7 @@ const RESIDENT_CHAT_LINES := [
 	"오늘도 사이렌은 남쪽에서만 울리더라.",
 	"사람들 냄새가 하나도 안 남았어. 삼백 밤이 지났는데도.",
 	"캣닢 배급이 늘었대. 나비 덕이라고들 해.",
-	"격리 신호 얘기 들었어? 벽 너머에서 온다던데.",
+	"이상한 신호 얘기 들었어? 땅 밑에서 올라온다던데.",
 	"발톱 관리는 게으름이 아니야. 생존이지.",
 	"어젯밤 고철 더미에서 라디오가 지직거렸대. 아직 누가 있다는 거야.",
 	"같은 문장만 반복되는 방송이 있대. 소름 돋아서 더는 안 들었어.",
@@ -3264,6 +3265,10 @@ func _update_shelter_medkit_button() -> void:
 		GameState.medkits <= 0
 		or GameState.player_health <= 0
 		or GameState.player_health >= GameState.get_max_health()
+	)
+	# 복귀가 곧 완전 회복이라 쉘터에선 보통 쓸 일이 없다 — 만피면 숨긴다.
+	shelter_medkit_button.visible = (
+		GameState.player_health < GameState.get_max_health() and GameState.medkits > 0
 	)
 	shelter_medkit_button.tooltip_text = "구급약 사용 (Shift)"
 

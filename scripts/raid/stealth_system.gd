@@ -533,7 +533,7 @@ func _update_stealth_mission(delta: float, distance_to_site: float) -> void:
 	var detail := "엄폐 상태 유지  %.1f초" % remaining
 	var color := Color("#8fd0c1")
 	if detected:
-		detail = "발각 위험 · 시야를 끊으십시오  %.1f / %.1f초" % [
+		detail = "발각 위험 · 시야를 끊으세요  %.1f / %.1f초" % [
 			host.field_mission_detection_time,
 			detection_grace,
 		]
@@ -564,7 +564,7 @@ func _update_stealth_reach_mission(delta: float) -> void:
 		host.field_missions._fail_field_mission("안전 지점 신호를 찾을 수 없습니다.")
 		return
 	var target_distance := player.global_position.distance_to((target as Node3D).global_position)
-	var detail := "안전 지점까지 %.1fm · 시야에 들지 마십시오." % target_distance
+	var detail := "안전 지점까지 %.1fm · 시야에 들지 마세요." % target_distance
 	var color := Color("#8fd0c1")
 	if detected:
 		detail = "발각 직전 · 엄폐물 뒤로  %.1f / %.1f초" % [
