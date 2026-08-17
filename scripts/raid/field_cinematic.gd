@@ -1,0 +1,767 @@
+class_name FieldCinematic
+extends RefCounted
+
+# 필드용 인게임 시네마틱 실행기 — 레터박스 · 조작 잠금 · 연출 이동 · 대사 ·
+# 정지 이미지 컷 · 선택지를 하나의 단계 큐로 돌린다.
+#
+# 쉘터의 주홍 등장 연출(_play_juhong_entrance_cinematic)이 참고 구현이었다.
+# 거기서 "레터박스 → 스크립트 이동 → 대화 → 레터박스 해제"의 뼈대만 뽑아
+# 필드에서도 쓸 수 있게 일반화했다. main.gd는 커지지 않는다 — host 패턴으로
+# 공용 헬퍼만 빌려 쓴다.
+#
+# 사용:
+#   cinematic.attach(main)
+#   cinematic.play([{...단계...}, ...], func() -> void: ...)
+#
+# ── 단계(step) 종류 ────────────────────────────────────────────
+#   {"type": "wait", "duration": 0.6}
+#   {"type": "notice", "text": "..."}                     필드 알림 배너
+#   {"type": "focus", "position": Vector3, "hold": 1.0}   카메라를 그쪽으로
+#   {"type": "focus_player"}                              카메라를 나비에게로
+#   {"type": "flash", "color": Color, "pulses": 3}        경보 섬광
+#   {"type": "shake", "strength": 0.32, "duration": 0.45}
+#   {"type": "spawn_actor", "key":"juhong", "root":"res://assets/characters/juhong",
+#    "display_name":"주홍", "role":"붉은 칼의 전령", "position": Vector3}
+#   {"type": "actor_walk", "key":"juhong", "to": Vector3, "duration": 1.6}
+#   {"type": "actor_fall", "key":"survivor"}              쓰러지는 연출(사망 암시)
+#   {"type": "actor_exit", "key":"juhong", "to": Vector3, "duration": 2.0}
+#   {"type": "lines", "speaker":"주홍", "title":"...", "portrait": Texture2D|String,
+#    "lines": ["...", "..."]}
+#   {"type": "image_cut", "texture": Texture2D|String, "title":"...", "lines":[...]}
+#   {"type": "choice", "id":"jongno_survivor", "prompt":"...",
+#    "options":[{"id":"take","label":"데려간다","detail":"가방 3칸"}, ...],
+#    "on_choice": Callable}
+#   {"type": "callback", "call": Callable}
+#
+# 규칙:
+#   * 연출 중 플레이어는 무적이다(main.take_damage가 is_cinematic_active를 본다).
+#     전리품 교체 모달에서 겪은 "연출 보는 동안 맞아 죽는" 사고를 되풀이하지 않는다.
+#   * 모든 연출은 건너뛸 수 있다. 단, 선택지 앞에서는 멈춘다 — 결정을 대신
+#     해 주지 않는다.
+
+const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
+const STORY_CHARACTER_SCRIPT := preload("res://scripts/shelter_story_character.gd")
+const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+
+const BAR_HEIGHT := 62.0
+const BAR_TIME := 0.4
+
+var host: Node
+var layer: CanvasLayer
+var bar_top: ColorRect
+var bar_bottom: ColorRect
+var skip_button: Button
+var dialogue_panel: PanelContainer
+var dialogue_speaker_label: Label
+var dialogue_title_label: Label
+var dialogue_body_label: Label
+var dialogue_progress_label: Label
+var dialogue_next_button: Button
+var dialogue_lines: Array[String] = []
+var dialogue_index := 0
+var typewriter: Typewriter
+var image_cut_root: Control
+var choice_root: Control
+
+var running := false
+var _sequence: Array = []
+var _step_index := 0
+var _finished_callback := Callable()
+var _actors: Dictionary = {}
+var _step_tween: Tween
+var _advance_timer: SceneTreeTimer
+var _fast_forward := false
+
+
+func attach(owner_node: Node) -> void:
+	host = owner_node
+
+
+func is_active() -> bool:
+	return running
+
+
+func play(sequence: Array, on_finished := Callable()) -> void:
+	if running or sequence.is_empty() or not is_instance_valid(host):
+		# 이미 연출 중이면 새 연출은 버린다 — 겹치면 조작 잠금이 꼬인다.
+		if on_finished.is_valid():
+			on_finished.call()
+		return
+	running = true
+	_sequence = sequence.duplicate()
+	_step_index = 0
+	_fast_forward = false
+	_finished_callback = on_finished
+	_actors.clear()
+	_build_layer()
+	var tween := host.create_tween()
+	tween.tween_property(bar_top, "offset_bottom", BAR_HEIGHT, BAR_TIME).set_trans(
+		Tween.TRANS_QUAD
+	).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(bar_bottom, "offset_top", -BAR_HEIGHT, BAR_TIME).set_trans(
+		Tween.TRANS_QUAD
+	).set_ease(Tween.EASE_OUT)
+	_wait(BAR_TIME)
+
+
+func skip() -> void:
+	# 남은 단계를 빠르게 소화한다. 선택지를 만나면 거기서 멈춘다.
+	if not running:
+		return
+	_fast_forward = true
+	if is_instance_valid(typewriter) and typewriter.is_typing():
+		typewriter.skip()
+	_close_dialogue()
+	_close_image_cut()
+	if is_instance_valid(_step_tween):
+		_step_tween.kill()
+	_cancel_pending_advance()
+	_advance()
+
+
+# ── 단계 진행 ──────────────────────────────────────────────────
+
+
+func _advance() -> void:
+	if not running:
+		return
+	# 판이 먼저 정리된 뒤에 대기 타이머가 늦게 도착할 수 있다. 그때는 조용히 접는다.
+	if not is_instance_valid(host) or not host.is_inside_tree():
+		running = false
+		_cancel_pending_advance()
+		return
+	while _step_index < _sequence.size():
+		var step := _sequence[_step_index] as Dictionary
+		_step_index += 1
+		var step_type := str(step.get("type", ""))
+		# 빨리 감기 중에는 시간만 먹는 연출을 건너뛴다. 선택지·콜백은 반드시 통과한다.
+		if _fast_forward and step_type in [
+			"wait", "focus", "focus_player", "flash", "shake",
+			"actor_walk", "actor_exit", "lines", "image_cut", "notice", "monologue",
+		]:
+			_apply_instant_side_effect(step)
+			continue
+		if _run_step(step):
+			return
+	_finish()
+
+
+func _apply_instant_side_effect(step: Dictionary) -> void:
+	# 건너뛰어도 "일어난 일"은 남아야 한다 — 등장한 인물은 그 자리에 서고,
+	# 쓰러질 인물은 쓰러진 채로 남는다.
+	match str(step.get("type", "")):
+		"actor_walk", "actor_exit":
+			var actor := _get_actor(str(step.get("key", "")))
+			if is_instance_valid(actor):
+				actor.global_position = step.get("to", actor.global_position)
+		"monologue":
+			if is_instance_valid(host) and host.get("monologue") != null:
+				host.monologue.play(step.get("lines", []))
+
+
+func _run_step(step: Dictionary) -> bool:
+	# true를 돌려주면 "이 단계가 스스로 _advance를 부른다"는 뜻이다.
+	match str(step.get("type", "")):
+		"wait":
+			_wait(float(step.get("duration", 0.5)))
+			return true
+		"notice":
+			host.call("_show_field_notice", str(step.get("text", "")))
+			_wait(float(step.get("duration", 0.9)))
+			return true
+		"monologue":
+			host.monologue.play(step.get("lines", []))
+			_wait(float(step.get("duration", 1.2)))
+			return true
+		"focus":
+			_focus_camera(step.get("position", Vector3.ZERO), float(step.get("hold", 1.0)))
+			return true
+		"focus_player":
+			var player := host.get("player") as Node3D
+			if is_instance_valid(player):
+				_focus_camera(player.global_position, float(step.get("hold", 0.4)))
+				return true
+			return false
+		"flash":
+			_play_flash(step.get("color", Color(0.85, 0.16, 0.06)), int(step.get("pulses", 3)))
+			_wait(float(step.get("duration", 1.0)))
+			return true
+		"shake":
+			host.set("camera_shake_time", float(step.get("duration", 0.45)))
+			host.set("camera_shake_strength", float(step.get("strength", 0.32)))
+			_wait(float(step.get("duration", 0.45)))
+			return true
+		"spawn_actor":
+			_spawn_actor(step)
+			return false
+		"actor_walk":
+			return _actor_walk(step, false)
+		"actor_exit":
+			return _actor_walk(step, true)
+		"actor_fall":
+			return _actor_fall(step)
+		"lines":
+			_open_dialogue(step)
+			return true
+		"image_cut":
+			_open_image_cut(step)
+			return true
+		"choice":
+			_open_choice(step)
+			return true
+		"callback":
+			var call_value: Variant = step.get("call", null)
+			if call_value is Callable and (call_value as Callable).is_valid():
+				(call_value as Callable).call()
+			return false
+	return false
+
+
+func _wait(duration: float) -> void:
+	# 단계 진행은 트윈 콜백이 아니라 SceneTreeTimer로 잰다. 트윈은 순수하게
+	# "보이는 것"만 맡고, "다음 단계로 언제 넘어가는가"는 타이머 하나가 쥔다.
+	# 트윈 체인에 진행 로직을 얹으면 중간에 트윈을 kill 하는 순간(건너뛰기)
+	# 진행이 통째로 멈춰 버린다. process_always=true라 일시정지에도 안 멎는다.
+	if not is_instance_valid(host) or host.get_tree() == null:
+		_advance()
+		return
+	_cancel_pending_advance()
+	_advance_timer = host.get_tree().create_timer(maxf(0.02, duration), true, false, true)
+	_advance_timer.timeout.connect(_advance, CONNECT_ONE_SHOT)
+
+
+func _cancel_pending_advance() -> void:
+	# 대기 중인 진행 타이머를 끊는다 — 건너뛰기 직후 한 단계가 두 번 흐르지 않게.
+	if _advance_timer != null and _advance_timer.timeout.is_connected(_advance):
+		_advance_timer.timeout.disconnect(_advance)
+	_advance_timer = null
+
+
+func _finish() -> void:
+	if not running:
+		return
+	running = false
+	_cancel_pending_advance()
+	# 조작 잠금은 레터박스가 걷히기 전에 먼저 푼다 — 답답함은 연출이 아니다.
+	var closing_layer := layer
+	layer = null
+	if is_instance_valid(closing_layer):
+		var closing_top := closing_layer.get_node_or_null("CineBarTop") as ColorRect
+		var closing_bottom := closing_layer.get_node_or_null("CineBarBottom") as ColorRect
+		var tween := host.create_tween()
+		if closing_top != null:
+			tween.tween_property(closing_top, "offset_bottom", 0.0, BAR_TIME)
+		if closing_bottom != null:
+			tween.parallel().tween_property(closing_bottom, "offset_top", 0.0, BAR_TIME)
+		tween.tween_callback(closing_layer.queue_free)
+	# 남은 배우는 어둠에 녹여 치운다. 연출이 끝난 자리에 이름표 달린 NPC가
+	# 그대로 서 있으면 그건 연출이 아니라 잔해다.
+	for actor_value in _actors.values():
+		var actor := actor_value as Node3D
+		if not is_instance_valid(actor):
+			continue
+		var fade := host.create_tween()
+		var actor_sprite := actor.get_node_or_null("CharacterSprite") as GeometryInstance3D
+		if actor_sprite != null:
+			fade.tween_property(actor_sprite, "modulate:a", 0.0, 0.6)
+		else:
+			fade.tween_interval(0.6)
+		fade.tween_callback(actor.queue_free)
+	bar_top = null
+	bar_bottom = null
+	skip_button = null
+	typewriter = null
+	dialogue_panel = null
+	dialogue_body_label = null
+	dialogue_lines.clear()
+	_sequence.clear()
+	_actors.clear()
+	var callback := _finished_callback
+	_finished_callback = Callable()
+	if callback.is_valid():
+		callback.call()
+
+
+# ── 레이어 ─────────────────────────────────────────────────────
+
+
+func _build_layer() -> void:
+	layer = CanvasLayer.new()
+	layer.name = "FieldCinematicLayer"
+	layer.layer = 94
+	host.add_child(layer)
+	bar_top = ColorRect.new()
+	bar_top.name = "CineBarTop"
+	bar_top.color = Color.BLACK
+	bar_top.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	bar_top.offset_bottom = 0.0
+	bar_top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(bar_top)
+	bar_bottom = ColorRect.new()
+	bar_bottom.name = "CineBarBottom"
+	bar_bottom.color = Color.BLACK
+	bar_bottom.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	bar_bottom.offset_top = 0.0
+	bar_bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(bar_bottom)
+	skip_button = _make_button("건너뛰기", "close")
+	skip_button.name = "CineSkipButton"
+	skip_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	skip_button.offset_left = -142.0
+	skip_button.offset_right = -14.0
+	skip_button.offset_top = 14.0
+	skip_button.offset_bottom = 58.0
+	skip_button.pressed.connect(skip)
+	layer.add_child(skip_button)
+
+
+func _make_button(text: String, icon_name: String) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_font_override("font", FONT)
+	button.add_theme_font_size_override("font_size", 15)
+	button.add_theme_color_override("font_color", Color("#e5ece7"))
+	button.icon = UI_ICONS.get_icon(icon_name, 22, Color("#cbd9cf"))
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.03, 0.05, 0.05, 0.92)
+	style.border_color = Color("#7f9488")
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(6)
+	style.content_margin_left = 12.0
+	style.content_margin_right = 12.0
+	style.content_margin_top = 7.0
+	style.content_margin_bottom = 7.0
+	button.add_theme_stylebox_override("normal", style)
+	button.add_theme_stylebox_override("hover", style)
+	button.add_theme_stylebox_override("pressed", style)
+	return button
+
+
+# ── 카메라 · 화면 효과 ─────────────────────────────────────────
+
+
+func _focus_camera(target: Vector3, hold: float) -> void:
+	var rig := host.get("camera_rig") as Node3D
+	if not is_instance_valid(rig):
+		_wait(hold)
+		return
+	var destination := Vector3(target.x, rig.position.y, target.z)
+	_step_tween = host.create_tween()
+	_step_tween.tween_property(rig, "position", destination, 0.75).set_trans(
+		Tween.TRANS_SINE
+	).set_ease(Tween.EASE_IN_OUT)
+	_wait(0.75 + maxf(0.05, hold))
+
+
+func _play_flash(color: Color, pulses: int) -> void:
+	if not is_instance_valid(layer):
+		return
+	var flash := ColorRect.new()
+	flash.name = "CineFlash"
+	flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	flash.color = Color(color.r, color.g, color.b, 0.0)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(flash)
+	layer.move_child(flash, 0)
+	var tween := host.create_tween()
+	for _pulse in maxi(1, pulses):
+		tween.tween_property(flash, "color:a", 0.2, 0.12)
+		tween.tween_property(flash, "color:a", 0.0, 0.22)
+	tween.tween_callback(flash.queue_free)
+
+
+# ── 배우 ───────────────────────────────────────────────────────
+
+
+func _get_actor(key: String) -> Node3D:
+	return _actors.get(key, null) as Node3D
+
+
+func _spawn_actor(step: Dictionary) -> void:
+	var key := str(step.get("key", "actor"))
+	var actor := STORY_CHARACTER_SCRIPT.new() as Node3D
+	actor.call(
+		"configure",
+		key,
+		str(step.get("display_name", "생존자")),
+		str(step.get("role", "")),
+		"대화하기",
+		str(step.get("root", "res://assets/characters/juhong")),
+		str(step.get("facing", "down_left")),
+		float(step.get("pixel_size", 0.0105))
+	)
+	actor.position = step.get("position", Vector3.ZERO)
+	host.add_child(actor)
+	# 연출용 배우는 길을 막지 않는다 — 필드에서는 정지 충돌체가 플레이어를 가둔다.
+	var body := actor.get_node_or_null("CharacterBody") as StaticBody3D
+	if body != null:
+		body.collision_layer = 0
+		body.collision_mask = 0
+	_actors[key] = actor
+
+
+func _actor_walk(step: Dictionary, exiting: bool) -> bool:
+	var actor := _get_actor(str(step.get("key", "")))
+	if not is_instance_valid(actor):
+		return false
+	var destination: Vector3 = step.get("to", actor.global_position)
+	destination.y = actor.global_position.y
+	var walk_duration := maxf(0.2, float(step.get("duration", 1.4)))
+	actor.call("begin_scripted_walk")
+	_step_tween = host.create_tween()
+	_step_tween.tween_property(
+		actor, "global_position", destination, walk_duration
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_step_tween.tween_callback(func() -> void:
+		if not is_instance_valid(actor):
+			return
+		actor.call("end_scripted_walk")
+		var player := host.get("player") as Node3D
+		if is_instance_valid(player) and not exiting:
+			actor.call(
+				"set_facing_from_world_direction",
+				player.global_position - actor.global_position
+			)
+		if exiting:
+			actor.queue_free()
+	)
+	_wait(walk_duration + 0.1)
+	return true
+
+
+func _actor_fall(step: Dictionary) -> bool:
+	# 신규 사망 애니메이션은 만들지 않는다. 기존 스프라이트를 옆으로 눕히고
+	# 색을 죽이는 것만으로 "쓰러졌다"는 문장은 충분히 읽힌다.
+	var actor := _get_actor(str(step.get("key", "")))
+	if not is_instance_valid(actor):
+		return false
+	var sprite := actor.get_node_or_null("CharacterSprite") as Node3D
+	host.set("camera_shake_time", 0.28)
+	host.set("camera_shake_strength", 0.26)
+	_step_tween = host.create_tween()
+	if sprite != null:
+		_step_tween.tween_property(sprite, "rotation:z", deg_to_rad(-78.0), 0.42).set_trans(
+			Tween.TRANS_QUAD
+		).set_ease(Tween.EASE_IN)
+		_step_tween.parallel().tween_property(sprite, "position:y", 0.24, 0.42)
+		_step_tween.tween_property(sprite, "modulate", Color(0.42, 0.36, 0.36, 0.85), 0.5)
+	else:
+		_step_tween.tween_interval(0.6)
+	_wait(0.95 + float(step.get("hold", 0.5)))
+	return true
+
+
+# ── 대사 패널 ──────────────────────────────────────────────────
+
+
+func _open_dialogue(step: Dictionary) -> void:
+	dialogue_lines.assign(step.get("lines", []))
+	if dialogue_lines.is_empty():
+		_advance()
+		return
+	dialogue_index = 0
+	var viewport_size: Vector2 = host.get_viewport().get_visible_rect().size
+	var compact := viewport_size.x < 760.0
+	dialogue_panel = PanelContainer.new()
+	dialogue_panel.name = "CineDialoguePanel"
+	dialogue_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	var half := minf(450.0, (viewport_size.x - 24.0) * 0.5)
+	dialogue_panel.offset_left = -half
+	dialogue_panel.offset_right = half
+	dialogue_panel.offset_bottom = -26.0
+	dialogue_panel.offset_top = -26.0 - (196.0 if compact else 178.0)
+	dialogue_panel.add_theme_stylebox_override(
+		"panel", _panel_style(Color(0.012, 0.019, 0.018, 0.985), Color("#b89545"))
+	)
+	layer.add_child(dialogue_panel)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 18)
+	margin.add_theme_constant_override("margin_top", 12)
+	margin.add_theme_constant_override("margin_right", 18)
+	margin.add_theme_constant_override("margin_bottom", 12)
+	dialogue_panel.add_child(margin)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	margin.add_child(row)
+	var portrait_texture := _resolve_texture(step.get("portrait", null))
+	if portrait_texture != null:
+		var portrait_frame := PanelContainer.new()
+		var portrait_size := 64.0 if compact else 72.0
+		portrait_frame.custom_minimum_size = Vector2(portrait_size, portrait_size)
+		portrait_frame.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		portrait_frame.add_theme_stylebox_override(
+			"panel", _panel_style(Color("#101815"), Color("#6e856f"))
+		)
+		row.add_child(portrait_frame)
+		var portrait := TextureRect.new()
+		portrait.texture = portrait_texture
+		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		portrait_frame.add_child(portrait)
+	var text_box := VBoxContainer.new()
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_box.add_theme_constant_override("separation", 7)
+	row.add_child(text_box)
+	var speaker_row := HBoxContainer.new()
+	text_box.add_child(speaker_row)
+	dialogue_speaker_label = Label.new()
+	dialogue_speaker_label.text = str(step.get("speaker", "나비"))
+	dialogue_speaker_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dialogue_speaker_label.add_theme_font_override("font", FONT)
+	dialogue_speaker_label.add_theme_font_size_override("font_size", 16)
+	dialogue_speaker_label.add_theme_color_override("font_color", Color("#f0ce70"))
+	speaker_row.add_child(dialogue_speaker_label)
+	dialogue_progress_label = Label.new()
+	dialogue_progress_label.add_theme_font_override("font", FONT)
+	dialogue_progress_label.add_theme_font_size_override("font_size", 14)
+	dialogue_progress_label.add_theme_color_override("font_color", Color("#82998d"))
+	speaker_row.add_child(dialogue_progress_label)
+	dialogue_title_label = Label.new()
+	dialogue_title_label.text = str(step.get("title", ""))
+	dialogue_title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dialogue_title_label.add_theme_font_override("font", FONT)
+	dialogue_title_label.add_theme_font_size_override("font_size", 14)
+	dialogue_title_label.add_theme_color_override("font_color", Color("#e7d49a"))
+	text_box.add_child(dialogue_title_label)
+	dialogue_body_label = Label.new()
+	dialogue_body_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	dialogue_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dialogue_body_label.add_theme_font_override("font", FONT)
+	dialogue_body_label.add_theme_font_size_override("font_size", 17)
+	dialogue_body_label.add_theme_color_override("font_color", Color("#e5ece7"))
+	text_box.add_child(dialogue_body_label)
+	typewriter = Typewriter.new()
+	layer.add_child(typewriter)
+	typewriter.attach(dialogue_body_label)
+	var actions := HBoxContainer.new()
+	actions.alignment = BoxContainer.ALIGNMENT_END
+	text_box.add_child(actions)
+	dialogue_next_button = _make_button("다음", "collect")
+	dialogue_next_button.custom_minimum_size = Vector2(132 if compact else 170, 44)
+	dialogue_next_button.pressed.connect(_advance_dialogue)
+	actions.add_child(dialogue_next_button)
+	_refresh_dialogue()
+
+
+func _refresh_dialogue() -> void:
+	if not is_instance_valid(dialogue_body_label):
+		return
+	if is_instance_valid(typewriter):
+		typewriter.start(dialogue_lines[dialogue_index])
+	else:
+		dialogue_body_label.text = dialogue_lines[dialogue_index]
+	dialogue_progress_label.text = "%d / %d" % [dialogue_index + 1, dialogue_lines.size()]
+	var last_line := dialogue_index >= dialogue_lines.size() - 1
+	dialogue_next_button.text = "계속" if last_line else "다음"
+
+
+func _advance_dialogue() -> void:
+	# 타이핑 중이면 첫 입력은 "전부 즉시 표시". 그 다음 입력에서 넘어간다.
+	if is_instance_valid(typewriter) and typewriter.is_typing():
+		typewriter.skip()
+		return
+	dialogue_index += 1
+	if dialogue_index < dialogue_lines.size():
+		_refresh_dialogue()
+		return
+	_close_dialogue()
+	_advance()
+
+
+func _close_dialogue() -> void:
+	if is_instance_valid(dialogue_panel):
+		dialogue_panel.queue_free()
+	if is_instance_valid(typewriter):
+		typewriter.queue_free()
+	dialogue_panel = null
+	dialogue_body_label = null
+	typewriter = null
+	dialogue_lines.clear()
+	dialogue_index = 0
+
+
+# ── 정지 이미지 컷(기록 화면) ──────────────────────────────────
+
+
+func _open_image_cut(step: Dictionary) -> void:
+	# 신규 아트는 만들지 않는다. 이미 있는 프롭·초상 텍스처를 크게 띄우고
+	# 비네팅과 타자기 문장을 얹어 "회수한 문서를 들여다보는 순간"으로 쓴다.
+	var lines: Array[String] = []
+	lines.assign(step.get("lines", []))
+	image_cut_root = Control.new()
+	image_cut_root.name = "CineImageCut"
+	image_cut_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	image_cut_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(image_cut_root)
+	layer.move_child(image_cut_root, 0)
+	var dim := ColorRect.new()
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.004, 0.008, 0.008, 0.94)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	image_cut_root.add_child(dim)
+	var picture := TextureRect.new()
+	picture.name = "CutPicture"
+	picture.texture = _resolve_texture(step.get("texture", null))
+	picture.set_anchors_preset(Control.PRESET_CENTER)
+	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	var viewport_size: Vector2 = host.get_viewport().get_visible_rect().size
+	var picture_size := minf(viewport_size.x * 0.52, viewport_size.y * 0.46)
+	picture.offset_left = -picture_size * 0.5
+	picture.offset_right = picture_size * 0.5
+	picture.offset_top = -picture_size * 0.5 - 42.0
+	picture.offset_bottom = picture_size * 0.5 - 42.0
+	picture.modulate = Color(1.0, 0.96, 0.86, 0.0)
+	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	image_cut_root.add_child(picture)
+	var caption_panel := PanelContainer.new()
+	caption_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	var half := minf(430.0, (viewport_size.x - 32.0) * 0.5)
+	caption_panel.offset_left = -half
+	caption_panel.offset_right = half
+	caption_panel.offset_bottom = -96.0
+	caption_panel.offset_top = -96.0 - 118.0
+	caption_panel.add_theme_stylebox_override(
+		"panel", _panel_style(Color(0.02, 0.03, 0.028, 0.92), Color("#8a7b4c"))
+	)
+	image_cut_root.add_child(caption_panel)
+	var caption_box := VBoxContainer.new()
+	caption_box.add_theme_constant_override("separation", 8)
+	caption_panel.add_child(caption_box)
+	var cut_title := Label.new()
+	cut_title.text = str(step.get("title", "회수한 기록"))
+	cut_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cut_title.add_theme_font_override("font", FONT)
+	cut_title.add_theme_font_size_override("font_size", 15)
+	cut_title.add_theme_color_override("font_color", Color("#e7d49a"))
+	caption_box.add_child(cut_title)
+	var cut_body := Label.new()
+	cut_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	cut_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cut_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	cut_body.add_theme_font_override("font", FONT)
+	cut_body.add_theme_font_size_override("font_size", 16)
+	cut_body.add_theme_color_override("font_color", Color("#d9e2dc"))
+	caption_box.add_child(cut_body)
+	var close_button := _make_button("계속", "collect")
+	close_button.custom_minimum_size = Vector2(150, 44)
+	close_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	close_button.pressed.connect(func() -> void:
+		_close_image_cut()
+		_advance()
+	)
+	caption_box.add_child(close_button)
+	dialogue_lines.assign(lines)
+	typewriter = Typewriter.new()
+	layer.add_child(typewriter)
+	typewriter.attach(cut_body)
+	typewriter.start("\n".join(lines))
+	var tween := host.create_tween()
+	tween.tween_property(picture, "modulate:a", 1.0, 0.55).set_trans(Tween.TRANS_SINE)
+
+
+func _close_image_cut() -> void:
+	if is_instance_valid(image_cut_root):
+		image_cut_root.queue_free()
+	image_cut_root = null
+	if is_instance_valid(typewriter):
+		typewriter.queue_free()
+	typewriter = null
+
+
+# ── 선택지 ─────────────────────────────────────────────────────
+
+
+func _open_choice(step: Dictionary) -> void:
+	var options := step.get("options", []) as Array
+	if options.is_empty():
+		_advance()
+		return
+	# 선택지는 빨리 감기로도 못 넘긴다. 여기서 fast_forward를 끊는다.
+	_fast_forward = false
+	choice_root = Control.new()
+	choice_root.name = "CineChoiceRoot"
+	choice_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	choice_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(choice_root)
+	var dim := ColorRect.new()
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.004, 0.008, 0.008, 0.68)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	choice_root.add_child(dim)
+	var viewport_size: Vector2 = host.get_viewport().get_visible_rect().size
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	var half := minf(430.0, (viewport_size.x - 32.0) * 0.5)
+	panel.offset_left = -half
+	panel.offset_right = half
+	panel.offset_bottom = -40.0
+	panel.offset_top = -40.0 - 44.0 - float(options.size()) * 62.0
+	panel.add_theme_stylebox_override(
+		"panel", _panel_style(Color(0.012, 0.019, 0.018, 0.985), Color("#c9a24d"))
+	)
+	choice_root.add_child(panel)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 16)
+	margin.add_theme_constant_override("margin_top", 12)
+	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_bottom", 12)
+	panel.add_child(margin)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 9)
+	margin.add_child(box)
+	var prompt := Label.new()
+	prompt.text = str(step.get("prompt", "결정해라"))
+	prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	prompt.add_theme_font_override("font", FONT)
+	prompt.add_theme_font_size_override("font_size", 16)
+	prompt.add_theme_color_override("font_color", Color("#e7d49a"))
+	box.add_child(prompt)
+	var choice_id := str(step.get("id", "choice"))
+	var handler: Variant = step.get("on_choice", null)
+	for option_value in options:
+		var option := option_value as Dictionary
+		var button := _make_button(str(option.get("label", "…")), "collect")
+		button.custom_minimum_size = Vector2(0, 52)
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		var detail := str(option.get("detail", ""))
+		if not detail.is_empty():
+			button.text = "%s   —   %s" % [str(option.get("label", "…")), detail]
+		button.pressed.connect(func() -> void:
+			_resolve_choice(choice_id, option, handler)
+		)
+		box.add_child(button)
+
+
+func _resolve_choice(choice_id: String, option: Dictionary, handler: Variant) -> void:
+	if is_instance_valid(choice_root):
+		choice_root.queue_free()
+	choice_root = null
+	# 선택은 저장에 남는다 — 나중 대사와 엔딩 문구가 이걸 읽는다.
+	GameState.record_mission_choice(choice_id, str(option.get("id", "")))
+	if handler is Callable and (handler as Callable).is_valid():
+		(handler as Callable).call(str(option.get("id", "")))
+	_advance()
+
+
+# ── 공용 ───────────────────────────────────────────────────────
+
+
+func _panel_style(background: Color, border: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = background
+	style.border_color = border
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(8)
+	return style
+
+
+func _resolve_texture(value: Variant) -> Texture2D:
+	if value is Texture2D:
+		return value as Texture2D
+	var path := str(value)
+	if path.is_empty() or not ResourceLoader.exists(path):
+		return null
+	return load(path) as Texture2D

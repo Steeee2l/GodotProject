@@ -60,29 +60,35 @@ func _run() -> void:
 	assert((tactical_map.get("extraction_profiles") as Array).size() == 3)
 	assert((tactical_map.get("raid_markers") as Array).size() >= 4)
 
-	var jackpot_clue := main_scene.get("jackpot").jackpot_clue_site as Node3D
-	assert(is_instance_valid(jackpot_clue))
-	assert(jackpot_clue.get_node_or_null("JackpotPropSprite") is Sprite3D)
+	# 잭팟(봉인 화물)은 이제 "종로 1단계" 메인 미션으로 흡수됐다. 모듈 이름이
+	# jackpot → main_mission, 상태 필드가 jackpot_state → state/point_index로
+	# 바뀌었으므로 어서션도 새 경로를 본다. 검증 대상(3연쇄 → 경보 웨이브 →
+	# 화물 회수 → 정산 문구)은 그대로다.
+	var main_mission: Object = main_scene.get("main_mission")
+	var clue_site := (main_mission.get("point_sites") as Dictionary).get(0, null) as Node3D
+	assert(is_instance_valid(clue_site))
+	assert(clue_site.get_node_or_null("JackpotPropSprite") is Sprite3D)
 	var jackpot_hud := main_scene.get("hud").jackpot_hud as PanelContainer
 	assert(is_instance_valid(jackpot_hud))
 	assert(jackpot_hud.size.y <= 70.0)
 	assert((main_scene.get("hud").jackpot_detail_label as Label).text.contains("TAB"))
-	main_scene.call("_complete_field_interaction", jackpot_clue)
-	assert(str(main_scene.get("jackpot").jackpot_state) == "power")
-	var jackpot_power := main_scene.get("jackpot").jackpot_power_site as Node3D
-	assert(is_instance_valid(jackpot_power))
-	main_scene.call("_complete_field_interaction", jackpot_power)
-	assert(str(main_scene.get("jackpot").jackpot_state) == "alarm")
+	main_scene.call("_complete_field_interaction", clue_site)
+	assert(int(main_mission.get("point_index")) == 1)
+	var power_site := (main_mission.get("point_sites") as Dictionary).get(1, null) as Node3D
+	assert(is_instance_valid(power_site))
+	main_scene.call("_complete_field_interaction", power_site)
+	assert(int(main_mission.get("point_index")) == 2)
+	assert(bool(main_mission.get("alarm_active")))
 	var jackpot_enemy_count := (main_scene.get("enemies") as Array).size()
 	main_scene.call("_update_jackpot_event", 1.0)
 	assert((main_scene.get("enemies") as Array).size() > jackpot_enemy_count)
-	var jackpot_cargo := main_scene.get("jackpot").jackpot_cargo_site as Node3D
-	assert(is_instance_valid(jackpot_cargo))
-	main_scene.call("_complete_field_interaction", jackpot_cargo)
-	assert(str(main_scene.get("jackpot").jackpot_state) == "carried")
+	var cargo_site := (main_mission.get("point_sites") as Dictionary).get(2, null) as Node3D
+	assert(is_instance_valid(cargo_site))
+	main_scene.call("_complete_field_interaction", cargo_site)
+	assert(str(main_mission.get("state")) == "carried")
 	assert(not (game_state.get("raid_special_cargo") as Dictionary).is_empty())
 	assert(int(game_state.call("get_raid_bag_used_slots")) <= 15)
-	assert(is_instance_valid(main_scene.get("jackpot").jackpot_carried_sprite as Sprite3D))
+	assert(is_instance_valid(main_mission.get("carried_sprite") as Sprite3D))
 	var cargo_result := main_scene.call("_settle_jackpot_cargo") as Dictionary
 	assert(str(cargo_result.get("summary", "")).contains("3번 보급 코어"))
 	assert(str(cargo_result.get("summary", "")).contains("세계 기록"))

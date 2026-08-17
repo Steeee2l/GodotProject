@@ -50,12 +50,16 @@ static func get_action_label(interaction_type: String) -> String:
 			return "현장 임무 수락"
 		"lore", "lore_clue":
 			return "기록 조사"
-		"jackpot_clue":
-			return "단서 조사"
-		"jackpot_power":
-			return "비상 전력 복구"
-		"jackpot_cargo":
-			return "봉인 화물 회수"
+		"main_mission_step":
+			return "메인 임무 지점 조사"
+		"main_mission_key":
+			return "열쇠 확보"
+		"main_mission_locked":
+			return "잠긴 거점"
+		"main_mission_defense":
+			return "봉쇄 해제 시작"
+		"main_mission_recovery":
+			return "회수물 확보"
 		"incident":
 			return "보급품 확보"
 		_:

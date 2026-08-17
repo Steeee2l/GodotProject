@@ -193,7 +193,7 @@ func _show_extraction_result(rescued_count: int) -> void:
 	host._refresh_pointer_mode()
 	host._update_combat_overlay_visibility()
 	var combat_xp := GameState.get_raid_experience_reward(host.run_kills, host.enemy_director.run_boss_kills)
-	var cargo_result: Dictionary = host.jackpot._settle_jackpot_cargo()
+	var cargo_result: Dictionary = host.main_mission.settle()
 	var cargo_xp := int(cargo_result.get("xp", 0))
 	var base_xp_reward: int = combat_xp + host.completed_mission_xp + cargo_xp
 	var xp_reward := roundi(float(base_xp_reward) * selected_extraction_multiplier)
@@ -234,7 +234,10 @@ func _show_extraction_result(rescued_count: int) -> void:
 		GameState.scrap += ghost_scrap
 	xp_reward += stealth_xp + ghost_xp
 	pending_extraction_xp_result = GameState.add_raid_experience(xp_reward)
-	host.hud.extraction_result_title.text = "탈출 성공 · Lv.%d" % int(pending_extraction_xp_result.get("new_level", GameState.player_level))
+	# 제목은 아직 '이전 레벨'이다. 레벨업 숫자는 XP 바가 가득 찬 순간에 바뀐다.
+	host.hud.extraction_result_title.text = "탈출 성공 · Lv.%d" % int(
+		pending_extraction_xp_result.get("old_level", GameState.player_level)
+	)
 	var mission_summary := ""
 	if not host.completed_mission_titles.is_empty():
 		mission_summary = "현장에서 해낸 일 · %s" % ", ".join(host.completed_mission_titles)
@@ -336,21 +339,7 @@ func _show_extraction_result(rescued_count: int) -> void:
 	lines.append("통조림은 쉘터 연료로, 재료와 여분 장비는 창고로 들어갑니다.")
 	lines.append("탭하면 쉘터로 복귀")
 	host.hud.extraction_result_summary.text = "\n".join(lines)
-	var new_xp := int(pending_extraction_xp_result.get("new_xp", GameState.player_xp))
-	var old_xp := int(pending_extraction_xp_result.get("old_xp", new_xp))
-	var required := maxi(1, int(pending_extraction_xp_result.get("new_required", GameState.get_xp_required())))
-	# 보상의 절반은 연출이다. 바가 이전 값에서 새 값으로 차오르는 걸 보여준다.
-	host.hud.extraction_xp_bar.value = clampf(float(old_xp) / float(required) * 100.0, 0.0, 100.0)
-	var xp_tween := host.create_tween()
-	xp_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
-	xp_tween.tween_interval(0.45)
-	xp_tween.tween_property(
-		host.hud.extraction_xp_bar,
-		"value",
-		float(new_xp) / float(required) * 100.0,
-		0.9
-	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	host.hud.extraction_xp_label.text = "Lv.%d   %d / %d XP" % [GameState.player_level, new_xp, required]
+	_play_extraction_xp_bar()
 	host.hud.extraction_result_panel.visible = true
 	if GameState.pending_level_choices > 0:
 		host._show_level_reward_choices()
@@ -368,6 +357,89 @@ func _show_extraction_result(rescued_count: int) -> void:
 
 var extraction_result_dismissable_msec := 0
 var extraction_result_finished := false
+
+
+func build_extraction_xp_bar_plan() -> Array[Dictionary]:
+	# 레벨업 정산에서 바가 거꾸로 줄어들던 문제(유저 신고).
+	# 원인: 시작값은 old_xp/이전 레벨 요구량인데, 목표값은 new_xp/새 레벨 요구량을
+	# 같은 분모(new_required)로 계산했다. 레벨이 오르면 요구량이 커지고 남은 XP는
+	# 작아지니 90% → 13% 로 역주행했다.
+	#
+	# 고침: "채우고 → 터뜨리고 → 0에서 다시 채운다"를 레벨업 횟수만큼 반복한다.
+	# 계획을 배열로 먼저 만들어 두면 연출과 검증(프로브)이 같은 숫자를 본다.
+	var old_xp := int(pending_extraction_xp_result.get("old_xp", GameState.player_xp))
+	var new_xp := int(pending_extraction_xp_result.get("new_xp", GameState.player_xp))
+	var old_required := maxi(1, int(pending_extraction_xp_result.get("old_required", 1)))
+	var new_required := maxi(1, int(pending_extraction_xp_result.get("new_required", 1)))
+	var levels_gained := maxi(0, int(pending_extraction_xp_result.get("levels_gained", 0)))
+	var plan: Array[Dictionary] = []
+	var start_percent := clampf(float(old_xp) / float(old_required) * 100.0, 0.0, 100.0)
+	plan.append({"kind": "set", "value": start_percent})
+	if levels_gained <= 0:
+		plan.append({
+			"kind": "fill",
+			"value": clampf(float(new_xp) / float(new_required) * 100.0, 0.0, 100.0),
+			"duration": 0.9,
+		})
+		return plan
+	# 레벨업이 여러 번이면 중간 레벨은 짧게 훑고 지나간다 — 마지막 한 칸만 천천히.
+	for level_step in levels_gained:
+		var last_step := level_step == levels_gained - 1
+		plan.append({"kind": "fill", "value": 100.0, "duration": 0.55 if last_step else 0.22})
+		plan.append({"kind": "levelup", "level": int(
+			pending_extraction_xp_result.get("old_level", GameState.player_level)
+		) + level_step + 1})
+		plan.append({"kind": "set", "value": 0.0})
+	plan.append({
+		"kind": "fill",
+		"value": clampf(float(new_xp) / float(new_required) * 100.0, 0.0, 100.0),
+		"duration": 0.75,
+	})
+	return plan
+
+
+func _play_extraction_xp_bar() -> void:
+	var new_xp := int(pending_extraction_xp_result.get("new_xp", GameState.player_xp))
+	var new_required := maxi(
+		1, int(pending_extraction_xp_result.get("new_required", GameState.get_xp_required()))
+	)
+	var plan := build_extraction_xp_bar_plan()
+	var bar: ProgressBar = host.hud.extraction_xp_bar
+	var label: Label = host.hud.extraction_xp_label
+	label.text = "Lv.%d   %d / %d XP" % [
+		int(pending_extraction_xp_result.get("old_level", GameState.player_level)),
+		int(pending_extraction_xp_result.get("old_xp", new_xp)),
+		maxi(1, int(pending_extraction_xp_result.get("old_required", new_required))),
+	]
+	bar.value = float((plan[0] as Dictionary).get("value", 0.0))
+	var xp_tween := host.create_tween()
+	xp_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	xp_tween.tween_interval(0.45)
+	for step_index in range(1, plan.size()):
+		var step := plan[step_index] as Dictionary
+		match str(step.get("kind", "")):
+			"set":
+				xp_tween.tween_callback(func() -> void:
+					bar.value = float(step.get("value", 0.0))
+				)
+			"fill":
+				xp_tween.tween_property(
+					bar, "value", float(step.get("value", 0.0)), float(step.get("duration", 0.6))
+				).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			"levelup":
+				# 바가 가득 찬 그 순간에만 레벨 숫자가 바뀐다 — 차오름과 숫자가 어긋나면
+				# 플레이어는 "씹혔다"고 읽는다.
+				xp_tween.tween_callback(func() -> void:
+					label.text = "Lv.%d   레벨 업" % int(step.get("level", GameState.player_level))
+					host.hud.extraction_result_title.text = "탈출 성공 · Lv.%d" % int(
+						step.get("level", GameState.player_level)
+					)
+				)
+				xp_tween.tween_property(bar, "modulate", Color("#fff3c4"), 0.12)
+				xp_tween.tween_property(bar, "modulate", Color.WHITE, 0.18)
+	xp_tween.tween_callback(func() -> void:
+		label.text = "Lv.%d   %d / %d XP" % [GameState.player_level, new_xp, new_required]
+	)
 
 
 func _on_extraction_result_input(event: InputEvent) -> void:

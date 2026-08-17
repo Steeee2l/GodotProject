@@ -977,6 +977,9 @@ func build_extraction_progress_ui() -> void:
 
 
 
+# 상단 중앙 메인 임무 배너. 이름의 'jackpot'은 봉인 화물 사건 시절의 잔재다 —
+# 지금은 MainMissionChain이 구역별 3단계 미션 전부를 이 패널로 말한다.
+# 노드 이름/필드명을 바꾸면 스모크 테스트와 배너 정렬 경로가 함께 흔들려 그대로 둔다.
 func build_jackpot_hud() -> void:
 	jackpot_hud = PanelContainer.new()
 	jackpot_hud.name = "JackpotEventPanel"

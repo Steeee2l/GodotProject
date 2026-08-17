@@ -1,4 +1,4 @@
-﻿extends Node3D
+extends Node3D
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const MOVE_SPEED := 5.2
@@ -74,7 +74,7 @@ const RAID_EVENT_DIRECTOR := preload("res://scripts/raid_event_director.gd")
 const GameOverScreen := preload("res://scripts/hud/game_over_screen.gd")
 const LoreReader := preload("res://scripts/hud/lore_reader.gd")
 const RaidHud := preload("res://scripts/hud/raid_hud.gd")
-const JackpotEvent := preload("res://scripts/raid/jackpot_event.gd")
+const MainMissionChain := preload("res://scripts/raid/main_mission_chain.gd")
 const FieldMissionController := preload("res://scripts/raid/field_mission_controller.gd")
 const FieldIncidents := preload("res://scripts/raid/field_incidents.gd")
 const ExtractionFlow := preload("res://scripts/raid/extraction_flow.gd")
@@ -306,7 +306,7 @@ var corpse_recovery_point: Node3D
 var game_over_screen := GameOverScreen.new()
 var lore_reader := LoreReader.new()
 var hud := RaidHud.new()
-var jackpot := JackpotEvent.new()
+var main_mission := MainMissionChain.new()
 var field_missions := FieldMissionController.new()
 var incidents := FieldIncidents.new()
 var extraction := ExtractionFlow.new()
@@ -402,6 +402,7 @@ func _ready() -> void:
 			or lore_reader.is_open()
 			or extraction_transition_active
 			or loot_system.is_loot_swap_open()
+			or main_mission.is_cinematic_active()
 		), "종료 (판 진행은 사라짐)")
 	raid_zone_data = GameState.get_raid_zone()
 	# 판 시작을 세이브에 새긴다 — 추출 없이 강제 종료하면 로드 시 포기 처리.
@@ -488,7 +489,7 @@ func _ready() -> void:
 	_setup_melee_weapon()
 	hud.attach(self)
 	monologue.attach(self)
-	jackpot.attach(self)
+	main_mission.attach(self)
 	field_missions.attach(self)
 	incidents.attach(self)
 	extraction.attach(self)
@@ -691,7 +692,7 @@ func _physics_process(delta: float) -> void:
 	stealth._update_scent_system(delta)
 	incidents._update_faction_conflicts(delta)
 	_update_raid_opportunities(delta)
-	jackpot._update_jackpot_event(delta)
+	main_mission.update(delta)
 	melee_attack_cooldown = maxf(0.0, melee_attack_cooldown - delta)
 	combat_hit_stop_cooldown = maxf(0.0, combat_hit_stop_cooldown - delta)
 	hit_stop_damage_accumulator = 0
@@ -745,6 +746,8 @@ func _physics_process(delta: float) -> void:
 		or lore_reader.is_open()
 		or extraction_transition_active
 		or boss_defeat_sequence_active
+		# 시네마틱 중에는 조작이 잠긴다. 카메라도 연출이 직접 끌고 간다.
+		or main_mission.is_cinematic_active()
 	):
 		player.velocity = Vector3.ZERO
 		player.move_and_slide()
@@ -3060,9 +3063,9 @@ func _get_field_interaction_accent(interaction_type: String, is_locked: bool) ->
 			return Color("#e1c36f")
 		"rescue":
 			return Color("#71d29b")
-		"mission_start", "incident", "jackpot_cargo":
+		"mission_start", "incident", "main_mission_recovery", "main_mission_key":
 			return Color("#e2a65f")
-		"lore", "lore_clue", "jackpot_clue":
+		"lore", "lore_clue", "main_mission_step":
 			return Color("#8fb5dc")
 		"corpse_recovery":
 			return Color("#d58a72")
@@ -3078,10 +3081,12 @@ func _get_field_interaction_icon_name(interaction_type: String) -> String:
 			return "parts"
 		"rescue":
 			return "resident"
-		"corpse_recovery", "jackpot_cargo", "incident":
+		"corpse_recovery", "main_mission_recovery", "incident":
 			return "collect"
-		"jackpot_power":
+		"main_mission_defense", "main_mission_step":
 			return "repair"
+		"main_mission_key", "main_mission_locked":
+			return "secure"
 		"extraction":
 			return "secure"
 		_:
@@ -3986,6 +3991,8 @@ func take_damage(amount: int) -> void:
 		or extraction_transition_active
 		or player_death_sequence_active
 		or boss_defeat_sequence_active
+		# 시네마틱 중에는 아무것도 나비를 때릴 수 없다 — 연출 보는 동안 죽는 사고 방지.
+		or main_mission.is_cinematic_active()
 	):
 		return
 	# 구르는 동안 + 착지 유예까지 무적. 오프닝 튜토리얼이 "구르는 동안은 총알이
@@ -4458,7 +4465,7 @@ func _setup_raid_opportunities(world: ProceduralCityMap) -> void:
 	# 깔려 있으면 "찾아서 줍는" 파밍의 첫인상이 죽는다. 가방 압박 학습은
 	# 일반 루팅 과정에서 자연히 온다.
 	incidents._spawn_high_value_hotspots(world)
-	jackpot._setup_jackpot_event(world)
+	main_mission.setup(world)
 	_refresh_raid_pressure_hud()
 
 
@@ -6330,11 +6337,18 @@ func _complete_field_interaction(point: Node3D) -> void:
 		hud.field_interaction_touch_held = false
 		lore_reader.show_entry(point)
 		return
-	if interaction_type == "jackpot_cargo":
+	if interaction_type == "main_mission_recovery":
 		field_interaction_hold_time = 0.0
 		field_interaction_keyboard_held = false
 		hud.field_interaction_touch_held = false
-		jackpot._attempt_take_jackpot_cargo(point)
+		main_mission.attempt_take_recovery(point)
+		return
+	if interaction_type == "main_mission_locked":
+		# 잠긴 거점은 붙잡고 있어도 안 열린다. 열쇠부터 찾으라고 말해 준다.
+		field_interaction_hold_time = 0.0
+		field_interaction_keyboard_held = false
+		hud.field_interaction_touch_held = false
+		main_mission.notify_locked()
 		return
 	if interaction_type == "rescue":
 		var occupied_after_escort: int = GameState.rescued_workers + rescued_followers.size()
@@ -6344,10 +6358,8 @@ func _complete_field_interaction(point: Node3D) -> void:
 			return
 	point.set_meta("completed", true)
 	match interaction_type:
-		"jackpot_clue":
-			jackpot._handle_jackpot_clue()
-		"jackpot_power":
-			jackpot._handle_jackpot_power()
+		"main_mission_step", "main_mission_key", "main_mission_defense":
+			main_mission.handle_point(point)
 		"loot_container":
 			_open_field_loot_container(point)
 		"high_value_cache", "dynamic_incident_cache":
@@ -6505,7 +6517,7 @@ func _recover_previous_corpse() -> void:
 	var recovered_cargo := loot.get("raid_special_cargo", {}) as Dictionary
 	if not recovered_cargo.is_empty():
 		GameState.raid_special_cargo = recovered_cargo.duplicate(true)
-		jackpot._restore_jackpot_cargo_presentation()
+		main_mission.restore_carry_presentation()
 	var recovered_weapon_id := str(loot.get("equipped_weapon_id", ""))
 	if (
 		not recovered_weapon_id.is_empty()
@@ -6871,6 +6883,7 @@ func _input(event: InputEvent) -> void:
 			or lore_reader.is_open()
 			or extraction_transition_active
 			or loot_system.is_loot_swap_open()
+			or main_mission.is_cinematic_active()
 		):
 			return
 		if key_event.pressed and key == KEY_F5:
@@ -6925,6 +6938,7 @@ func _input(event: InputEvent) -> void:
 			# 전리품 교체 모달 위에서는 좌클릭이 근접 공격으로 새지 않게 —
 			# GUI(닫기 X 버튼 등)가 이벤트를 받아야 한다.
 			or loot_system.is_loot_swap_open()
+			or main_mission.is_cinematic_active()
 		):
 			return
 		var mouse_event := event as InputEventMouseButton
@@ -6945,6 +6959,7 @@ func _input(event: InputEvent) -> void:
 			or lore_reader.is_open()
 			or extraction_transition_active
 			or loot_system.is_loot_swap_open()
+			or main_mission.is_cinematic_active()
 		):
 			return
 		if _handle_mobile_action_touch(touch):
@@ -6978,6 +6993,7 @@ func _input(event: InputEvent) -> void:
 			or lore_reader.is_open()
 			or extraction_transition_active
 			or loot_system.is_loot_swap_open()
+			or main_mission.is_cinematic_active()
 		):
 			return
 		if drag.index == fire_touch_id:
@@ -7117,11 +7133,16 @@ func _is_player_detected_for_field_mission() -> bool:
 
 
 func _update_jackpot_event(delta: float) -> void:
-	jackpot._update_jackpot_event(delta)
+	main_mission.update(delta)
 
 
 func _settle_jackpot_cargo() -> Dictionary:
-	return jackpot._settle_jackpot_cargo()
+	return main_mission.settle()
+
+
+func is_cinematic_active() -> bool:
+	# 연출 중에는 조작·전투 입력이 전부 잠기고 플레이어는 무적이다.
+	return main_mission.is_cinematic_active()
 
 
 func _update_faction_conflicts(delta: float) -> void:

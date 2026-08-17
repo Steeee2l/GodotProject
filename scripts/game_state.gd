@@ -3,6 +3,7 @@ extends Node
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
 const RAID_REGION_CATALOG := preload("res://scripts/raid_region_catalog.gd")
+const MAIN_MISSION_CATALOG := preload("res://scripts/raid/main_mission_catalog.gd")
 
 # 기본 12칸 — 확장 사다리(고철)로 늘려 간다. 처음부터 넉넉하면 성장 재미가 없다.
 const RAID_BAG_CAPACITY := 12
@@ -131,6 +132,16 @@ var raid_kills: int = 0
 var raid_special_cargo: Dictionary = {}
 var recovered_story_cargo_ids: Array[String] = []
 var subway_story_stage: int = 0
+# ── 존별 메인 미션 체인 ────────────────────────────────────────
+# 구역 id → 완주한 단계 수(0~3). 세 단계를 끝낸 구역에서는 메인 미션이
+# 더 이상 뜨지 않고 반복 사건만 남는다.
+var main_mission_progress: Dictionary = {}
+# 시네마틱 선택의 기록 — 이후 대사·엔딩 문구가 이걸 읽는다. {선택지 id: 고른 값}
+var mission_choices: Dictionary = {}
+# 이미 본 필드 시네마틱. 같은 장면을 판마다 다시 보면 그건 연출이 아니라 통행세다.
+var seen_field_cinematics: Array[String] = []
+# 구역 완주 안내를 사자가 이미 전한 구역들.
+var saja_seen_main_mission_zones: Array[String] = []
 var shelter_workbench_level: int = 1
 var shelter_tier: int = 1
 var scratcher_bank_level: int = 1
@@ -925,6 +936,89 @@ func set_subway_story_stage(stage: int) -> void:
 	save_persistent_state()
 
 
+# ── 존별 메인 미션 체인 ────────────────────────────────────────
+
+
+func get_main_mission_progress(zone_id: String) -> int:
+	var total := MAIN_MISSION_CATALOG.get_stage_count(zone_id)
+	return clampi(int(main_mission_progress.get(zone_id, 0)), 0, maxi(0, total))
+
+
+func advance_main_mission(zone_id: String, completed_stage_index: int) -> int:
+	# 같은 단계를 두 번 정산해도 진행도는 한 칸만 오른다 — 재도전으로 앞서
+	# 갈 수 없다.
+	var total := MAIN_MISSION_CATALOG.get_stage_count(zone_id)
+	var next_progress := clampi(
+		maxi(get_main_mission_progress(zone_id), completed_stage_index + 1), 0, maxi(0, total)
+	)
+	main_mission_progress[zone_id] = next_progress
+	save_persistent_state()
+	return next_progress
+
+
+func is_zone_main_chain_complete(zone_id: String) -> bool:
+	var total := MAIN_MISSION_CATALOG.get_stage_count(zone_id)
+	return total > 0 and get_main_mission_progress(zone_id) >= total
+
+
+func get_zone_unlock_hint(zone_id: String) -> String:
+	# 다음 도시를 가리키면서 "아직 못 간다"만 말하면 벽이다. 무엇이 필요한지 붙인다.
+	if is_raid_zone_unlocked(zone_id):
+		return ""
+	var required_tier := int((RAID_ZONES.get(zone_id, {}) as Dictionary).get("required_tier", 1))
+	var needs: Array[String] = []
+	if shelter_tier < required_tier:
+		needs.append("쉘터 티어 %d" % required_tier)
+	if required_tier >= 4 and get_progression_item_count("sealed_zone_keycard") <= 0:
+		needs.append("봉인구역 키카드")
+	if needs.is_empty():
+		return ""
+	return "아직 길이 막혀 있다 · 필요: %s" % " · ".join(needs)
+
+
+func record_mission_choice(choice_id: String, option_id: String) -> void:
+	if choice_id.is_empty():
+		return
+	mission_choices[choice_id] = option_id
+	save_persistent_state()
+
+
+func get_mission_choice(choice_id: String) -> String:
+	return str(mission_choices.get(choice_id, ""))
+
+
+func has_seen_field_cinematic(cinematic_id: String) -> bool:
+	return seen_field_cinematics.has(cinematic_id)
+
+
+func mark_field_cinematic_seen(cinematic_id: String) -> void:
+	if cinematic_id.is_empty() or seen_field_cinematics.has(cinematic_id):
+		return
+	seen_field_cinematics.append(cinematic_id)
+	save_persistent_state()
+
+
+func _migrate_main_mission_progress() -> void:
+	# 구세이브 승격: 종로 1단계는 예전 "봉인 화물(잭팟)"이었다. 이미 화물을
+	# 회수한 세이브는 그 단계를 끝낸 것으로 본다 — 안 그러면 다 깬 미션이
+	# 처음부터 다시 뜬다.
+	if (
+		recovered_story_cargo_ids.has("seoul_line3_relief_core")
+		and int(main_mission_progress.get("jongno_outskirts", 0)) < 1
+	):
+		main_mission_progress["jongno_outskirts"] = 1
+	# 회수 목록에 이미 들어 있는 단계는 전부 완주로 승격한다(구세이브 일반화).
+	for zone_id in MAIN_MISSION_CATALOG.ZONE_ORDER:
+		var total := MAIN_MISSION_CATALOG.get_stage_count(zone_id)
+		var progress := int(main_mission_progress.get(zone_id, 0))
+		for stage_index in total:
+			var stage := MAIN_MISSION_CATALOG.get_stage(str(zone_id), stage_index)
+			var recovery_id := str((stage.get("recovery", {}) as Dictionary).get("id", ""))
+			if recovered_story_cargo_ids.has(recovery_id):
+				progress = maxi(progress, stage_index + 1)
+		main_mission_progress[zone_id] = clampi(progress, 0, total)
+
+
 # ── 시체 회수 압박 ─────────────────────────────────────────────
 # 시체가 영원히 기다리면 회수 판은 그냥 한 판 더일 뿐이다. 다른 것들이
 # 먼저 도착하기 시작하면, 회수는 "지금 가야 하는 일"이 된다.
@@ -1301,6 +1395,36 @@ func get_pending_shelter_story_event() -> Dictionary:
 				"주홍이라는 고양이가 같은 표식을 쫓아. 붉은 앞치마를 보거든, 칼보다 귀를 먼저 열어.",
 			],
 		}
+	# 한 구역의 메인 미션 셋을 다 끝냈으면 사자가 다음 도시를 가리킨다.
+	# 흔적이 끊긴 자리에서 유저를 세워 두지 않는다.
+	for zone_id in MAIN_MISSION_CATALOG.ZONE_ORDER:
+		var chain_zone_id := str(zone_id)
+		if not is_zone_main_chain_complete(chain_zone_id):
+			continue
+		if saja_seen_main_mission_zones.has(chain_zone_id):
+			continue
+		var zone_name := str((RAID_ZONES.get(chain_zone_id, {}) as Dictionary).get("name", "그 구역"))
+		var next_zone_id := MAIN_MISSION_CATALOG.get_next_zone(chain_zone_id)
+		var closing_lines: Array[String] = [
+			"%s에서 가져온 기록, 전부 읽었다. 거기서 나올 건 더 없어." % zone_name,
+			"기록을 남긴 손은 한 방향으로만 움직였다. 끝이 아니라 이어지는 선이야.",
+		]
+		if next_zone_id.is_empty():
+			closing_lines.append("그 선의 끝이 여기다. 이제 남은 건 문 뒤를 직접 보는 일뿐이다.")
+		else:
+			var next_name := str(
+				(RAID_ZONES.get(next_zone_id, {}) as Dictionary).get("name", "다음 구역")
+			)
+			closing_lines.append("다음은 %s. 같은 필체가 거기서 다시 시작한다." % next_name)
+			var hint := get_zone_unlock_hint(next_zone_id)
+			if not hint.is_empty():
+				closing_lines.append("%s 준비가 되기 전엔 문이 안 열려." % hint)
+		return {
+			"id": "saja_main_chain_%s" % chain_zone_id,
+			"speaker": "사자",
+			"title": "끊긴 흔적",
+			"lines": closing_lines,
+		}
 	if subway_story_stage > saja_seen_subway_stage:
 		return {
 			"id": "saja_subway_%d" % subway_story_stage,
@@ -1330,6 +1454,10 @@ func mark_shelter_story_event_seen(event_id: String) -> void:
 		saja_seen_story_cargo_count = recovered_story_cargo_ids.size()
 	elif event_id.begins_with("saja_subway_"):
 		saja_seen_subway_stage = subway_story_stage
+	elif event_id.begins_with("saja_main_chain_"):
+		var chain_zone_id := event_id.trim_prefix("saja_main_chain_")
+		if not saja_seen_main_mission_zones.has(chain_zone_id):
+			saja_seen_main_mission_zones.append(chain_zone_id)
 	save_persistent_state()
 
 
@@ -4025,6 +4153,10 @@ func save_persistent_state() -> bool:
 		"raid_special_cargo": raid_special_cargo,
 		"recovered_story_cargo_ids": recovered_story_cargo_ids,
 		"subway_story_stage": subway_story_stage,
+		"main_mission_progress": main_mission_progress,
+		"mission_choices": mission_choices,
+		"seen_field_cinematics": seen_field_cinematics,
+		"saja_seen_main_mission_zones": saja_seen_main_mission_zones,
 		"shelter_workbench_level": shelter_workbench_level,
 		"shelter_tier": shelter_tier,
 		"scratcher_bank_level": scratcher_bank_level,
@@ -4207,6 +4339,11 @@ func load_persistent_state() -> bool:
 	raid_special_cargo = (data.get("raid_special_cargo", {}) as Dictionary).duplicate(true)
 	recovered_story_cargo_ids = _to_string_array(data.get("recovered_story_cargo_ids", []))
 	subway_story_stage = clampi(int(data.get("subway_story_stage", 0)), 0, 3)
+	main_mission_progress = (data.get("main_mission_progress", {}) as Dictionary).duplicate(true)
+	mission_choices = (data.get("mission_choices", {}) as Dictionary).duplicate(true)
+	seen_field_cinematics = _to_string_array(data.get("seen_field_cinematics", []))
+	saja_seen_main_mission_zones = _to_string_array(data.get("saja_seen_main_mission_zones", []))
+	_migrate_main_mission_progress()
 	shelter_workbench_level = clampi(int(data.get("shelter_workbench_level", shelter_workbench_level)), 1, 5)
 	shelter_tier = clampi(int(data.get("shelter_tier", shelter_tier)), 1, 5)
 	scratcher_bank_level = clampi(int(data.get("scratcher_bank_level", scratcher_bank_level)), 1, 5)
@@ -4431,6 +4568,10 @@ func reset_run() -> void:
 	raid_special_cargo.clear()
 	recovered_story_cargo_ids.clear()
 	subway_story_stage = 0
+	main_mission_progress.clear()
+	mission_choices.clear()
+	seen_field_cinematics.clear()
+	saja_seen_main_mission_zones.clear()
 	shelter_workbench_level = 1
 	shelter_tier = 1
 	scratcher_bank_level = 1
