@@ -3,6 +3,7 @@ extends Node3D
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
 const SHELTER_UI := preload("res://scripts/shelter_ui_components.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const AMMO_TEXTURE := preload("res://assets/items/ammo_762.png")
@@ -219,6 +220,9 @@ var selected_category := "armor"
 var selected_recipe_id := "craft_scav_vest"
 var recipe_list: VBoxContainer
 var detail_box: VBoxContainer
+# 제작 버튼은 상세 스크롤 밖 고정 바에 산다 — 스크롤 아래에 숨으면(세로 실측
+# 168px 초과) 유저는 만들 방법이 없다고 읽는다.
+var detail_action_bar: VBoxContainer
 var resource_value_labels: Dictionary = {}
 # 제작 직후 상세 패널에 잠깐 띄우는 성공 피드백(리빌드에서 살아남도록 상태로 보관).
 var craft_feedback_text := ""
@@ -238,7 +242,7 @@ func _ready() -> void:
 
 func get_interaction_prompt() -> String:
 	# 이름만으로는 무엇을 만드는지 모른다. 기능을 한 줄로 말한다.
-	return "제작대 · 방어구·무기 제작 · +99 강화"
+	return "작업대 · 방어구·무기 제작 · +99 강화"
 
 
 func get_interaction_radius() -> float:
@@ -428,6 +432,7 @@ func _build_resource_strip() -> Control:
 			compact,
 			not compact
 		)
+		_fit_chip_text(chip, resource_key)
 		var value_label := chip.find_child("ResourceValue_%s" % resource_key, true, false) as Label
 		if value_label != null:
 			resource_value_labels[resource_key] = value_label
@@ -497,17 +502,30 @@ func _build_detail_panel() -> Control:
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.021, 0.027, 0.032, 0.88), Color("#55776d"), 1, 8))
 	var margin := _margin(22, 20, 22, 20)
 	panel.add_child(margin)
+	# 설명·재료만 스크롤하고 제작 버튼은 바닥에 고정한다.
+	var shell := VBoxContainer.new()
+	shell.name = "WorkbenchDetailShell"
+	shell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	shell.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	shell.add_theme_constant_override("separation", 10)
+	margin.add_child(shell)
 	var scroll := ScrollContainer.new()
 	scroll.name = "WorkbenchDetailScroll"
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	margin.add_child(scroll)
+	shell.add_child(scroll)
 	detail_box = VBoxContainer.new()
 	detail_box.name = "WorkbenchDetailContent"
 	detail_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	detail_box.add_theme_constant_override("separation", 14)
 	scroll.add_child(detail_box)
+	detail_action_bar = VBoxContainer.new()
+	detail_action_bar.name = "WorkbenchDetailActions"
+	detail_action_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	detail_action_bar.size_flags_vertical = Control.SIZE_SHRINK_END
+	detail_action_bar.add_theme_constant_override("separation", 6)
+	shell.add_child(detail_action_bar)
 	return panel
 
 
@@ -553,6 +571,11 @@ func _refresh_detail_panel() -> void:
 	if not is_instance_valid(detail_box):
 		return
 	_clear(detail_box)
+	# 제작 버튼이 사는 고정 바. 없으면(구버전 트리) 상세 본문으로 되돌아간다.
+	var action_host: VBoxContainer = detail_box
+	if is_instance_valid(detail_action_bar):
+		_clear(detail_action_bar)
+		action_host = detail_action_bar
 	var recipe := _selected_recipe()
 	if recipe.is_empty():
 		detail_box.add_child(_label("선택된 설계도가 없습니다.", 16, Color("#dfe6de")))
@@ -612,7 +635,7 @@ func _refresh_detail_panel() -> void:
 	craft.pressed.connect(func() -> void:
 		_craft(recipe)
 	)
-	detail_box.add_child(craft)
+	action_host.add_child(craft)
 
 	# 버튼이 죽어 있으면 이유를 말한다 — 회색 버튼만 보여주는 건 UX가 아니다.
 	if craft.disabled:
@@ -620,14 +643,14 @@ func _refresh_detail_panel() -> void:
 		if not reason.is_empty():
 			var reason_label := _label("잠긴 이유: %s" % reason, 14, Color("#e68576"))
 			reason_label.name = "WorkbenchBlockedReason"
-			detail_box.add_child(reason_label)
+			action_host.add_child(reason_label)
 
 	# 제작 직후 성공 피드백 — 리빌드 후에도 잠깐 남아 스르륵 사라진다.
 	if not craft_feedback_text.is_empty() and Time.get_ticks_msec() < craft_feedback_until_msec:
 		var feedback := _label(craft_feedback_text, 16, Color("#9fdcae"))
 		feedback.name = "WorkbenchCraftFeedback"
 		feedback.add_theme_font_size_override("font_size", 20)
-		detail_box.add_child(feedback)
+		action_host.add_child(feedback)
 		feedback.pivot_offset = Vector2(0.0, 12.0)
 		feedback.scale = Vector2(0.94, 0.94)
 		feedback.modulate.a = 0.0
@@ -710,6 +733,11 @@ func _can_craft(recipe: Dictionary) -> bool:
 
 func _craft(recipe: Dictionary) -> void:
 	if not _can_craft(recipe):
+		# 조용한 return은 버튼 고장으로 읽힌다 — 못 만드는 이유를 그대로 말한다.
+		var blocked_reason := _recipe_list_subtitle(recipe)
+		_set_craft_feedback(
+			"제작 불가" if blocked_reason.is_empty() else "제작 불가 · %s" % blocked_reason
+		)
 		return
 	var result: Dictionary = recipe.get("result", {})
 	if bool(result.get("auto_repair", false)):
@@ -723,6 +751,9 @@ func _craft(recipe: Dictionary) -> void:
 		if GameState.try_upgrade_workbench():
 			GameState.save_persistent_state()
 			_set_craft_feedback("작업대 확장 완료 · Lv.%d" % GameState.shelter_workbench_level)
+		else:
+			# 예전엔 실패하면 아무 말도 없어서 버튼이 고장 난 것처럼 읽혔다.
+			_set_craft_feedback(_workbench_upgrade_failure_reason())
 		_refresh_after_change()
 		return
 	if bool(result.get("artisan", false)):
@@ -733,16 +764,23 @@ func _craft(recipe: Dictionary) -> void:
 		_refresh_after_change()
 		return
 	if bool(result.get("enhance", false)):
-		GameState.try_enhance_weapon(GameState.equipped_weapon_id)
-		_set_craft_feedback("강화 완료 · %s +%d" % [
-			GameState.equipped_weapon_id.to_upper(),
-			GameState.get_weapon_enhancement_level(GameState.equipped_weapon_id),
-		])
+		# 반환 bool을 버리고 무조건 "강화 완료"를 찍던 버그 — 고철이 모자라
+		# 아무 일도 안 일어난 판에서도 성공 문구가 나왔다.
+		if GameState.try_enhance_weapon(GameState.equipped_weapon_id):
+			_set_craft_feedback("강화 완료 · %s +%d" % [
+				GameState.equipped_weapon_id.to_upper(),
+				GameState.get_weapon_enhancement_level(GameState.equipped_weapon_id),
+			])
+		else:
+			_set_craft_feedback(_weapon_enhance_failure_reason())
 		_refresh_after_change()
 		return
 	if result.has("enhance_mod"):
-		GameState.try_enhance_mod(str(result["enhance_mod"]))
-		_set_craft_feedback("파츠 강화 완료")
+		var enhance_mod_id := str(result["enhance_mod"])
+		if GameState.try_enhance_mod(enhance_mod_id):
+			_set_craft_feedback("파츠 강화 완료 · +%d" % GameState.get_mod_enhancement_level(enhance_mod_id))
+		else:
+			_set_craft_feedback(_mod_enhance_failure_reason(enhance_mod_id))
 		_refresh_after_change()
 		return
 	var cost: Dictionary = _effective_cost(recipe)
@@ -772,6 +810,88 @@ func _craft(recipe: Dictionary) -> void:
 func _set_craft_feedback(message: String) -> void:
 	craft_feedback_text = message
 	craft_feedback_until_msec = Time.get_ticks_msec() + 3000
+
+
+# ── 실패 사유 ────────────────────────────────────────────────
+# GameState의 try_* 는 bool만 돌려준다. "왜 안 됐는지"는 같은 조건을 여기서
+# 다시 읽어 만든다. 사유 없는 실패는 유저에게 버튼 고장으로 읽힌다.
+func _shortage_text(key: String, cost: int) -> String:
+	return "%s %s 부족" % [
+		_resource_name(key),
+		GameState.format_compact_number(maxi(0, cost - _owned_resource(key))),
+	]
+
+
+func _workbench_upgrade_failure_reason() -> String:
+	if GameState.shelter_workbench_level >= 5:
+		return "작업대가 이미 최고 레벨(Lv.5)입니다."
+	var cost := GameState.get_workbench_upgrade_cost()
+	for key in cost.keys():
+		var need := int(cost[key])
+		if _owned_resource(str(key)) < need:
+			return "작업대 확장 불가 · %s" % _shortage_text(str(key), need)
+	return "작업대를 지금 확장할 수 없습니다."
+
+
+func _weapon_enhance_failure_reason() -> String:
+	var weapon_id := str(GameState.equipped_weapon_id)
+	if weapon_id.is_empty() or GameState.get_weapon_count(weapon_id) <= 0:
+		return "강화 불가 · 장착한 무기가 없습니다."
+	if GameState.get_weapon_enhancement_level(weapon_id) >= GameState.MAX_WEAPON_ENHANCEMENT:
+		return "강화 불가 · 이미 최고 강화 단계입니다."
+	var cost := GameState.get_weapon_enhancement_cost(weapon_id)
+	if GameState.scrap < cost:
+		return "강화 불가 · %s" % _shortage_text("scrap", cost)
+	return "강화에 실패했습니다."
+
+
+func _mod_enhance_failure_reason(mod_id: String) -> String:
+	if not GameState.equipped_weapon_mods.has(mod_id):
+		return "파츠 강화 불가 · 해당 부착물을 장착하지 않았습니다."
+	if GameState.get_mod_enhancement_level(mod_id) >= GameState.MAX_WEAPON_ENHANCEMENT:
+		return "파츠 강화 불가 · 이미 최고 강화 단계입니다."
+	var cost := GameState.get_mod_enhancement_cost(mod_id)
+	if GameState.scrap < cost:
+		return "파츠 강화 불가 · %s" % _shortage_text("scrap", cost)
+	return "파츠 강화에 실패했습니다."
+
+
+func _largest_shortage_text(recipe: Dictionary) -> String:
+	# "재료 부족"만으로는 무엇을 더 주워 와야 하는지 알 수 없다. 가장 많이
+	# 모자란 재료 하나만 병기해 다음 출정의 목표로 만든다.
+	var cost := _effective_cost(recipe)
+	var worst_key := ""
+	var worst_gap := 0
+	for key in cost.keys():
+		var gap := int(cost[key]) - _owned_resource(str(key))
+		if gap > worst_gap:
+			worst_gap = gap
+			worst_key = str(key)
+	if worst_key.is_empty():
+		return ""
+	return "%s %s 부족" % [
+		_resource_name(worst_key), GameState.format_compact_number(worst_gap)
+	]
+
+
+func _blueprint_hint_text(blueprint_id: String) -> String:
+	# 어느 청사진이 어디서 나오는지까지 말해 준다. 청사진은 봉인 보급함
+	# 전용 드랍이라, 이걸 모르면 영원히 잠긴 줄로 읽힌다.
+	var blueprint_name := str(
+		(LOOT_ECONOMY.ITEM_CATALOG.get(blueprint_id, {}) as Dictionary).get("display_name", blueprint_id)
+	)
+	var source := "봉인 보급함"
+	for container_id in LOOT_ECONOMY.CONTAINER_DEFINITIONS.keys():
+		var table := LOOT_ECONOMY.CONTAINER_DEFINITIONS[container_id] as Dictionary
+		var found := false
+		for entry in (table.get("entries", []) as Array):
+			if str((entry as Array)[0]) == blueprint_id:
+				found = true
+				break
+		if found:
+			source = str(table.get("display_name", source))
+			break
+	return "%s · %s에서 나옵니다" % [blueprint_name, source]
 
 
 func get_craftable_count() -> int:
@@ -809,6 +929,15 @@ func _refresh_header_resources() -> void:
 		var value_label := resource_value_labels.get(key) as Label
 		if is_instance_valid(value_label):
 			value_label.text = "x%s" % GameState.format_compact_number(_owned_resource(key))
+			# 수치가 길어져도 ELLIPSIS로 잘리지 않게 최소 폭을 다시 잰다.
+			var font := value_label.get_theme_font("font")
+			if font != null:
+				value_label.custom_minimum_size.x = ceilf(font.get_string_size(
+					value_label.text,
+					HORIZONTAL_ALIGNMENT_LEFT,
+					-1,
+					value_label.get_theme_font_size("font_size")
+				).x) + 2.0
 
 
 func _owned_resource(key: String) -> int:
@@ -887,7 +1016,8 @@ func _recipe_list_subtitle(recipe: Dictionary) -> String:
 		not required_blueprint.is_empty()
 		and GameState.get_progression_item_count(required_blueprint) <= 0
 	):
-		return "청사진 필요"
+		# 어느 청사진인지, 어디서 나오는지까지 말한다.
+		return "청사진 필요 · %s" % _blueprint_hint_text(required_blueprint)
 	var required_tier := int(recipe.get("required_tier", 1))
 	if GameState.shelter_tier < required_tier:
 		return "쉘터 Tier %d 필요" % required_tier
@@ -899,9 +1029,24 @@ func _recipe_list_subtitle(recipe: Dictionary) -> String:
 		if GameState.workbench_repair_active:
 			return "수리 진행 중"
 		return "수리 가능" if GameState.weapon_durability < 100.0 else "수리 불필요"
+	# 강화 계열은 재료가 아니라 단계 상한에 걸리는 경우가 따로 있다.
+	if bool(result.get("enhance", false)):
+		if str(GameState.equipped_weapon_id).is_empty():
+			return "장착한 무기 없음"
+		if GameState.get_weapon_enhancement_level(GameState.equipped_weapon_id) >= GameState.MAX_WEAPON_ENHANCEMENT:
+			return "최고 강화 단계"
+	if result.has("enhance_mod"):
+		var subtitle_mod_id := str(result["enhance_mod"])
+		if not GameState.equipped_weapon_mods.has(subtitle_mod_id):
+			return "해당 부착물 미장착"
+		if GameState.get_mod_enhancement_level(subtitle_mod_id) >= GameState.MAX_WEAPON_ENHANCEMENT:
+			return "최고 강화 단계"
+	# "재료 부족"에는 가장 많이 모자란 재료 하나를 병기한다.
+	var shortage := _largest_shortage_text(recipe)
+	var short_label := "재료 부족" if shortage.is_empty() else "재료 부족 · %s" % shortage
 	if bool(result.get("workbench_upgrade", false)):
-		return "최고 레벨" if GameState.shelter_workbench_level >= 5 else ("확장 가능" if _can_craft(recipe) else "재료 부족")
-	return "제작 가능" if _can_craft(recipe) else "재료 부족"
+		return "최고 레벨" if GameState.shelter_workbench_level >= 5 else ("확장 가능" if _can_craft(recipe) else short_label)
+	return "제작 가능" if _can_craft(recipe) else short_label
 
 
 func _result_text(recipe: Dictionary) -> String:
@@ -1230,6 +1375,25 @@ func _close_button() -> Button:
 	button.tooltip_text = "닫기"
 	button.focus_mode = Control.FOCUS_NONE
 	return button
+
+
+func _fit_chip_text(chip: PanelContainer, resource_id: String) -> PanelContainer:
+	# 자원 칩 이름 라벨은 ELLIPSIS라 최소 폭이 1px이다 — 옆의 수치 라벨이
+	# EXPAND_FILL로 남는 폭을 다 먹으면 이름("스코프 렌즈" 등)이 통째로 사라진다.
+	for label_name in ["ResourceName_%s" % resource_id, "ResourceValue_%s" % resource_id]:
+		var label := chip.find_child(label_name, true, false) as Label
+		if label == null:
+			continue
+		var font := label.get_theme_font("font")
+		if font == null:
+			continue
+		label.custom_minimum_size.x = ceilf(font.get_string_size(
+			label.text,
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1,
+			label.get_theme_font_size("font_size")
+		).x) + 2.0
+	return chip
 
 
 func _label(text: String, size: int, color: Color) -> Label:

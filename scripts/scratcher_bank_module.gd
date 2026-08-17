@@ -14,6 +14,14 @@ const RESIDENT_PORTRAITS := preload("res://scripts/resident_portrait_catalog.gd"
 var has_focus := false
 var ui_layer: CanvasLayer
 var content: VBoxContainer
+# 확장·오버클럭·부스터는 스크롤 밖 고정 바에 산다 — 스크롤 아래에 숨으면
+# 유저는 "확장 기능이 없다"고 읽는다(세로 실측 150px 초과).
+var action_bar: VBoxContainer
+# 창고 모듈과 같은 피드백 문법. _rebuild_ui()가 라벨을 새로 만들기 때문에
+# 마지막 문구를 따로 들고 있다가 재생성 뒤 다시 붙인다.
+var feedback_label: Label
+var pending_feedback := ""
+var pending_feedback_ok := false
 
 
 func _ready() -> void:
@@ -45,6 +53,9 @@ func set_interaction_focus(value: bool) -> void:
 func _open_ui() -> void:
 	if is_instance_valid(ui_layer):
 		ui_layer.queue_free()
+	# 새로 열 때는 지난 세션의 문구를 끌고 오지 않는다.
+	pending_feedback = ""
+	pending_feedback_ok = false
 	ui_layer = CanvasLayer.new()
 	ui_layer.name = "ScratcherBankUILayer"
 	ui_layer.layer = 80
@@ -83,10 +94,12 @@ func _open_ui() -> void:
 	safe_margin.add_child(center)
 	var panel := PanelContainer.new()
 	panel.name = "ScratcherBankPanel"
-	panel.custom_minimum_size = Vector2(
-		minf(960.0, available_size.x - outer_margin * 2.0),
-		minf(620.0, available_size.y - outer_margin * 2.0)
-	)
+	# 세로 화면에서 실제로 쓸 수 있는 폭. 내부 위젯이 이 값을 넘겨 최소 폭을 밀어
+	# 올리면 패널이 통째로 화면 밖으로 나간다(실측 720 화면에 910px 패널 →
+	# 닫기·오버클럭 버튼이 화면 밖). 내부는 이 폭 안에서만 논다.
+	var panel_width := minf(960.0, maxf(260.0, available_size.x - outer_margin * 2.0))
+	var panel_height := minf(620.0, maxf(320.0, available_size.y - outer_margin * 2.0))
+	panel.custom_minimum_size = Vector2(panel_width, panel_height)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	panel.clip_contents = true
@@ -101,22 +114,33 @@ func _open_ui() -> void:
 	margin.add_theme_constant_override("margin_right", inner_margin)
 	margin.add_theme_constant_override("margin_bottom", inner_margin)
 	panel.add_child(margin)
+	# 목록만 스크롤하고 액션 줄은 바닥에 고정하기 위한 2단 껍데기.
+	var shell := VBoxContainer.new()
+	shell.name = "ScratcherBankShell"
+	shell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	shell.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	shell.add_theme_constant_override("separation", 8)
+	margin.add_child(shell)
 	var panel_scroll := ScrollContainer.new()
 	panel_scroll.name = "ScratcherBankScroll"
 	panel_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	panel_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	margin.add_child(panel_scroll)
+	shell.add_child(panel_scroll)
 	content = VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	# 패널이 이미 화면에 맞춰 줄어든 뒤다 — 여기서 960 기준 최소폭을 다시
-	# 강제하면 세로 화면에서 내용이 폭을 넘어 잘린다. 실제 패널 폭을 따른다.
-	content.custom_minimum_size.x = maxf(
-		280.0, panel.custom_minimum_size.x - float(inner_margin) * 2.0 - 12.0
-	)
+	# 내용 쪽에서 최소 폭을 못 박으면 그 값이 스크롤·패널로 거꾸로 전파돼
+	# 패널을 화면 밖으로 밀어낸다. 폭은 패널이 정하고 내용은 따라간다.
+	content.custom_minimum_size.x = 0.0
 	content.add_theme_constant_override("separation", 10 if viewport_size.y < 640.0 else 16)
 	panel_scroll.add_child(content)
+	action_bar = VBoxContainer.new()
+	action_bar.name = "ScratcherBankActionBar"
+	action_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	action_bar.size_flags_vertical = Control.SIZE_SHRINK_END
+	action_bar.add_theme_constant_override("separation", 6)
+	shell.add_child(action_bar)
 	_rebuild_ui()
 
 
@@ -147,18 +171,18 @@ func _rebuild_ui() -> void:
 	wallet.add_theme_constant_override("h_separation", 8)
 	wallet.add_theme_constant_override("v_separation", 6)
 	header.add_child(wallet)
-	wallet.add_child(SHELTER_UI.make_currency_chip(
+	wallet.add_child(_fit_chip_text(SHELTER_UI.make_currency_chip(
 		"scrap",
 		GameState.format_compact_number(GameState.scrap),
 		compact,
 		not narrow
-	))
-	wallet.add_child(SHELTER_UI.make_currency_chip(
+	), "scrap"))
+	wallet.add_child(_fit_chip_text(SHELTER_UI.make_currency_chip(
 		"catnip",
 		GameState.format_compact_number(GameState.catnip),
 		compact,
 		not narrow
-	))
+	), "catnip"))
 	var workers: int = GameState.get_active_scratcher_workers()
 	var slots: int = GameState.get_scratcher_worker_slots()
 	var summary := GridContainer.new()
@@ -225,10 +249,25 @@ func _rebuild_ui() -> void:
 				continue  # 이미 좌석에 앉아 있다.
 			bench.add_child(_portrait_card(resident_id, false, slots))
 
-	# 생산 설정은 아래 한 줄로. 별도 열을 차지할 만큼의 내용이 아니다.
-	var actions := HBoxContainer.new()
+	_rebuild_actions()
+
+
+func _rebuild_actions() -> void:
+	# 고정 하단 바 — 목록이 아무리 길어도 확장·오버클럭·부스터는 늘 보인다.
+	if not is_instance_valid(action_bar):
+		return
+	for child in action_bar.get_children():
+		action_bar.remove_child(child)
+		child.queue_free()
+	var viewport_size := get_viewport().get_visible_rect().size
+	var narrow := viewport_size.x < 760.0
+	# 좁은 화면에서 세 버튼을 한 줄에 밀어 넣으면 줄 전체 최소 폭이 패널을 밀어
+	# 화면 밖으로 내보낸다. 세로에서는 쌓는다.
+	var actions: BoxContainer = VBoxContainer.new() if narrow else HBoxContainer.new()
+	actions.name = "ScratcherBankActions"
+	actions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	actions.add_theme_constant_override("separation", 8)
-	body.add_child(actions)
+	action_bar.add_child(actions)
 	var boost_remaining: int = GameState.get_catnip_boost_remaining()
 	var boost := _button(
 		"가동 중  %02d:%02d" % [boost_remaining / 60, boost_remaining % 60]
@@ -237,8 +276,7 @@ func _rebuild_ui() -> void:
 		"catnip"
 	)
 	boost.disabled = boost_remaining > 0 or GameState.catnip < GameState.get_catnip_boost_cost()
-	boost.custom_minimum_size = Vector2(0, 40)
-	boost.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stretch_action(boost)
 	boost.pressed.connect(_activate_boost)
 	actions.add_child(boost)
 	var upgrade_cost := int(GameState.SCRATCHER_UPGRADE_COSTS.get(GameState.scratcher_bank_level + 1, 0))
@@ -260,8 +298,7 @@ func _rebuild_ui() -> void:
 		or GameState.scrap < upgrade_cost
 		or GameState.catnip < upgrade_catnip
 	)
-	upgrade.custom_minimum_size = Vector2(0, 40)
-	upgrade.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stretch_action(upgrade)
 	upgrade.pressed.connect(_upgrade)
 	actions.add_child(upgrade)
 	# 오버클럭: 고철을 다시 생산에 넣는 복리 사다리. "항상 다음에 살 것"을 만든다.
@@ -278,13 +315,46 @@ func _rebuild_ui() -> void:
 	overclock.disabled = (
 		GameState.scrap < overclock_cost or GameState.catnip < overclock_catnip
 	)
-	overclock.custom_minimum_size = Vector2(0, 40)
-	overclock.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	overclock.pressed.connect(func() -> void:
-		if GameState.try_upgrade_scratcher_overclock():
-			_rebuild_ui()
-	)
+	_stretch_action(overclock)
+	overclock.pressed.connect(_upgrade_overclock)
 	actions.add_child(overclock)
+
+	# 실패 사유를 적는 자리. 버튼이 고장 난 게 아니라 조건이 모자란 것이라고 말해 준다.
+	feedback_label = _label("", 12, Color("#e6c779"))
+	feedback_label.name = "ScratcherBankFeedback"
+	feedback_label.custom_minimum_size.y = 20
+	feedback_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	action_bar.add_child(feedback_label)
+	if not pending_feedback.is_empty():
+		_apply_feedback_style(pending_feedback, pending_feedback_ok)
+
+
+func _stretch_action(button: Button) -> void:
+	# 긴 문구를 한 줄로 고집하면 버튼 최소 폭이 패널 폭을 넘긴다 — 줄바꿈을 허용해
+	# 폭 대신 높이를 쓴다.
+	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	button.custom_minimum_size = Vector2(0, 48)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+
+func _fit_chip_text(chip: PanelContainer, resource_id: String) -> PanelContainer:
+	# 자원 칩 이름 라벨은 ELLIPSIS라 최소 폭이 1px이다 — 옆의 수치 라벨이
+	# EXPAND_FILL로 남는 폭을 다 먹으면 이름이 통째로 사라진다(실측 폭 1px).
+	# 두 라벨 모두 실제 글자 폭을 최소 폭으로 못 박는다.
+	for label_name in ["ResourceName_%s" % resource_id, "ResourceValue_%s" % resource_id]:
+		var label := chip.find_child(label_name, true, false) as Label
+		if label == null:
+			continue
+		var font := label.get_theme_font("font")
+		if font == null:
+			continue
+		label.custom_minimum_size.x = ceilf(font.get_string_size(
+			label.text,
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1,
+			label.get_theme_font_size("font_size")
+		).x) + 2.0
+	return chip
 
 
 func _portrait_card(resident_id: String, is_seat: bool, slots: int) -> Button:
@@ -356,7 +426,21 @@ func _reroll_worker(resident_id: String) -> void:
 	var result: Dictionary = GameState.try_reroll_resident_trait(resident_id)
 	if bool(result.get("ok", false)):
 		get_tree().call_group("shelter_resident_host", "refresh_shelter_residents", false)
+		var rolled: Dictionary = result.get("trait", {}) as Dictionary
+		_set_feedback("특성 재굴림 완료 · %s" % str(rolled.get("name", "새 특성")), true)
 		_rebuild_ui()
+		return
+	# 재굴림은 우클릭이라 더더욱 조용히 실패하면 안 된다 — 눌린 줄도 모른다.
+	match str(result.get("reason", "")):
+		"churu":
+			_set_feedback(
+				"츄르가 %d개 부족합니다." % maxi(0, int(result.get("cost", 0)) - GameState.churu),
+				false
+			)
+		"no_candidates":
+			_set_feedback("바꿀 수 있는 다른 특성이 없습니다.", false)
+		_:
+			_set_feedback("이 주민은 재굴림할 수 없습니다.", false)
 
 
 func _toggle_worker(resident_id: String) -> void:
@@ -367,15 +451,89 @@ func _toggle_worker(resident_id: String) -> void:
 
 
 func _upgrade() -> void:
-	if GameState.try_upgrade_scratcher_bank():
-		GameState.save_persistent_state()
-		_rebuild_ui()
+	# GameState는 성공 여부만 돌려준다 — 사유는 같은 조건을 모듈에서 다시 읽어 만든다.
+	var next_level: int = GameState.scratcher_bank_level + 1
+	var cost := int(GameState.SCRATCHER_UPGRADE_COSTS.get(next_level, 0))
+	var catnip_cost := int(GameState.SCRATCHER_UPGRADE_CATNIP_COSTS.get(next_level, 0))
+	if cost <= 0:
+		_set_feedback("이미 최고 레벨입니다.", false)
+		return
+	if GameState.scrap < cost:
+		_set_feedback(
+			"고철이 %s 부족합니다." % GameState.format_compact_number(cost - GameState.scrap),
+			false
+		)
+		return
+	if GameState.catnip < catnip_cost:
+		_set_feedback(
+			"캣닢이 %s 부족합니다." % GameState.format_compact_number(catnip_cost - GameState.catnip),
+			false
+		)
+		return
+	if not GameState.try_upgrade_scratcher_bank():
+		_set_feedback("확장 조건을 만족하지 못했습니다.", false)
+		return
+	GameState.save_persistent_state()
+	_set_feedback("Lv.%d 확장 완료 · 작업 좌석 +1" % GameState.scratcher_bank_level, true)
+	_rebuild_ui()
 
 
 func _activate_boost() -> void:
-	if GameState.activate_catnip_boost():
-		GameState.save_persistent_state()
-		_rebuild_ui()
+	if GameState.get_catnip_boost_remaining() > 0:
+		_set_feedback("부스터가 이미 가동 중입니다.", false)
+		return
+	var cost := GameState.get_catnip_boost_cost()
+	if GameState.catnip < cost:
+		_set_feedback(
+			"캣닢이 %s 부족합니다." % GameState.format_compact_number(cost - GameState.catnip),
+			false
+		)
+		return
+	if not GameState.activate_catnip_boost():
+		_set_feedback("부스터를 가동하지 못했습니다.", false)
+		return
+	GameState.save_persistent_state()
+	_set_feedback("부스터 가동 · 10분간 생산 x10", true)
+	_rebuild_ui()
+
+
+func _upgrade_overclock() -> void:
+	var cost := GameState.get_overclock_cost()
+	var catnip_cost := GameState.get_overclock_catnip_cost()
+	if GameState.scrap < cost:
+		_set_feedback(
+			"고철이 %s 부족합니다." % GameState.format_compact_number(cost - GameState.scrap),
+			false
+		)
+		return
+	if GameState.catnip < catnip_cost:
+		_set_feedback(
+			"캣닢이 %s 부족합니다." % GameState.format_compact_number(catnip_cost - GameState.catnip),
+			false
+		)
+		return
+	if not GameState.try_upgrade_scratcher_overclock():
+		_set_feedback("오버클럭 조건을 만족하지 못했습니다.", false)
+		return
+	_set_feedback("오버클럭 Lv.%d · 시간당 +8%%" % GameState.scratcher_overclock_level, true)
+	_rebuild_ui()
+
+
+func _set_feedback(message: String, success: bool) -> void:
+	# 문구는 UI 재생성 뒤에도 남아야 한다 — pending에 보관하고 라벨에도 즉시 반영.
+	pending_feedback = message
+	pending_feedback_ok = success
+	_apply_feedback_style(message, success)
+
+
+func _apply_feedback_style(message: String, success: bool) -> void:
+	if not is_instance_valid(feedback_label):
+		return
+	feedback_label.text = message
+	feedback_label.add_theme_color_override(
+		"font_color",
+		Color("#9de0b1") if success else Color("#f09a8a")
+	)
 
 
 func _button(text: String, icon_name := "") -> Button:
@@ -469,6 +627,10 @@ func _summary_card(title: String, value: String, icon_name: String, compact: boo
 	value_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	title_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	value_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	# ELLIPSIS 라벨의 최소 폭은 1px이다 — 최소 폭을 안 주면 칸이 좁아질 때
+	# 글자가 통째로 사라진다.
+	title_label.custom_minimum_size.x = 48.0
+	value_label.custom_minimum_size.x = 62.0
 	box.add_child(title_label)
 	box.add_child(value_label)
 	return panel

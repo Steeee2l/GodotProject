@@ -230,7 +230,7 @@ const CHAINS := {
 				"detail": "붉은 화물 위치로 이동 · 접근하는 약탈대를 경계하세요",
 				"alarm": true,
 			},
-			"carry_title": "탈출 필요 · 4/4",
+			"carry_title": "탈출 필요 · 3/4",
 			"carry_detail": "특수 화물 운반 중 · 가장 가까운 하수구로 이동하세요",
 			"carry_notice": "특수 화물 확보 · 탈출 시 특별 보상과 기록 해금",
 			"carry_monologue": [
@@ -382,7 +382,7 @@ const CHAINS := {
 				"detail": "마지막 밸브실에서 통제 기록을 회수하세요",
 				"alarm": true,
 			},
-			"carry_title": "탈출 필요 · 4/4",
+			"carry_title": "탈출 필요 · 3/4",
 			"carry_detail": "급수 통제 기록 운반 중 · 가장 가까운 하수구로 이동하세요",
 			"carry_notice": "통제 기록 확보 · 탈출하면 배관도가 해독됩니다",
 			"carry_monologue": [
@@ -687,7 +687,7 @@ const CHAINS := {
 				"detail": "천막 미로 안쪽의 은닉 물자를 회수하세요",
 				"alarm": true,
 			},
-			"carry_title": "탈출 필요 · 4/4",
+			"carry_title": "탈출 필요 · 3/4",
 			"carry_detail": "배급 상자 운반 중 · 가장 가까운 하수구로 이동하세요",
 			"carry_notice": "은닉 배급 확보 · 탈출 시 특별 보상",
 			"carry_monologue": [
@@ -1015,7 +1015,7 @@ const CHAINS := {
 				"detail": "간선 종단함에서 기록을 회수하세요 · 경보 주의",
 				"alarm": true,
 			},
-			"carry_title": "탈출 필요 · 4/4",
+			"carry_title": "탈출 필요 · 3/4",
 			"carry_detail": "종단 기록 운반 중 · 가장 가까운 하수구로 이동하세요",
 			"carry_notice": "종단 기록 확보 · 탈출 시 특별 보상",
 			"carry_monologue": [
@@ -1204,7 +1204,7 @@ const CHAINS := {
 				"detail": "보관소에서 반출 기록함을 회수하세요 · 경보 주의",
 				"alarm": true,
 			},
-			"carry_title": "탈출 필요 · 4/4",
+			"carry_title": "탈출 필요 · 3/4",
 			"carry_detail": "반출 기록함 운반 중 · 가장 가까운 하수구로 이동하세요",
 			"carry_notice": "반출 기록 확보 · 탈출 시 특별 보상",
 			"carry_monologue": [
@@ -1393,7 +1393,7 @@ const CHAINS := {
 				"detail": "마지막 관측기에서 원본 자료를 회수하세요 · 경보 주의",
 				"alarm": true,
 			},
-			"carry_title": "탈출 필요 · 4/4",
+			"carry_title": "탈출 필요 · 3/4",
 			"carry_detail": "관측 자료 운반 중 · 가장 가까운 하수구로 이동하세요",
 			"carry_notice": "원본 자료 확보 · 탈출 시 특별 보상",
 			"carry_monologue": [

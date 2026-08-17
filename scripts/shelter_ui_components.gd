@@ -78,12 +78,44 @@ static func make_resource_chip(
 	if show_name:
 		var name_label := _label(display_name, 11 if compact else 12, Color("#91a39a"))
 		name_label.name = "ResourceName_%s" % resource_id
+		# 값 라벨이 EXPAND_FILL로 슬랙을 다 먹어 이름이 폭 1px로 붕괴했다
+		# ("고철"/"캣닢"/"스코프 렌즈"가 통째로 증발). 실측 폭을 하한으로 박는다.
+		name_label.custom_minimum_size.x = ceilf(
+			FONT.get_string_size(
+				display_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 11 if compact else 12
+			).x
+		) + 2.0
+		name_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 		row.add_child(name_label)
 
-	var value_label := _label("x%s" % value_text, 14 if compact else 16, accent)
+	var value_font_size := 14 if compact else 16
+	var value_string := "x%s" % value_text
+	var value_label := _label(value_string, value_font_size, accent)
 	value_label.name = "ResourceValue_%s" % resource_id
 	value_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	# 재화가 커지면("x240K") 마지막 글자가 5px씩 잘렸다 — 실측 폭을 최소 폭으로
+	# 박아 두고, 칩 자체도 그만큼은 넓어지게 한다. 숫자가 잘리면 칩은 무의미하다.
+	var value_width := ceilf(
+		FONT.get_string_size(
+			value_string, HORIZONTAL_ALIGNMENT_LEFT, -1, value_font_size
+		).x
+	) + 2.0
+	value_label.custom_minimum_size.x = value_width
+	value_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	var name_width := 0.0
+	if show_name:
+		name_width = ceilf(
+			FONT.get_string_size(
+				display_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 11 if compact else 12
+			).x
+		) + 2.0
+	var icon_width := 25.0 if compact else 28.0
+	var separation := 6.0 * (2.0 if show_name else 1.0)
+	panel.custom_minimum_size.x = maxf(
+		panel.custom_minimum_size.x,
+		8.0 + 9.0 + icon_width + name_width + value_width + separation
+	)
 	row.add_child(value_label)
 	return panel
 

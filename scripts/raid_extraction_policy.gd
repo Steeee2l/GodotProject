@@ -3,7 +3,8 @@ extends RefCounted
 
 const ROUTES := [
 	{
-		"title": "안전 귀환로",
+		# 세 선택지의 용어를 "탈출로"로 통일한다(귀환로/탈출로 혼용 폐지).
+		"title": "안전 탈출로",
 		"reward_multiplier": 1.0,
 		"color": Color("#d9b44a"),
 	},
@@ -44,7 +45,7 @@ static func calculate_route_bonus(
 			"medkits": 0,
 			"component_id": "",
 			"component_count": 0,
-			"summary": "안전 귀환로 · 추가 보급 없음",
+			"summary": "안전 탈출로 · 추가 보급 없음",
 		}
 	var activity_score := maxi(
 		1,

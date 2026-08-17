@@ -27,6 +27,21 @@ var map_paused_tree := false
 var tree_was_paused_before_map := false
 var opened_at_msec := 0
 var close_button: Button
+# 마커 라벨은 그리는 자리에서 바로 찍지 않고 여기 모았다가 마지막에 한 번에
+# 배치한다. "내 위치"와 "불명 격리 신호"가 정면 충돌해 둘 다 못 읽던 문제 때문.
+var pending_labels: Array[Dictionary] = []
+
+# 라벨이 겹칠 때 위아래로 시도해 볼 오프셋. 다 막히면 그 라벨은 접는다.
+const LABEL_NUDGES: Array[float] = [0.0, -15.0, 15.0, -30.0, 30.0, -45.0, 45.0]
+# 라벨 우선순위 — 숫자가 큰 쪽이 먼저 자리를 잡는다.
+const LABEL_PRIORITY_NOTICE := 110
+const LABEL_PRIORITY_PLAYER := 100
+const LABEL_PRIORITY_BOSS := 80
+const LABEL_PRIORITY_CORPSE := 70
+const LABEL_PRIORITY_MANUAL := 60
+const LABEL_PRIORITY_EVENT := 50
+const LABEL_PRIORITY_HOTSPOT := 40
+const LABEL_PRIORITY_EXTRACTION := 30
 
 
 func setup(
@@ -343,19 +358,32 @@ func _record_player_visit(force: bool) -> void:
 
 func _draw() -> void:
 	var viewport_size := size
-	draw_rect(Rect2(Vector2.ZERO, viewport_size), Color(0.005, 0.008, 0.009, 0.91))
+	# 딤이 0.91이라 아래 필드 HUD(layer 130)가 그대로 비쳐 보였다. 지도는 전면
+	# 모달이다 — 여는 순간 필드 화면은 완전히 덮는다(등장 페이드는 modulate가 맡는다).
+	draw_rect(Rect2(Vector2.ZERO, viewport_size), Color(0.004, 0.007, 0.008, 1.0))
+	pending_labels.clear()
 	if not is_instance_valid(world):
 		return
 	var panel_size := Vector2(minf(1040.0, viewport_size.x - 64.0), minf(720.0, viewport_size.y - 54.0))
 	var panel_rect := Rect2((viewport_size - panel_size) * 0.5, panel_size)
 	draw_style_box(_panel_style(), panel_rect)
 	draw_string(UI_FONT, panel_rect.position + Vector2(28, 40), "현장 전술 지도", HORIZONTAL_ALIGNMENT_LEFT, -1, 25, Color("#e4e1d3"))
+	# 부제는 개발 메모("이동한 구역만 기록 · 탭: 개인 표식")가 그대로 남아 있었다.
+	# 플레이어에게 하는 말로 고쳐 쓴다.
 	var map_hint := (
-		"이동한 구역만 기록 · 탭: 개인 표식 · 표식 다시 탭: 삭제 · 확인 중 전투 일시정지"
+		"가 본 곳만 지도에 남는다 · 탭하면 표식, 다시 탭하면 삭제 · 보는 동안 전투는 멈춘다"
 		if DisplayServer.is_touchscreen_available()
-		else "이동한 구역만 기록 · 클릭: 개인 표식 · 우클릭: 삭제 · 확인 중 전투 일시정지"
+		else "가 본 곳만 지도에 남는다 · 클릭하면 표식, 우클릭하면 삭제 · 보는 동안 전투는 멈춘다"
 	)
-	draw_string(UI_FONT, panel_rect.position + Vector2(28, 65), map_hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#aebbb4"))
+	# 세로 화면에서는 패널이 좁다 — 문장을 자르는 대신 글자를 한 단계씩 줄여 담는다.
+	var hint_size := 14
+	var hint_limit := panel_rect.size.x - 56.0
+	while (
+		hint_size > 10
+		and UI_FONT.get_string_size(map_hint, HORIZONTAL_ALIGNMENT_LEFT, -1, hint_size).x > hint_limit
+	):
+		hint_size -= 1
+	draw_string(UI_FONT, panel_rect.position + Vector2(28, 65), map_hint, HORIZONTAL_ALIGNMENT_LEFT, -1, hint_size, Color("#aebbb4"))
 
 	var data: Dictionary = world.call("get_map_snapshot_data")
 	var grid_size := int(data.get("grid_size", 22))
@@ -433,14 +461,13 @@ func _draw() -> void:
 			2.0
 		)
 		draw_circle(extraction_center, 2.5, route_color.lightened(0.32))
-		draw_string(
-			UI_FONT,
+		_queue_label(
 			extraction_center + Vector2(marker_size * 0.62, marker_size * 0.18),
 			"×%.2f" % route_multiplier,
-			HORIZONTAL_ALIGNMENT_LEFT,
-			74,
 			13,
-			route_color.lightened(0.18)
+			route_color.lightened(0.18),
+			LABEL_PRIORITY_EXTRACTION,
+			74.0
 		)
 
 	for marker in raid_markers:
@@ -483,14 +510,17 @@ func _draw() -> void:
 		)
 		draw_polyline(_closed_polygon(diamond), marker_color.lightened(0.18), 2.0)
 		draw_circle(marker_center, marker_radius * 0.22, Color("#f5f0d5"))
-		draw_string(
-			UI_FONT,
+		_queue_label(
 			marker_center + Vector2(marker_radius + 6.0, -marker_radius * 0.3),
 			str(marker.get("label", "고가치 지점")),
-			HORIZONTAL_ALIGNMENT_LEFT,
-			150,
 			13,
-			marker_color.lightened(0.2)
+			marker_color.lightened(0.2),
+			(
+				LABEL_PRIORITY_EVENT
+				if marker_type in ["incident", "jackpot"]
+				else LABEL_PRIORITY_HOTSPOT
+			),
+			150.0
 		)
 
 	if corpse_recovery_available:
@@ -518,14 +548,13 @@ func _draw() -> void:
 			Color("#ffd0a2"),
 			3.0
 		)
-		draw_string(
-			UI_FONT,
+		_queue_label(
 			corpse_center + Vector2(marker_size * 0.7, -marker_size * 0.55),
 			"분실 장비",
-			HORIZONTAL_ALIGNMENT_LEFT,
-			110,
 			15,
-			Color("#ffd0a2")
+			Color("#ffd0a2"),
+			LABEL_PRIORITY_CORPSE,
+			110.0
 		)
 
 	if manual_marker_position != Vector3.INF:
@@ -535,14 +564,13 @@ func _draw() -> void:
 		draw_circle(manual_center, manual_radius * 1.65, Color(0.95, 0.79, 0.32, 0.14))
 		draw_circle(manual_center, manual_radius, Color("#f2cb62"), false, 3.0)
 		draw_circle(manual_center, 3.0, Color("#fff2bf"))
-		draw_string(
-			UI_FONT,
+		_queue_label(
 			manual_center + Vector2(manual_radius + 7.0, 4.0),
 			"개인 표식",
-			HORIZONTAL_ALIGNMENT_LEFT,
-			90,
 			13,
-			Color("#f2d481")
+			Color("#f2d481"),
+			LABEL_PRIORITY_MANUAL,
+			90.0
 		)
 
 	for boss in boss_targets.duplicate():
@@ -566,14 +594,13 @@ func _draw() -> void:
 		])
 		draw_colored_polygon(diamond, Color("#ff6a52"))
 		draw_polyline(_closed_polygon(diamond), Color("#fff0d2"), 2.0)
-		draw_string(
-			UI_FONT,
+		_queue_label(
 			boss_center + Vector2(marker_size * 0.68, -marker_size * 0.52),
 			str(boss.get_meta("display_name", "위험 개체")),
-			HORIZONTAL_ALIGNMENT_LEFT,
-			160,
 			15,
-			Color("#ffc4a8")
+			Color("#ffc4a8"),
+			LABEL_PRIORITY_BOSS,
+			160.0
 		)
 
 	if is_instance_valid(player):
@@ -590,9 +617,18 @@ func _draw() -> void:
 		_draw_player_heading(player_center, marker_size * 1.35, map_rect)
 		var sector := str(world.call("get_sector_label", player.global_position))
 		var label_position := player_center + Vector2(outer_radius + 7.0, -outer_radius * 0.45)
-		draw_string(UI_FONT, label_position, "내 위치  %s" % sector, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
-		var footer := "현재 %s   ·   가방 %d/%d칸   ·   회수 가치 %s   ·   %s" % [
+		_queue_label(
+			label_position,
+			"내 위치  %s" % sector,
+			17,
+			Color.WHITE,
+			LABEL_PRIORITY_PLAYER
+		)
+		# 가방이 넘치면 그 자리에서 루팅이 막힌다 — 만재는 경고색으로 말한다.
+		var bag_full := current_bag_slots >= current_bag_capacity
+		var footer := "현재 %s   ·   %s %d/%d칸   ·   회수 가치 %s   ·   %s" % [
 			sector,
+			"가방 만재" if bag_full else "가방",
 			current_bag_slots,
 			current_bag_capacity,
 			_compact_number(current_bag_value),
@@ -600,11 +636,100 @@ func _draw() -> void:
 		]
 		if nearest_distance < INF:
 			footer += "   ·   발견 탈출구 %.0fm" % nearest_distance
-		draw_string(UI_FONT, panel_rect.position + Vector2(28, panel_rect.size.y - 22), footer, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#d7d4b9"))
+		draw_string(
+			UI_FONT,
+			panel_rect.position + Vector2(28, panel_rect.size.y - 22),
+			footer,
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1,
+			16,
+			Color("#ff9595") if bag_full else Color("#d7d4b9")
+		)
 	if discovered_extraction_indices.is_empty():
-		draw_string(UI_FONT, map_rect.get_center() + Vector2(-170, 6), "탈출구 미발견 · 직접 시야로 찾아야 합니다", HORIZONTAL_ALIGNMENT_CENTER, 340, 17, Color("#d9c579"))
+		_queue_label(
+			map_rect.get_center() + Vector2(-170, 6),
+			"탈출구 미발견 · 직접 시야로 찾아야 합니다",
+			17,
+			Color("#d9c579"),
+			LABEL_PRIORITY_NOTICE,
+			340.0,
+			HORIZONTAL_ALIGNMENT_CENTER
+		)
 
 	draw_polyline(_closed_polygon(map_boundary), Color("#7c8982"), 2.0)
+	_draw_queued_labels(panel_rect.grow(-16.0))
+
+
+func _queue_label(
+	baseline: Vector2,
+	text: String,
+	font_size: int,
+	color: Color,
+	priority: int,
+	clip_width: float = -1.0,
+	alignment: int = HORIZONTAL_ALIGNMENT_LEFT
+) -> void:
+	if text.is_empty():
+		return
+	pending_labels.append({
+		"baseline": baseline,
+		"text": text,
+		"size": font_size,
+		"color": color,
+		"priority": priority,
+		"clip": clip_width,
+		"alignment": alignment,
+	})
+
+
+func _draw_queued_labels(bounds: Rect2) -> void:
+	# 마커 라벨을 그리던 자리에서 바로 찍으면 "내 위치"와 사건 라벨이 같은 픽셀에
+	# 겹쳐 둘 다 못 읽는다. 중요한 라벨부터 자리를 잡고, 겹치면 위아래로 조금씩
+	# 밀어 본다. 끝까지 자리가 없으면 그 라벨은 접는다 — 마커 아이콘은 그대로 남는다.
+	if pending_labels.is_empty():
+		return
+	pending_labels.sort_custom(
+		func(left: Dictionary, right: Dictionary) -> bool:
+			return int(left["priority"]) > int(right["priority"])
+	)
+	var taken: Array[Rect2] = []
+	for entry in pending_labels:
+		var font_size := int(entry["size"])
+		var text := str(entry["text"])
+		var clip := float(entry["clip"])
+		var alignment := int(entry["alignment"])
+		var measured := UI_FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
+		var box_width := measured.x
+		if clip > 0.0:
+			# 왼쪽 정렬은 실제 글자 폭까지만, 가운데 정렬은 지정한 상자 폭 전체를 쓴다.
+			box_width = clip if alignment != HORIZONTAL_ALIGNMENT_LEFT else minf(measured.x, clip)
+		var ascent := UI_FONT.get_ascent(font_size)
+		var line_height := UI_FONT.get_height(font_size)
+		var origin: Vector2 = entry["baseline"]
+		var placed := Vector2.INF
+		for nudge in LABEL_NUDGES:
+			var candidate := Vector2(
+				clampf(origin.x, bounds.position.x, maxf(bounds.position.x, bounds.end.x - box_width)),
+				clampf(origin.y + nudge, bounds.position.y + ascent, bounds.end.y)
+			)
+			var rect := Rect2(
+				candidate.x, candidate.y - ascent, box_width, line_height
+			).grow_individual(2.0, 1.0, 2.0, 1.0)
+			var free := true
+			for occupied in taken:
+				if occupied.intersects(rect):
+					free = false
+					break
+			if free:
+				taken.append(rect)
+				placed = candidate
+				break
+		if placed == Vector2.INF:
+			continue
+		draw_string(
+			UI_FONT, placed, text, alignment, clip, font_size, entry["color"] as Color
+		)
+	pending_labels.clear()
 
 
 func _panel_style() -> StyleBoxFlat:

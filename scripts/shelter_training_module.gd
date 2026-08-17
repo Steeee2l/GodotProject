@@ -13,6 +13,10 @@ const SHELTER_UI := preload("res://scripts/shelter_ui_components.gd")
 var ui_layer: CanvasLayer
 var content: VBoxContainer
 var status_label: Label
+# _rebuild_ui()가 상태 라벨을 새로 만들기 때문에 마지막 문구를 따로 들고 있다가
+# 재생성 뒤 다시 붙인다 — 그러지 않으면 성공 문구가 한 프레임 만에 사라진다.
+var pending_status := ""
+var pending_status_ok := false
 var compact_layout := false
 var narrow_layout := false
 
@@ -44,6 +48,9 @@ func set_interaction_focus(value: bool) -> void:
 func _open_ui() -> void:
 	if is_instance_valid(ui_layer):
 		ui_layer.queue_free()
+	# 새로 열 때는 지난 세션의 문구를 끌고 오지 않는다.
+	pending_status = ""
+	pending_status_ok = false
 	ui_layer = CanvasLayer.new()
 	ui_layer.name = "TrainingFacilityUILayer"
 	ui_layer.layer = 90
@@ -80,9 +87,14 @@ func _open_ui() -> void:
 	modal.add_child(center)
 	var panel := PanelContainer.new()
 	panel.name = "TrainingPanel"
+	# 화면에서 실제로 쓸 수 있는 크기를 넘지 않는다 — 내부 위젯이 최소 폭을
+	# 밀어 올리면 패널째로 화면 밖으로 나간다.
+	# 세로 화면은 780 상한을 풀어 위아래를 꽉 쓴다 — 훈련 카드가 스크롤 아래로
+	# 숨던 205px을 화면 안으로 끌어올린다.
+	var panel_height_room := maxf(320.0, available_size.y - 32.0)
 	panel.custom_minimum_size = Vector2(
-		minf(1120.0, available_size.x - 32.0),
-		minf(780.0, available_size.y - 32.0)
+		minf(1120.0, maxf(280.0, available_size.x - 32.0)),
+		panel_height_room if viewport_size.y > viewport_size.x else minf(780.0, panel_height_room)
 	)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -131,13 +143,15 @@ func _rebuild_ui() -> void:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	# ELLIPSIS 라벨은 최소 폭이 1px이라, 못 박지 않으면 옆칸에 밀려 글자가 사라진다.
+	title.custom_minimum_size.x = 120.0
 	top_row.add_child(title)
-	var resource_panel := SHELTER_UI.make_currency_chip(
+	var resource_panel := _fit_chip_text(SHELTER_UI.make_currency_chip(
 		"food",
 		GameState.format_compact_number(GameState.canned_food),
 		compact_layout,
 		not narrow_layout
-	)
+	), "food")
 	resource_panel.custom_minimum_size.x = 104 if compact_layout else 148
 	resource_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var resource_value := resource_panel.find_child("ResourceValue_food", true, false) as Label
@@ -174,6 +188,7 @@ func _rebuild_ui() -> void:
 	content.add_child(section_row)
 	var section_title := _label("영구 강화", 19 if compact_layout else 21, Color("#dce4dc"))
 	section_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	section_title.custom_minimum_size.x = 90.0
 	section_row.add_child(section_title)
 	var section_hint := _label("카드를 눌러 즉시 훈련", 12, Color("#82958c"))
 	section_hint.name = "TrainingSectionHint"
@@ -207,6 +222,8 @@ func _rebuild_ui() -> void:
 	status_label.name = "TrainingStatus"
 	status_label.custom_minimum_size.y = 18
 	content.add_child(status_label)
+	if not pending_status.is_empty():
+		_apply_status_style(pending_status, pending_status_ok)
 
 
 func _add_summary_chip(parent: Container, icon_name: String, title: String, value: String, color: Color) -> void:
@@ -300,6 +317,8 @@ func _add_training_card(parent: GridContainer, node_id: String) -> void:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	# ELLIPSIS 라벨의 최소 폭은 1px이다 — 등급 라벨에 밀려 제목이 사라지지 않게.
+	title.custom_minimum_size.x = 96.0
 	title_row.add_child(title)
 	var rank_label := _label(
 		"%d / %d" % [rank, max_rank],
@@ -336,6 +355,7 @@ func _add_training_card(parent: GridContainer, node_id: String) -> void:
 	action_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	action_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	action_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	action_label.custom_minimum_size.x = 88.0
 	action_row.add_child(action_label)
 	if rank >= max_rank:
 		action_icon.texture = UI_ICONS.get_icon("upgrade", 24, Color("#78b791"))
@@ -373,15 +393,55 @@ func _set_mouse_passthrough(control: Control) -> void:
 
 
 func _upgrade_training(node_id: String) -> void:
+	var definition := GameState.get_training_definition(node_id)
+	var title := str(definition.get("title", node_id))
 	var result := GameState.try_upgrade_training(node_id)
 	if bool(result.get("ok", false)):
+		# 성공도 조용하면 통조림만 줄어든 것처럼 보인다. 무엇이 몇 단계가 됐는지 남긴다.
+		_set_status(
+			"%s %d단계 훈련 완료 · 통조림 -%d" % [
+				title,
+				int(result.get("rank", 0)),
+				int(result.get("cost", 0)),
+			],
+			true
+		)
 		call_deferred("_rebuild_ui")
 		return
-	var reason := str(result.get("reason", ""))
-	status_label.text = (
-		"통조림이 부족합니다. 필요 수량: %d" % int(result.get("cost", 0))
-		if reason == "canned_food"
-		else "선행 강화를 먼저 완료해야 합니다."
+	# 실패 사유를 GameState 반환값 그대로 갈라 준다 — "선행 필요"로 뭉뚱그리면
+	# 최대 단계·통조림 부족을 구분할 수 없다.
+	match str(result.get("reason", "")):
+		"canned_food":
+			var short: int = maxi(0, int(result.get("cost", 0)) - GameState.canned_food)
+			_set_status("통조림이 %d개 부족합니다. (필요 %d개)" % [
+				short,
+				int(result.get("cost", 0)),
+			], false)
+		"prerequisite":
+			_set_status(
+				"선행 훈련이 필요합니다 · %s" % _training_requirement_text(definition),
+				false
+			)
+		"max_rank":
+			_set_status("%s 훈련은 이미 최대 단계입니다." % title, false)
+		_:
+			_set_status("훈련 정보를 찾을 수 없습니다.", false)
+
+
+func _set_status(message: String, success: bool) -> void:
+	# 문구는 UI 재생성 뒤에도 남아야 한다 — pending에 보관하고 라벨에도 즉시 반영.
+	pending_status = message
+	pending_status_ok = success
+	_apply_status_style(message, success)
+
+
+func _apply_status_style(message: String, success: bool) -> void:
+	if not is_instance_valid(status_label):
+		return
+	status_label.text = message
+	status_label.add_theme_color_override(
+		"font_color",
+		Color("#9de0b1") if success else Color("#f09a8a")
 	)
 
 
@@ -404,6 +464,25 @@ func _close_button() -> Button:
 	button.tooltip_text = "닫기"
 	button.focus_mode = Control.FOCUS_NONE
 	return button
+
+
+func _fit_chip_text(chip: PanelContainer, resource_id: String) -> PanelContainer:
+	# 자원 칩 이름 라벨은 ELLIPSIS라 최소 폭이 1px이다 — 옆의 수치 라벨이
+	# EXPAND_FILL로 남는 폭을 다 먹으면 이름("통조림")이 통째로 사라진다.
+	for label_name in ["ResourceName_%s" % resource_id, "ResourceValue_%s" % resource_id]:
+		var label := chip.find_child(label_name, true, false) as Label
+		if label == null:
+			continue
+		var font := label.get_theme_font("font")
+		if font == null:
+			continue
+		label.custom_minimum_size.x = ceilf(font.get_string_size(
+			label.text,
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1,
+			label.get_theme_font_size("font_size")
+		).x) + 2.0
+	return chip
 
 
 func _label(text: String, font_size: int, color: Color) -> Label:

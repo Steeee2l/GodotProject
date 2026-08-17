@@ -237,12 +237,20 @@ func _total_steps() -> int:
 	return maxi(1, points.size() + 1)
 
 
+static func localize_control_hint(text: String) -> String:
+	# 터치 기기에는 TAB 키가 없다 — 카탈로그의 "TAB 지도 확인"이 15곳에서
+	# 있지도 않은 키를 안내하고 있었다. 표시 직전에 기기에 맞게 갈아 끼운다.
+	if not DisplayServer.is_touchscreen_available():
+		return text
+	return text.replace("TAB 지도 확인", "지도 버튼으로 확인").replace("TAB", "지도 버튼")
+
+
 func _set_step(title: String, detail: String, step: int) -> void:
 	if not is_instance_valid(host.hud.jackpot_hud):
 		return
 	host.hud.jackpot_hud.visible = true
 	host.hud.jackpot_step_label.text = title
-	host.hud.jackpot_detail_label.text = detail
+	host.hud.jackpot_detail_label.text = localize_control_hint(detail)
 	host.hud.jackpot_progress.max_value = _total_steps()
 	host.hud.jackpot_progress.value = clampi(step, 0, _total_steps())
 	# 단계 갱신 순간에만 10초 노출. 운반 중엔 탈출 안내라 상시 유지.

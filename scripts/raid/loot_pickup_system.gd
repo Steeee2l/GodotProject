@@ -287,7 +287,11 @@ func _update_ammo_pickups(delta: float) -> void:
 			and not is_instance_valid(host.nearby_field_interaction)
 		)
 	if host.hud.ammo_pickup_button and is_instance_valid(host.nearby_ammo_pickup):
-		host.hud.ammo_pickup_button.text = "%s  [F]" % str(host.nearby_ammo_pickup.get_meta("display_name", "Ammo"))
+		# 터치 기기에는 F키가 없다 — 있지도 않은 키를 안내하지 않는다.
+		var pickup_name := str(host.nearby_ammo_pickup.get_meta("display_name", "Ammo"))
+		host.hud.ammo_pickup_button.text = (
+			pickup_name if DisplayServer.is_touchscreen_available() else "%s  [F]" % pickup_name
+		)
 
 
 func _collect_nearby_ammo() -> void:
@@ -332,7 +336,7 @@ func _collect_nearby_ammo() -> void:
 			var component_hint := (
 				""
 				if GameState.workbench_lesson_seen or GameState.get_mod_component_count(component_id) > amount
-				else "   → 쉘터 제작대에서 개조에 쓴다"
+				else "   → 쉘터 작업대에서 개조에 쓴다"
 			)
 			toast_text = "%s +%d   보유 %d%s" % [
 				str(host.nearby_ammo_pickup.get_meta("display_name", "총기 부품")),

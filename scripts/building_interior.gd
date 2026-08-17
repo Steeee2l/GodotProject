@@ -14,6 +14,9 @@ const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
+# 건물 내부 사망도 필드와 같은 경로를 탄다 — 게임오버 화면·시큐어 슬롯·사망 집계.
+const GAME_OVER_SCREEN := preload("res://scripts/hud/game_over_screen.gd")
+const RAID_LOSS_MANAGER := preload("res://scripts/raid_loss_manager.gd")
 const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
 const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
@@ -68,6 +71,11 @@ const FATIGUE_RELOAD_GAIN := 0.8
 const FATIGUE_ROLL_GAIN := 0.45
 const FATIGUE_SPEED_MIN := 0.58
 
+var game_over_screen := GAME_OVER_SCREEN.new()
+var player_death_sequence_active := false
+var building_run_started_msec := Time.get_ticks_msec()
+var building_run_kills := 0
+var last_damage_source_name := "건물 내부의 무언가"
 var floor_root: Node3D
 var player: CharacterBody3D
 var survivor: AnimatedSprite3D
@@ -183,6 +191,8 @@ func _ready() -> void:
 	_setup_aim_laser()
 	fatigue = clampf(float(GameState.fatigue), 0.0, FATIGUE_MAX)
 	_build_interface()
+	building_run_started_msec = Time.get_ticks_msec()
+	game_over_screen.build(self)
 	_build_visibility_fog()
 	_load_floor(BuildingRunState.current_floor, "entry")
 	if not get_viewport().size_changed.is_connected(_apply_mobile_safe_layout):
@@ -192,6 +202,9 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	if player == null or loading_floor:
+		return
+	if player_death_sequence_active:
+		player.velocity = Vector3.ZERO
 		return
 	if inventory_ui != null and bool(inventory_ui.call("is_open")):
 		player.velocity = Vector3.ZERO
@@ -254,6 +267,21 @@ func _physics_process(delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if player_death_sequence_active:
+		# 사망 화면은 아무 입력이나 한 번으로 넘어간다(필드와 동일).
+		var continue_requested: bool = (
+			(event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed)
+			or (event is InputEventMouseButton and (event as InputEventMouseButton).pressed)
+			or (
+				event is InputEventKey
+				and (event as InputEventKey).pressed
+				and not (event as InputEventKey).echo
+			)
+		)
+		if continue_requested:
+			_continue_after_death()
+			get_viewport().set_input_as_handled()
+		return
 	if inventory_ui != null and bool(inventory_ui.call("is_open")):
 		if (
 			event is InputEventKey
@@ -433,21 +461,105 @@ func _notification(what: int) -> void:
 
 
 func take_damage(amount: int) -> void:
+	if player_death_sequence_active:
+		return
 	var applied_damage := maxi(1, roundi(float(amount) * GameState.get_damage_taken_multiplier()))
 	GameState.player_health = maxi(0, GameState.player_health - applied_damage)
 	_update_health()
 	_show_status("피격 -%d · 체력 %d" % [applied_damage, GameState.player_health])
 	if GameState.player_health <= 0:
-		GameState.player_health = 35
-		GameState.store_carried_raid_loot_for_recovery(BuildingRunState.return_position)
-		GameState.clear_carried_raid_inventory_after_death()
-		BuildingRunState.active = false
-		if GameState.has_method("register_shelter_return"):
-			GameState.call("register_shelter_return")
+		_begin_player_death_sequence()
+
+
+# ── 건물 내부 사망 ────────────────────────────────────────────
+# 예전에는 여기서 세 가지가 동시에 어긋나 있었다.
+#   ① 게임오버 화면이 없어 죽은 사실도 잃은 것도 화면에 안 떴다.
+#   ② store_carried_raid_loot_for_recovery를 써서 시큐어 슬롯이 통째로 무시됐다.
+#   ③ register_shelter_return()을 인자 없이 불러 사망이 '생환'으로 집계됐다
+#      (survived_return_count 증가 + 생환 전용 서사 해금).
+# 이제 필드(main.gd)의 사망 시퀀스와 같은 경로를 탄다.
+func _begin_player_death_sequence() -> void:
+	if player_death_sequence_active:
+		return
+	player_death_sequence_active = true
+	# 시체는 건물 좌표가 아니라 건물 입구(필드 복귀 지점)에 남긴다 —
+	# 회수 판은 필드에서 열리고, 건물 내부 좌표는 다음 판에 재현되지 않는다.
+	var corpse_loot: Dictionary = RAID_LOSS_MANAGER.store_death_corpse(
+		BuildingRunState.return_position
+	)
+	_clear_carried_inventory_after_death()
+	fire_button_held = false
+	mouse_fire_held = false
+	laser_aim_held = false
+	touch_vector = Vector2.ZERO
+	_release_mobile_held_actions()
+	if is_instance_valid(player):
+		player.velocity = Vector3.ZERO
+	game_over_screen.present({
+		"survival_time": _format_building_survival_time(),
+		"kills": building_run_kills,
+		"damage_text": "-",
+		"source_name": last_damage_source_name,
+		"weapon_name": "건물 내부 교전",
+		"blocked": 0,
+		"loss_value_text": GameState.format_compact_number(
+			RAID_LOSS_MANAGER.get_total_value(corpse_loot)
+		),
+		"loot": corpse_loot,
+		"lesson": _build_building_death_lesson(),
+	})
+	Engine.time_scale = 0.18
+	var tween := create_tween()
+	tween.set_ignore_time_scale(true)
+	tween.set_parallel(true)
+	tween.tween_property(game_over_screen.panel, "modulate:a", 1.0, 0.55).set_delay(0.4)
+	tween.tween_property(game_over_screen.fade, "color:a", 0.62, 0.85).set_delay(0.8)
+	tween.set_parallel(false)
+	tween.tween_interval(1.0)
+	tween.tween_callback(func() -> void: game_over_screen.ready_to_continue = true)
+
+
+func _clear_carried_inventory_after_death() -> void:
+	GameState.clear_carried_raid_inventory_after_death()
+	# 시큐어 슬롯이 지킨 것을 돌려준다 — 필드 사망과 동일하게.
+	RAID_LOSS_MANAGER.restore_secure_items_after_death()
+	GameState.fatigue = minf(fatigue + 18.0, FATIGUE_MAX)
+	GameState.player_health = mini(82, GameState.get_max_health())
+	GameState.returning_from_shelter = false
+	GameState.world_time_hours = 9.0
+	GameState.save_persistent_state()
+
+
+func _format_building_survival_time() -> String:
+	var elapsed_seconds := maxi(0, int((Time.get_ticks_msec() - building_run_started_msec) / 1000))
+	return "%02d:%02d" % [elapsed_seconds / 60, elapsed_seconds % 60]
+
+
+func _build_building_death_lesson() -> String:
+	if GameState.medkits > 0:
+		return "치료 키트가 %d개 남아 있었습니다. 다음엔 더 일찍 쓰세요." % GameState.medkits
+	if _get_reserve_ammo() <= 0:
+		return "탄약이 바닥난 상태였습니다. 건물 안에서는 물러설 자리가 좁습니다."
+	return "건물 안은 사방이 막혀 있습니다. 1층 출구까지의 거리를 항상 세어 두세요."
+
+
+func _continue_after_death() -> void:
+	if not game_over_screen.can_continue():
+		return
+	game_over_screen.mark_continue_started()
+	BuildingRunState.active = false
+	var tween := create_tween()
+	tween.set_ignore_time_scale(true)
+	tween.tween_property(game_over_screen.fade, "color:a", 1.0, 0.35)
+	tween.tween_callback(func() -> void:
+		Engine.time_scale = 1.0
+		# 사망 귀환은 '살아 돌아온' 게 아니다 — 생환 전용 서사가 열리지 않게 한다.
+		GameState.register_shelter_return(false)
 		get_node("/root/SceneTransition").call(
 			"transition_to",
 			"res://scenes/shelter_interior.tscn"
 		)
+	)
 
 
 func _build_environment() -> void:
@@ -1428,6 +1540,7 @@ func _on_enemy_died(enemy: CharacterBody3D, enemy_key: String) -> void:
 	if enemies.is_empty():
 		call_deferred("_handle_floor_cleared")
 	GameState.raid_kills += 1
+	building_run_kills += 1
 	GameState.advance_contract("kills", 1)
 	var reward_key := "%s_drop" % enemy_key
 	if not BuildingRunState.is_loot_collected(BuildingRunState.current_floor, reward_key):
@@ -2460,6 +2573,7 @@ func _update_medkit_button() -> void:
 
 func _apply_mobile_safe_layout() -> void:
 	var viewport_size := get_viewport().get_visible_rect().size
+	game_over_screen.apply_layout(viewport_size)
 	var safe := UISafeArea.get_margins(viewport_size)
 	var vitals := get_node_or_null("HUD/VitalsPanel") as Control
 	if vitals:

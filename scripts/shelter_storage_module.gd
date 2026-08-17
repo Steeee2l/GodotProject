@@ -55,6 +55,9 @@ const COMPONENT_TEXTURES := {
 var ui_layer: CanvasLayer
 var content: VBoxContainer
 var feedback_label: Label
+# 목록 스크롤 높이를 패널 높이에서 역산한다 — 고정값(390)을 쓰면 가로 720 화면에서
+# 패널이 화면 아래로 47px 삐져나갔다.
+var panel_height_budget := 620.0
 
 
 func _ready() -> void:
@@ -78,7 +81,7 @@ func get_interaction_radius() -> float:
 
 func interact() -> String:
 	_open_ui()
-	return "보관함을 열었습니다."
+	return "창고를 열었습니다."
 
 
 func set_interaction_focus(value: bool) -> void:
@@ -131,10 +134,12 @@ func _open_ui() -> void:
 	panel.name = "ShelterStoragePanel"
 	# 세로 화면은 720 상한을 풀어 위아래를 꽉 쓴다 — 스크롤을 줄이는 게 우선.
 	var portrait := viewport_size.y > viewport_size.x
-	panel.custom_minimum_size = Vector2(
-		minf(1120.0, available_size.x - outer_margin * 2.0),
-		(available_size.y - outer_margin * 2.0) if portrait else minf(720.0, available_size.y - outer_margin * 2.0)
-	)
+	# 화면에서 실제로 쓸 수 있는 크기를 절대 넘지 않는다.
+	var panel_width := minf(1120.0, maxf(280.0, available_size.x - outer_margin * 2.0))
+	var height_room := maxf(320.0, available_size.y - outer_margin * 2.0)
+	var panel_height := height_room if portrait else minf(720.0, height_room)
+	panel_height_budget = panel_height
+	panel.custom_minimum_size = Vector2(panel_width, panel_height)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	panel.clip_contents = true
@@ -184,7 +189,7 @@ func _rebuild_ui() -> void:
 	title_box.add_theme_constant_override("separation", 2)
 	top_row.add_child(title_box)
 	title_box.add_child(_label("쉘터 창고  Lv.%d" % GameState.storage_level, 26 if not compact else 22, Color("#e7ddbd")))
-	title_box.add_child(_label("가방과 보관함 사이에서 장비를 이동합니다.", 12, Color("#91a7a2")))
+	title_box.add_child(_label("가방과 창고 사이에서 장비를 이동합니다.", 12, Color("#91a7a2")))
 	var close := _icon_button("close", "닫기", Color("#dce7e4"))
 	close.name = "CloseButton"
 	close.pressed.connect(_close_ui)
@@ -194,18 +199,18 @@ func _rebuild_ui() -> void:
 	wallet.add_theme_constant_override("h_separation", 8)
 	wallet.add_theme_constant_override("v_separation", 6)
 	header.add_child(wallet)
-	wallet.add_child(SHELTER_UI.make_currency_chip(
+	wallet.add_child(_fit_chip_text(SHELTER_UI.make_currency_chip(
 		"scrap",
 		GameState.format_compact_number(GameState.scrap),
 		compact,
 		not narrow
-	))
-	wallet.add_child(SHELTER_UI.make_currency_chip(
+	), "scrap"))
+	wallet.add_child(_fit_chip_text(SHELTER_UI.make_currency_chip(
 		"churu",
 		GameState.format_compact_number(GameState.churu),
 		compact,
 		not narrow
-	))
+	), "churu"))
 
 	# 귀중품은 쓸 데가 없다. 여기가 유일한 출구다.
 	var valuable_total: int = GameState.get_valuable_total_value()
@@ -238,8 +243,15 @@ func _rebuild_ui() -> void:
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 12)
 	content.add_child(body)
-	body.add_child(_build_backpack_panel(narrow, compact))
-	body.add_child(_build_storage_panel(narrow, compact))
+	# 목록 높이는 패널이 남긴 만큼만 — 헤더·요약·판매/확장 줄은 스크롤 밖 고정이라
+	# 그 몫(가로 320 / 세로 두 칸 432)을 먼저 떼고 나눠 준다.
+	var list_height := (
+		clampf((panel_height_budget - 432.0) * 0.5, 130.0, 460.0)
+		if narrow
+		else clampf(panel_height_budget - 320.0, 130.0, 460.0)
+	)
+	body.add_child(_build_backpack_panel(narrow, list_height))
+	body.add_child(_build_storage_panel(narrow, compact, list_height))
 
 	feedback_label = _label("", 12, Color("#e6c779"))
 	feedback_label.name = "StorageFeedback"
@@ -248,7 +260,7 @@ func _rebuild_ui() -> void:
 	content.add_child(feedback_label)
 
 
-func _build_backpack_panel(narrow: bool, compact: bool) -> Control:
+func _build_backpack_panel(narrow: bool, list_height: float) -> Control:
 	var panel := PanelContainer.new()
 	panel.name = "BackpackItemsPanel"
 	panel.custom_minimum_size = Vector2(0 if narrow else 330, 180 if narrow else 0)
@@ -264,19 +276,19 @@ func _build_backpack_panel(narrow: bool, compact: bool) -> Control:
 	box.add_theme_constant_override("separation", 8)
 	margin.add_child(box)
 	var title_row := HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", 8)
 	box.add_child(title_row)
-	title_row.add_child(_label("가방", 16, Color("#d8e3df")))
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_row.add_child(spacer)
 	var backpack_count := 0
 	for entry in _get_backpack_entries():
 		backpack_count += int(entry.get("count", 0))
-	title_row.add_child(_label("%d개" % backpack_count, 12, Color("#8ca29d")))
+	# 예전엔 가운데 스페이서가 EXPAND_FILL로 남는 폭을 다 먹어, 양옆 라벨이
+	# 폭 1px로 찌그러지고 ELLIPSIS 때문에 글자가 통째로 사라졌다.
+	title_row.add_child(_section_title("가방"))
+	title_row.add_child(_section_value("%d개" % backpack_count, 56.0))
 
 	var scroll := ScrollContainer.new()
 	scroll.name = "BackpackItemScroll"
-	scroll.custom_minimum_size.y = 142 if narrow else (250 if compact else 380)
+	scroll.custom_minimum_size.y = list_height
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -298,7 +310,7 @@ func _build_backpack_panel(narrow: bool, compact: bool) -> Control:
 	return panel
 
 
-func _build_storage_panel(narrow: bool, compact: bool) -> Control:
+func _build_storage_panel(narrow: bool, compact: bool, list_height: float) -> Control:
 	var panel := PanelContainer.new()
 	panel.name = "StorageGridPanel"
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -314,20 +326,18 @@ func _build_storage_panel(narrow: bool, compact: bool) -> Control:
 	margin.add_child(box)
 
 	var title_row := HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", 8)
 	box.add_child(title_row)
-	title_row.add_child(_label("보관함", 16, Color("#e4d8b8")))
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_row.add_child(spacer)
-	title_row.add_child(_label(
+	# 스페이서가 폭을 다 먹어 "창고"/"0 / 30 슬롯"이 1px로 사라지던 자리.
+	title_row.add_child(_section_title("창고", Color("#e4d8b8")))
+	title_row.add_child(_section_value(
 		"%d / %d 슬롯" % [GameState.get_storage_used_slots(), GameState.get_storage_capacity()],
-		12,
-		Color("#91a7a2")
+		94.0
 	))
 
 	var scroll := ScrollContainer.new()
 	scroll.name = "StorageGridScroll"
-	scroll.custom_minimum_size.y = 230 if narrow else (250 if compact else 390)
+	scroll.custom_minimum_size.y = list_height
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
@@ -453,14 +463,16 @@ func _upgrade_card() -> Control:
 	)
 	button.pressed.connect(_upgrade_storage)
 	row.add_child(button)
-	row.add_child(SHELTER_UI.make_currency_chip(
+	row.add_child(_fit_chip_text(SHELTER_UI.make_currency_chip(
 		"scrap",
 		GameState.format_compact_number(scrap_cost),
 		true,
 		false
-	))
+	), "scrap"))
 	if churu_cost > 0:
-		row.add_child(SHELTER_UI.make_currency_chip("churu", str(churu_cost), true, false))
+		row.add_child(_fit_chip_text(
+			SHELTER_UI.make_currency_chip("churu", str(churu_cost), true, false), "churu"
+		))
 	return panel
 
 
@@ -490,8 +502,46 @@ func _summary_card(title: String, value: String, icon_name: String) -> Control:
 	labels.add_child(_label(title, 10, Color("#849994")))
 	var value_label := _label(value, 14, Color("#e1e8e5"))
 	value_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	# ELLIPSIS 라벨은 최소 폭이 1px이라 못 박지 않으면 글자째 사라진다.
+	value_label.custom_minimum_size.x = 76.0
 	labels.add_child(value_label)
 	return panel
+
+
+func _section_title(text: String, color := Color("#d8e3df")) -> Label:
+	# 남는 폭은 제목이 가져간다 — 값 라벨은 제 글자 폭만 쓴다.
+	var label := _label(text, 16, color)
+	label.custom_minimum_size.x = 48.0
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return label
+
+
+func _section_value(text: String, min_width: float) -> Label:
+	var label := _label(text, 12, Color("#91a7a2"))
+	label.custom_minimum_size.x = min_width
+	label.size_flags_horizontal = Control.SIZE_SHRINK_END
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	return label
+
+
+func _fit_chip_text(chip: PanelContainer, resource_id: String) -> PanelContainer:
+	# 자원 칩 이름 라벨은 ELLIPSIS라 최소 폭이 1px이다 — 옆의 수치 라벨이
+	# EXPAND_FILL로 남는 폭을 다 먹으면 이름이 통째로 사라진다(실측 폭 1px).
+	for label_name in ["ResourceName_%s" % resource_id, "ResourceValue_%s" % resource_id]:
+		var label := chip.find_child(label_name, true, false) as Label
+		if label == null:
+			continue
+		var font := label.get_theme_font("font")
+		if font == null:
+			continue
+		label.custom_minimum_size.x = ceilf(font.get_string_size(
+			label.text,
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1,
+			label.get_theme_font_size("font_size")
+		).x) + 2.0
+	return chip
 
 
 func _get_backpack_entries() -> Array[Dictionary]:

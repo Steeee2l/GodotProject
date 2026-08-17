@@ -13,6 +13,7 @@ const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
 const FATIGUE_MAX := 100.0
+const UI_SAFE_AREA := preload("res://scripts/ui_safe_area.gd")
 const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/magazine_spring.png")
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
 const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
@@ -45,6 +46,9 @@ var extraction_xp_bar: ProgressBar
 var extraction_xp_label: Label
 var extraction_level_choice_title: Label
 var extraction_level_choice_row: HBoxContainer
+var extraction_return_row: HBoxContainer
+var extraction_return_hint: Label
+var extraction_return_button: Button
 var jackpot_hud: PanelContainer
 var jackpot_step_label: Label
 var jackpot_detail_label: Label
@@ -120,7 +124,10 @@ func build(owner_node: Node) -> void:
 	ammo_prompt_panel.visible = false
 	host.get_node("HUD").add_child(ammo_prompt_panel)
 	ammo_pickup_button = Button.new()
-	ammo_pickup_button.custom_minimum_size = Vector2(330, 48)
+	# 최소 폭 330을 박아 두면 패널이 아무리 좁게 잡혀도 이 폭까지 다시 부풀어
+	# 우하단 구급약 버튼을 밀고 들어간다(실측 35x44 겹침). 폭은 패널이 정한다.
+	ammo_pickup_button.custom_minimum_size = Vector2(0, 48)
+	ammo_pickup_button.clip_text = true
 	ammo_pickup_button.text = "7.62mm 탄약 획득" if DisplayServer.is_touchscreen_available() else "7.62mm 탄약 획득  [F]"
 	ammo_pickup_button.icon = AMMO_762_TEXTURE
 	ammo_pickup_button.expand_icon = true
@@ -494,6 +501,146 @@ func build(owner_node: Node) -> void:
 	inventory_ui.connect("equipment_changed", Callable(host, "_on_inventory_equipment_changed"))
 	inventory_ui.connect("item_discard_requested", Callable(host, "_on_inventory_item_discard_requested"))
 	host._update_equipment_ui()
+	_watch_prompt_layout(ammo_prompt_panel)
+	_watch_prompt_layout(field_interaction_panel)
+	_watch_prompt_layout(equipment_panel)
+	_queue_bottom_prompt_bounds()
+
+
+# ── 하단 프롬프트 예약 영역 ─────────────────────────────────────
+# 필드 프롬프트(탄약 획득 · 상호작용)는 화면 중앙 하단에 뜨는데, 그 자리는
+# 우하단 무기 카드/구급약·줍기 버튼 줄과 정면으로 부딪힌다. 실측(720x1280)에서
+# FieldInteractionPrompt ↔ EquipmentPanel 57x46, AmmoPickupPrompt ↔ MedkitButton
+# 35x44px이 겹쳐 "즉시" 글자와 진행 바 오른쪽이 잘려 나갔다.
+#
+# 폭을 숫자로 박으면 화면 비율이 바뀔 때마다 다시 겹친다. 우하단 위젯의 실제
+# rect로 예약 영역을 잡는다 — shelter_ops_console._weapon_card_reserved_height와
+# 같은 문법이다. main._apply_hud_layout이 프롬프트를 중앙 기준으로 다시 잡으면
+# 그 뒤(같은 프레임 끝)에 한 번 더 보정한다.
+const BOTTOM_RIGHT_RESERVED_NODES := [
+	"EquipmentPanel", "FireButton", "MeleeButton", "DashButton",
+	"CanThrowButton", "ContextButton", "MedkitButton", "ReloadButton",
+	"CanInfoButton",
+]
+const BOTTOM_LEFT_RESERVED_NODES := ["TouchStick"]
+const PROMPT_RESERVED_GAP := 10.0
+const PROMPT_MIN_WIDTH := 190.0
+
+var _prompt_bounds_pending := false
+
+
+func _watch_prompt_layout(node: Control) -> void:
+	if node == null:
+		return
+	if not node.item_rect_changed.is_connected(_queue_bottom_prompt_bounds):
+		node.item_rect_changed.connect(_queue_bottom_prompt_bounds)
+	if not node.visibility_changed.is_connected(_queue_bottom_prompt_bounds):
+		node.visibility_changed.connect(_queue_bottom_prompt_bounds)
+
+
+func _queue_bottom_prompt_bounds() -> void:
+	# 한 프레임에 신호가 몇 번 오든 보정은 한 번. 지연 호출이라 우하단 위젯이
+	# 전부 최종 위치를 잡은 뒤에 실행된다(main은 프롬프트를 먼저, 무기 카드를
+	# 나중에 배치한다 — 같은 프레임 안에서 읽으면 한 박자 늦은 rect를 본다).
+	if _prompt_bounds_pending or host == null:
+		return
+	_prompt_bounds_pending = true
+	apply_bottom_prompt_bounds.call_deferred()
+
+
+func apply_bottom_prompt_bounds() -> void:
+	_prompt_bounds_pending = false
+	if host == null or not host.is_inside_tree():
+		return
+	var viewport_size: Vector2 = host.get_viewport().get_visible_rect().size
+	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
+		return
+	var safe: Vector4 = UI_SAFE_AREA.get_margins(viewport_size)
+	var side_margin := maxf(maxf(safe.x, safe.z), clampf(viewport_size.x * 0.02, 10.0, 26.0))
+	for panel_value in [ammo_prompt_panel, field_interaction_panel]:
+		var panel := panel_value as PanelContainer
+		if panel == null or not is_instance_valid(panel):
+			continue
+		var rect: Rect2 = panel.get_global_rect()
+		if rect.size.x <= 1.0 or rect.size.y <= 1.0:
+			continue
+		# 앵커 원점을 rect에서 역산한다 — 프리셋(CENTER_BOTTOM)이 바뀌어도 안전.
+		var origin_x: float = rect.position.x - panel.offset_left
+		var right_limit := minf(
+			viewport_size.x - side_margin,
+			_bottom_reserved_edge(
+				BOTTOM_RIGHT_RESERVED_NODES, rect, true, viewport_size.x
+			) - PROMPT_RESERVED_GAP
+		)
+		var left_limit := maxf(
+			side_margin,
+			_bottom_reserved_edge(BOTTOM_LEFT_RESERVED_NODES, rect, false, 0.0)
+			+ PROMPT_RESERVED_GAP
+		)
+		if rect.end.x <= right_limit + 0.5 and rect.position.x >= left_limit - 0.5:
+			continue  # 안 겹치면 main이 잡은 중앙 배치를 그대로 존중한다.
+		var min_width := maxf(PROMPT_MIN_WIDTH, panel.get_combined_minimum_size().x)
+		var new_width := minf(rect.size.x, maxf(min_width, right_limit - left_limit))
+		var new_right := right_limit
+		var new_left := new_right - new_width
+		if new_left < left_limit:
+			new_left = left_limit
+			new_right = new_left + new_width
+		panel.offset_left = new_left - origin_x
+		panel.offset_right = new_right - origin_x
+
+
+func _bottom_reserved_edge(
+	node_names: Array, band: Rect2, from_right: bool, fallback: float
+) -> float:
+	# band(프롬프트가 놓인 세로 구간)와 실제로 겹치는 위젯만 센다. 가로 화면에서
+	# 버튼 줄이 프롬프트보다 아래로 내려가면 폭을 깎을 이유가 없다.
+	var edge := fallback
+	if host == null:
+		return edge
+	var hud_root := host.get_node_or_null("HUD")
+	if hud_root == null:
+		return edge
+	for node_name in node_names:
+		var widget := hud_root.get_node_or_null(str(node_name)) as Control
+		if widget == null or not widget.is_visible_in_tree():
+			continue
+		var widget_rect: Rect2 = widget.get_global_rect()
+		if widget_rect.size.x <= 1.0 or widget_rect.size.y <= 1.0:
+			continue
+		if widget_rect.position.y >= band.end.y or widget_rect.end.y <= band.position.y:
+			continue
+		edge = minf(edge, widget_rect.position.x) if from_right else maxf(edge, widget_rect.end.x)
+	return edge
+
+
+func hide_field_combat_hud() -> void:
+	# 정산 화면 위로 긴장도 패널·증원 배너·조준 십자선·무기 카드가 그대로 겹쳐
+	# 그려지던 문제. 정산은 '판이 끝난 화면'이니 전투 HUD는 전부 내린다.
+	for panel in [
+		raid_pressure_panel, dynamic_incident_hud, reinforcement_call_panel,
+		jackpot_hud, ammo_prompt_panel, field_interaction_panel, equipment_panel,
+		fatigue_panel, ammo_notice, toast_stack, fire_button, melee_button,
+		dash_button, combat_feedback,
+	]:
+		if panel != null and is_instance_valid(panel):
+			(panel as CanvasItem).visible = false
+	for canvas in [aim_canvas, damage_feedback_canvas]:
+		if canvas != null and is_instance_valid(canvas):
+			(canvas as CanvasLayer).visible = false
+	# main이 소유한 우하단 버튼 줄과 조이스틱도 같이 내린다(정산 중에는 조작이 없다).
+	if host == null:
+		return
+	var hud_root := host.get_node_or_null("HUD")
+	if hud_root == null:
+		return
+	for node_name in [
+		"TouchStick", "CanThrowButton", "ContextButton", "MedkitButton",
+		"ReloadButton", "CanInfoButton", "MapButton",
+	]:
+		var widget := hud_root.get_node_or_null(str(node_name)) as CanvasItem
+		if widget != null:
+			widget.visible = false
 
 
 # ── 토스트 스택 ─────────────────────────────────────────────────
@@ -973,6 +1120,78 @@ func build_extraction_progress_ui() -> void:
 	extraction_level_choice_row.add_theme_constant_override("separation", 12)
 	extraction_level_choice_row.visible = false
 	content.add_child(extraction_level_choice_row)
+	# "탭하면 쉘터로 복귀"가 요약 라벨(y≈707)에 섞여 레벨업 선택 UI(y≈815)보다
+	# 위에 있었다. 화면이 시키는 순서와 실제 순서가 거꾸로였다는 뜻이다.
+	# 나가는 안내와 나가는 버튼은 성장 선택 아래, 마지막 줄에 둔다.
+	extraction_return_row = HBoxContainer.new()
+	extraction_return_row.name = "ExtractionReturnRow"
+	extraction_return_row.add_theme_constant_override("separation", 12)
+	content.add_child(extraction_return_row)
+	extraction_return_hint = Label.new()
+	extraction_return_hint.name = "ReturnHint"
+	extraction_return_hint.text = "탭하면 쉘터로 복귀"
+	extraction_return_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	extraction_return_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	extraction_return_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	extraction_return_hint.add_theme_font_override("font", FONT)
+	extraction_return_hint.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION)
+	extraction_return_hint.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
+	extraction_return_row.add_child(extraction_return_hint)
+	extraction_return_button = Button.new()
+	extraction_return_button.name = "ExtractionReturnButton"
+	extraction_return_button.text = "쉘터로 돌아가기"
+	# 가로 720px 높이에서는 이 줄이 패널 밖으로 14px 삐져나갔다 — 낮은 화면에서만
+	# 줄여서 담는다. 나가는 버튼이 화면 밖에 있으면 아무 의미가 없다.
+	var short_viewport := host.get_viewport().get_visible_rect().size.y < 800.0
+	extraction_return_button.custom_minimum_size = Vector2(
+		176 if short_viewport else 196, 36 if short_viewport else 46
+	)
+	extraction_return_button.focus_mode = Control.FOCUS_NONE
+	extraction_return_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	extraction_return_button.add_theme_font_override("font", FONT)
+	extraction_return_button.add_theme_font_size_override("font_size", HudStyle.TYPE_BODY)
+	extraction_return_button.add_theme_color_override("font_color", Color("#f0e6c4"))
+	extraction_return_button.add_theme_stylebox_override(
+		"normal", HudStyle.panel(Color("#1b2119"), Color("#9c8646"), 7)
+	)
+	extraction_return_button.add_theme_stylebox_override(
+		"hover", HudStyle.panel(Color("#26301f"), Color("#e0c46f"), 7)
+	)
+	extraction_return_button.add_theme_stylebox_override(
+		"pressed", HudStyle.panel(Color("#333d27"), Color("#f0d77d"), 7)
+	)
+	extraction_return_row.add_child(extraction_return_button)
+
+
+func set_extraction_return_state(pending_choices: int) -> void:
+	# 성장 선택이 남아 있으면 버튼을 죽이지 않는다 — 눌렀을 때 이유를 말해 준다.
+	# 비활성 버튼은 "고장났다"로 읽히고, 이 화면은 성장 포인트가 잠기는 유일한
+	# 길목이라 침묵하면 안 된다.
+	if extraction_return_hint == null or extraction_return_button == null:
+		return
+	extraction_return_hint.modulate.a = 1.0
+	if pending_choices > 0:
+		extraction_return_hint.text = (
+			"위에서 성장을 %d개 더 골라야 나갈 수 있습니다." % pending_choices
+		)
+		extraction_return_hint.add_theme_color_override("font_color", Color("#e8d18a"))
+		extraction_return_button.text = "성장 선택 후 복귀"
+	else:
+		extraction_return_hint.text = "화면을 탭하거나 오른쪽 버튼으로 쉘터에 돌아갑니다."
+		extraction_return_hint.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
+		extraction_return_button.text = "쉘터로 돌아가기"
+
+
+func flash_extraction_return_warning(pending_choices: int) -> void:
+	if extraction_return_hint == null:
+		return
+	extraction_return_hint.text = "먼저 성장을 고르세요 · 남은 선택 %d개" % maxi(1, pending_choices)
+	extraction_return_hint.add_theme_color_override("font_color", Color("#ffb27a"))
+	var flash := extraction_return_hint.create_tween()
+	flash.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	for _pulse in 2:
+		flash.tween_property(extraction_return_hint, "modulate:a", 0.25, 0.1)
+		flash.tween_property(extraction_return_hint, "modulate:a", 1.0, 0.16)
 
 
 
@@ -1161,8 +1380,9 @@ func build_controls_lesson() -> void:
 	panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	panel.offset_left = -352
 	panel.offset_right = 352
-	panel.offset_bottom = -168
-	panel.offset_top = -224
+	# 상호작용 카드(하단 -257~-173)와 정면으로 겹쳐 둘 다 못 읽혔다 — 그 위로 올린다.
+	panel.offset_bottom = -266
+	panel.offset_top = -322
 	panel.add_theme_stylebox_override("panel", HudStyle.toast())
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.z_index = 120

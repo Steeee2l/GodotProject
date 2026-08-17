@@ -13,6 +13,13 @@ var reset_confirm_button: Button
 
 
 func _ready() -> void:
+	# 디버그 버튼(초기화·쉘터 해금)은 layer 4090에 떠 있어 가로 화면에서 메인 임무
+	# 카드를 가렸다. 출시 빌드에는 아예 만들지 않는다 — 숨기는 게 아니라 없앤다.
+	if not OS.is_debug_build():
+		# 버튼이 없으면 그 버튼을 노리던 터치 라우팅·단축키도 남길 이유가 없다.
+		set_process_input(false)
+		set_process_unhandled_key_input(false)
+		return
 	_build_mobile_reset_ui()
 
 

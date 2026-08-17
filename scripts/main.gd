@@ -403,7 +403,7 @@ func _ready() -> void:
 			or extraction_transition_active
 			or loot_system.is_loot_swap_open()
 			or main_mission.is_cinematic_active()
-		), "종료 (판 진행은 사라짐)")
+		), "종료 (가방·장착 장비 전손)")
 	raid_zone_data = GameState.get_raid_zone()
 	# 판 시작을 세이브에 새긴다 — 추출 없이 강제 종료하면 로드 시 포기 처리.
 	# 오프닝(튜토리얼)은 제외: 새 유저의 첫 이탈에 벌을 주지 않는다.
@@ -482,7 +482,9 @@ func _ready() -> void:
 		_deactivate_companion()
 	top_left_status_panel.visible = false
 	objective_panel.visible = false
-	objective_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	# WORD_SMART는 폭이 모자라면 단어 안에서도 끊는다 — 세로(패널 폭 221px)에서
+	# "지하철역"이 "지하/철역"으로 쪼개져 읽히지 않았다. 단어는 통째로 지킨다.
+	objective_label.autowrap_mode = TextServer.AUTOWRAP_WORD
 	touch_stick.visible = DisplayServer.is_touchscreen_available()
 	_build_sprite_frames()
 	_setup_weapon_layer()
@@ -2667,7 +2669,12 @@ func _apply_hud_layout() -> void:
 	objective_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	objective_panel.offset_left = side_margin
 	objective_panel.offset_top = left_column_cursor
-	objective_panel.offset_right = side_margin + safe_left_width
+	# 목표 문장은 체력/피로 패널보다 길다 — 좌측 열 폭에 묶으면 단어가 쪼개진다.
+	# 세로에서도 최소 300px는 확보하되 화면 폭은 넘지 않게.
+	var objective_width := maxf(
+		safe_left_width, minf(viewport_size.x - side_margin * 2.0, 320.0)
+	)
+	objective_panel.offset_right = side_margin + objective_width
 	objective_panel.offset_bottom = objective_panel.offset_top + minf(
 		objective_height,
 		maxf(44.0, left_column_limit - objective_panel.offset_top)
@@ -5083,7 +5090,7 @@ func _refresh_tactical_map_status() -> void:
 		)
 	var threat := clampf(float(raid_zone_data.get("threat", 0.0)), 0.0, 1.0)
 	var risk_tier := clampi(ceili(maxf(0.01, threat) * 5.0), 1, 5)
-	var risk_label := "지역 위험 %d/5" % risk_tier
+	var risk_label := "구역 위험 %d/5" % risk_tier
 	tactical_map.call(
 		"set_raid_status",
 		bag_value,

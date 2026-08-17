@@ -295,9 +295,13 @@ func _ready() -> void:
 	_update_stats()
 	# 복귀 정산이 무엇을 어디로 옮겼는지 먼저 말한다 — 가방이 조용히 비면
 	# 플레이어는 잃어버린 줄 안다.
-	var settlement_text := _build_return_settlement_text(GameState.consume_return_settlement())
+	var settlement: Dictionary = GameState.consume_return_settlement()
+	var settlement_text := _build_return_settlement_text(settlement)
 	var corpse_notice: Dictionary = GameState.consume_corpse_decay_notice()
 	var return_lines: Array[String] = []
+	# 판 포기(추출 없이 강제 종료) 후 첫 복귀 — 지금까지 아무 통보가 없었다.
+	if GameState.consume_abandonment_notice():
+		return_lines.append("지난 출정을 중도 포기해 휴대품을 모두 잃었습니다. 창고 보관분과 고철은 남아 있습니다.")
 	if not settlement_text.is_empty():
 		return_lines.append(settlement_text)
 	if not corpse_notice.is_empty():
@@ -313,12 +317,36 @@ func _ready() -> void:
 	var unlocks: Array[Dictionary] = GameState.consume_milestone_unlocks()
 	if not unlocks.is_empty():
 		call_deferred("_show_milestone_unlock_banner", unlocks)
-	call_deferred("_open_pending_shelter_story")
+	# 정산 결과는 토스트(layer 5)로 나가면 사자 서사 모달(layer 78, 딤 0.78)에
+	# 그대로 덮인다 — 첫 생환에서 정산 안내를 본 사람이 아무도 없었다.
+	# 모달급 카드로 승격하고, 서사보다 먼저 띄운 뒤 닫히면 서사로 넘긴다.
+	var settlement_card_lines := _build_return_settlement_card_lines(settlement)
+	if settlement_card_lines.is_empty():
+		call_deferred("_open_shelter_return_followups")
+	else:
+		call_deferred("_show_return_settlement_card", settlement_card_lines)
+
+
+func _show_catnip_fever_lesson_once() -> void:
+	# 피버는 시설 버튼이 아니라 게이지 카드라 아무도 규칙을 알려 주지 않았다.
+	# 스크래핑 생산기를 해금한 첫 복귀에 딱 한 번만 설명한다.
+	if GameState.catnip_fever_lesson_seen:
+		return
+	if not GameState.is_shelter_facility_unlocked("catnip_scraper"):
+		return
+	GameState.catnip_fever_lesson_seen = true
+	GameState.save_persistent_state()
+	_show_status("캣닢을 부으면 피버 게이지가 25%씩 찬다. 네 번 채우면 쉘터 전체가 20초간 5배로 돈다.")
+
+
+func _open_shelter_return_followups() -> void:
+	_show_catnip_fever_lesson_once()
+	_open_pending_shelter_story()
 	# 주홍은 복귀하면 스스로 찾아온다 — 플레이어가 구석까지 걸어가 말을 걸어야
 	# 했던 예전 흐름은 "왜 저기 서 있지?"로 읽혔다. 사자와의 대화가 걸려 있으면
 	# 그 대화가 끝나는 순간 입구에서 걸어 들어온다.
 	if is_instance_valid(juhong_character):
-		call_deferred("_queue_juhong_entrance_cinematic")
+		_queue_juhong_entrance_cinematic()
 
 
 func _physics_process(delta: float) -> void:
@@ -1033,7 +1061,8 @@ func _open_iron_mission_dialog() -> void:
 		"available":
 			var accept_result: Dictionary = GameState.accept_current_iron_mission()
 			if not bool(accept_result.get("ok", false)):
-				_show_status("철근의 훈련을 지금 시작할 수 없습니다.")
+				# 사유 없는 거부는 버튼 고장으로 읽힌다 — 반환된 상태를 문장으로.
+				_show_status(_iron_mission_failure_reason(str(accept_result.get("reason", ""))))
 				return
 			lines.append(str(definition.get("accept_dialogue", "몸부터 단련하고 다시 와.")))
 			lines.append("시험 목표 · %s" % str(definition.get("brief", "생존 시험을 완수하세요.")))
@@ -1047,7 +1076,7 @@ func _open_iron_mission_dialog() -> void:
 		"complete":
 			var claim_result: Dictionary = GameState.claim_current_iron_mission_reward()
 			if not bool(claim_result.get("ok", false)):
-				_show_status("철근의 훈련 보상을 정산하지 못했습니다.")
+				_show_status(_iron_mission_failure_reason(str(claim_result.get("reason", ""))))
 				return
 			lines.append(str(definition.get("complete_dialogue", "이번 시험은 통과다.")))
 			lines.append("영구 강화 획득 · %s" % str(definition.get("reward_text", "생존 능력 강화")))
@@ -1056,6 +1085,20 @@ func _open_iron_mission_dialog() -> void:
 			title = "철근의 생존 훈련"
 			lines.append("가르칠 건 다 가르쳤다. 이제 살아 돌아오는 건 네 몫이야.")
 	_open_contract_story(title, lines, "철근", _character_portrait(iron_trainer))
+
+
+func _iron_mission_failure_reason(reason: String) -> String:
+	# GameState는 상태 문자열만 돌려준다. 화면에 나가는 문장은 여기서 만든다.
+	match reason:
+		"finished":
+			return "철근이 가르칠 훈련은 모두 끝났습니다."
+		"active":
+			return "훈련이 이미 진행 중입니다. 출정에서 목표를 채우고 오세요."
+		"complete":
+			return "훈련은 이미 완료 상태입니다. 다시 말을 걸어 보상을 받으세요."
+		"available":
+			return "아직 훈련을 완료하지 못했습니다."
+	return "철근의 훈련을 지금 진행할 수 없습니다."
 
 
 func _character_portrait(character: Node3D) -> Texture2D:
@@ -1831,6 +1874,8 @@ func _build_merchant_arrival_notice(canvas: CanvasLayer) -> void:
 func _set_merchant_notice_visible(value: bool) -> void:
 	if is_instance_valid(merchant_notice_panel):
 		merchant_notice_panel.visible = value
+		# 알림이 뜨고 지는 만큼 상단 스택 높이가 바뀐다 — 토스트 자리를 다시 잡는다.
+		_apply_shelter_safe_layout()
 
 
 func _open_contract_ui() -> void:
@@ -2675,12 +2720,19 @@ func _merchant_trade_row(good: Dictionary, stock_index: int = -1) -> Button:
 		Color("#a9bbb2"),
 		"OwnedChip"
 	))
+	# 못 사는 이유가 화면에 없었다 — 가격 칩에 부족분을 병기한다.
+	var shortage_note := ""
+	if buying and not sold_out and GameState.scrap < price:
+		shortage_note = "고철 %s 부족" % GameState.format_compact_number(price - GameState.scrap)
+	elif not buying and price > 0 and owned < int(good["amount"]):
+		shortage_note = "%s %d개 부족" % [str(good["title"]), int(good["amount"]) - owned]
 	row.add_child(_merchant_trade_chip(
 		currency_icon,
 		"필요" if buying else "받음",
 		price,
 		currency_color if can_trade else Color("#d9786c"),
-		"PriceChip"
+		"PriceChip",
+		shortage_note
 	))
 	var action_label := Label.new()
 	action_label.name = "TradeAction"
@@ -2698,7 +2750,9 @@ func _merchant_trade_row(good: Dictionary, stock_index: int = -1) -> Button:
 	if sold_out:
 		title.add_theme_color_override("font_color", Color("#8d7d74"))
 		action_label.text = "품절"
-	button.disabled = not can_trade
+	# 모바일에서 살 수 없는 행이 disabled면 탭이 죽어 이유를 볼 방법이 없다.
+	# 품절만 잠그고, 재화 부족은 눌러서 사유를 듣게 한다(_trade_merchant_good).
+	button.disabled = sold_out
 	button.pressed.connect(func() -> void: _trade_merchant_good(good, buying, stock_index))
 	return button
 
@@ -2708,7 +2762,8 @@ func _merchant_trade_chip(
 	caption: String,
 	value: int,
 	color: Color,
-	node_name: String
+	node_name: String,
+	note: String = ""
 ) -> VBoxContainer:
 	var chip := VBoxContainer.new()
 	chip.name = node_name
@@ -2740,6 +2795,15 @@ func _merchant_trade_chip(
 	value_label.add_theme_font_size_override("font_size", 16)
 	value_label.add_theme_color_override("font_color", color)
 	value_row.add_child(value_label)
+	if not note.is_empty():
+		var note_label := Label.new()
+		note_label.name = "%sNote" % node_name
+		note_label.text = note
+		note_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		note_label.add_theme_font_override("font", FONT)
+		note_label.add_theme_font_size_override("font_size", 11)
+		note_label.add_theme_color_override("font_color", Color("#d9786c"))
+		chip.add_child(note_label)
 	return chip
 
 
@@ -3136,14 +3200,45 @@ func _apply_shelter_safe_layout() -> void:
 		dash_button.offset_left = dash_button.offset_right - 118.0
 		dash_button.offset_top = dash_button.offset_bottom - 72.0
 	if is_instance_valid(prompt_label):
-		prompt_label.offset_left = -220.0
-		prompt_label.offset_right = 220.0
-		prompt_label.offset_bottom = -60.0 - safe.w
+		# "주민과 잡담" 안내가 대시·구급약 버튼 위에 그대로 겹쳐 있었다.
+		# 터치 레이아웃에서는 버튼 줄(높이 72 + 여백 70)보다 위로 올린다.
+		var prompt_half := minf(220.0, viewport_size.x * 0.5 - 16.0)
+		prompt_label.offset_left = -prompt_half
+		prompt_label.offset_right = prompt_half
+		prompt_label.offset_bottom = (
+			(-154.0 - safe.w) if DisplayServer.is_touchscreen_available() else (-60.0 - safe.w)
+		)
 		prompt_label.offset_top = prompt_label.offset_bottom - 52.0
+	# 상단 3중 겹침(스탯 패널 ↔ 상태 토스트 ↔ 행상인 알림) 정리.
+	# 토스트가 스탯 패널을 덮어 체력·재화가 안 보이던 문제.
+	var top_stack_bottom := 22.0 + safe.y
+	if stats_panel:
+		top_stack_bottom = maxf(
+			top_stack_bottom,
+			stats_panel.position.y + maxf(stats_panel.size.y, stats_panel.get_combined_minimum_size().y)
+		)
+	if is_instance_valid(merchant_notice_panel):
+		var notice_width := minf(382.0, viewport_size.x - 48.0 - safe.x - safe.z)
+		merchant_notice_panel.offset_right = -24.0 - safe.z
+		merchant_notice_panel.offset_left = merchant_notice_panel.offset_right - notice_width
+		# 스탯 패널과 나란히 설 자리가 없으면 그 아래로 내린다.
+		var stats_right := 0.0
+		if stats_panel:
+			stats_right = stats_panel.position.x + maxf(
+				stats_panel.size.x, stats_panel.custom_minimum_size.x
+			)
+		var notice_top := 22.0 + safe.y
+		if stats_right + notice_width + 48.0 + safe.z > viewport_size.x:
+			notice_top = top_stack_bottom + 8.0
+		merchant_notice_panel.offset_top = notice_top
+		merchant_notice_panel.offset_bottom = notice_top + 72.0
+		if merchant_notice_panel.visible:
+			top_stack_bottom = maxf(top_stack_bottom, notice_top + 72.0)
 	if is_instance_valid(status_panel):
-		status_panel.offset_left = -270.0
-		status_panel.offset_top = 24.0 + safe.y
-		status_panel.offset_right = 270.0
+		var status_half := minf(270.0, viewport_size.x * 0.5 - 16.0)
+		status_panel.offset_left = -status_half
+		status_panel.offset_right = status_half
+		status_panel.offset_top = top_stack_bottom + 10.0
 		status_panel.offset_bottom = status_panel.offset_top + 52.0
 	if ops_console != null:
 		ops_console.apply_layout(safe)
@@ -3772,7 +3867,22 @@ func _upgrade_shelter_tier() -> void:
 		GameState.save_persistent_state()
 		get_tree().reload_current_scene()
 		return
+	# 실패하면 아무 말도 없이 돌아가 버튼이 고장 난 것처럼 읽혔다 — 사유를 붙인다.
+	_show_status(_shelter_tier_upgrade_failure_reason())
 	_update_stats()
+
+
+func _shelter_tier_upgrade_failure_reason() -> String:
+	if GameState.shelter_tier >= 5:
+		return "쉘터가 이미 최고 Tier(5)입니다."
+	var cost: Dictionary = GameState.get_shelter_upgrade_cost()
+	var scrap_gap := int(cost.get("scrap", 0)) - GameState.scrap
+	if scrap_gap > 0:
+		return "확장 불가 · 고철 %s 부족" % GameState.format_compact_number(scrap_gap)
+	var churu_gap := int(cost.get("churu", 0)) - GameState.churu
+	if churu_gap > 0:
+		return "확장 불가 · 츄르 %d개 부족" % churu_gap
+	return "쉘터를 지금 확장할 수 없습니다."
 
 
 func _update_live_shelter_income(delta: float) -> void:
@@ -3999,6 +4109,16 @@ func _open_raid_zone_select() -> void:
 	raid_zone_detail_loadout = Label.new()
 	raid_zone_detail_loadout.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	detail_box.add_child(_build_raid_zone_detail_entry("backpack", "출정 준비", raid_zone_detail_loadout))
+	# 사망 페널티 사전 고지 — 지금까지는 탈출 비콘 앞에서만 떴다. 첫 판에
+	# 죽는 유저는 거기까지 가 보지도 못하고 규칙을 사후에 배웠다.
+	var death_penalty_notice := Label.new()
+	death_penalty_notice.name = "RaidDeathPenaltyNotice"
+	death_penalty_notice.text = "죽으면 가방과 장착 장비를 전부 현장에 남긴다 · 창고 보관분과 고철은 안전"
+	death_penalty_notice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	death_penalty_notice.add_theme_font_override("font", FONT)
+	death_penalty_notice.add_theme_font_size_override("font_size", 13)
+	death_penalty_notice.add_theme_color_override("font_color", Color("#9b8b6a"))
+	detail_box.add_child(death_penalty_notice)
 	# 잠긴 구역일 때만 뜨는 상태 문구(키카드/티어 필요). 평상시엔 숨긴다.
 	raid_zone_detail_requirement = Label.new()
 	raid_zone_detail_requirement.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -4165,6 +4285,8 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 		raid_zone_detail_state.add_theme_color_override("font_color", tier_color)
 		raid_zone_detail_state.tooltip_text = ""
 		raid_zone_detail_requirement.visible = false
+		# 출정 거부 사유로 덮어썼던 색을 원래 잠금 안내 색으로 되돌린다.
+		raid_zone_detail_requirement.add_theme_color_override("font_color", Color("#d78371"))
 		var manifest := GameState.build_raid_loadout_manifest(zone_id)
 		var ammo_count := int(manifest.get("ammo_count", 0))
 		var medkit_count := int(manifest.get("medkits", 0))
@@ -4175,17 +4297,27 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 				if not manifest_weapon_id.is_empty()
 				else "맨손 · 현장 조달"
 			)
-			raid_zone_detail_loadout.text = "%s\n가방 %d/%d칸 · 탄약 %d발 · 구급약 %d개" % [
+			var used_slots := int(GameState.get_raid_bag_used_slots())
+			var bag_capacity := int(GameState.get_raid_bag_capacity())
+			var bag_overflow := used_slots > bag_capacity
+			raid_zone_detail_loadout.text = "%s\n가방 %d/%d칸 · 탄약 %d발 · 구급약 %d개%s" % [
 				weapon_display,
-				GameState.get_raid_bag_used_slots(),
-				GameState.get_raid_bag_capacity(),
+				used_slots,
+				bag_capacity,
 				ammo_count,
 				medkit_count,
+				# 가방이 넘치면 출정 버튼이 거부한다 — 누르기 전에 준비 줄이 먼저 말한다.
+				"\n가방 초과 · 창고에 %d칸을 비워야 출정할 수 있습니다." % (used_slots - bag_capacity)
+				if bag_overflow
+				else "",
 			]
-			var loadout_short := ammo_count < 60 or medkit_count <= 0
-			raid_zone_detail_loadout.add_theme_color_override(
-				"font_color", Color("#e0b06a") if loadout_short else Color("#b7c7bf")
-			)
+			var loadout_short := ammo_count < 60 or medkit_count <= 0 or bag_overflow
+			var loadout_color := Color("#b7c7bf")
+			if bag_overflow:
+				loadout_color = Color("#ee806c")
+			elif loadout_short:
+				loadout_color = Color("#e0b06a")
+			raid_zone_detail_loadout.add_theme_color_override("font_color", loadout_color)
 		var weapon_id := str(manifest.get("weapon_id", ""))
 		var ammo_id := str(GameState.equipped_ammo_id) if not weapon_id.is_empty() else ""
 		var stored_ammo := (
@@ -4339,7 +4471,9 @@ func _launch_raid_zone(zone_id: String) -> void:
 	var used_slots := int(GameState.get_raid_bag_used_slots())
 	var capacity := int(GameState.get_raid_bag_capacity())
 	if used_slots > capacity:
-		_show_status(
+		# 거부 사유는 반드시 출정 모달 안(layer 70)에 써야 한다. 예전엔 layer 5
+		# 토스트로만 나가서 딤 0.86에 완전히 가려졌고, 버튼이 고장 난 것으로 읽혔다.
+		_show_raid_launch_error(
 			"출정 불가 · 가방이 %d/%d칸입니다. 창고에 휴대품을 보관한 뒤 다시 시도하세요."
 			% [used_slots, capacity]
 		)
@@ -4356,6 +4490,9 @@ func _confirm_launch_raid_zone(zone_id: String) -> void:
 		_show_raid_launch_error("선택한 구역에 진입할 수 없습니다.")
 		return
 	raid_launch_in_progress = true
+	# 성공했으면 이전 거부 사유는 지운다.
+	if is_instance_valid(raid_zone_detail_requirement):
+		raid_zone_detail_requirement.visible = false
 	if is_instance_valid(raid_zone_launch_button):
 		raid_zone_launch_button.disabled = true
 		raid_zone_launch_button.text = "출정 준비 중..."
@@ -4380,9 +4517,12 @@ func _change_to_raid_scene() -> void:
 
 
 func _show_raid_launch_error(message: String) -> void:
+	# 라벨은 생성 시·갱신 시 숨겨져 있다. text만 갈아 끼우고 visible을 안 켜서
+	# 사유가 화면에 뜬 적이 한 번도 없었다 — 켜는 것이 이 함수의 핵심이다.
 	if is_instance_valid(raid_zone_detail_requirement):
 		raid_zone_detail_requirement.text = message
 		raid_zone_detail_requirement.add_theme_color_override("font_color", Color("#ee806c"))
+		raid_zone_detail_requirement.visible = true
 	_show_status(message)
 
 
@@ -4444,6 +4584,8 @@ func _show_status(message: String) -> void:
 	if is_instance_valid(status_panel):
 		status_panel.modulate.a = 1.0
 		status_panel.visible = true
+		# 스탯 패널·행상인 알림 높이가 그때그때 다르다 — 뜨는 순간 자리를 다시 잡는다.
+		_apply_shelter_safe_layout()
 
 
 func _update_status_toast(delta: float) -> void:
@@ -4512,6 +4654,104 @@ func _show_milestone_unlock_banner(unlocks: Array) -> void:
 	tween.tween_interval(2.6 + 0.6 * float(unlocks.size()))
 	tween.tween_property(panel, "modulate:a", 0.0, 0.5)
 	tween.tween_callback(layer.queue_free)
+
+
+var return_settlement_layer: CanvasLayer
+
+
+func _build_return_settlement_card_lines(settlement: Dictionary) -> Array[String]:
+	# 항목별 한 줄. "무엇이 어디로 갔는가"만 말한다 — 정산은 설명이 아니라 영수증이다.
+	var lines: Array[String] = []
+	if settlement.is_empty():
+		return lines
+	var food := int(settlement.get("food", 0))
+	if food > 0:
+		lines.append("통조림 %d개  →  쉘터 연료" % food)
+	var stored := int(settlement.get("stored", 0))
+	if stored > 0:
+		lines.append("재료·장비 %d점  →  창고" % stored)
+	var valuable_count := int(settlement.get("valuable_count", 0))
+	if valuable_count > 0:
+		lines.append("귀중품 %d점  →  고철 +%s" % [
+			valuable_count,
+			GameState.format_compact_number(int(settlement.get("valuable_scrap", 0))),
+		])
+	var overflow := int(settlement.get("overflow", 0))
+	if overflow > 0:
+		lines.append("창고가 꽉 차 %d점은 가방에 남았습니다" % overflow)
+	return lines
+
+
+func _show_return_settlement_card(lines: Array) -> void:
+	if is_instance_valid(return_settlement_layer) or lines.is_empty():
+		return
+	return_settlement_layer = CanvasLayer.new()
+	return_settlement_layer.name = "ReturnSettlementLayer"
+	# 사자 서사(78)보다 위. 정산이 서사에 가려지던 것이 이 카드의 존재 이유다.
+	return_settlement_layer.layer = 80
+	return_settlement_layer.add_to_group("shelter_modal_ui")
+	add_child(return_settlement_layer)
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return_settlement_layer.add_child(root)
+	var dim := ColorRect.new()
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.003, 0.006, 0.006, 0.82)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(center)
+	var panel := PanelContainer.new()
+	panel.name = "ReturnSettlementPanel"
+	panel.custom_minimum_size.x = minf(440.0, get_viewport().get_visible_rect().size.x - 40.0)
+	panel.add_theme_stylebox_override(
+		"panel", _rounded_panel_style(Color(0.02, 0.028, 0.026, 0.985), Color("#8fc7a4"), 8)
+	)
+	center.add_child(panel)
+	var margin := MarginContainer.new()
+	for margin_name in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
+		margin.add_theme_constant_override(margin_name, 22)
+	panel.add_child(margin)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 9)
+	margin.add_child(box)
+	var eyebrow := Label.new()
+	eyebrow.text = "복귀 정산"
+	eyebrow.add_theme_font_override("font", FONT)
+	eyebrow.add_theme_font_size_override("font_size", 13)
+	eyebrow.add_theme_color_override("font_color", Color("#7fae90"))
+	box.add_child(eyebrow)
+	var title := Label.new()
+	title.text = "가방을 풀었습니다"
+	title.add_theme_font_override("font", FONT)
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", Color("#f3e3ba"))
+	box.add_child(title)
+	for line_value in lines:
+		var entry := Label.new()
+		entry.text = "·  %s" % str(line_value)
+		entry.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		entry.add_theme_font_override("font", FONT)
+		entry.add_theme_font_size_override("font_size", 15)
+		entry.add_theme_color_override("font_color", Color("#dfe8e1"))
+		box.add_child(entry)
+	var confirm := _merchant_button("확인", true, "check")
+	confirm.name = "ReturnSettlementConfirmButton"
+	confirm.custom_minimum_size.y = 46
+	confirm.pressed.connect(_close_return_settlement_card, CONNECT_DEFERRED)
+	box.add_child(confirm)
+	ModalDismiss.install(return_settlement_layer, dim, _close_return_settlement_card)
+
+
+func _close_return_settlement_card() -> void:
+	if is_instance_valid(return_settlement_layer):
+		return_settlement_layer.queue_free()
+	return_settlement_layer = null
+	# 정산을 읽고 난 다음이 서사의 자리다.
+	call_deferred("_open_shelter_return_followups")
 
 
 func _build_return_settlement_text(settlement: Dictionary) -> String:

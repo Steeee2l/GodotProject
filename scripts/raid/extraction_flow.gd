@@ -61,7 +61,7 @@ var extraction_success_label: Label
 var pending_extraction_xp_result: Dictionary = {}
 var selected_extraction_index := 0
 var selected_extraction_multiplier := 1.0
-var selected_extraction_title := "안전 귀환로"
+var selected_extraction_title := "안전 탈출로"
 
 
 func attach(owner_node: Node) -> void:
@@ -187,11 +187,27 @@ func _setup_extraction_site(world: ProceduralCityMap) -> void:
 	extraction_success_label.z_index = 501
 	host.get_node("HUD").add_child(extraction_success_label)
 	host.hud.build_extraction_progress_ui()
+	if host.hud.extraction_return_button != null:
+		host.hud.extraction_return_button.pressed.connect(_on_extraction_return_pressed)
+	# 성장 카드를 한 장 고를 때마다 남은 개수가 바뀐다(main._show_level_reward_choices가
+	# 행을 새로 채운다). 안내 문구와 버튼 라벨이 그 숫자를 따라가게 묶어 둔다.
+	if host.hud.extraction_level_choice_row != null:
+		host.hud.extraction_level_choice_row.child_order_changed.connect(
+			_refresh_extraction_return_state
+		)
+		host.hud.extraction_level_choice_row.visibility_changed.connect(
+			_refresh_extraction_return_state
+		)
 
 
 func _show_extraction_result(rescued_count: int) -> void:
 	host._refresh_pointer_mode()
 	host._update_combat_overlay_visibility()
+	# 정산 화면 위로 긴장도 패널·증원 배너·무기 카드가 그대로 겹쳐 그려지던 문제.
+	host.hud.hide_field_combat_hud()
+	# 지난 판에서 못 쓰고 나온 성장 포인트. add_raid_experience가 이번 판 몫을
+	# 더하기 전에 읽어야 '지난 판 잔여'와 '이번 판 획득'이 안 섞인다.
+	var carried_level_choices := maxi(0, GameState.pending_level_choices)
 	var combat_xp := GameState.get_raid_experience_reward(host.run_kills, host.enemy_director.run_boss_kills)
 	var cargo_result: Dictionary = host.main_mission.settle()
 	var cargo_xp := int(cargo_result.get("xp", 0))
@@ -260,6 +276,14 @@ func _show_extraction_result(rescued_count: int) -> void:
 	)
 	# 칩은 "왜 이만큼 벌었는지"의 근거 목록이다. 전문용어 대신 행동으로 쓴다.
 	host.hud.add_result_reward_chip("upgrade", "경험치 +%d" % xp_reward, HudStyle.GREEN)
+	# 성장 포인트는 이 화면에서만 쓸 수 있다. 지난 판에 못 쓰고 나왔다면
+	# 조용히 잠긴 채로 두지 말고 "아직 %d개 남아 있다"고 매번 말해 준다.
+	if carried_level_choices > 0:
+		host.hud.add_result_reward_chip(
+			"secure",
+			"지난 판에서 안 고른 성장 %d개 · 아래에서 지금 고를 수 있습니다" % carried_level_choices,
+			HudStyle.GOLD
+		)
 	if ghost_scrap > 0:
 		host.hud.add_result_reward_chip(
 			"secure",
@@ -312,6 +336,10 @@ func _show_extraction_result(rescued_count: int) -> void:
 	var haul_components := 0
 	var haul_gear := 0
 	var haul_ammo := 0
+	# 귀중품과 청사진(진행품)이 집계에서 통째로 빠져 있었다 — 이번 판에서 제일
+	# 값나가는 것을 들고 나왔는데 '가져온 것'에 한 줄도 안 뜨던 문제.
+	var haul_valuables := GameState.get_valuable_total_count()
+	var haul_progression := 0
 	for entry in GameState.get_raid_bag_entries():
 		var entry_type := str(entry.get("type", ""))
 		var entry_count := int(entry.get("count", 0))
@@ -322,10 +350,23 @@ func _show_extraction_result(rescued_count: int) -> void:
 				haul_gear += entry_count
 			"ammo":
 				haul_ammo += entry_count
+			"progression":
+				haul_progression += entry_count
 	if haul_gear > 0:
 		host.hud.add_result_reward_chip("weapon", "무기·방어구 %d점" % haul_gear, HudStyle.GOLD)
 	if haul_components > 0:
 		host.hud.add_result_reward_chip("parts", "부품 %d개" % haul_components, HudStyle.GOLD)
+	if haul_valuables > 0:
+		host.hud.add_result_reward_chip(
+			"scrap",
+			"귀중품 %d점 · 쉘터 도착 시 고철 +%s" % [
+				haul_valuables,
+				GameState.format_compact_number(GameState.get_valuable_total_value()),
+			],
+			HudStyle.GOLD
+		)
+	if haul_progression > 0:
+		host.hud.add_result_reward_chip("secure", "청사진·열쇠 %d점" % haul_progression, HudStyle.GOLD)
 	if haul_ammo > 0:
 		host.hud.add_result_reward_chip("ammo", "탄약 %d발" % haul_ammo, HudStyle.TEXT_DIM)
 	var lines: PackedStringArray = [mission_summary]
@@ -336,12 +377,21 @@ func _show_extraction_result(rescued_count: int) -> void:
 	if not next_goal.is_empty():
 		lines.append(next_goal)
 	# 귀속 규칙을 여기서 미리 말해 준다 — 쉘터에 도착해서야 알면 늦다.
-	lines.append("통조림은 쉘터 연료로, 재료와 여분 장비는 창고로 들어갑니다.")
-	lines.append("탭하면 쉘터로 복귀")
+	# 귀속 규칙 예고에 귀중품 환전을 빠뜨리면, 쉘터에서 귀중품이 사라진 걸
+	# 보고 "털렸다"고 읽는다.
+	lines.append("통조림은 쉘터 연료로, 재료와 여분 장비는 창고로, 귀중품은 고철로 바뀝니다.")
+	# "탭하면 쉘터로 복귀"는 요약 라벨에서 뺐다 — 레벨업 선택 UI보다 위에 있어
+	# 순서가 거꾸로였다. 안내와 버튼은 선택 UI 아래(hud.extraction_return_row)로.
 	host.hud.extraction_result_summary.text = "\n".join(lines)
 	_play_extraction_xp_bar()
 	host.hud.extraction_result_panel.visible = true
+	extraction_result_dismissable_msec = Time.get_ticks_msec() + 700
+	host.hud.set_extraction_return_state(GameState.pending_level_choices)
+	if not host.hud.extraction_result_panel.gui_input.is_connected(_on_extraction_result_input):
+		host.hud.extraction_result_panel.gui_input.connect(_on_extraction_result_input)
 	if GameState.pending_level_choices > 0:
+		# 성장 선택이 남아 있으면 자동 복귀 폴백을 걸지 않는다. 8초 뒤 혼자
+		# 쉘터로 넘어가면 이 화면에서만 쓸 수 있는 성장 포인트가 그대로 잠긴다.
 		host._show_level_reward_choices()
 	else:
 		# 정산은 이번 판의 보상 순간이다. 읽는 속도는 사람마다 다르니 시간을
@@ -351,8 +401,6 @@ func _show_extraction_result(rescued_count: int) -> void:
 		wait_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
 		wait_tween.tween_interval(8.0)
 		wait_tween.tween_callback(_finish_extraction_to_shelter)
-		extraction_result_dismissable_msec = Time.get_ticks_msec() + 700
-		host.hud.extraction_result_panel.gui_input.connect(_on_extraction_result_input)
 
 
 var extraction_result_dismissable_msec := 0
@@ -455,11 +503,44 @@ func _on_extraction_result_input(event: InputEvent) -> void:
 		)
 	)
 	if confirmed and not extraction_result_finished:
+		if _block_return_for_level_choices():
+			return
 		extraction_result_finished = true
 		_finish_extraction_to_shelter()
 
 
+func _refresh_extraction_return_state() -> void:
+	if host == null or host.hud == null:
+		return
+	host.hud.set_extraction_return_state(GameState.pending_level_choices)
+
+
+func _on_extraction_return_pressed() -> void:
+	if extraction_result_finished:
+		return
+	if _block_return_for_level_choices():
+		return
+	extraction_result_finished = true
+	_finish_extraction_to_shelter()
+
+
+func _block_return_for_level_choices() -> bool:
+	# 성장 선택은 이 화면에서만 쓸 수 있다. 카드 밖 아무 데나 탭했다고 선택이
+	# 통째로 삼켜지면, 다음 탈출까지 성장 포인트가 잠긴다. 막고, 이유를 말한다.
+	if GameState.pending_level_choices <= 0:
+		return false
+	host.hud.set_extraction_return_state(GameState.pending_level_choices)
+	host.hud.flash_extraction_return_warning(GameState.pending_level_choices)
+	if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
+		Input.vibrate_handheld(20)
+	return true
+
+
 func _finish_extraction_to_shelter() -> void:
+	if GameState.pending_level_choices > 0 and not extraction_result_finished:
+		# 자동 복귀 폴백/외부 호출이 선택을 건너뛰지 못하게 하는 마지막 방어선.
+		_block_return_for_level_choices()
+		return
 	if extraction_result_finished and not host.get_tree().paused:
 		return
 	extraction_result_finished = true
@@ -490,7 +571,7 @@ func _create_extraction_beacon(world_position: Vector3, index: int) -> Node3D:
 	var site := Node3D.new()
 	var route_definition := RAID_EXTRACTION_POLICY.get_route(index)
 	var route_color: Color = route_definition.get("color", Color("#d9b44a"))
-	var route_title := str(route_definition.get("title", "안전 귀환로"))
+	var route_title := str(route_definition.get("title", "안전 탈출로"))
 	var reward_multiplier := float(route_definition.get("reward_multiplier", 1.0))
 	site.name = "SewerExtraction_%02d" % (index + 1)
 	host.add_child(site)
@@ -498,7 +579,7 @@ func _create_extraction_beacon(world_position: Vector3, index: int) -> Node3D:
 	site.set_meta("interaction_type", "extraction")
 	site.set_meta(
 		"display_name",
-		"안전 귀환 하수구" if index == 0 else route_title
+		"안전 탈출 하수구" if index == 0 else route_title
 	)
 	site.set_meta("hold_duration", 0.0)
 	site.set_meta("interaction_distance", FIELD_INTERACTION_DISTANCE)
@@ -607,12 +688,12 @@ func _begin_extraction() -> void:
 			host.nearby_field_interaction.get_meta("reward_multiplier", 1.0)
 		)
 		selected_extraction_title = str(
-			host.nearby_field_interaction.get_meta("route_title", "안전 귀환로")
+			host.nearby_field_interaction.get_meta("route_title", "안전 탈출로")
 		)
 	else:
 		selected_extraction_index = 0
 		selected_extraction_multiplier = 1.0
-		selected_extraction_title = "안전 귀환로"
+		selected_extraction_title = "안전 탈출로"
 	host.extraction_transition_active = true
 	host._refresh_pointer_mode()
 	host._update_combat_overlay_visibility()
@@ -629,7 +710,10 @@ func _begin_extraction() -> void:
 		host.extraction_fade.mouse_filter = Control.MOUSE_FILTER_STOP
 	var rescued_count: int = host._commit_rescued_followers()
 	extraction_success_label.text = "탈출 성공 · %s" % selected_extraction_title
-	GameState.finish_corpse_recovery_attempt()
+	# 시체를 실제로 주웠을 때만 회수 시도를 종료한다(= 시체 기록 삭제).
+	# 회수했다면 _recover_previous_corpse가 이미 pending을 비웠다. 비어 있지
+	# 않다면 안 주운 것이므로 다음 판을 위해 남긴다.
+	GameState.finish_corpse_recovery_attempt(GameState.pending_corpse_recovery.is_empty())
 	host._save_run_state()
 	host.get_tree().paused = true
 	var tween := host.create_tween()

@@ -183,6 +183,8 @@ var workbench_lesson_seen: bool = false
 var field_controls_lesson_seen: bool = false
 var fatigue_lesson_seen: bool = false
 var extraction_choice_lesson_seen: bool = false
+# 캣닢 피버는 시설이 아니라 '사건'이라 아무도 설명해 주지 않았다 — 해금 1회 레슨.
+var catnip_fever_lesson_seen: bool = false
 var unlocked_milestones: Array[String] = []
 var pending_milestone_unlocks: Array[Dictionary] = []
 var resident_reroll_counts: Dictionary = {}
@@ -190,6 +192,9 @@ var shelter_return_serial: int = 0
 # 살아서 돌아온 횟수. shelter_return_serial은 사망 귀환도 세므로(시체 부패·행상인
 # 주기 등이 쓴다), "살아 돌아온 자에게만" 열리는 서사는 이 값으로 판정한다.
 var survived_return_count: int = 0
+# 판 포기(추출 없이 강제 종료)는 100% 전손인데 지금까지 아무 통보가 없었다.
+# 로드 직후 켜 두고, 쉘터에 들어서는 순간 한 줄로 알린다(세이브 대상 아님).
+var pending_abandonment_notice: bool = false
 var merchant_last_roll_serial: int = -1
 var merchant_status: String = "away"
 var merchant_decline_count: int = 0
@@ -790,7 +795,9 @@ const RESIDENT_NAME_POOL: Array[String] = [
 	"보리", "두부", "호두", "감자", "밤이", "구름", "탄이", "콩이",
 	"모카", "치즈", "소금", "후추", "달이", "별이", "봄이", "여름",
 	"가을", "겨울", "라떼", "쿠키", "설탕", "참깨", "들깨", "누룽지",
-	"만두", "찹쌀", "팥이", "토리", "마루", "나비", "복실", "몽이",
+	# "나비"는 주인공 이름이라 뺐다 — 주민 명단에 주인공과 같은 이름이 뜨면
+	# 플레이어는 자기 자신이 두 명이 된 줄로 읽는다.
+	"만두", "찹쌀", "팥이", "토리", "마루", "복실", "몽이",
 	"뭉치", "초코", "우유", "크림", "연탄", "까미", "백설", "자두",
 	"앵두", "매실", "도담", "다온", "하루", "새벽", "노을", "이슬",
 	"단추", "양말", "꼬리", "수박", "참외", "호박", "미소", "단비",
@@ -1152,9 +1159,16 @@ func clear_carried_raid_inventory_after_death() -> void:
 	save_persistent_state()
 
 
-func finish_corpse_recovery_attempt() -> void:
-	if corpse_recovery_attempt_active:
+func finish_corpse_recovery_attempt(recovered: bool = false) -> void:
+	# 회수 판이 끝났다. 예전에는 무조건 시체 기록을 지워서, 시체 근처에
+	# 가지도 않고 탈출한 판에서도 장비가 영구 소멸했다(회수 기회 1회 박탈).
+	# 실제로 주웠을 때만 지운다 — 안 주웠으면 부패 규칙에 맡긴다.
+	if not corpse_recovery_attempt_active:
+		return
+	if recovered:
 		clear_pending_corpse_recovery()
+	else:
+		corpse_recovery_attempt_active = false
 
 
 func apply_raid_abandonment() -> void:
@@ -1167,7 +1181,15 @@ func apply_raid_abandonment() -> void:
 	# 벌칙은 전리품 손실로 충분하다 — 쉘터에 있는 이상 체력은 가득.
 	player_health = get_max_health()
 	raid_in_progress = false
+	# 무엇을 왜 잃었는지 반드시 말한다. 조용한 전손은 버그로 읽힌다.
+	pending_abandonment_notice = true
 	save_persistent_state()
+
+
+func consume_abandonment_notice() -> bool:
+	var had_notice := pending_abandonment_notice
+	pending_abandonment_notice = false
+	return had_notice
 
 
 func register_shelter_return(survived: bool = true) -> void:
@@ -1338,7 +1360,8 @@ func get_pending_shelter_story_event() -> Dictionary:
 			"lines": [
 				"제 발로 돌아왔군. 살아 돌아온 자에게만 이 아래의 문이 하나씩 열린다.",
 				"창고와 체력 훈련장을 풀었다. 전리품은 창고에 남기고, 통조림은 네 몸에 투자해.",
-				"도시의 고철 더미와 캣닢 화단을 그냥 지나치지 마. 그 부스러기가 이 쉘터의 심장을 돌린다.",
+				# 필드에 캣닢 픽업이 없다 — 없는 것을 찾게 만드는 대사는 뺐다.
+				"도시의 고철 더미를 그냥 지나치지 마. 그 부스러기가 이 쉘터의 심장을 돌린다.",
 				"저 근육 덩어리에게 특별 훈련을 받아. 시설 공사는 내 몫이다.",
 				"오늘은 행상인도 파이프 곁을 맴돌 거다. 들일지는 네가 정해.",
 				"내 계약을 하나씩 풀 때마다, 이 도시가 왜 이렇게 됐는지도 한 겹씩 벗겨질 거다.",
@@ -3132,6 +3155,15 @@ func get_valuable_total_value() -> int:
 	return total
 
 
+func get_valuable_total_count() -> int:
+	# 귀중품은 get_raid_bag_entries()에 안 들어간다(가방 칸을 안 먹는 별도 목록).
+	# 정산 화면의 '가져온 것'이 귀중품을 통째로 빠뜨리던 원인이라 개수를 따로 센다.
+	var count := 0
+	for amount in valuable_inventory.values():
+		count += maxi(0, int(amount))
+	return count
+
+
 func grant_extraction_risk_payout(kills: int, pressure_level: int, reward_multiplier: float) -> int:
 	# 출정 자체가 진행 통화를 벌게 한다. 예전에는 고철이 거의 전부 쉘터
 	# 수동 생산에서 나와, 중반부터 출정이 "심부름"이 되고 진행은 대기가 됐다.
@@ -4121,6 +4153,7 @@ func save_persistent_state() -> bool:
 		"field_controls_lesson_seen": field_controls_lesson_seen,
 		"fatigue_lesson_seen": fatigue_lesson_seen,
 		"extraction_choice_lesson_seen": extraction_choice_lesson_seen,
+		"catnip_fever_lesson_seen": catnip_fever_lesson_seen,
 		"unlocked_milestones": unlocked_milestones,
 		"resident_reroll_counts": resident_reroll_counts,
 		"fatigue": fatigue,
@@ -4288,6 +4321,7 @@ func load_persistent_state() -> bool:
 	field_controls_lesson_seen = bool(data.get("field_controls_lesson_seen", field_controls_lesson_seen))
 	fatigue_lesson_seen = bool(data.get("fatigue_lesson_seen", fatigue_lesson_seen))
 	extraction_choice_lesson_seen = bool(data.get("extraction_choice_lesson_seen", extraction_choice_lesson_seen))
+	catnip_fever_lesson_seen = bool(data.get("catnip_fever_lesson_seen", catnip_fever_lesson_seen))
 	unlocked_milestones = _to_string_array(data.get("unlocked_milestones", []))
 	resident_reroll_counts = (data.get("resident_reroll_counts", {}) as Dictionary).duplicate(true)
 	if int(data.get("version", 0)) < 12:
@@ -4504,6 +4538,7 @@ func reset_run() -> void:
 	fatigue_lesson_seen = false
 	field_controls_lesson_seen = false
 	extraction_choice_lesson_seen = false
+	catnip_fever_lesson_seen = false
 	unlocked_milestones.clear()
 	resident_reroll_counts.clear()
 	fatigue = 0.0

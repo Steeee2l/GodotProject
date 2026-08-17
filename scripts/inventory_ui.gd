@@ -291,10 +291,11 @@ func _build_inventory_panel() -> Control:
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 10)
 	box.add_child(header)
-	var title := _label("인벤토리", 23, Color("#f0e8d0"))
+	# 화면 문구는 "가방"으로 통일한다 — HUD·툴팁이 이미 가방으로 부르고 있었다.
+	var title := _label("가방", 23, Color("#f0e8d0"))
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
-	var close_button := _icon_text_button("닫기", "인벤토리 닫기 [Esc]", "close")
+	var close_button := _icon_text_button("닫기", "가방 닫기 [Esc]", "close")
 	close_button.custom_minimum_size = Vector2(62, 34)
 	close_button.pressed.connect(func() -> void: set_open(false))
 	header.add_child(close_button)
@@ -308,10 +309,15 @@ func _build_inventory_panel() -> Control:
 	equipped_grid.add_theme_constant_override("v_separation", 6)
 	box.add_child(equipped_grid)
 
+	# 세로 화면에서 이 줄이 오버부킹돼 슬롯 표시가 폭 1px로 붕괴했다(글자 증발).
+	# 제목이 슬랙을 다 먹던 게 원인 — 제목은 고정 폭으로 내리고, 슬롯 표시가
+	# 남은 폭을 갖되 최소 폭 아래로는 절대 안 줄게 한다.
 	var bag_header := HBoxContainer.new()
+	bag_header.name = "BagHeader"
+	bag_header.add_theme_constant_override("separation", 8)
 	box.add_child(bag_header)
 	var bag_title := _section("가방")
-	bag_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bag_title.custom_minimum_size.x = 44
 	bag_header.add_child(bag_title)
 	bag_slot_usage_label = _label(
 		"남은 슬롯 %d / %d" % [
@@ -324,6 +330,10 @@ func _build_inventory_panel() -> Control:
 	bag_slot_usage_label.name = "BagSlotUsage"
 	bag_slot_usage_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	bag_slot_usage_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# 만재 경고는 필드 루팅이 실패하는 이유 그 자체다 — 절대 잘리면 안 된다.
+	bag_slot_usage_label.custom_minimum_size.x = 148
+	bag_slot_usage_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	bag_slot_usage_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bag_header.add_child(bag_slot_usage_label)
 	# 인크리멘탈 사다리: 가방 확장(고철)과 시큐어 슬롯(츄르)이 항상 눈앞에 있다.
 	# "조금만 더 모으면 산다"가 파밍의 이유가 된다.
@@ -1142,7 +1152,12 @@ func _refresh_contents() -> void:
 	for index in range(empty_slots):
 		bag_grid.add_child(_empty_slot())
 	if bag_slot_usage_label:
-		bag_slot_usage_label.text = "남은 슬롯 %d / %d" % [empty_slots, bag_capacity]
+		# 만재는 "남은 슬롯 0"보다 "가방 만재"가 먼저 읽혀야 한다.
+		bag_slot_usage_label.text = (
+			"가방 만재 %d / %d칸" % [occupied_slots, bag_capacity]
+			if occupied_slots >= bag_capacity
+			else "남은 슬롯 %d / %d" % [empty_slots, bag_capacity]
+		)
 		bag_slot_usage_label.add_theme_color_override(
 			"font_color",
 			Color("#ff9595") if occupied_slots >= bag_capacity else Color("#b7c8c0")
