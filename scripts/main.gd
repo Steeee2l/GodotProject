@@ -107,6 +107,24 @@ const DEEP_NIGHT_HOUR := 22.0
 const BASE_ENEMY_COUNT := 24
 const MAX_NIGHT_ENEMY_COUNT := 44
 const ENEMY_PAIR_SQUAD_CHANCE := 0.78
+# ── 상시 보충(밀도 유지)의 안전장치 ────────────────────────────────
+# 이 보충은 "맵 전체 적 수를 target_count로 되돌리는" 배경 시스템이지 전투
+# 압박 장치가 아니다. 그런데 스폰 지점이 플레이어 20~34m였고 간격 하한이
+# 2.8초라, 싸우는 동안 내 등 뒤로 2~3명씩 계속 채워졌다 — "소탕해도 계속
+# 나온다"(유저 신고)의 실제 원인. 이제 세 겹으로 막는다:
+#   1) 내 구역(NEARBY_RADIUS) 안이 이미 붐비면 보충하지 않는다
+#   2) 보충은 내 구역 '바깥'에만 떨어진다(MIN_SPAWN_DISTANCE)
+#   3) 교전 중이면 타이머가 거의 흐르지 않는다(COMBAT_TIMER_SCALE)
+# 맵 반대편 밀도는 그대로 유지되므로 파밍 게임이 되지는 않는다.
+const REINFORCEMENT_NEARBY_RADIUS := 45.0
+const REINFORCEMENT_NEARBY_LIMIT := 4
+const REINFORCEMENT_MIN_SPAWN_DISTANCE := 62.0
+# 간격 하한 2.8초 → 14초. 위협이 높아도 "정리할 틈"은 있어야 한다.
+const REINFORCEMENT_INTERVAL_CALM := 26.0
+const REINFORCEMENT_INTERVAL_TENSE := 14.0
+# 교전 중에는 타이머를 1/5 속도로 흘린다. 완전히 멈추지는 않는다 —
+# 멀리서 alerted가 안 풀린 적 하나 때문에 맵 보충이 영원히 죽으면 안 된다.
+const REINFORCEMENT_COMBAT_TIMER_SCALE := 0.2
 const FIRST_STAGE_ZONE_ID := "jongno_outskirts"
 const SALVAGE_VEHICLE_POINT_COUNT := 10
 const SALVAGE_MISC_POINT_COUNT := 4
@@ -3859,13 +3877,29 @@ func _update_enemy_pressure(delta: float) -> void:
 		+ roundi(night_intensity * float(MAX_NIGHT_ENEMY_COUNT - BASE_ENEMY_COUNT))
 	)
 	if enemies.size() >= target_count:
-		reinforcement_timer = minf(reinforcement_timer, 3.0)
+		# 예전엔 여기서 타이머를 3초로 당겨 뒀다 — 한 명 죽이는 순간 곧바로
+		# 보충이 터지는 장전 상태였다. 하한 아래로는 절대 당기지 않는다.
+		reinforcement_timer = maxf(reinforcement_timer, REINFORCEMENT_INTERVAL_TENSE)
 		return
 
-	reinforcement_timer -= delta
+	# ── 내 구역은 내가 정리할 수 있어야 한다 ──
+	# 이미 교전 상한까지 붙어 있거나 근처가 붐비면 보충을 아예 굴리지 않는다.
+	# 타이머도 그대로 두므로, 정리한 뒤에야 다음 보충이 성립한다.
+	var alerted_count := enemy_director.count_alerted_enemies()
+	if alerted_count >= EnemyDirector.MAX_CONCURRENT_ALERTED:
+		return
+	if _count_enemies_near_player(REINFORCEMENT_NEARBY_RADIUS) >= REINFORCEMENT_NEARBY_LIMIT:
+		return
+
+	# 교전 중이면 타이머가 기어간다 — 싸우는 동안 등 뒤가 채워지지 않는다.
+	reinforcement_timer -= delta * (
+		REINFORCEMENT_COMBAT_TIMER_SCALE if alerted_count > 0 else 1.0
+	)
 	if reinforcement_timer > 0.0:
 		return
-	var squad_anchor := enemy_director._find_reinforcement_position()
+	var squad_anchor := enemy_director._find_reinforcement_position(
+		REINFORCEMENT_MIN_SPAWN_DISTANCE
+	)
 	if squad_anchor != Vector3.INF:
 		var missing_count := target_count - enemies.size()
 		var squad_size := (
@@ -3887,7 +3921,26 @@ func _update_enemy_pressure(delta: float) -> void:
 			kinds,
 			effective_threat
 		)
-	reinforcement_timer = lerpf(15.0, 2.8, effective_threat)
+	reinforcement_timer = lerpf(
+		REINFORCEMENT_INTERVAL_CALM, REINFORCEMENT_INTERVAL_TENSE, effective_threat
+	)
+
+
+func _count_enemies_near_player(radius: float) -> int:
+	# '내 구역'의 적 수. 상시 보충이 이 구역을 채우지 못하게 막는 단일 기준.
+	if player == null or not is_instance_valid(player):
+		return 0
+	var count := 0
+	var squared_radius := radius * radius
+	for enemy in enemies:
+		if not is_instance_valid(enemy) or bool(enemy.get("dying")):
+			continue
+		if (
+			enemy.global_position.distance_squared_to(player.global_position)
+			<= squared_radius
+		):
+			count += 1
+	return count
 
 
 func _build_day_night_tint() -> void:

@@ -239,9 +239,14 @@ func _run() -> void:
 	# 처치 보장 드랍(2026-08 유저 요구: 모든 킬 = 무기 or 방어구 최소 1개).
 	# roll_enemy_drop의 기존 분포는 그대로 두고(위 어서션 유지), 무기·방어구가
 	# 안 나온 킬에 enemy_director가 이 fallback을 별도 픽업으로 얹는다.
-	# fallback 자체는 항상 장비를 내놓아야 하고, 무기 비율은 55% 부근이어야 한다.
-	# 40%에서 올렸다: 방어구는 이미 남아도는데 무기가 안 나온다는 신고가 이어져
-	# fallback의 무게추를 무기 쪽으로 옮겼다.
+	# fallback 자체는 항상 장비를 내놓아야 하고, 무기 비율은 22% 부근이어야 한다.
+	# 55% → 22%로 되돌렸다. 55%는 "적을 죽여도 무기가 안 나온다"는 신고에 대한
+	# 보정이었는데, 실측해 보니 진짜 원인은 비중이 아니라 weapon_rarity_cap이
+	# 적이 들고 있던 총(MP5·AK·산탄총)을 전부 걸러 M1911만 남기던 것이었다
+	# (1스테이지 25킬 실측: 무기 픽업 7.2정 전부 M1911). 원인을 고친 뒤에도
+	# 55%를 유지하면 적 무기 캡을 매 판 강제로 때려서 드랍이 굴림이 아니라
+	# 상수가 된다. 비중을 내려도 판당 무기 픽업 수는 7.0정으로 종전과 같고,
+	# 대신 구경이 골고루 섞인다(M1911 34% · MP5 40% · AK 14% · 더블배럴 11%).
 	var guaranteed_weapon_count := 0
 	var guaranteed_sample_count := 2000
 	for _sample in guaranteed_sample_count:
@@ -254,7 +259,26 @@ func _run() -> void:
 	var guaranteed_weapon_rate := (
 		float(guaranteed_weapon_count) / float(guaranteed_sample_count)
 	)
-	assert(guaranteed_weapon_rate >= 0.49 and guaranteed_weapon_rate <= 0.61)
+	assert(guaranteed_weapon_rate >= 0.17 and guaranteed_weapon_rate <= 0.27)
+	# 적이 들고 있던 총은 존 등급과 무관하게 떨어져야 한다 — 1스테이지
+	# (weapon_rarity_cap 1, minimum_stage 게이트)에서도 MP5·AK·산탄총이
+	# fallback으로 나와야 한다. 예전엔 여기서 전부 방어구로 치환됐다.
+	for high_tier_weapon_id in ["mp5", "ak47", "double_barrel"]:
+		var carried_weapon_seen := false
+		for _sample in 400:
+			var carried := LOOT_ECONOMY.roll_guaranteed_equipment_drop(
+				1, "ranged", high_tier_weapon_id, random
+			)
+			if str(carried.get("type", "")) == "weapon":
+				assert(str((carried.get("data", {}) as Dictionary).get("weapon_id", "")) == high_tier_weapon_id)
+				carried_weapon_seen = true
+				break
+		assert(carried_weapon_seen, "1스테이지에서도 적이 든 %s는 떨어져야 한다" % high_tier_weapon_id)
+	# 그 총의 동반 탄약도 ammo_tier_cap을 타지 않아야 한다 — 1스테이지
+	# (cap 1)에서 AK가 떨어지면 7.62(tier 2)가 막혀 "탄 없는 총"만 남았다.
+	var low_stage_companion := LOOT_ECONOMY.roll_weapon_companion_ammo("ak47", 1, random)
+	assert(str(low_stage_companion.get("type", "")) == "ammo")
+	assert(str((low_stage_companion.get("data", {}) as Dictionary).get("ammo_id", "")).begins_with("762"))
 	# 근접(배트) 적은 무기 fallback이 성립하지 않으니 방어구 확정이어야 한다.
 	for _sample in 200:
 		var melee_guaranteed := LOOT_ECONOMY.roll_guaranteed_equipment_drop(
@@ -282,7 +306,11 @@ func _run() -> void:
 			and LOOT_ECONOMY.try_register_loot(game_state, definition, "field", 1)
 		):
 			registered_weapon_count += 1
-	assert(registered_weapon_count <= 1)
+	# 필드 컨테이너 무기 캡(weapon_spawn_cap, 1스테이지 4)은 적 드랍 캡과
+	# 분리됐다 — 예전엔 카운터를 공유해서 무기 상자 몇 개만 열어도 그 판의
+	# 적 무기 드랍이 통째로 막혔다.
+	assert(registered_weapon_count <= 4)
+	assert(int(game_state.get("raid_enemy_weapon_drops_generated")) == 0)
 
 	print(
 		"LOOT_ECONOMY_OK stage1 weapons=%.2f ammo=%.1f common=%.1f value=%.0f stage4 weapons=%.2f enemy_weapon_rate=%.3f common_enemy_rate=%.3f recovery_rate=%.3f"

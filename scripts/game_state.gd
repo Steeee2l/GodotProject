@@ -127,6 +127,9 @@ var raid_field_loot_value_generated: int = 0
 var raid_enemy_loot_value_generated: int = 0
 var raid_total_loot_value_generated: int = 0
 var raid_weapon_drops_generated: int = 0
+# 적 처치로 나온 무기만 따로 센다. 예전엔 필드 컨테이너 무기와 한 통계를
+# 공유해서, 무기 상자 몇 개만 열어도 그 판의 적 무기 드랍이 통째로 막혔다.
+var raid_enemy_weapon_drops_generated: int = 0
 var raid_enemy_drops_generated: int = 0
 var raid_kills: int = 0
 var raid_special_cargo: Dictionary = {}
@@ -879,6 +882,7 @@ func reset_raid_supply_counters() -> void:
 	raid_enemy_loot_value_generated = 0
 	raid_total_loot_value_generated = 0
 	raid_weapon_drops_generated = 0
+	raid_enemy_weapon_drops_generated = 0
 	raid_enemy_drops_generated = 0
 	raid_kills = 0
 

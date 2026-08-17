@@ -442,7 +442,9 @@ func _on_enemy_died(enemy: CharacterBody3D) -> void:
 		_resolve_reinforcement_block()
 	_spawn_enemy_loot(enemy)
 	host.enemies.erase(enemy)
-	host.reinforcement_timer = minf(host.reinforcement_timer, 2.5)
+	# 예전엔 킬마다 보충 타이머를 2.5초로 당겼다 — 죽일수록 빨리 채워지는
+	# 구조라 "소탕"이라는 행위 자체가 성립하지 않았다(유저 신고). 밀도 보충은
+	# 킬과 무관하게 자기 주기로만 돈다.
 
 
 func _on_enemy_damaged(_enemy: CharacterBody3D, amount: int) -> void:
@@ -530,14 +532,19 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 	)
 	var main_pickup: Node3D = null
 	var main_type := ""
-	if (
-		not definition.is_empty()
-		and LOOT_ECONOMY.try_register_loot(GameState, definition, "enemy", stage_tier)
-	):
-		main_type = str(definition.get("type", "canned_food"))
-		var data := (definition.get("data", {}) as Dictionary).duplicate(true)
-		data["loot_source"] = "enemy"
-		main_pickup = host._create_loot_pickup(main_type, drop_position, data)
+	if not definition.is_empty():
+		if LOOT_ECONOMY.try_register_loot(GameState, definition, "enemy", stage_tier):
+			main_type = str(definition.get("type", "canned_food"))
+			var data := (definition.get("data", {}) as Dictionary).duplicate(true)
+			data["loot_source"] = "enemy"
+			main_pickup = host._create_loot_pickup(main_type, drop_position, data)
+		elif str(definition.get("type", "")) == "weapon":
+			# 무기 캡·가치 캡에 막힌 총은 조용히 사라지지 않는다 — 그 구경
+			# 탄약으로 바꿔 지급한다. 판에 굴러다니는 총이 무한정 늘어나는 건
+			# 막되, "죽였는데 아무것도 안 떨어졌다"는 체감은 남기지 않는다.
+			main_pickup = _spawn_capped_weapon_ammo_substitute(
+				enemy_weapon_id, stage_tier, drop_position
+			)
 	var dropped_weapon := main_type == "weapon"
 	# 처치 보장 — 무기도 방어구도 안 나온 킬은 fallback 장비(무기 40%/방어구
 	# 60%)를 확정으로 얹는다. "죽였는데 장비가 하나도 없다"를 없앤다(유저 요구).
@@ -547,8 +554,25 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 			stage_tier, enemy_kind, enemy_weapon_id, spawn_random
 		)
 		if not guaranteed.is_empty():
-			# 경제 상한(무기 캡 등)에 막혀도 보장이 우선 — 집계는 하되 캡만 무시.
 			if not LOOT_ECONOMY.try_register_loot(GameState, guaranteed, "enemy", stage_tier):
+				if (
+					str(guaranteed.get("type", "")) == "weapon"
+					and LOOT_ECONOMY.is_enemy_weapon_cap_reached(GameState, stage_tier)
+				):
+					# 판에 굴러다니는 총이 무한정 늘어나는 것만 막는다. '수' 상한에
+					# 걸린 총은 그 구경 탄약으로 바꿔 지급한다 — 예전엔 여기서
+					# 그냥 ignore_caps로 줘서 무기 캡 자체가 무의미했다.
+					var substitute: Dictionary = LOOT_ECONOMY.roll_weapon_companion_ammo(
+						enemy_weapon_id, stage_tier, spawn_random
+					)
+					guaranteed = (
+						substitute
+						if not substitute.is_empty()
+						else LOOT_ECONOMY.roll_guaranteed_equipment_drop(
+							stage_tier, "melee", "baseball_bat", spawn_random
+						)
+					)
+				# 보장은 보장이다 — 가치 캡에 막혀도 집계만 하고 지급한다.
 				LOOT_ECONOMY.try_register_loot(GameState, guaranteed, "enemy", stage_tier, true)
 			var guaranteed_type := str(guaranteed.get("type", "armor"))
 			var guaranteed_data := (guaranteed.get("data", {}) as Dictionary).duplicate(true)
@@ -578,6 +602,28 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 				companion_data
 			)
 	return main_pickup
+
+
+func _spawn_capped_weapon_ammo_substitute(
+	enemy_weapon_id: String,
+	stage_tier: int,
+	drop_position: Vector3
+) -> Node3D:
+	# 캡에 막힌 무기 드랍의 대체 지급 — 총 대신 그 총의 탄약.
+	var substitute: Dictionary = LOOT_ECONOMY.roll_weapon_companion_ammo(
+		enemy_weapon_id, stage_tier, spawn_random
+	)
+	if substitute.is_empty():
+		return null
+	if not LOOT_ECONOMY.try_register_loot(GameState, substitute, "enemy", stage_tier):
+		return null
+	var substitute_data := (substitute.get("data", {}) as Dictionary).duplicate(true)
+	substitute_data["loot_source"] = "enemy"
+	return host._create_loot_pickup(
+		str(substitute.get("type", "ammo")),
+		drop_position,
+		substitute_data
+	)
 
 
 func _on_enemy_reinforcement_called(caller: CharacterBody3D) -> void:
@@ -751,12 +797,18 @@ func _spawn_called_reinforcements() -> void:
 		spawned_count += squad_size
 
 
-func _find_reinforcement_position() -> Vector3:
+func _find_reinforcement_position(minimum_distance: float = 0.0) -> Vector3:
+	# minimum_distance를 주면 그 거리 '밖'에서만 자리를 찾는다. 상시 밀도 보충은
+	# 플레이어 구역 바깥에만 떨어져야 하고(소탕한 곳은 조용해야 한다), 무전 호출
+	# 증원은 예전처럼 가까이 와야 저지 실패가 압박으로 읽힌다 — 그래서 인자로 뺐다.
 	var world := host.get_node("World") as ProceduralCityMap
 	var map_limit := world.get_map_limit() - 4.0
+	var near_distance := maxf(20.0, minimum_distance)
+	var far_distance := maxf(34.0, minimum_distance + 26.0)
+	var reject_distance := maxf(17.0, minimum_distance)
 	for attempt in 16:
 		var angle := spawn_random.randf_range(0.0, TAU)
-		var distance := spawn_random.randf_range(20.0, 34.0)
+		var distance := spawn_random.randf_range(near_distance, far_distance)
 		var requested := player.global_position + Vector3(cos(angle), 0.0, sin(angle)) * distance
 		requested.x = clampf(requested.x, -map_limit, map_limit)
 		requested.z = clampf(requested.z, -map_limit, map_limit)
@@ -766,7 +818,7 @@ func _find_reinforcement_position() -> Vector3:
 			0.62,
 			[player.get_rid()]
 		)
-		if candidate.distance_to(player.global_position) < 17.0:
+		if candidate.distance_to(player.global_position) < reject_distance:
 			continue
 		if world.is_position_in_safe_zone(candidate):
 			continue

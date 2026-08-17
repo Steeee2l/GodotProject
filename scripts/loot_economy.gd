@@ -1,16 +1,26 @@
 class_name LootEconomy
 extends RefCounted
 
+# ── 캡 설계 메모 ────────────────────────────────────────────────
+# 예전 enemy_value_cap(1스테이지 1200)은 킬 4~5번이면 소진됐다. 그 뒤 모든
+# 적 드랍이 try_register_loot에서 조용히 거부되고, 처치 보장 fallback만
+# ignore_caps로 새어 나왔다 — 즉 캡은 이미 '지켜지지 않는 캡'이었는데
+# (실측: 25킬에 8,677 가치가 스폰) 정작 호환탄 회수·식량·부품 같은 정상
+# 드랍만 골라 죽이고 있었다. 캡을 실제 판 규모(raid_kill_cap 40~100킬)에
+# 맞춰 다시 세운다. 값을 올리는 게 아니라, 있는 그대로 정직하게 만드는 것.
+# weapon_spawn_cap은 필드 컨테이너 전용으로 좁히고, 적 드랍은 아래
+# enemy_weapon_spawn_cap이 따로 센다(카운터도 분리).
 const STAGE_PROFILES := {
 	1: {
 		"name": "초반 생존 구역",
 		"weapon_rarity_cap": 1,
 		"ammo_tier_cap": 1,
 		"field_value_cap": 3600,
-		"enemy_value_cap": 1200,
-		"total_value_cap": 4900,
-		"weapon_spawn_cap": 1,
-		"enemy_drop_cap": 18,
+		"enemy_value_cap": 12000,
+		"total_value_cap": 16000,
+		"weapon_spawn_cap": 4,
+		"enemy_weapon_spawn_cap": 8,
+		"enemy_drop_cap": 70,
 		"raid_kill_cap": 40,
 		"weapon_case_chance": 0.16,
 		"guaranteed_canned_food_pickups": 21,
@@ -31,10 +41,11 @@ const STAGE_PROFILES := {
 		"weapon_rarity_cap": 2,
 		"ammo_tier_cap": 2,
 		"field_value_cap": 5200,
-		"enemy_value_cap": 1800,
-		"total_value_cap": 7200,
-		"weapon_spawn_cap": 2,
-		"enemy_drop_cap": 22,
+		"enemy_value_cap": 17000,
+		"total_value_cap": 22500,
+		"weapon_spawn_cap": 5,
+		"enemy_weapon_spawn_cap": 10,
+		"enemy_drop_cap": 95,
 		"raid_kill_cap": 55,
 		"weapon_case_chance": 0.24,
 		"guaranteed_canned_food_pickups": 23,
@@ -57,10 +68,11 @@ const STAGE_PROFILES := {
 		"weapon_rarity_cap": 3,
 		"ammo_tier_cap": 3,
 		"field_value_cap": 8000,
-		"enemy_value_cap": 2800,
-		"total_value_cap": 11000,
-		"weapon_spawn_cap": 3,
-		"enemy_drop_cap": 28,
+		"enemy_value_cap": 24000,
+		"total_value_cap": 32000,
+		"weapon_spawn_cap": 6,
+		"enemy_weapon_spawn_cap": 12,
+		"enemy_drop_cap": 125,
 		"raid_kill_cap": 70,
 		"weapon_case_chance": 0.34,
 		"guaranteed_canned_food_pickups": 25,
@@ -83,10 +95,11 @@ const STAGE_PROFILES := {
 		"weapon_rarity_cap": 4,
 		"ammo_tier_cap": 4,
 		"field_value_cap": 12000,
-		"enemy_value_cap": 4200,
-		"total_value_cap": 16500,
-		"weapon_spawn_cap": 5,
-		"enemy_drop_cap": 34,
+		"enemy_value_cap": 34000,
+		"total_value_cap": 46000,
+		"weapon_spawn_cap": 8,
+		"enemy_weapon_spawn_cap": 15,
+		"enemy_drop_cap": 150,
 		"raid_kill_cap": 85,
 		"weapon_case_chance": 0.42,
 		"guaranteed_canned_food_pickups": 27,
@@ -109,10 +122,11 @@ const STAGE_PROFILES := {
 		"weapon_rarity_cap": 4,
 		"ammo_tier_cap": 4,
 		"field_value_cap": 17000,
-		"enemy_value_cap": 6000,
-		"total_value_cap": 23000,
-		"weapon_spawn_cap": 6,
-		"enemy_drop_cap": 40,
+		"enemy_value_cap": 44000,
+		"total_value_cap": 61000,
+		"weapon_spawn_cap": 10,
+		"enemy_weapon_spawn_cap": 18,
+		"enemy_drop_cap": 175,
 		"raid_kill_cap": 100,
 		"weapon_case_chance": 0.5,
 		"guaranteed_canned_food_pickups": 29,
@@ -829,8 +843,7 @@ static func roll_enemy_drop(
 		and enemy_weapon_id != "baseball_bat"
 		and random.randf() < weapon_drop_chance
 	):
-		var weapon_definition := _find_weapon_definition(enemy_weapon_id)
-		if not weapon_definition.is_empty() and _item_allowed(weapon_definition, stage):
+		if _enemy_carried_weapon_allowed(enemy_weapon_id):
 			return _materialize_item(enemy_weapon_id, stage, random)
 	# 방어구는 파밍의 심장이다. 힘들게 죽인 적은 확실히 뭔가를 내놓아야, 한 판
 	# 안에서 장비를 갈아타며 강해지는(도망자→청소부) 파워 커브가 산다.
@@ -904,9 +917,12 @@ static func roll_guaranteed_equipment_drop(
 ) -> Dictionary:
 	# 처치 보장 드랍 — roll_enemy_drop이 무기도 방어구도 내놓지 않았을 때
 	# enemy_director가 얹는 fallback. "힘들게 죽였는데 장비가 하나도 없다"를
-	# 없앤다(모든 킬 = 무기 or 방어구 최소 1개). 무기 40% → 55%로 올렸다:
-	# 방어구는 이미 남아돌 만큼 나오는데 무기가 안 나온다는 신고가 계속이라
-	# fallback의 무게추를 무기 쪽으로 옮긴다(동반 탄약도 같이 따라온다).
+	# 없앤다(모든 킬 = 무기 or 방어구 최소 1개).
+	# 무기 비중 55% → 22%로 되돌린다. 55%는 "무기가 안 나온다"는 신고에 대한
+	# 보정이었는데, 그 신고의 진짜 원인은 비중이 아니라 rarity_cap이 적의 총을
+	# M1911로 고정하던 것이었다(실측: 25킬 무기 픽업 7.2정 전부 M1911).
+	# 원인을 고친 지금 55%를 유지하면 무기 캡을 매 판 강제로 때려서 드랍이
+	# 굴림이 아니라 상수가 된다 — 캡은 천장이어야지 분포가 되면 안 된다.
 	# roll_enemy_drop의 기존 분포·시그니처는 건드리지 않으려고 별도 함수로 둔다.
 	# 근접 적(baseball_bat)은 여기서도 방어구 확정 — 야구방망이는 WeaponSystem
 	# WEAPONS에도 ITEM_CATALOG에도 정의가 없어 주워도 장착할 수 없다.
@@ -914,12 +930,24 @@ static func roll_guaranteed_equipment_drop(
 	if (
 		enemy_kind != "melee"
 		and enemy_weapon_id != "baseball_bat"
-		and random.randf() < 0.55
+		and random.randf() < 0.22
 	):
-		var weapon_definition := _find_weapon_definition(enemy_weapon_id)
-		if not weapon_definition.is_empty() and _item_allowed(weapon_definition, stage):
+		if _enemy_carried_weapon_allowed(enemy_weapon_id):
 			return _materialize_item(enemy_weapon_id, stage, random)
 	return _materialize_item(_roll_enemy_armor_id(stage, random), stage, random)
+
+
+static func _enemy_carried_weapon_allowed(enemy_weapon_id: String) -> bool:
+	# 적이 손에 들고 나를 쏘던 총은 존 등급과 무관하게 떨어져야 한다.
+	# 예전엔 _item_allowed로 weapon_rarity_cap·minimum_stage를 걸었는데,
+	# 적 무장 구성은 존 threat이 정하지 스테이지 캡이 정하지 않는다. 그래서
+	# 1스테이지(rarity_cap 1)에서는 MP5·AK·산탄총을 든 적이 절반이 넘는데도
+	# 그 총은 절대 안 나오고, 나오는 건 항상 M1911뿐이었다 — 실측 25킬에
+	# 무기 픽업 5정이 전부 M1911. "적을 죽여도 무기가 안 나온다"는 신고의
+	# 정체가 이것이다(수가 아니라 종류가 고정돼 있었다).
+	# 러버밴딩이 아니다 — 플레이어 장비가 아니라 그 적의 무장을 그대로 따른다.
+	# 컨테이너(weapon_case)의 rarity_cap은 그대로 둔다: 그쪽은 존이 정한다.
+	return not _find_weapon_definition(enemy_weapon_id).is_empty()
 
 
 static func roll_weapon_companion_ammo(
@@ -929,8 +957,10 @@ static func roll_weapon_companion_ammo(
 ) -> Dictionary:
 	# 총이 드랍되면 그 구경 탄약을 정상 스택으로 반드시 동반시킨다 — 주운 총을
 	# 그 자리에서 장전해 써 볼 수 있어야 드랍이 의미가 있다(유저 요구).
+	# 동반 탄약은 ammo_tier_cap을 타지 않는다: 1스테이지(cap 1)에서 AK가
+	# 떨어지면 7.62(tier 2)가 막혀 "탄 없는 총"만 남았다.
 	var ammo_item_id := _enemy_ammo_item_id(
-		weapon_id, clampi(stage_tier, 1, 5), random
+		weapon_id, clampi(stage_tier, 1, 5), random, true
 	)
 	if ammo_item_id.is_empty():
 		return {}
@@ -957,6 +987,17 @@ static func get_definition_value(definition: Dictionary) -> int:
 	)
 
 
+static func is_enemy_weapon_cap_reached(game_state: Node, stage_tier: int) -> bool:
+	# 적 무기 드랍이 '수' 상한에 닿았는가. 여기에 걸린 총만 탄약으로 대체한다 —
+	# 가치 상한에 걸린 경우까지 탄약으로 바꾸면 판 후반의 처치 보장이 통째로
+	# 탄약이 돼서 "무기가 안 나온다"가 그대로 재발한다(실측으로 확인).
+	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 5)] as Dictionary
+	return (
+		int(game_state.get("raid_enemy_weapon_drops_generated"))
+		>= int(profile.get("enemy_weapon_spawn_cap", 4))
+	)
+
+
 static func try_register_loot(
 	game_state: Node,
 	definition: Dictionary,
@@ -970,12 +1011,20 @@ static func try_register_loot(
 	var value := get_definition_value(definition)
 	var loot_type := str(definition.get("type", ""))
 	if not ignore_caps:
-		if (
-			loot_type == "weapon"
-			and int(game_state.get("raid_weapon_drops_generated"))
-			>= int(profile.get("weapon_spawn_cap", 1))
-		):
-			return false
+		# 무기 캡은 출처별로 따로 센다. 예전엔 하나의 카운터를 공유해서,
+		# 무기 상자 몇 개를 먼저 열면 그 판의 적 무기 드랍이 통째로 막혔다.
+		if loot_type == "weapon":
+			if source == "enemy":
+				if (
+					int(game_state.get("raid_enemy_weapon_drops_generated"))
+					>= int(profile.get("enemy_weapon_spawn_cap", 4))
+				):
+					return false
+			elif (
+				int(game_state.get("raid_weapon_drops_generated"))
+				>= int(profile.get("weapon_spawn_cap", 1))
+			):
+				return false
 		if (
 			source == "enemy"
 			and int(game_state.get("raid_enemy_drops_generated"))
@@ -1017,6 +1066,11 @@ static func try_register_loot(
 			"raid_weapon_drops_generated",
 			int(game_state.get("raid_weapon_drops_generated")) + 1
 		)
+		if source == "enemy":
+			game_state.set(
+				"raid_enemy_weapon_drops_generated",
+				int(game_state.get("raid_enemy_weapon_drops_generated")) + 1
+			)
 	return true
 
 
@@ -1315,7 +1369,8 @@ static func roll_matched_ammo_recovery(
 static func _enemy_ammo_item_id(
 	enemy_weapon_id: String,
 	stage_tier: int,
-	random: RandomNumberGenerator
+	random: RandomNumberGenerator,
+	ignore_tier_cap: bool = false
 ) -> String:
 	var ordinary_id := ""
 	var high_tier_id := ""
@@ -1344,7 +1399,9 @@ static func _enemy_ammo_item_id(
 		if not high_definition.is_empty() and _item_allowed(high_definition, stage_tier):
 			return high_tier_id
 	var ordinary_definition := ITEM_CATALOG.get(ordinary_id, {}) as Dictionary
-	if ordinary_definition.is_empty() or not _item_allowed(ordinary_definition, stage_tier):
+	if ordinary_definition.is_empty():
+		return ""
+	if not ignore_tier_cap and not _item_allowed(ordinary_definition, stage_tier):
 		return ""
 	return ordinary_id
 
