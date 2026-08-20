@@ -22,6 +22,30 @@ static func build_death_corpse_loot() -> Dictionary:
 		GameState.equipped_head_armor_id,
 		GameState.equipped_footwear_id
 	)
+	# 장착 중이던 무기 1정 + 그 총에 박힌 부착물은 시체로 가지 않는다 — 사망해도
+	# 손에 남는다(clear_carried_raid_inventory_after_death와 같은 판정 규칙).
+	# 여기서 빼 두지 않으면 시체 회수 시 같은 무기가 이중 지급된다.
+	var corpse_weapons := GameState.weapon_inventory.duplicate(true)
+	var corpse_mods := GameState.weapon_mod_inventory.duplicate(true)
+	var corpse_loadouts := GameState.weapon_mod_loadouts.duplicate(true)
+	var kept_weapon_id: String = (
+		GameState.equipped_weapon_id
+		if GameState.has_ak and not GameState.equipped_weapon_id.is_empty()
+		else ""
+	)
+	if not kept_weapon_id.is_empty():
+		var kept_count := int(corpse_weapons.get(kept_weapon_id, 0))
+		if kept_count > 1:
+			corpse_weapons[kept_weapon_id] = kept_count - 1
+		else:
+			corpse_weapons.erase(kept_weapon_id)
+		for mod_id in GameState.equipped_weapon_mods:
+			var mod_count := int(corpse_mods.get(str(mod_id), 0))
+			if mod_count > 1:
+				corpse_mods[str(mod_id)] = mod_count - 1
+			else:
+				corpse_mods.erase(str(mod_id))
+		corpse_loadouts.erase(kept_weapon_id)
 	var loot := {
 		"ammo_inventory": GameState.ammo_inventory.duplicate(true),
 		"medkits": maxi(0, GameState.medkits),
@@ -29,12 +53,14 @@ static func build_death_corpse_loot() -> Dictionary:
 		"churu": maxi(0, GameState.churu),
 		"mod_component_inventory": GameState.mod_component_inventory.duplicate(true),
 		"progression_item_inventory": GameState.progression_item_inventory.duplicate(true),
-		"weapon_mod_inventory": GameState.weapon_mod_inventory.duplicate(true),
-		"weapon_inventory": GameState.weapon_inventory.duplicate(true),
+		"weapon_mod_inventory": corpse_mods,
+		"weapon_inventory": corpse_weapons,
 		"equipment_inventory": equipment_totals,
-		"equipped_weapon_id": GameState.equipped_weapon_id,
-		"equipped_weapon_mods": GameState.equipped_weapon_mods.duplicate(),
-		"weapon_mod_loadouts": GameState.weapon_mod_loadouts.duplicate(true),
+		# 장착 무기는 유지되므로 시체에는 "장착 중이던 무기" 정보가 없다.
+		# (예전 세이브의 시체 기록에는 남아 있을 수 있고, 회수 코드는 그대로 처리한다.)
+		"equipped_weapon_id": "",
+		"equipped_weapon_mods": [],
+		"weapon_mod_loadouts": corpse_loadouts,
 		"raid_special_cargo": GameState.raid_special_cargo.duplicate(true),
 	}
 	# 부작용 없음 — 탈출 결정 화면에서 "지금 확보 가치"를 미리 보여줄 때도 쓰므로
@@ -208,6 +234,8 @@ static func format_loss_summary(loot: Dictionary) -> String:
 		lines.append("장비 · %s" % "  /  ".join(gear_entries))
 	if not supply_entries.is_empty():
 		lines.append("휴대품 · %s" % "  /  ".join(supply_entries))
+	# 사망 페널티 완화 — 장착 무기·부착물은 시체 목록에 아예 안 들어온다.
+	lines.append("장착 중이던 무기와 부착물은 손에 남았습니다.")
 	lines.append("다음 탐사에서 사망 지점의 가방을 한 번 회수할 수 있습니다.")
 	return "\n".join(lines)
 

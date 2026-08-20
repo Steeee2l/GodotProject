@@ -52,7 +52,10 @@ func _run() -> void:
     assert(game_over_panel.custom_minimum_size.y <= 500.0)
     var corpse := game_state.get("pending_corpse_recovery") as Dictionary
     var corpse_loot := corpse.get("loot", {}) as Dictionary
-    assert(int((corpse_loot.get("weapon_inventory", {}) as Dictionary).get("ak47", 0)) == 1)
+    # 사망 페널티 완화(2026-08): 장착 중이던 무기 1정은 시체로 가지 않고 손에
+    # 남는다. 시작 AK는 장착 상태이므로 시체 전리품에 있으면 안 된다(이중 지급 방지).
+    assert(int((corpse_loot.get("weapon_inventory", {}) as Dictionary).get("ak47", 0)) == 0)
+    assert(str(corpse_loot.get("equipped_weapon_id", "x")).is_empty())
     assert(int(corpse_loot.get("canned_food", 0)) == 2)
     # 시큐어 주머니가 죽음에서 1개를 지킨다(츄르>개조품>부품>구급약 우선순위).
     # 츄르·개조품이 없는 이 시나리오에서는 스프링 1개가 보존되고 2개만 시체에 남는다.
@@ -60,10 +63,16 @@ func _run() -> void:
         int((corpse_loot.get("mod_component_inventory", {}) as Dictionary).get("magazine_spring", 0)) == 2,
         "Two springs stay on the corpse; the secure pouch keeps one."
     )
-    main_scene.call("_clear_carried_inventory_after_death")
-    assert(not bool(game_state.get("has_ak")))
-    assert(int(game_state.call("get_weapon_count", "ak47")) == 0)
-    assert(str(game_state.get("equipped_weapon_id")).is_empty())
+    # 페널티는 _begin_player_death_sequence가 사망 순간 원자적으로 이미 적용했다.
+    # 예전 이 자리의 중복 _clear_carried_inventory_after_death 호출은 시큐어
+    # 주머니가 복원해 준 스프링까지 다시 0으로 밀어 HEAD에서 이 테스트를
+    # 깨뜨리고 있었다(실측: 라인 70 어서션 행 걸림) — 중복 호출을 제거한다.
+    # 사망 페널티 완화(2026-08): 장착 무기(AK)는 사망 후에도 손에 남는다.
+    # 탄약(가방 몫)은 종전대로 전부 잃는다.
+    assert(bool(game_state.get("has_ak")))
+    assert(int(game_state.call("get_weapon_count", "ak47")) == 1)
+    assert(str(game_state.get("equipped_weapon_id")) == "ak47")
+    assert(int(game_state.call("get_ammo_count", "762_fmj")) == 0)
     assert(int(game_state.get("canned_food")) == 5)
     assert(int(game_state.call("get_stored_storage_count", "food", "canned_food")) == 5)
     # 시큐어 주머니가 지킨 스프링 1개는 정산 후 인벤토리로 복원된다.

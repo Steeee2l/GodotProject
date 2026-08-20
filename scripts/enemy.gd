@@ -6,6 +6,7 @@ signal damaged(enemy: CharacterBody3D, amount: int)
 
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const GRENADE_PROJECTILE := preload("res://scripts/enemy_grenade.gd")
+const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
@@ -40,6 +41,16 @@ const HEALTH_BAR_Y := 1.68
 const THREAT_MARKER_Y := 1.98
 const RELOAD_INDICATOR_Y := 2.08
 const REINFORCEMENT_ICON_Y := 2.42
+# ── 엘리트 ──────────────────────────────────────────────────────
+# "싸울 이유가 있는 표적" — 같은 스프라이트를 약간 키우고 머리 위 경고
+# 아이콘으로 식별시킨다. 아이콘은 "!!"(REINFORCEMENT_ICON_Y 2.42)와 겹치지
+# 않게 그보다 위에 둔다. 스탯은 존 티어(threat)만 따른다 — 러버밴딩 금지.
+const ELITE_ICON_Y := 3.04
+const ELITE_NAME_Y := 2.6
+const ELITE_SPRITE_SCALE := 1.18
+const ELITE_HEALTH_MULTIPLIER := 2.6
+const ELITE_DAMAGE_MULTIPLIER := 1.4
+const ELITE_SPEED_MULTIPLIER := 1.12
 const MELEE_WINDUP_TIME := 0.46
 const MELEE_STRIKE_TIME := 0.16
 const MELEE_RECOVERY_TIME := 0.34
@@ -185,6 +196,12 @@ var pending_facing_since_msec := 0
 var faction_id := "raider"
 var opening_shot_pending := false
 var opening_pressure_time := 0.0
+# 엘리트 상태 — promote_to_elite()가 스폰 직후 한 번만 켠다.
+var elite := false
+var elite_damage_multiplier := 1.0
+var elite_speed_multiplier := 1.0
+var elite_icon: Sprite3D
+var elite_name_label: Label3D
 static var weapon_texture_cache: Dictionary = {}
 static var health_bar_texture_cache: Dictionary = {}
 static var reload_texture_cache: Dictionary = {}
@@ -234,6 +251,57 @@ func configure(
 
 func set_threat_level(value: float) -> void:
 	threat_level = clampf(value, 0.0, 1.0)
+
+
+func promote_to_elite(elite_display_name: String) -> void:
+	# 엘리트 승격 — 스폰 직후(add_child 이후) 한 번만 호출한다.
+	# HP ~2.6배·피해 ~1.4배·이동 약간 빠르게. 새 스프라이트 없이 기존 리소스를
+	# 키우고(×1.18) 머리 위 경고 아이콘을 단다. 아이콘은 발각 전에도 보인다 —
+	# "쟤는 위험하다"를 접근 전에 알고 싸울지 말지 고를 수 있어야 한다.
+	if elite:
+		return
+	elite = true
+	elite_damage_multiplier = ELITE_DAMAGE_MULTIPLIER
+	elite_speed_multiplier = ELITE_SPEED_MULTIPLIER
+	health = roundi(float(health) * ELITE_HEALTH_MULTIPLIER)
+	max_health = health
+	set_meta("elite", true)
+	set_meta("display_name", elite_display_name)
+	if sprite:
+		sprite.scale *= ELITE_SPRITE_SCALE
+	if shadow:
+		shadow.scale = Vector3(ELITE_SPRITE_SCALE, 1.0, ELITE_SPRITE_SCALE)
+	if weapon_visual:
+		weapon_visual.scale *= ELITE_SPRITE_SCALE
+	# 위협 아이콘 — 경고 삼각형(ui_icon_factory "alert")을 붉게. stealth의
+	# 가시성 페이드(set_player_visibility_factor)에 안 넣어서 상시 표시된다.
+	elite_icon = Sprite3D.new()
+	elite_icon.name = "EliteThreatIcon"
+	elite_icon.texture = UI_ICONS.get_icon("alert", 96, Color("#ff5f4a"))
+	elite_icon.position = Vector3(0, ELITE_ICON_Y, 0)
+	elite_icon.pixel_size = 0.0052
+	elite_icon.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	elite_icon.shaded = false
+	elite_icon.transparent = true
+	elite_icon.no_depth_test = true
+	elite_icon.render_priority = 121
+	add_child(elite_icon)
+	# 이름표 — 보스 마커(Label3D) 패턴 재사용. 다만 상시 노출은 소음이라
+	# 가시성 페이드를 태워 실제로 보이는 거리에서만 읽히게 한다.
+	elite_name_label = Label3D.new()
+	elite_name_label.name = "EliteNameLabel"
+	elite_name_label.text = elite_display_name
+	elite_name_label.position = Vector3(0, ELITE_NAME_Y, 0)
+	elite_name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	elite_name_label.no_depth_test = true
+	elite_name_label.render_priority = 120
+	elite_name_label.font = DAMAGE_FONT
+	elite_name_label.font_size = 30
+	elite_name_label.pixel_size = 0.005
+	elite_name_label.modulate = Color("#f3b7a4")
+	elite_name_label.outline_modulate = Color(0.1, 0.02, 0.01, 0.95)
+	elite_name_label.outline_size = 8
+	add_child(elite_name_label)
 
 
 func set_environment_visibility(night_factor: float) -> void:
@@ -408,6 +476,12 @@ func set_player_visibility_factor(value: float) -> void:
 		reinforcement_call_indicator.modulate = call_color
 	if shadow:
 		shadow.transparency = 1.0 - player_visibility_factor
+	# 엘리트 이름표는 가시성 페이드를 따른다(실제로 보이는 거리에서만 읽힌다).
+	# elite_icon은 일부러 여기서 제외 — 발각 전에도 "쟤는 위험하다"가 보여야 한다.
+	if elite_name_label:
+		var elite_name_color := elite_name_label.modulate
+		elite_name_color.a = player_visibility_factor
+		elite_name_label.modulate = elite_name_color
 	_update_vision_fan_visual()
 	_update_health_bar_visibility()
 
@@ -1680,7 +1754,8 @@ func _pursue_last_known_position() -> void:
 		return
 	var direction := _steer_around_obstacles(offset.normalized())
 	var base_speed := MELEE_SPEED if enemy_kind == "melee" else PISTOL_SPEED
-	velocity = direction * base_speed * lerpf(1.0, 1.32, threat_level)
+	# elite_speed_multiplier: 엘리트만 1.12, 일반은 1.0.
+	velocity = direction * base_speed * lerpf(1.0, 1.32, threat_level) * elite_speed_multiplier
 	_set_facing_from_world_direction(direction)
 	_set_motion_state("walk")
 
@@ -1714,7 +1789,7 @@ func _update_stationary_target_flank(direction: Vector3, distance: float) -> boo
 		tactical_waypoint = Vector3.INF
 		tactical_repath_timer = 0.0
 		return false
-	velocity = flank_direction * PISTOL_SPEED * lerpf(1.25, 1.65, threat_level)
+	velocity = flank_direction * PISTOL_SPEED * lerpf(1.25, 1.65, threat_level) * elite_speed_multiplier
 	_set_facing_from_world_direction(direction)
 	_set_motion_state("walk")
 	return true
@@ -1982,7 +2057,7 @@ func _update_pistol(direction: Vector3, distance: float, delta: float) -> void:
 	if magazine_ammo <= 0:
 		_start_reload()
 		return
-	var movement_speed := PISTOL_SPEED * lerpf(1.12, 1.48, threat_level)
+	var movement_speed := PISTOL_SPEED * lerpf(1.12, 1.48, threat_level) * elite_speed_multiplier
 	var preferred_min := 8.0
 	var preferred_max := 17.0
 	var attack_range := _get_weapon_engagement_range()
@@ -2046,7 +2121,7 @@ func _start_pistol_burst(direction: Vector3) -> void:
 
 
 func _update_grenadier(direction: Vector3, distance: float, delta: float) -> void:
-	var movement_speed := PISTOL_SPEED * lerpf(1.0, 1.25, threat_level)
+	var movement_speed := PISTOL_SPEED * lerpf(1.0, 1.25, threat_level) * elite_speed_multiplier
 	if grenade_cooldown <= 0.0 and distance >= 7.0 and distance <= 28.0 and _has_line_of_sight():
 		grenade_target_position = target.global_position + target.velocity * 0.32
 		combat_state = "grenade_windup"
@@ -2192,7 +2267,8 @@ func _perform_melee_strike() -> void:
 	offset.y = 0.0
 	if offset.length() > 1.75 or not _has_line_of_sight():
 		return
-	var strike_damage := 12 + roundi(6.0 * threat_level)
+	# 엘리트 배율(일반 1.0)을 근접 타격에도 동일하게 적용한다.
+	var strike_damage := roundi(float(12 + roundi(6.0 * threat_level)) * elite_damage_multiplier)
 	if target.has_method("take_hostile_hit"):
 		target.call("take_hostile_hit", strike_damage, pending_attack_direction, self)
 	elif target.has_method("take_damage"):
@@ -2274,11 +2350,13 @@ func _get_weapon_burst_cooldown() -> float:
 
 
 func _get_enemy_bullet_damage() -> int:
+	var base_damage := 12 + roundi(4.0 * threat_level)
 	match weapon_id:
-		"mp5": return 6 + roundi(3.0 * threat_level)
-		"ak47": return 9 + roundi(4.0 * threat_level)
-		"double_barrel": return 5 + roundi(2.0 * threat_level)
-	return 12 + roundi(4.0 * threat_level)
+		"mp5": base_damage = 6 + roundi(3.0 * threat_level)
+		"ak47": base_damage = 9 + roundi(4.0 * threat_level)
+		"double_barrel": base_damage = 5 + roundi(2.0 * threat_level)
+	# 엘리트 배율(일반 1.0) — 존 티어 스탯 위에 곱한다.
+	return roundi(float(base_damage) * elite_damage_multiplier)
 
 
 func get_combat_identity() -> Dictionary:
@@ -2286,7 +2364,8 @@ func get_combat_identity() -> Dictionary:
 	if weapon_id != "baseball_bat":
 		weapon_name = str(weapon_stats.get("display_name", weapon_id))
 	return {
-		"source_name": "적대 생존자",
+		# 엘리트에게 죽었다면 사망 화면에도 그 이름이 찍힌다.
+		"source_name": str(get_meta("display_name", "적대 생존자")) if elite else "적대 생존자",
 		"weapon_name": weapon_name,
 	}
 
@@ -2755,6 +2834,11 @@ func _start_death(hit_direction: Vector3) -> void:
 	backstab_stunned = false
 	combat_state = "dying"
 	threat_marker.visible = false
+	# 엘리트 표식은 위협 안내다 — 시체 위에 떠 있으면 안 된다.
+	if elite_icon:
+		elite_icon.visible = false
+	if elite_name_label:
+		elite_name_label.visible = false
 	_update_vision_fan_visual()
 	_update_health_bar_visibility()
 	collision_layer = 0

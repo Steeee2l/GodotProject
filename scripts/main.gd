@@ -421,7 +421,7 @@ func _ready() -> void:
 			or extraction_transition_active
 			or loot_system.is_loot_swap_open()
 			or main_mission.is_cinematic_active()
-		), "종료 (가방·장착 장비 전손)")
+		), "종료 (판 포기 · 장착 무기만 남는다)")
 	raid_zone_data = GameState.get_raid_zone()
 	# 판 시작을 세이브에 새긴다 — 추출 없이 강제 종료하면 로드 시 포기 처리.
 	# 오프닝(튜토리얼)은 제외: 새 유저의 첫 이탈에 벌을 주지 않는다.
@@ -3758,6 +3758,9 @@ func _spawn_enemies() -> void:
 			maxf(night_intensity, zone_threat)
 		)
 		spawned_count += squad_sizes[squad_index]
+	# 엘리트 — 판당 1~2명을 초기 배치에 섞는다(안전 반경 밖). 상세 규칙은
+	# enemy_director.spawn_initial_elites 참조.
+	enemy_director.spawn_initial_elites(world)
 	# Bosses enter only after fatigue reaches the raid threshold. This keeps the
 	# opening route readable and makes the arrival alert match the actual spawn.
 
@@ -6272,7 +6275,7 @@ func _update_field_interactions(delta: float) -> void:
 		GameState.save_persistent_state()
 		_show_field_notice(
 			"탈출로를 찾았다.\n"
-			+ "지금 나가면 가방에 든 것이 전부 내 것이 된다. 죽으면 전부 놓고 간다.\n"
+			+ "지금 나가면 가방에 든 것이 전부 내 것이 된다. 죽으면 장착 무기만 남기고 전부 놓고 간다.\n"
 			+ "더 버티면 전리품 배율이 오른다. 어느 쪽을 고를지는 네 몫이다."
 		)
 	if hud.field_interaction_button:
@@ -6292,7 +6295,7 @@ func _update_field_interactions(delta: float) -> void:
 			var carried_value := _get_carried_loot_value_cached()
 			var multiplier := float(nearby_field_interaction.get_meta("reward_multiplier", 1.0))
 			if carried_value > 0:
-				detail = "지금 확보 %s  ·  죽으면 전부 잃는다  ·  정산 ×%.2f" % [
+				detail = "지금 확보 %s  ·  죽으면 장착 무기 빼고 잃는다  ·  정산 ×%.2f" % [
 					GameState.format_compact_number(roundi(float(carried_value) * multiplier)),
 					multiplier,
 				]
@@ -6578,6 +6581,9 @@ func _recover_previous_corpse() -> void:
 	if not recovered_cargo.is_empty():
 		GameState.raid_special_cargo = recovered_cargo.duplicate(true)
 		main_mission.restore_carry_presentation()
+	# 사망 페널티 완화 이후의 시체에는 equipped_weapon_id가 비어 있다(장착 무기는
+	# 죽어도 손에 남으므로 회수 대상이 아니다). 이 분기는 완화 이전 세이브의
+	# 시체 기록 호환용으로만 남는다.
 	var recovered_weapon_id := str(loot.get("equipped_weapon_id", ""))
 	if (
 		not recovered_weapon_id.is_empty()
@@ -7121,7 +7127,13 @@ func _notification(what: int) -> void:
 		if not get_tree().paused:
 			auto_paused_for_background = true
 			get_tree().paused = true
-	elif what in [NOTIFICATION_APPLICATION_RESUMED, NOTIFICATION_WM_WINDOW_FOCUS_IN]:
+	elif what in [
+		NOTIFICATION_APPLICATION_RESUMED,
+		NOTIFICATION_WM_WINDOW_FOCUS_IN,
+		# 웹 빌드는 탭 복귀 시 WM_WINDOW_FOCUS_IN 없이 APPLICATION_FOCUS_IN만
+		# 올 수 있다 — 자동 일시정지가 영영 안 풀려 벽돌이 되는 경로를 막는다.
+		NOTIFICATION_APPLICATION_FOCUS_IN,
+	]:
 		if auto_paused_for_background:
 			auto_paused_for_background = false
 			get_tree().paused = false

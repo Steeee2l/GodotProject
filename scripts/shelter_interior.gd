@@ -301,7 +301,7 @@ func _ready() -> void:
 	var return_lines: Array[String] = []
 	# 판 포기(추출 없이 강제 종료) 후 첫 복귀 — 지금까지 아무 통보가 없었다.
 	if GameState.consume_abandonment_notice():
-		return_lines.append("지난 출정을 중도 포기해 휴대품을 모두 잃었습니다. 창고 보관분과 고철은 남아 있습니다.")
+		return_lines.append("지난 출정을 중도 포기해 장착 무기 외 휴대품을 모두 잃었습니다. 창고 보관분과 고철은 남아 있습니다.")
 	if not settlement_text.is_empty():
 		return_lines.append(settlement_text)
 	if not corpse_notice.is_empty():
@@ -4113,7 +4113,8 @@ func _open_raid_zone_select() -> void:
 	# 죽는 유저는 거기까지 가 보지도 못하고 규칙을 사후에 배웠다.
 	var death_penalty_notice := Label.new()
 	death_penalty_notice.name = "RaidDeathPenaltyNotice"
-	death_penalty_notice.text = "죽으면 가방과 장착 장비를 전부 현장에 남긴다 · 창고 보관분과 고철은 안전"
+	# 사망 페널티 완화(장착 무기 유지) 반영 — 이 고지가 거짓이 되면 안 된다.
+	death_penalty_notice.text = "죽으면 가방과 방어구를 현장에 남긴다 · 장착 무기·부착물과 창고 보관분·고철은 안전"
 	death_penalty_notice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	death_penalty_notice.add_theme_font_override("font", FONT)
 	death_penalty_notice.add_theme_font_size_override("font_size", 13)
@@ -5000,7 +5001,12 @@ func _notification(what: int) -> void:
 		if not get_tree().paused:
 			auto_paused_for_background = true
 			get_tree().paused = true
-	elif what in [NOTIFICATION_APPLICATION_RESUMED, NOTIFICATION_WM_WINDOW_FOCUS_IN]:
+	elif what in [
+		NOTIFICATION_APPLICATION_RESUMED,
+		NOTIFICATION_WM_WINDOW_FOCUS_IN,
+		# 웹 빌드는 탭 복귀 시 APPLICATION_FOCUS_IN만 올 수 있다 — main과 동일.
+		NOTIFICATION_APPLICATION_FOCUS_IN,
+	]:
 		if auto_paused_for_background:
 			auto_paused_for_background = false
 			get_tree().paused = false

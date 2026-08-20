@@ -247,7 +247,7 @@ func build(host: Node) -> void:
 	loss_label.add_theme_font_override("font", FONT)
 	loss_label.add_theme_font_size_override("font_size", 14)
 	loss_label.add_theme_color_override("font_color", Color("#b8cdc3"))
-	loss_label.text = "다음 탐사에서 사망 지점의 가방을 한 번 회수할 수 있습니다."
+	loss_label.text = "장착 무기·부착물은 남습니다. 다음 탐사에서 사망 지점의 가방을 한 번 회수할 수 있습니다."
 	recovery_row.add_child(loss_label)
 
 	var continue_separator := HSeparator.new()
@@ -432,7 +432,8 @@ func present(result: Dictionary) -> void:
 		cause += "\n%s" % lesson
 	cause_label.text = cause
 	loss_value_label.text = "회수 가치 %s" % result.get("loss_value_text", "0")
-	loss_label.text = "휴대품은 현장에 남았습니다. 다음 탐사에서 사망 지점의 가방을 한 번 회수할 수 있습니다."
+	# 사망 페널티 완화 — 장착 무기·부착물은 시체로 가지 않고 손에 남는다.
+	loss_label.text = "휴대품은 현장에, 장착 무기·부착물은 손에 남았습니다. 다음 탐사에서 사망 지점의 가방을 한 번 회수할 수 있습니다."
 	populate_loss_icons(result.get("loot", {}) as Dictionary)
 	ready_to_continue = false
 	continue_started = false

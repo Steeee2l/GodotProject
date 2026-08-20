@@ -111,6 +111,7 @@ var active_reinforcement_caller: CharacterBody3D
 # 예고 배너가 화면에 떠 있는가. 저지 보상을 한 번만 주기 위한 단일 관문이기도 하다.
 var reinforcement_call_banner_active := false
 var run_boss_kills := 0
+var run_elite_kills := 0
 var fatigue_boss_event_triggered := false
 
 
@@ -369,19 +370,25 @@ func _spawn_enemy(
 	threat: float,
 	assigned_squad_id: int = -1,
 	assigned_squad_anchor: Vector3 = Vector3.ZERO,
-	formation_offset: Vector3 = Vector3.ZERO
+	formation_offset: Vector3 = Vector3.ZERO,
+	forced_weapon_id: String = ""
 ) -> CharacterBody3D:
+	# forced_weapon_id: 엘리트 스폰이 무장을 직접 고르기 위한 선택 인자.
+	# 비우면 종전과 동일하게 위협도 기반으로 굴린다.
 	var enemy_weapon_id := "baseball_bat"
 	if kind != "melee":
-		var roll := spawn_random.randf()
-		if roll < lerpf(0.48, 0.22, threat):
-			enemy_weapon_id = "m1911"
-		elif roll < lerpf(0.82, 0.58, threat):
-			enemy_weapon_id = "mp5"
-		elif roll < lerpf(0.95, 0.88, threat):
-			enemy_weapon_id = "ak47"
+		if not forced_weapon_id.is_empty():
+			enemy_weapon_id = forced_weapon_id
 		else:
-			enemy_weapon_id = "double_barrel"
+			var roll := spawn_random.randf()
+			if roll < lerpf(0.48, 0.22, threat):
+				enemy_weapon_id = "m1911"
+			elif roll < lerpf(0.82, 0.58, threat):
+				enemy_weapon_id = "mp5"
+			elif roll < lerpf(0.95, 0.88, threat):
+				enemy_weapon_id = "ak47"
+			else:
+				enemy_weapon_id = "double_barrel"
 		enemy_ranged_spawn_serial += 1
 	var enemy := CharacterBody3D.new()
 	enemy.name = "%s_%s_Enemy%d" % [kind.capitalize(), enemy_weapon_id, enemy_spawn_serial]
@@ -410,6 +417,53 @@ func _spawn_enemy(
 	return enemy
 
 
+# ── 엘리트 ──────────────────────────────────────────────────────
+# "모든 적이 같은 값이라 싸울 이유가 있는 표적이 없다"에 대한 답.
+# 판당 1~2명(존 티어 1~2 = 1명, 3+ = 2명), 초기 배치에 포함하되 진입 안전
+# 반경 밖. 원거리 kind에 상위 무장을 확정으로 쥐여 주고, 처치 시 그 무기가
+# 확정 드랍된다(_spawn_elite_loot). 스탯은 존 티어만 따른다 — 플레이어 장비
+# 참조(러버밴딩) 금지. 전술 지도에는 안 올린다 — 필드에서 아이콘으로 발견한다.
+const ELITE_DISPLAY_NAME := "약탈자 정예 · 무장 강탈자"
+
+
+func get_initial_elite_count(stage_tier: int) -> int:
+	return 1 if stage_tier <= 2 else 2
+
+
+func spawn_initial_elites(world: ProceduralCityMap) -> void:
+	var stage_tier := LOOT_ECONOMY.get_stage_for_zone(host.raid_zone_data)
+	var elite_count := get_initial_elite_count(stage_tier)
+	# 존 티어 위협만 사용 — 야간 보정(night_intensity)도 안 태운다.
+	var zone_threat := clampf(float(host.raid_zone_data.get("threat", 0.0)), 0.0, 1.0)
+	for elite_index in elite_count:
+		var anchor := _find_distributed_enemy_position(world, elite_index + 1, elite_count + 1)
+		anchor = _ensure_initial_enemy_safe_anchor(world, anchor, 91 + elite_index)
+		# 상위 무장 확정 — 드랍이 보상의 핵심이라 M1911 엘리트는 성립하지 않는다.
+		var weapon_roll := spawn_random.randf()
+		var elite_weapon_id := "mp5"
+		if weapon_roll >= 0.8:
+			elite_weapon_id = "double_barrel"
+		elif weapon_roll >= 0.45:
+			elite_weapon_id = "ak47"
+		var elite := _spawn_enemy(
+			"pistol",
+			anchor,
+			zone_threat,
+			-1,
+			Vector3.ZERO,
+			Vector3.ZERO,
+			elite_weapon_id
+		)
+		if elite.has_method("promote_to_elite"):
+			elite.call("promote_to_elite", ELITE_DISPLAY_NAME)
+		if elite.has_method("configure_patrol"):
+			elite.call(
+				"configure_patrol",
+				"sentry",
+				_build_enemy_patrol_route(world, anchor, 173 + elite_index * 7, "sentry")
+			)
+
+
 func _on_enemy_died(enemy: CharacterBody3D) -> void:
 	host.run_kills += 1
 	GameState.raid_kills += 1
@@ -429,6 +483,12 @@ func _on_enemy_died(enemy: CharacterBody3D) -> void:
 		== int(host.active_field_mission.get_meta("mission_id", 0))
 	):
 		host.field_mission_kills += 1
+	if bool(enemy.get_meta("elite", false)):
+		# 엘리트 처치 집계 — XP는 탈출 정산(extraction_flow)에서 일반 킬의
+		# ~3배가 되도록 보너스를 더한다(킬 22 XP + 엘리트 보너스 44).
+		run_elite_kills += 1
+		if host.hud != null and host.hud.has_method("push_toast"):
+			host.hud.push_toast("정예 처치! 확정 전리품이 떨어졌다", Color("#f2bd55"), 2.8)
 	if bool(enemy.get_meta("raid_boss", false)):
 		run_boss_kills += 1
 		GameState.register_boss_defeat()
@@ -503,6 +563,9 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 				boss_ammo_data
 			)
 		return boss_drop
+	if bool(enemy.get_meta("elite", false)):
+		# 엘리트는 굴림이 아니라 확정 — 위험을 알고 골라 싸운 대가.
+		return _spawn_elite_loot(enemy_weapon_id, stage_tier, drop_position)
 	# 호환탄 회수 — 사수 시체는 60% 확률로 장착 구경 탄약을 별도로 남긴다.
 	# 일반 드랍(방어구·식량·부품) 테이블과 독립이라 그쪽 비중은 안 건드린다.
 	# 45%에서 올렸다: 킬당 회수량이 탄창 하나에도 못 미쳐 "쏠수록 가난해진다"는
@@ -604,6 +667,41 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 	return main_pickup
 
 
+func _spawn_elite_loot(
+	elite_weapon_id: String,
+	stage_tier: int,
+	drop_position: Vector3
+) -> Node3D:
+	# 엘리트 확정 드랍 3종 — ① 들고 있던 무기(희귀도 게이트 면제 경로)
+	# ② 동반 탄약 2배 스택 ③ 고가치품(귀중품/부품) 1개.
+	# 확정은 확정이다: 캡에 막혀도 집계만 하고 지급한다(처치 보장과 같은 원칙).
+	var drops: Array[Dictionary] = LOOT_ECONOMY.roll_elite_drop(
+		stage_tier, elite_weapon_id, spawn_random
+	)
+	var main_pickup: Node3D = null
+	var drop_offsets := [
+		Vector3.ZERO,
+		Vector3(-0.9, 0.0, 0.6),
+		Vector3(0.9, 0.0, -0.5),
+	]
+	for drop_index in drops.size():
+		var definition: Dictionary = drops[drop_index]
+		if definition.is_empty():
+			continue
+		if not LOOT_ECONOMY.try_register_loot(GameState, definition, "enemy", stage_tier):
+			LOOT_ECONOMY.try_register_loot(GameState, definition, "enemy", stage_tier, true)
+		var data := (definition.get("data", {}) as Dictionary).duplicate(true)
+		data["loot_source"] = "enemy_elite"
+		var pickup: Node3D = host._create_loot_pickup(
+			str(definition.get("type", "canned_food")),
+			drop_position + (drop_offsets[drop_index % drop_offsets.size()] as Vector3),
+			data
+		)
+		if main_pickup == null:
+			main_pickup = pickup
+	return main_pickup
+
+
 func _spawn_capped_weapon_ammo_substitute(
 	enemy_weapon_id: String,
 	stage_tier: int,
@@ -689,11 +787,14 @@ func _update_reinforcement_call(delta: float, effective_threat: float) -> void:
 		)
 	var alerted_count := 0
 	var visual_contact_count := 0
+	var elite_alerted := false
 	for enemy in host.enemies:
 		if not is_instance_valid(enemy) or bool(enemy.get("dying")):
 			continue
 		if bool(enemy.get("alerted")):
 			alerted_count += 1
+			if bool(enemy.get_meta("elite", false)):
+				elite_alerted = true
 			if bool(enemy.get("has_current_line_of_sight")):
 				visual_contact_count += 1
 	# 저지 성공 (b): 호출이 진행 중인데 교전 중인 적이 하나도 안 남았다 =
@@ -716,8 +817,12 @@ func _update_reinforcement_call(delta: float, effective_threat: float) -> void:
 	# 수가 줄면 그때 호출이 성립한다).
 	if alerted_count >= MAX_CONCURRENT_ALERTED:
 		return
-	var prolonged_firefight := sustained_combat_time >= REINFORCEMENT_CALL_TRIGGER_TIME
-	var prolonged_standoff := concealed_combat_time >= REINFORCEMENT_HIDDEN_TRIGGER_TIME
+	# 엘리트가 교전 중이면 호출 시도가 30% 빨라진다 — "저 녀석을 빨리 잡아야
+	# 한다"는 위협 정체성. 동시 교전 상한(MAX_CONCURRENT_ALERTED)·쿨다운·
+	# 상시 보충 게이트는 건드리지 않는다.
+	var trigger_scale := 0.7 if elite_alerted else 1.0
+	var prolonged_firefight := sustained_combat_time >= REINFORCEMENT_CALL_TRIGGER_TIME * trigger_scale
+	var prolonged_standoff := concealed_combat_time >= REINFORCEMENT_HIDDEN_TRIGGER_TIME * trigger_scale
 	if not prolonged_firefight and not prolonged_standoff:
 		return
 	var caller: CharacterBody3D
@@ -730,6 +835,9 @@ func _update_reinforcement_call(delta: float, effective_threat: float) -> void:
 		if not enemy.has_method("start_reinforcement_call"):
 			continue
 		var score: float = enemy.global_position.distance_to(player.global_position)
+		# 엘리트가 무전을 우선 잡는다 — 저지 목표가 자연스럽게 엘리트가 된다.
+		if bool(enemy.get_meta("elite", false)):
+			score -= 60.0
 		if prolonged_standoff and bool(enemy.get("has_current_line_of_sight")):
 			score += 18.0
 		if score < best_score:

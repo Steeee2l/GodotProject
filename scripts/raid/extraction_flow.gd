@@ -209,6 +209,9 @@ func _show_extraction_result(rescued_count: int) -> void:
 	# 더하기 전에 읽어야 '지난 판 잔여'와 '이번 판 획득'이 안 섞인다.
 	var carried_level_choices := maxi(0, GameState.pending_level_choices)
 	var combat_xp := GameState.get_raid_experience_reward(host.run_kills, host.enemy_director.run_boss_kills)
+	# 엘리트 킬은 일반의 ~3배 — run_kills에 이미 1회분(22)이 포함되므로 +44.
+	# get_raid_experience_reward 시그니처는 건드리지 않고 여기서 얹는다.
+	combat_xp += host.enemy_director.run_elite_kills * 44
 	var cargo_result: Dictionary = host.main_mission.settle()
 	var cargo_xp := int(cargo_result.get("xp", 0))
 	var base_xp_reward: int = combat_xp + host.completed_mission_xp + cargo_xp
@@ -738,6 +741,8 @@ func reset_banked_level_watch() -> void:
 func update_banked_level_watch() -> void:
 	var banked_xp: int = (
 		GameState.get_raid_experience_reward(host.run_kills, host.enemy_director.run_boss_kills)
+		# 엘리트 보너스(+44/킬)도 예고에 반영 — 정산과 예고가 어긋나면 안 된다.
+		+ host.enemy_director.run_elite_kills * 44
 		+ host.completed_mission_xp
 	)
 	var projected_levels := 0

@@ -195,8 +195,8 @@ var shelter_return_serial: int = 0
 # 살아서 돌아온 횟수. shelter_return_serial은 사망 귀환도 세므로(시체 부패·행상인
 # 주기 등이 쓴다), "살아 돌아온 자에게만" 열리는 서사는 이 값으로 판정한다.
 var survived_return_count: int = 0
-# 판 포기(추출 없이 강제 종료)는 100% 전손인데 지금까지 아무 통보가 없었다.
-# 로드 직후 켜 두고, 쉘터에 들어서는 순간 한 줄로 알린다(세이브 대상 아님).
+# 판 포기(추출 없이 강제 종료)는 장착 무기만 남는 대손실인데 지금까지 아무
+# 통보가 없었다. 로드 직후 켜 두고, 쉘터에 들어서는 순간 한 줄로 알린다(세이브 대상 아님).
 var pending_abandonment_notice: bool = false
 var merchant_last_roll_serial: int = -1
 var merchant_status: String = "away"
@@ -1135,6 +1135,13 @@ func store_carried_raid_loot_for_recovery(world_position: Vector3) -> Dictionary
 
 
 func clear_carried_raid_inventory_after_death() -> void:
+	# 장착 중이던 무기 1정과 그 총에 박힌 부착물은 죽어도(판 포기여도) 손에 남는다.
+	# 사망이 예외 없는 100% 전손이면 전투 위험이 항상 비합리적이라 "도망만 다니는"
+	# 플레이가 정답이 된다(테스터 신고). 가방·방어구·탄약은 종전대로 잃는다.
+	# 강화 수치(weapon_enhancement_levels)는 원래 사망에 지워지지 않으므로
+	# 무기가 남는 한 강화도 함께 남는다.
+	var kept_weapon_id := equipped_weapon_id if has_ak and not equipped_weapon_id.is_empty() else ""
+	var kept_weapon_mods := equipped_weapon_mods.duplicate()
 	for inventory in [ammo_inventory, mod_component_inventory, progression_item_inventory, weapon_mod_inventory, equipment_inventory]:
 		for key in inventory.keys():
 			inventory[key] = 0
@@ -1149,11 +1156,22 @@ func clear_carried_raid_inventory_after_death() -> void:
 	clear_churu_buffs()
 	magazine_ammo = 0
 	reserve_ammo = 0
-	has_ak = false
-	equipped_weapon_id = ""
-	equipped_weapon_mods.clear()
-	equipped_magazine_id = ""
-	equipped_ammo_id = ""
+	if kept_weapon_id.is_empty():
+		# 맨손 사망 — 종전과 동일한 전손 처리.
+		has_ak = false
+		equipped_weapon_id = ""
+		equipped_weapon_mods.clear()
+		equipped_magazine_id = ""
+		equipped_ammo_id = ""
+	else:
+		# 장착 무기 유지: 재고 1정 + 부착물 + 로드아웃을 되살린다.
+		# equipped_weapon_id·equipped_weapon_mods·equipped_magazine_id·
+		# equipped_ammo_id는 건드리지 않는다 — 총은 계속 손에 들려 있다.
+		# 탄만 빈 상태(magazine/reserve 0)로 시작한다.
+		weapon_inventory[kept_weapon_id] = 1
+		for mod_id in kept_weapon_mods:
+			weapon_mod_inventory[str(mod_id)] = int(weapon_mod_inventory.get(str(mod_id), 0)) + 1
+		weapon_mod_loadouts[kept_weapon_id] = kept_weapon_mods.duplicate()
 	equipped_body_armor_id = ""
 	equipped_head_armor_id = ""
 	equipped_footwear_id = ""

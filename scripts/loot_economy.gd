@@ -1421,3 +1421,70 @@ static func _find_weapon_definition(weapon_id: String) -> Dictionary:
 	if str(definition.get("loot_type", "")) != "weapon":
 		return {}
 	return definition
+
+
+# ── 엘리트 확정 드랍 ────────────────────────────────────────────
+# 엘리트를 굳이 골라 싸운 대가는 굴림이 아니라 확정이어야 한다.
+# 기존 roll_* 함수의 시그니처는 건드리지 않는 별도 진입점.
+# 고가치품 후보 — 스테이지 하한(minimum_stage)만 지키면 되는 값나가는 축.
+const ELITE_PRIZE_VALUABLE_IDS := [
+	"old_wristwatch",
+	"circuit_board",
+	"lithium_cell",
+	"fiber_spool",
+	"server_drive",
+	"gold_tooth",
+	"wedding_ring",
+	"gold_chain",
+	"military_freq",
+]
+
+
+static func roll_elite_drop(
+	stage_tier: int,
+	enemy_weapon_id: String,
+	random: RandomNumberGenerator
+) -> Array[Dictionary]:
+	# 반환 순서: [무기, 동반 탄약(2배), 고가치품]. 비는 항목은 건너뛴다.
+	# ① 들고 있던 무기 — 희귀도 게이트 면제(_enemy_carried_weapon_allowed 경로:
+	#    적의 무장을 그대로 따르므로 러버밴딩이 아니다).
+	# ② 그 구경 탄약 — roll_weapon_companion_ammo의 정상 스택을 2배로.
+	# ③ 귀중품 70% / 개조 부품 30% 확정 1개.
+	var stage := clampi(stage_tier, 1, 5)
+	var results: Array[Dictionary] = []
+	if _enemy_carried_weapon_allowed(enemy_weapon_id):
+		var weapon_definition := _materialize_item(enemy_weapon_id, stage, random)
+		if not weapon_definition.is_empty():
+			results.append(weapon_definition)
+	var ammo_definition := roll_weapon_companion_ammo(enemy_weapon_id, stage, random)
+	if not ammo_definition.is_empty():
+		var ammo_data := ammo_definition.get("data", {}) as Dictionary
+		var doubled := maxi(1, int(ammo_data.get("amount", 6))) * 2
+		ammo_data["amount"] = doubled
+		ammo_data["total_value"] = int(ammo_data.get("base_value", 0)) * doubled
+		ammo_data["value_per_slot"] = float(ammo_data["total_value"]) / float(
+			maxi(1, int(ammo_data.get("slot_size", 1)))
+		)
+		results.append(ammo_definition)
+	var prize := _roll_elite_prize(stage, random)
+	if not prize.is_empty():
+		results.append(prize)
+	return results
+
+
+static func _roll_elite_prize(stage: int, random: RandomNumberGenerator) -> Dictionary:
+	if random.randf() < 0.3:
+		return _materialize_item(_roll_basic_component_id(stage, random), stage, random)
+	var eligible: Array[String] = []
+	for item_id in ELITE_PRIZE_VALUABLE_IDS:
+		var definition := ITEM_CATALOG.get(str(item_id), {}) as Dictionary
+		if not definition.is_empty() and _item_allowed(definition, stage):
+			eligible.append(str(item_id))
+	if eligible.is_empty():
+		# 어떤 스테이지에서도 비지 않지만, 카탈로그가 변해도 확정은 지킨다.
+		return _materialize_item(_roll_basic_component_id(stage, random), stage, random)
+	return _materialize_item(
+		eligible[random.randi_range(0, eligible.size() - 1)],
+		stage,
+		random
+	)

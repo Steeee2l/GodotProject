@@ -367,6 +367,16 @@ func _collect_nearby_ammo() -> void:
 				str(host.nearby_ammo_pickup.get_meta("display_name", "무기")),
 				amount,
 			]
+		"valuable":
+			# 엘리트 확정 드랍으로 귀중품이 바닥 픽업으로 흔해졌다. 이 match에
+			# "valuable" 분기가 없어서 아래 탄약 분기로 떨어져 762탄이 지급되던
+			# 잠복 버그를 함께 고친다 — 귀중품 원장(valuable_inventory)에 넣는다.
+			var valuable_id := str(host.nearby_ammo_pickup.get_meta("item_id", "subway_token"))
+			GameState.try_add_raid_item("valuable", valuable_id, amount)
+			toast_text = "%s +%d   쉘터 복귀 시 고철로 환전" % [
+				str(host.nearby_ammo_pickup.get_meta("display_name", "귀중품")),
+				amount,
+			]
 		"armor":
 			var equipment_id := str(host.nearby_ammo_pickup.get_meta("equipment_id", "scav_vest"))
 			if GameState.add_equipment(equipment_id, amount):
