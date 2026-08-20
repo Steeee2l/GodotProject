@@ -289,7 +289,15 @@ func _build_layer() -> void:
 	layer = CanvasLayer.new()
 	layer.name = "FieldCinematicLayer"
 	layer.layer = 94
+	# 트리가 일시정지돼도 연출 UI는 살아 있어야 한다. 실기기(PC 웹) 신고:
+	# 대화 1/3에서 모든 입력이 죽는 멈춤 — 포커스 전환 자동 일시정지 등으로
+	# 트리가 멈추면 pausable 버튼은 클릭을 못 받아 게임이 벽돌이 됐다.
+	layer.process_mode = Node.PROCESS_MODE_ALWAYS
 	host.add_child(layer)
+	var relay := CinematicInputRelay.new()
+	relay.name = "CineInputRelay"
+	relay.cinematic = self
+	layer.add_child(relay)
 	bar_top = ColorRect.new()
 	bar_top.name = "CineBarTop"
 	bar_top.color = Color.BLACK
@@ -765,3 +773,72 @@ func _resolve_texture(value: Variant) -> Texture2D:
 	if path.is_empty() or not ResourceLoader.exists(path):
 		return null
 	return load(path) as Texture2D
+
+
+func is_waiting_for_input() -> bool:
+	return (
+		is_instance_valid(dialogue_panel)
+		or is_instance_valid(image_cut_root)
+		or is_instance_valid(choice_root)
+	)
+
+
+func advance_from_anywhere() -> bool:
+	# '다음' 버튼을 못 찾거나 못 누르는 상황(작은 버튼, 겹침, 입력 경로 문제)
+	# 에서도 연출이 벽이 되지 않게 — 화면 아무 곳이나 탭/클릭, 스페이스/엔터로
+	# 진행한다. 선택지는 예외: 결정을 대신 해 주지 않는다.
+	if is_instance_valid(choice_root):
+		return false
+	if is_instance_valid(dialogue_panel):
+		_advance_dialogue()
+		return true
+	if is_instance_valid(image_cut_root):
+		_close_image_cut()
+		_advance()
+		return true
+	return false
+
+
+class CinematicInputRelay extends Node:
+	# 연출 레이어에 붙는 입력 중계 + 멈춤 자가 복구 노드.
+	var cinematic: RefCounted
+
+	func _ready() -> void:
+		process_mode = Node.PROCESS_MODE_ALWAYS
+
+	func _process(_delta: float) -> void:
+		# 시네마틱 도중 트리가 일시정지로 남으면(포커스 자동 일시정지가
+		# 안 풀리는 등) 대화·트윈·버튼이 전부 죽어 '벽돌'이 된다. 연출 중
+		# 정당한 일시정지는 ESC 메뉴뿐이므로, 그 외에는 즉시 되살린다.
+		if cinematic == null or not bool(cinematic.call("is_active")):
+			return
+		var tree := get_tree()
+		if tree == null or not tree.paused:
+			return
+		var cinematic_host: Node = cinematic.get("host")
+		if cinematic_host != null:
+			var menu := cinematic_host.get_node_or_null("PauseMenu")
+			if menu != null and bool(menu.call("is_open")):
+				return
+		tree.paused = false
+
+	func _unhandled_input(event: InputEvent) -> void:
+		if cinematic == null or not bool(cinematic.call("is_active")):
+			return
+		var advance := false
+		if event is InputEventMouseButton:
+			var mouse := event as InputEventMouseButton
+			advance = mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT
+		elif event is InputEventScreenTouch:
+			advance = (event as InputEventScreenTouch).pressed
+		elif event is InputEventKey:
+			var key := event as InputEventKey
+			advance = (
+				key.pressed
+				and not key.echo
+				and key.keycode in [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER, KEY_E, KEY_F]
+			)
+		if not advance:
+			return
+		if bool(cinematic.call("advance_from_anywhere")):
+			get_viewport().set_input_as_handled()
