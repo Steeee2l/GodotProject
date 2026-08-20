@@ -13,6 +13,8 @@ var hit_flash_scale := 0.72
 var vignette_scale := 0.7
 var minimum_brightness := 0.16
 var aim_assist_strength := 0.65
+# 피해량 숫자 팝 — 기본 켜짐. 화면이 어지러운 유저를 위한 끄기 토글.
+var damage_numbers_enabled := true
 var auto_reload := true
 var vibration_enabled := true
 var battery_saver := false
@@ -142,6 +144,7 @@ func _build_ui() -> void:
 	_add_slider(content, "화면 가장자리 효과", "피격 시 붉은 비네팅 강도", 0.0, 1.0, 0.05, vignette_scale, func(value: float) -> void: vignette_scale = value)
 	_add_slider(content, "최소 밝기", "밤과 실내의 가장 어두운 정도", 0.0, 0.5, 0.05, minimum_brightness, func(value: float) -> void: minimum_brightness = value)
 	_add_slider(content, "조준 보정", "모바일과 패드의 원뿔 조준 보정", 0.0, 1.0, 0.05, aim_assist_strength, func(value: float) -> void: aim_assist_strength = value)
+	_add_toggle(content, "피해량 숫자 표시", damage_numbers_enabled, func(value: bool) -> void: damage_numbers_enabled = value)
 	_add_toggle(content, "탄약이 있으면 자동 재장전", auto_reload, func(value: bool) -> void: auto_reload = value)
 	_add_toggle(content, "모바일 햅틱", vibration_enabled, func(value: bool) -> void: vibration_enabled = value)
 	_add_toggle(content, "모바일 저전력 모드", battery_saver, func(value: bool) -> void: battery_saver = value)
@@ -222,7 +225,7 @@ func _panel_style() -> StyleBoxFlat:
 
 func _save_settings() -> void:
 	var config := ConfigFile.new()
-	for property_name in ["ui_scale", "combat_text_scale", "camera_shake_scale", "hit_flash_scale", "vignette_scale", "minimum_brightness", "aim_assist_strength", "auto_reload", "vibration_enabled", "battery_saver"]:
+	for property_name in ["ui_scale", "combat_text_scale", "camera_shake_scale", "hit_flash_scale", "vignette_scale", "minimum_brightness", "aim_assist_strength", "damage_numbers_enabled", "auto_reload", "vibration_enabled", "battery_saver"]:
 		config.set_value("accessibility", property_name, get(property_name))
 	config.save(SAVE_PATH)
 
@@ -231,6 +234,6 @@ func _load_settings() -> void:
 	var config := ConfigFile.new()
 	if config.load(SAVE_PATH) != OK:
 		return
-	for property_name in ["ui_scale", "combat_text_scale", "camera_shake_scale", "hit_flash_scale", "vignette_scale", "minimum_brightness", "aim_assist_strength", "auto_reload", "vibration_enabled", "battery_saver"]:
+	for property_name in ["ui_scale", "combat_text_scale", "camera_shake_scale", "hit_flash_scale", "vignette_scale", "minimum_brightness", "aim_assist_strength", "damage_numbers_enabled", "auto_reload", "vibration_enabled", "battery_saver"]:
 		if config.has_section_key("accessibility", property_name):
 			set(property_name, config.get_value("accessibility", property_name, get(property_name)))

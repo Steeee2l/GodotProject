@@ -4141,12 +4141,19 @@ func _show_damage_direction(hit_direction: Vector3) -> void:
 
 
 func _trigger_hit_stop(duration: float) -> void:
+	# 처치 히트스톱(kill_impact 0.05)이나 보스 슬로모(0.18) 등 더 깊은 연출이
+	# 이미 잡고 있으면 얕은 대미지 강조(0.24)로 덮어쓰지 않는다.
+	if Engine.time_scale < 0.23:
+		return
 	hit_stop_serial += 1
 	var serial := hit_stop_serial
 	Engine.time_scale = 0.24
 	get_tree().create_timer(duration, true, false, true).timeout.connect(func() -> void:
 		if serial == hit_stop_serial and not player_death_sequence_active:
-			Engine.time_scale = 1.0
+			# 그 사이 처치 히트스톱 등 다른 주인이 time_scale을 가져갔다면
+			# 복원도 그쪽 몫이다 — 여기서 1.0으로 되돌리면 그 연출이 잘린다.
+			if is_equal_approx(Engine.time_scale, 0.24):
+				Engine.time_scale = 1.0
 	)
 
 

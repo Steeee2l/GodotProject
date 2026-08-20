@@ -12,6 +12,7 @@ const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
 const DAMAGE_FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const DAMAGE_NUMBER_SCRIPT := preload("res://scripts/damage_number.gd")
+const KILL_IMPACT := preload("res://scripts/kill_impact.gd")
 const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
 const MELEE_SPEED := 5.1
 const PISTOL_SPEED := 3.15
@@ -55,6 +56,9 @@ const MELEE_WINDUP_TIME := 0.46
 const MELEE_STRIKE_TIME := 0.16
 const MELEE_RECOVERY_TIME := 0.34
 const HIT_STAGGER_TIME := 0.13
+# 피격 미세 넉백 — 스태거 0.13초 동안 감속(18/s)하며 총 ~0.4u 밀린다.
+# 이동 AI와 충돌하지 않게 velocity 임펄스(stagger_velocity)로만 민다.
+const HIT_KNOCKBACK_SPEED := 4.4
 const STEALTH_TAKEDOWN_MAX_RANGE := 2.05
 # 상호 인지 원칙: 적 시야는 플레이어의 적 가시 반경(주간 시야 확장 기준
 # 약 16.7u, stealth_system의 fully_visible_radius 430px 환산)을 넘지 않는다.
@@ -118,6 +122,19 @@ var pending_attack_direction := Vector3.ZERO
 var stagger_velocity := Vector3.ZERO
 var dying := false
 var visual_tween: Tween
+# 피격 플래시/셰이크 전용 트윈 — 자세용 visual_tween과 분리해 연사로
+# 초당 여러 발 맞아도 kill 후 재시작만 하면 서로 꼬이지 않는다.
+var hit_flash_tween: Tween
+var hit_shake_tween: Tween
+var weapon_flash_tween: Tween
+# 피격 화이트 플래시 보조 스프라이트 — gl_compatibility 렌더러는 과노출
+# modulate(2.4배 등)를 1.0으로 클램프해 스프라이트가 실제로 하얘지지 않는다
+# (실화면 캡처로 확인). 몸 위에 흰 라디얼 글로를 한 장 겹쳐 번쩍임을 만든다.
+var hit_flash_overlay: Sprite3D
+var hit_flash_overlay_tween: Tween
+# 스프라이트 기본 틴트 — 존 틴트 같은 상시 착색이 생기면 여기에 기록한다.
+# 피격 플래시·자세 리셋은 항상 이 값 + 현재 가시성 알파로 복귀한다.
+var sprite_base_tint := Color.WHITE
 var patrol_origin := Vector3.ZERO
 var patrol_target := Vector3.ZERO
 var patrol_pause := 0.0
@@ -210,6 +227,7 @@ static var lost_target_texture: Texture2D
 static var reinforcement_call_texture_cache: Dictionary = {}
 static var reinforcement_ring_texture: Texture2D
 static var enemy_gunshot_stream_cache: AudioStreamWAV
+static var hit_flash_overlay_texture: Texture2D
 
 
 func configure(
@@ -529,6 +547,7 @@ func _ready() -> void:
 	sprite.no_depth_test = true
 	sprite.render_priority = 30
 	add_child(sprite)
+	_setup_hit_flash_overlay()
 	_setup_weapon_visual()
 	_setup_enemy_audio()
 	_setup_enemy_health_bar()
@@ -2542,10 +2561,10 @@ func _reset_sprite_pose() -> void:
 	sprite.position = SPRITE_BASE_POSITION
 	sprite.scale = Vector3.ONE
 	sprite.rotation = Vector3.ZERO
-	sprite.modulate = Color.WHITE
+	# Color.WHITE 강제 복귀는 기본 틴트와 가시성 알파(스텔스 페이드)를 지웠다.
+	_apply_sprite_base_modulate()
 	_update_weapon_visual()
-	if weapon_visual:
-		weapon_visual.modulate = Color.WHITE
+	_apply_weapon_base_modulate()
 
 
 func _kill_visual_tween() -> void:
@@ -2556,13 +2575,20 @@ func _kill_visual_tween() -> void:
 func _play_attack_feedback() -> void:
 	if sprite == null:
 		return
+	# Color.WHITE 복귀는 기본 틴트·가시성 알파를 지웠다 — 기본색으로 되돌린 뒤
+	# 콜백으로 최신 값을 한 번 더 스냅한다(피격 플래시와 같은 원칙).
+	var sprite_base := sprite_base_tint
+	sprite_base.a = player_visibility_factor
 	var tween := create_tween()
-	tween.tween_property(sprite, "modulate", Color(1.45, 0.82, 0.58, 1), 0.045)
-	tween.tween_property(sprite, "modulate", Color.WHITE, 0.11)
+	tween.tween_property(sprite, "modulate", Color(1.45, 0.82, 0.58, player_visibility_factor), 0.045)
+	tween.tween_property(sprite, "modulate", sprite_base, 0.11)
+	tween.tween_callback(_apply_sprite_base_modulate)
 	if weapon_visual:
+		var weapon_base := Color(1.0, 1.0, 1.0, player_visibility_factor)
 		var weapon_flash := create_tween()
-		weapon_flash.tween_property(weapon_visual, "modulate", Color(1.8, 1.35, 0.5, 1), 0.035)
-		weapon_flash.tween_property(weapon_visual, "modulate", Color.WHITE, 0.09)
+		weapon_flash.tween_property(weapon_visual, "modulate", Color(1.8, 1.35, 0.5, player_visibility_factor), 0.035)
+		weapon_flash.tween_property(weapon_visual, "modulate", weapon_base, 0.09)
+		weapon_flash.tween_callback(_apply_weapon_base_modulate)
 
 
 func take_damage(amount: int) -> void:
@@ -2632,7 +2658,7 @@ func take_melee_hit(amount: int, hit_direction: Vector3, backstab: bool) -> void
 	health = 0
 	damaged.emit(self, fatal_damage)
 	_register_health_damage()
-	_spawn_damage_number(fatal_damage, true, hit_direction)
+	_spawn_damage_number(fatal_damage, true, hit_direction, "normal", true)
 	combat_state = "stagger"
 	state_timer = 0.28
 	velocity = Vector3.ZERO
@@ -2765,14 +2791,18 @@ func take_hit(amount: int, hit_direction: Vector3, is_critical: bool = false, hi
 	health -= amount
 	damaged.emit(self, amount)
 	_register_health_damage()
-	_spawn_damage_number(amount, is_critical or lethal, hit_direction, hit_grade)
+	# 처치 마지막 타격(lethal)은 killing_blow로 따로 넘긴다 — 치명타 색을
+	# 빌리는 대신 "살짝 크게"로 구분해 표시한다.
+	_spawn_damage_number(amount, is_critical, hit_direction, hit_grade, lethal)
 	threat_marker.visible = false
 	var knockback_direction := hit_direction
 	knockback_direction.y = 0.0
 	if knockback_direction.length_squared() <= 0.01:
 		knockback_direction = -pending_attack_direction
 	knockback_direction = knockback_direction.normalized()
-	stagger_velocity = knockback_direction * 3.6
+	# 미세 넉백 — 스태거 상태의 _update_stagger가 velocity로 적용한다.
+	# 보스는 아래 _absorbs_hit_stagger에서 경직·넉백을 함께 흡수한다.
+	stagger_velocity = knockback_direction * HIT_KNOCKBACK_SPEED
 	_spawn_hit_burst(knockback_direction, Color("#ffcf91"), 10, 0.3)
 	_play_hit_reaction(knockback_direction)
 	if health <= 0:
@@ -2792,10 +2822,25 @@ func _absorbs_hit_stagger(_amount: int) -> bool:
 
 
 func _spawn_damage_number(
-	amount: int, is_critical: bool, hit_direction: Vector3, hit_grade: String = "normal"
+	amount: int,
+	is_critical: bool,
+	hit_direction: Vector3,
+	hit_grade: String = "normal",
+	killing_blow: bool = false
 ) -> void:
-	var number := DAMAGE_NUMBER_SCRIPT.new() as Label3D
-	get_parent().add_child(number)
+	# 기본 켜짐 — 접근성 설정(F10 → 피해량 숫자 표시)에서 끌 수 있다.
+	# 오토로드 식별자를 직접 쓰면 --script 콜드 스타트에서 enemy.gd 컴파일이
+	# 깨진다(raid_loss_manager의 GameState와 같은 문제) — 노드 경로로 찾는다.
+	var accessibility := get_node_or_null("/root/AccessibilitySettings")
+	if accessibility != null and not bool(accessibility.get("damage_numbers_enabled")):
+		return
+	if get_parent() == null:
+		return
+	# 풀 재사용 — 연사로 초당 수십 개가 떠도 노드 생성/해제 비용이 안 쌓인다.
+	var number: Label3D = DAMAGE_NUMBER_SCRIPT.acquire(get_parent())
+	if number == null:
+		number = DAMAGE_NUMBER_SCRIPT.new() as Label3D
+		get_parent().add_child(number)
 	number.call(
 		"setup",
 		amount,
@@ -2804,24 +2849,143 @@ func _spawn_damage_number(
 		global_position + Vector3(0, 1.62, 0),
 		hit_direction,
 		weapon_random.randf_range(-0.28, 0.28),
-		hit_grade
+		hit_grade,
+		elite,
+		killing_blow
 	)
 
 
 func _play_hit_reaction(hit_direction: Vector3) -> void:
+	if sprite == null:
+		return
 	_kill_visual_tween()
-	visual_tween = create_tween()
-	visual_tween.tween_property(sprite, "modulate", Color(2.4, 2.4, 2.4, 1), 0.025)
-	visual_tween.tween_property(sprite, "modulate", Color(1.8, 0.16, 0.1, 1), 0.055)
-	visual_tween.tween_property(sprite, "modulate", Color.WHITE, 0.12)
-	var shake := create_tween()
-	shake.tween_property(sprite, "position", SPRITE_BASE_POSITION + hit_direction * 0.11, 0.035)
-	shake.tween_property(sprite, "position", SPRITE_BASE_POSITION - hit_direction * 0.055, 0.035)
-	shake.tween_property(sprite, "position", SPRITE_BASE_POSITION, 0.07)
+	# ── 피격 화이트 플래시 ──
+	# 과노출 modulate로 하얗게 번쩍인 뒤 "기본 틴트 + 현재 가시성 알파"로
+	# 정확히 복귀한다. 복귀 색을 트윈 시작 시점에 굳혀 두면 스텔스 페이드와
+	# 어긋나므로, tween_method가 매 프레임 기본색을 다시 읽어 섞는다.
+	# 예전 구현은 Color.WHITE로 복귀해 가시성 알파를 지우는 문제가 있었다.
+	if hit_flash_tween != null:
+		hit_flash_tween.kill()
+	# 오토로드 식별자 대신 노드 경로 — --script 콜드 스타트 컴파일 안전.
+	var accessibility := get_node_or_null("/root/AccessibilitySettings")
+	var flash_scale := 1.0
+	if accessibility != null:
+		flash_scale = clampf(float(accessibility.get("hit_flash_scale")), 0.0, 1.0)
+	if flash_scale > 0.01:
+		# 곱연산 modulate라 순백은 못 만들지만 4~6배 과노출이면 실화면에서
+		# 충분히 '하얀 번쩍'으로 읽힌다(스크린샷 프로브로 확인).
+		var flash_gain := 1.0 + 5.2 * flash_scale
+		_apply_hit_flash(1.0, flash_gain)
+		hit_flash_tween = create_tween()
+		hit_flash_tween.tween_method(_apply_hit_flash.bind(flash_gain), 1.0, 1.0, 0.06)
+		hit_flash_tween.tween_method(_apply_hit_flash.bind(flash_gain), 1.0, 0.0, 0.08)
+		hit_flash_tween.tween_callback(_apply_sprite_base_modulate)
+		# 보조 스프라이트 플래시 — gl_compatibility에서 modulate 과노출이
+		# 클램프되어도 이쪽은 확실히 하얗게 번쩍인다. 연사 대비 kill 후 재시작.
+		if hit_flash_overlay != null:
+			if hit_flash_overlay_tween != null:
+				hit_flash_overlay_tween.kill()
+			# 투명 정렬 함정: 본체 스프라이트와 거의 같은 깊이에 두면
+			# render_priority만으로는 위에 안 그려진다(실화면 검증). 직교
+			# 카메라라 화면 위치는 그대로인 채, 카메라 쪽으로 당겨 깊이
+			# 정렬에서 확실히 앞에 세운다.
+			var view_camera := get_viewport().get_camera_3d()
+			var overlay_anchor := global_position + SPRITE_BASE_POSITION + Vector3(0, 0.06, 0)
+			if view_camera != null:
+				var toward_camera := view_camera.global_position - overlay_anchor
+				if toward_camera.length_squared() > 0.01:
+					hit_flash_overlay.global_position = (
+						overlay_anchor + toward_camera.normalized() * 1.5
+					)
+			# 스텔스로 흐려진 적이라도 명중 확인은 보여야 한다(맞춘 위치가
+			# 읽히는 게 피드백의 목적) — 가시성 배율은 0.6 밑으로 안 내린다.
+			hit_flash_overlay.modulate = Color(
+				1.0, 1.0, 1.0,
+				0.88 * flash_scale * maxf(player_visibility_factor, 0.6)
+			)
+			hit_flash_overlay_tween = create_tween()
+			hit_flash_overlay_tween.tween_interval(0.05)
+			hit_flash_overlay_tween.tween_property(
+				hit_flash_overlay, "modulate:a", 0.0, 0.09
+			)
+	if hit_shake_tween != null:
+		hit_shake_tween.kill()
+	hit_shake_tween = create_tween()
+	hit_shake_tween.tween_property(sprite, "position", SPRITE_BASE_POSITION + hit_direction * 0.11, 0.035)
+	hit_shake_tween.tween_property(sprite, "position", SPRITE_BASE_POSITION - hit_direction * 0.055, 0.035)
+	hit_shake_tween.tween_property(sprite, "position", SPRITE_BASE_POSITION, 0.07)
 	if weapon_visual:
-		var weapon_hit := create_tween()
-		weapon_hit.tween_property(weapon_visual, "modulate", Color(2.2, 0.28, 0.16, 1), 0.05)
-		weapon_hit.tween_property(weapon_visual, "modulate", Color.WHITE, 0.12)
+		if weapon_flash_tween != null:
+			weapon_flash_tween.kill()
+		weapon_flash_tween = create_tween()
+		weapon_flash_tween.tween_property(
+			weapon_visual,
+			"modulate",
+			Color(2.2, 2.2, 2.2, player_visibility_factor),
+			0.05
+		)
+		weapon_flash_tween.tween_callback(_apply_weapon_base_modulate)
+
+
+func _setup_hit_flash_overlay() -> void:
+	hit_flash_overlay = Sprite3D.new()
+	hit_flash_overlay.name = "HitFlashOverlay"
+	hit_flash_overlay.texture = _get_hit_flash_texture()
+	hit_flash_overlay.position = SPRITE_BASE_POSITION + Vector3(0, 0.06, 0)
+	hit_flash_overlay.pixel_size = 0.0125
+	hit_flash_overlay.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	hit_flash_overlay.shaded = false
+	hit_flash_overlay.transparent = true
+	hit_flash_overlay.no_depth_test = true
+	# 적 스프라이트(30) 바로 위, 체력바(112~)와 표식 아래.
+	hit_flash_overlay.render_priority = 32
+	hit_flash_overlay.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	add_child(hit_flash_overlay)
+
+
+static func _get_hit_flash_texture() -> Texture2D:
+	# 흰 라디얼 글로 한 장 — 전 개체가 공유한다(reinforcement 링과 같은 방식).
+	if hit_flash_overlay_texture != null:
+		return hit_flash_overlay_texture
+	var image := Image.create(96, 96, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	var center := Vector2(47.5, 47.5)
+	for y in 96:
+		for x in 96:
+			var radius := (Vector2(x, y) - center).length()
+			var falloff := clampf(1.0 - radius / 46.0, 0.0, 1.0)
+			if falloff <= 0.0:
+				continue
+			# 중심은 진한 흰색, 가장자리로 부드럽게 소멸.
+			image.set_pixel(x, y, Color(1.0, 1.0, 1.0, pow(falloff, 1.4)))
+	hit_flash_overlay_texture = ImageTexture.create_from_image(image)
+	return hit_flash_overlay_texture
+
+
+func _apply_hit_flash(weight: float, flash_gain: float) -> void:
+	if sprite == null or dying:
+		return
+	var base := sprite_base_tint
+	base.a = player_visibility_factor
+	var flash := Color(flash_gain, flash_gain, flash_gain, player_visibility_factor)
+	sprite.modulate = base.lerp(flash, clampf(weight, 0.0, 1.0))
+
+
+func _apply_sprite_base_modulate() -> void:
+	# 기본 틴트 + 현재 가시성 알파 — 플래시·자세 리셋의 공통 복귀 지점.
+	if sprite == null or dying:
+		return
+	var base := sprite_base_tint
+	base.a = player_visibility_factor
+	sprite.modulate = base
+
+
+func _apply_weapon_base_modulate() -> void:
+	if weapon_visual == null or dying:
+		return
+	var base := Color.WHITE
+	base.a = player_visibility_factor
+	weapon_visual.modulate = base
 
 
 func _start_death(hit_direction: Vector3) -> void:
@@ -2846,8 +3010,26 @@ func _start_death(hit_direction: Vector3) -> void:
 	velocity = hit_direction * 2.5
 	_set_motion_state("death")
 	_spawn_hit_burst(hit_direction, Color("#8b1717"), 18, 0.55)
+	# 처치 임팩트(히트스톱 + 확인음) — 필드·건물 내부 공용(static 헬퍼).
+	# 보스는 전용 처치 연출(_play_boss_defeat_sequence)이 있어 제외한다.
+	if not bool(get_meta("raid_boss", false)):
+		KILL_IMPACT.play_kill_impact(elite)
 	died.emit(self)
 	_kill_visual_tween()
+	# 피격 플래시/셰이크 트윈이 살아 있으면 사망 페이드의 modulate와 싸운다.
+	if hit_flash_tween != null:
+		hit_flash_tween.kill()
+	if hit_shake_tween != null:
+		hit_shake_tween.kill()
+	if weapon_flash_tween != null:
+		weapon_flash_tween.kill()
+	# 마지막 타격의 흰 플래시는 처치 순간을 강조하도록 남겨 두되,
+	# 시체 위에 계속 떠 있지 않게 빠르게 꺼 준다.
+	if hit_flash_overlay != null:
+		if hit_flash_overlay_tween != null:
+			hit_flash_overlay_tween.kill()
+		hit_flash_overlay_tween = create_tween()
+		hit_flash_overlay_tween.tween_property(hit_flash_overlay, "modulate:a", 0.0, 0.16)
 	visual_tween = create_tween()
 	visual_tween.set_parallel(true)
 	visual_tween.tween_property(sprite, "modulate", Color(0.35, 0.08, 0.07, 0.0), 0.48)

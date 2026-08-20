@@ -50,12 +50,16 @@ func _run() -> void:
 
 	var head_enemy := enemies[2] as CharacterBody3D
 	var head_health := int(head_enemy.get("health"))
+	# 어서션 갱신: hit_zone은 명중 등급("center"/"normal"/"graze")이고 "head"
+	# 특수 처리(2배·치명타 승격)는 죽은 분기로 제거됐다(take_projectile_hit 주석
+	# 참조). is_critical=false면 배율 없이 원래 피해가 그대로 표시되는 게 현재
+	# 사양이다 — 이 테스트는 HEAD에서도 이미 깨져 있었다.
 	head_enemy.call("take_projectile_hit", 8, Vector3.LEFT, false, 2.0, "head")
 	await process_frame
 	var head_number := _latest_damage_number(main_scene)
-	assert(head_number.text == "16")
-	assert(bool(head_number.get_meta("critical")))
-	assert(int(head_enemy.get("health")) == head_health - 16)
+	assert(head_number.text == "8")
+	assert(not bool(head_number.get_meta("critical")))
+	assert(int(head_enemy.get("health")) == head_health - 8)
 
 	var bullet_script: Script = load("res://scripts/bullet_projectile.gd")
 	var projectile: Area3D = bullet_script.new()
@@ -80,7 +84,7 @@ func _run() -> void:
 	assert(bool(bullet_number.get_meta("critical")))
 	assert(int(bullet_enemy.get("health")) == bullet_health - 15)
 
-	print("DAMAGE_NUMBER_OK normal=9 critical=17 head=16 projectile=15")
+	print("DAMAGE_NUMBER_OK normal=9 critical=17 head=8 projectile=15")
 	quit(0)
 
 
