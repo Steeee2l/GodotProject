@@ -467,6 +467,15 @@ func spawn_initial_elites(world: ProceduralCityMap) -> void:
 func _on_enemy_died(enemy: CharacterBody3D) -> void:
 	host.run_kills += 1
 	GameState.raid_kills += 1
+	# 처치 확정 셰이크 — 타격 셰이크(0.12/0.16)보다 한 단계 굵게, 죽는
+	# 순간이 손에 남게 한다. 엘리트는 더 크게. 보스는 전용 연출이 있으므로
+	# 여기서 더 얹지 않는다. 접근성 배율은 main의 적용부에서 곱해진다.
+	if not bool(enemy.get_meta("raid_boss", false)):
+		var elite_kill := bool(enemy.get_meta("elite", false))
+		host.camera_shake_time = maxf(host.camera_shake_time, 0.3 if elite_kill else 0.17)
+		host.camera_shake_strength = maxf(
+			host.camera_shake_strength, 0.4 if elite_kill else 0.26
+		)
 	# 처치 흡혈 — 공격이 곧 유지력이다. 방어구를 갖출수록 더 크게 돌아,
 	# 장비가 갖춰진 판에서 "쓸어버리는" 궤도가 실제로 성립한다.
 	if host.player_health > 0:
