@@ -1,6 +1,7 @@
 extends Node3D
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
+const SFX := preload("res://scripts/sfx_bank.gd")
 const MOVE_SPEED := 5.2
 const BASE_CAMERA_SIZE := 28.0
 const CAMERA_DIAGONAL_OFFSET := 13.5
@@ -210,7 +211,6 @@ var mouse_fire_held := false
 var has_ak := false
 var magazine_ammo := 30
 var reserve_ammo := 90
-var gunshot_players: Array[AudioStreamPlayer3D] = []
 var roll_audio_player: AudioStreamPlayer3D
 var building_canvas: CanvasLayer
 var building_overlays := {}
@@ -403,6 +403,8 @@ var jackpot_banner_reveal_time := 0.0
 # 시간은 enemy_director가 호출자의 실제 경과로 매 프레임 밀어 넣는다.
 var reinforcement_call_alert_remaining := 0.0
 var reinforcement_call_alert_duration := 0.0
+# 증원 경보음은 배너 시작 1회 + 3초 남았을 때 1회 — 이 플래그가 두 번째를 한 번만 보장.
+var reinforcement_alarm_warned := false
 var raid_hotspots_opened := 0
 var dynamic_incident_site: Node3D
 var dynamic_incident_state := "scheduled"
@@ -553,7 +555,8 @@ func _ready() -> void:
 	if not AccessibilitySettings.settings_changed.is_connected(_apply_runtime_accessibility_settings):
 		AccessibilitySettings.settings_changed.connect(_apply_runtime_accessibility_settings)
 	_apply_runtime_accessibility_settings()
-	weapon_combat._build_gunshot_audio()
+	# 효과음을 미리 합성해 첫 총성에서 합성 루프가 프레임을 잡지 않게 한다.
+	SFX.warm_up()
 	_build_roll_audio()
 	_build_bgm_audio()
 	stealth._install_scent_system()
@@ -1413,6 +1416,7 @@ func _try_melee_attack() -> void:
 	_play_directional_animation()
 	_show_melee_fan(melee_attack_direction)
 	_play_bat_swing(attack_direction)
+	SFX.play("melee_swing")
 	state_label.text = "근접 공격"
 
 
@@ -1523,6 +1527,7 @@ func _resolve_melee_hit(direction: Vector3) -> void:
 		# 배트가 실제로 맞았을 때만 화면이 울린다 — 헛스윙과 명중의 손맛을 가른다.
 		camera_shake_time = maxf(camera_shake_time, 0.12)
 		camera_shake_strength = maxf(camera_shake_strength, 0.22 if backstab else 0.16)
+		SFX.play("melee_hit")
 
 
 func _spawn_player_melee_arc(direction: Vector3) -> void:
@@ -3337,6 +3342,7 @@ func _weapon_jammed() -> bool:
 		return false
 	fire_cooldown = 0.7
 	hud.push_toast("급탄 불량 · 내구도 %.1f%%" % weapon_durability, HudStyle.WARN, 1.4)
+	SFX.play("dry_fire")
 	return true
 
 
@@ -3368,6 +3374,8 @@ func _get_current_facing_world_direction() -> Vector3:
 
 func _show_no_ammo_notice() -> void:
 	fire_cooldown = maxf(fire_cooldown, 0.35)
+	# 빈 약실 공이 클릭(연타는 SfxBank 최소 간격으로 억제).
+	SFX.play("dry_fire")
 	hud.push_toast("탄약 없음 · 예비탄을 확보해야 한다", HudStyle.DANGER, 1.4)
 	_update_equipment_ui()
 
@@ -3665,6 +3673,7 @@ func _spawn_particle_burst(
 func _build_roll_audio() -> void:
 	roll_audio_player = AudioStreamPlayer3D.new()
 	roll_audio_player.name = "RollWhoosh"
+	roll_audio_player.bus = "SFX"
 	roll_audio_player.stream = _create_roll_stream()
 	roll_audio_player.unit_size = 4.0
 	roll_audio_player.max_distance = 24.0
@@ -4072,6 +4081,8 @@ func take_damage(amount: int) -> void:
 	GameState.player_health = player_health
 	player_hit_flash_time = 0.32
 	player_hit_stun_time = maxf(player_hit_stun_time, 0.18)
+	# 플레이어 피격음 — 비네트·플래시와 같은 프레임.
+	SFX.play("hit_player")
 	var health_bar := get_node_or_null("HUD/TopLeft/Margin/VBox/Health") as ProgressBar
 	if health_bar:
 		health_bar.value = player_health
@@ -6484,6 +6495,7 @@ func _mark_field_loot_container_opened(point: Node3D) -> void:
 
 
 func _open_field_loot_container(point: Node3D) -> void:
+	SFX.play("container_open")
 	var container_type := str(point.get_meta("container_type", "street_cache"))
 	var stage_tier := int(point.get_meta(
 		"stage_tier",
@@ -6959,11 +6971,14 @@ func _input(event: InputEvent) -> void:
 			or main_mission.is_cinematic_active()
 		):
 			return
-		if key_event.pressed and key == KEY_F5:
+		# 디버그 전용 키(F5 보스 소환 / F8 충돌 표시 / N 맵 리롤)는 출시 빌드
+		# (웹·모바일 export)에서 절대 작동하면 안 된다 — shelter_debug_shortcut과
+		# 같은 OS.is_debug_build() 가드.
+		if key_event.pressed and key == KEY_F5 and OS.is_debug_build():
 			enemy_director._spawn_test_boss_near_player()
 			get_viewport().set_input_as_handled()
 			return
-		if key_event.pressed and key == KEY_F8:
+		if key_event.pressed and key == KEY_F8 and OS.is_debug_build():
 			var city_world := $World as ProceduralCityMap
 			var debug_enabled := city_world.toggle_collision_debug()
 			state_label.text = "충돌 판정 표시 켜짐" if debug_enabled else "충돌 판정 표시 꺼짐"
@@ -6998,7 +7013,7 @@ func _input(event: InputEvent) -> void:
 			weapon_combat._reload_ak47()
 		elif key == KEY_T and key_event.pressed:
 			can_throw.toggle_aim()
-		elif key == KEY_N and key_event.pressed:
+		elif key == KEY_N and key_event.pressed and OS.is_debug_build():
 			_save_run_state()
 			GameState.randomize_map()
 			get_tree().reload_current_scene()
@@ -7156,9 +7171,6 @@ func _apply_runtime_accessibility_settings() -> void:
 
 func _exit_tree() -> void:
 	Engine.time_scale = 1.0
-	for audio_player in gunshot_players:
-		if is_instance_valid(audio_player):
-			audio_player.stop()
 	if is_instance_valid(roll_audio_player):
 		roll_audio_player.stop()
 	# 장면 전환 시 BGM 정리는 플레이어 노드가 함께 해제되며 자연히 멈춘다.
@@ -7274,6 +7286,8 @@ func _show_reinforcement_call_banner(duration: float) -> void:
 	# 호출 시작. 배너를 띄우고 게이지를 가득 채운 상태에서 출발시킨다.
 	reinforcement_call_alert_duration = maxf(0.1, duration)
 	reinforcement_call_alert_remaining = reinforcement_call_alert_duration
+	reinforcement_alarm_warned = false
+	SFX.play("reinforce_alarm")
 	if hud != null:
 		hud.set_reinforcement_call_progress(
 			reinforcement_call_alert_remaining, reinforcement_call_alert_duration
@@ -7287,6 +7301,9 @@ func _update_reinforcement_call_banner(remaining: float) -> void:
 	reinforcement_call_alert_remaining = clampf(
 		remaining, 0.0001, reinforcement_call_alert_duration
 	)
+	if not reinforcement_alarm_warned and reinforcement_call_alert_remaining <= 3.0:
+		reinforcement_alarm_warned = true
+		SFX.play("reinforce_alarm")
 	if hud != null:
 		hud.set_reinforcement_call_progress(
 			reinforcement_call_alert_remaining, reinforcement_call_alert_duration

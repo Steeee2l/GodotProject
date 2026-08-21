@@ -78,6 +78,7 @@ const ROLL_FRAME_COUNT := 4
 const ROLL_STAMINA_COST := 35.0
 const ROLL_START_SPEED := 42.0
 const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
+const SFX := preload("res://scripts/sfx_bank.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const UI_SAFE_AREA := preload("res://scripts/ui_safe_area.gd")
 const WEAPON_FLOAT_DISTANCE := 0.72
@@ -92,7 +93,6 @@ var host: Node
 var spawn_random: RandomNumberGenerator
 var player: CharacterBody3D
 var camera: Camera3D
-var gunshot_index := 0
 
 
 func attach(owner_node: Node) -> void:
@@ -210,6 +210,7 @@ func _reload_ak47() -> void:
 			host._show_no_ammo_notice()
 		return
 	host.weapon_reloading = true
+	SFX.play("reload_start")
 	host.reload_timer = float(host.weapon_stats.get("reload_time", 2.15))
 	host.fire_cooldown = host.reload_timer
 	host._add_fatigue(FATIGUE_RELOAD_GAIN)
@@ -226,6 +227,7 @@ func _reload_ak47() -> void:
 
 func _finish_reload() -> void:
 	host.weapon_reloading = false
+	SFX.play("reload_end")
 	var magazine_size := int(host.weapon_stats.get("magazine_size", 30))
 	var needed: int = magazine_size - host.magazine_ammo
 	var loaded := mini(needed, host.reserve_ammo)
@@ -349,48 +351,10 @@ func _spawn_launch_fx(direction: Vector3) -> void:
 	)
 
 
-func _build_gunshot_audio() -> void:
-	var stream := _create_gunshot_stream()
-	for index in 4:
-		var audio := AudioStreamPlayer3D.new()
-		audio.name = "Gunshot%d" % index
-		audio.stream = stream
-		audio.unit_size = 9.0
-		audio.max_distance = 72.0
-		audio.volume_db = -1.0
-		player.add_child(audio)
-		host.gunshot_players.append(audio)
-
-
-func _create_gunshot_stream() -> AudioStreamWAV:
-	var mix_rate := 44100
-	var sample_count := int(mix_rate * 0.34)
-	var data := PackedByteArray()
-	data.resize(sample_count * 2)
-	var random := RandomNumberGenerator.new()
-	random.seed = 47047
-	for index in sample_count:
-		var time := float(index) / mix_rate
-		var muzzle_blast := random.randf_range(-1.0, 1.0) * exp(-time * 35.0)
-		var metallic_crack := sin(TAU * 720.0 * time + random.randf_range(-0.18, 0.18)) * exp(-time * 23.0)
-		var low_thump := sin(TAU * 86.0 * time) * exp(-time * 11.0)
-		var tail_noise := random.randf_range(-1.0, 1.0) * exp(-maxf(0.0, time - 0.045) * 9.0) * 0.34
-		var slapback := 0.0
-		if time > 0.055:
-			slapback += random.randf_range(-1.0, 1.0) * exp(-(time - 0.055) * 19.0) * 0.18
-		if time > 0.115:
-			slapback += random.randf_range(-1.0, 1.0) * exp(-(time - 0.115) * 14.0) * 0.11
-		var sample := muzzle_blast * 0.82 + metallic_crack * 0.26 + low_thump * 0.58 + tail_noise + slapback
-		host._write_wav_sample(data, index, tanh(sample * 1.35) * 0.92)
-	return host._make_wav_stream(data, mix_rate)
-
-
 func _play_gunshot() -> void:
-	if host.gunshot_players.is_empty():
-		return
-	var audio: AudioStreamPlayer3D = host.gunshot_players[gunshot_index]
-	gunshot_index = (gunshot_index + 1) % host.gunshot_players.size()
-	audio.play()
+	# 플레이어 총성 — 장착 무기 구경별(권총/소총/산탄) 합성음. 자기 총은 2D로
+	# 또렷하게, 적 총성은 enemy.gd가 같은 뱅크를 3D 위치로 낮춰 쓴다.
+	SFX.play_weapon_shot(host.equipped_weapon_id)
 
 
 func _get_current_fire_direction() -> Vector3:

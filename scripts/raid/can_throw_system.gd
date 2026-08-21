@@ -383,6 +383,7 @@ func _play_clank(position: Vector3) -> void:
 	if clank_player == null or not is_instance_valid(clank_player):
 		clank_player = AudioStreamPlayer3D.new()
 		clank_player.name = "CanClank"
+		clank_player.bus = "SFX"
 		clank_player.stream = _create_clank_stream()
 		clank_player.unit_size = 6.0
 		clank_player.max_distance = 30.0

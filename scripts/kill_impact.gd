@@ -128,7 +128,7 @@ static func _ensure_audio_bank(tree: SceneTree) -> void:
 			audio_players.append(child)
 	while audio_players.size() < AUDIO_PLAYER_COUNT:
 		var player := AudioStreamPlayer.new()
-		player.bus = "Master"
+		player.bus = "SFX"
 		audio_bank.add_child(player)
 		audio_players.append(player)
 

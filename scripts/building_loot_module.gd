@@ -9,6 +9,7 @@ const COMPONENT_TEXTURES := {
 }
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
+const SFX := preload("res://scripts/sfx_bank.gd")
 const FLOOR_DROP_MAX_WIDTH := 0.9
 const FLOOR_DROP_MAX_HEIGHT := 0.72
 
@@ -142,6 +143,8 @@ func interact() -> String:
 			acquired_names.append(granted)
 	BuildingRunState.mark_loot_collected(floor_number, loot_key)
 	GameState.save_persistent_state()
+	# 컨테이너 수색은 열기 소리, 바닥 픽업은 주머니 소리.
+	SFX.play("container_open" if not container_type.is_empty() else "pickup")
 	var description := "비어 있습니다."
 	if not acquired_names.is_empty():
 		description = "획득 · %s" % " / ".join(acquired_names)

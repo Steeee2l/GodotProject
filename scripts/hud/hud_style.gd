@@ -14,6 +14,7 @@ extends RefCounted
 #  - 폰트 크기는 TYPE_* 스케일에서 고른다.
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
+const SFX := preload("res://scripts/sfx_bank.gd")
 
 # ── 색 토큰 ────────────────────────────────────────────────────
 const INK := Color(0.014, 0.021, 0.022, 0.96)          # 표준 패널 바탕
@@ -174,6 +175,9 @@ static func label(text: String, size: int, color: Color) -> Label:
 
 
 static func style_button(button: Button, accent: Color = LINE_FOCUS, primary := false) -> Button:
+	# 공용 스타일을 입는 모든 버튼은 같은 탭 클릭음을 낸다(UI 버스, 중복 연결 방지).
+	if not button.pressed.is_connected(_play_button_tap):
+		button.pressed.connect(_play_button_tap)
 	button.add_theme_font_override("font", FONT)
 	button.add_theme_font_size_override("font_size", TYPE_HEADING if primary else TYPE_BODY)
 	button.add_theme_color_override("font_color", TEXT)
@@ -207,6 +211,10 @@ static func style_button(button: Button, accent: Color = LINE_FOCUS, primary := 
 	disabled.content_margin_bottom = 7.0
 	button.add_theme_stylebox_override("disabled", disabled)
 	return button
+
+
+static func _play_button_tap() -> void:
+	SFX.play("ui_tap")
 
 
 static func close_button(icon: Texture2D) -> Button:

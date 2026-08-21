@@ -4949,9 +4949,10 @@ func _input(event: InputEvent) -> void:
 			_use_shelter_medkit()
 		elif event.keycode == KEY_F:
 			_interact()
-		elif event.keycode == KEY_8:
+		elif event.keycode == KEY_8 and OS.is_debug_build():
+			# 디버그 전용 — 출시 빌드(웹·모바일 export)에서는 작동하지 않는다.
 			_add_debug_resident()
-		elif event.keycode == KEY_9:
+		elif event.keycode == KEY_9 and OS.is_debug_build():
 			_unlock_all_facilities_debug()
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
@@ -5055,6 +5056,7 @@ func _build_roll_audio() -> void:
 		return
 	roll_audio_player = AudioStreamPlayer3D.new()
 	roll_audio_player.name = "ShelterRollWhoosh"
+	roll_audio_player.bus = "SFX"
 	roll_audio_player.stream = _create_roll_stream()
 	roll_audio_player.unit_size = 4.0
 	roll_audio_player.max_distance = 22.0

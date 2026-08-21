@@ -7,6 +7,7 @@ extends RefCounted
 
 const AIM_REVEAL_BUILDING_ALPHA := 0.28
 const AK_DROP_TEXTURE := preload("res://assets/weapons/ak47_drop.png")
+const SFX := preload("res://scripts/sfx_bank.gd")
 const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
 const BASE_ENEMY_COUNT := 24
@@ -401,6 +402,7 @@ func _collect_nearby_ammo() -> void:
 				updated_ammo_count,
 			]
 	host.hud.push_toast(toast_text, toast_accent, toast_seconds)
+	SFX.play("pickup")
 	host._update_equipment_ui()
 	host._update_medkit_button()
 	ammo_pickups.erase(host.nearby_ammo_pickup)

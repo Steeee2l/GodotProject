@@ -37,7 +37,7 @@ func _ready() -> void:
 	# 이전 소리가 잘려 "드르르륵"의 결이 안 산다.
 	for _index in 4:
 		var player := AudioStreamPlayer.new()
-		player.bus = "Master"
+		player.bus = "UI"
 		player.volume_db = -16.0
 		player.stream = _tick_stream
 		add_child(player)

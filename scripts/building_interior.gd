@@ -1,6 +1,7 @@
 extends Node3D
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
+const SFX := preload("res://scripts/sfx_bank.gd")
 const ROOM_MODULE_SCENE := preload("res://scenes/modules/building_room_module.tscn")
 const TRANSITION_MODULE_SCENE := preload("res://scenes/modules/building_transition_module.tscn")
 const LOOT_MODULE_SCENE := preload("res://scenes/modules/building_loot_module.tscn")
@@ -175,6 +176,8 @@ var auto_paused_for_background := false
 
 
 func _ready() -> void:
+	# 효과음을 미리 합성해 첫 총성에서 합성 루프가 프레임을 잡지 않게 한다.
+	SFX.warm_up()
 	if not BuildingRunState.active:
 		BuildingRunState.begin_run(
 			"editor_preview_tower",
@@ -292,7 +295,8 @@ func _input(event: InputEvent) -> void:
 			inventory_ui.call("toggle")
 		return
 	if event is InputEventKey and not event.echo:
-		if event.keycode == KEY_F8 and event.pressed:
+		if event.keycode == KEY_F8 and event.pressed and OS.is_debug_build():
+			# 디버그 전용 — 출시 빌드에서는 작동하지 않는다.
 			_toggle_collision_debug()
 		elif event.keycode == KEY_F and event.pressed:
 			_interact()
@@ -466,6 +470,7 @@ func take_damage(amount: int) -> void:
 	var applied_damage := maxi(1, roundi(float(amount) * GameState.get_damage_taken_multiplier()))
 	GameState.player_health = maxi(0, GameState.player_health - applied_damage)
 	_update_health()
+	SFX.play("hit_player")
 	_show_status("피격 -%d · 체력 %d" % [applied_damage, GameState.player_health])
 	if GameState.player_health <= 0:
 		_begin_player_death_sequence()
@@ -1778,6 +1783,7 @@ func _try_melee_attack(screen_point: Vector2) -> void:
 	_play_animation()
 	_show_melee_fan(attack_direction)
 	_play_bat_swing(attack_direction)
+	SFX.play("melee_swing")
 
 
 func _update_melee_attack(delta: float) -> void:
@@ -1833,6 +1839,7 @@ func _resolve_melee_hit(direction: Vector3) -> void:
 		# 배트가 실제로 맞았을 때만 화면이 울린다 — 헛스윙과 명중의 손맛을 가른다.
 		camera_shake_time = maxf(camera_shake_time, 0.12)
 		camera_shake_strength = maxf(camera_shake_strength, 0.22 if backstab else 0.16)
+		SFX.play("melee_hit")
 
 
 func _setup_melee_weapon() -> void:
@@ -2151,6 +2158,8 @@ func _fire_toward_world(target_position: Vector3) -> void:
 		bullet.position = player.global_position + shot_direction * 0.75 + Vector3(0, 0.35, 0)
 		add_child(bullet)
 	GameState.magazine_ammo = int(GameState.magazine_ammo) - 1
+	# 건물 내부도 필드와 같은 뱅크의 구경별 총성.
+	SFX.play_weapon_shot(str(GameState.equipped_weapon_id))
 	_add_fatigue(FATIGUE_SHOT_GAIN)
 	fire_cooldown = float(weapon_stats.get("fire_interval", 0.12))
 	_update_ammo_label()
@@ -2167,9 +2176,12 @@ func _start_reload() -> void:
 	var magazine_size := int(weapon_stats.get("magazine_size", 30))
 	var reserve := _get_reserve_ammo()
 	if int(GameState.magazine_ammo) >= magazine_size or reserve <= 0:
-		if reserve <= 0: _show_status("예비 탄약이 없습니다.")
+		if reserve <= 0:
+			_show_status("예비 탄약이 없습니다.")
+			SFX.play("dry_fire")
 		return
 	weapon_reloading = true
+	SFX.play("reload_start")
 	_add_fatigue(FATIGUE_RELOAD_GAIN)
 	reload_timer = float(weapon_stats.get("reload_time", 2.15))
 	fire_cooldown = reload_timer
@@ -2179,6 +2191,7 @@ func _start_reload() -> void:
 
 func _finish_reload() -> void:
 	weapon_reloading = false
+	SFX.play("reload_end")
 	var magazine_size := int(weapon_stats.get("magazine_size", 30))
 	var reserve := _get_reserve_ammo()
 	var needed := magazine_size - int(GameState.magazine_ammo)

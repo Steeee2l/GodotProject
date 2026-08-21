@@ -32,7 +32,7 @@ func attach(owner_node: Node) -> void:
 	for index in 2:
 		var player := AudioStreamPlayer.new()
 		player.name = "BgmLayer%d" % index
-		player.bus = "Master"
+		player.bus = "Music"
 		player.volume_db = -60.0
 		host.add_child(player)
 		_players.append(player)

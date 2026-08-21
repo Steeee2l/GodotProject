@@ -9,6 +9,7 @@ const GRENADE_PROJECTILE := preload("res://scripts/enemy_grenade.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
+const SFX := preload("res://scripts/sfx_bank.gd")
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
 const DAMAGE_FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const DAMAGE_NUMBER_SCRIPT := preload("res://scripts/damage_number.gd")
@@ -170,7 +171,6 @@ var health_bar_damage_trail: Sprite3D
 var health_bar_fill: Sprite3D
 var reload_indicator: Sprite3D
 var detection_indicator: Sprite3D
-var shot_audio_player: AudioStreamPlayer3D
 var magazine_size := 1
 var magazine_ammo := 1
 var reload_duration := 1.8
@@ -226,7 +226,6 @@ static var detection_texture_cache: Dictionary = {}
 static var lost_target_texture: Texture2D
 static var reinforcement_call_texture_cache: Dictionary = {}
 static var reinforcement_ring_texture: Texture2D
-static var enemy_gunshot_stream_cache: AudioStreamWAV
 static var hit_flash_overlay_texture: Texture2D
 
 
@@ -549,7 +548,6 @@ func _ready() -> void:
 	add_child(sprite)
 	_setup_hit_flash_overlay()
 	_setup_weapon_visual()
-	_setup_enemy_audio()
 	_setup_enemy_health_bar()
 	_setup_reload_indicator()
 	_setup_detection_indicator()
@@ -1126,6 +1124,8 @@ func _start_reload() -> void:
 	reload_indicator.texture = _get_reload_texture(0)
 	reload_indicator.visible = true
 	_set_motion_state("idle")
+	# 적의 장전 클릭 — 가까이서 들리면 "지금이 기회"라는 텔레그래프가 된다.
+	SFX.play("reload_start", global_position, -4.0)
 
 
 func _update_reload(delta: float) -> void:
@@ -1162,6 +1162,7 @@ func _update_reload(delta: float) -> void:
 		magazine_ammo = magazine_size
 		combat_state = "normal"
 		reload_indicator.visible = false
+		SFX.play("reload_end", global_position, -4.0)
 		attack_cooldown = 0.28
 		_reset_sprite_pose()
 
@@ -1549,6 +1550,9 @@ func _become_alerted() -> void:
 		var scene := _raid_host()
 		if scene != null and scene.has_method("notify_player_detected"):
 			scene.call("notify_player_detected")
+		# 발각 "!" 스팅 — 플레이어를 향한 경계 진입 순간 한 번. 분대 연쇄 경보는
+		# SfxBank의 종류별 최소 간격이 겹침을 억제한다.
+		SFX.play("alert_sting")
 	if is_instance_valid(target):
 		last_known_position = target.global_position
 	pursuit_time = maxf(
@@ -2431,54 +2435,10 @@ func _get_weapon_range_profile() -> Vector3:
 	return Vector3(16.0, 34.0, 0.35)
 
 
-func _setup_enemy_audio() -> void:
-	if weapon_id == "baseball_bat":
-		return
-	shot_audio_player = AudioStreamPlayer3D.new()
-	shot_audio_player.name = "EnemyGunshot"
-	shot_audio_player.stream = _get_enemy_gunshot_stream()
-	shot_audio_player.unit_size = 6.0
-	shot_audio_player.max_distance = 48.0
-	shot_audio_player.volume_db = -6.0
-	add_child(shot_audio_player)
-
-
-func _get_enemy_gunshot_stream() -> AudioStreamWAV:
-	if enemy_gunshot_stream_cache:
-		return enemy_gunshot_stream_cache
-	var mix_rate := 32000
-	var sample_count := int(mix_rate * 0.22)
-	var data := PackedByteArray()
-	data.resize(sample_count * 2)
-	var random := RandomNumberGenerator.new()
-	random.seed = 54019
-	for index in sample_count:
-		var time := float(index) / mix_rate
-		var snap := random.randf_range(-1.0, 1.0) * exp(-time * 42.0)
-		var crack := sin(TAU * 920.0 * time + random.randf_range(-0.2, 0.2)) * exp(-time * 29.0)
-		var body := sin(TAU * 132.0 * time) * exp(-time * 15.0)
-		var tail := 0.0
-		if time > 0.045:
-			tail = random.randf_range(-1.0, 1.0) * exp(-(time - 0.045) * 18.0) * 0.16
-		var sample := tanh((snap * 0.76 + crack * 0.22 + body * 0.3 + tail) * 1.25) * 0.78
-		var encoded := int(clampf(sample, -1.0, 1.0) * 32767.0)
-		data[index * 2] = encoded & 0xff
-		data[index * 2 + 1] = (encoded >> 8) & 0xff
-	var stream := AudioStreamWAV.new()
-	stream.format = AudioStreamWAV.FORMAT_16_BITS
-	stream.mix_rate = mix_rate
-	stream.stereo = false
-	stream.data = data
-	enemy_gunshot_stream_cache = stream
-	return enemy_gunshot_stream_cache
-
-
 func _play_enemy_gunshot() -> void:
-	if not is_instance_valid(shot_audio_player):
-		return
-	shot_audio_player.stop()
-	shot_audio_player.pitch_scale = randf_range(0.94, 1.12)
-	shot_audio_player.play()
+	# 적 총성 — 공용 SfxBank에서 무기 구경별 소리를 3D 위치로 재생한다(멀면 작게).
+	# 플레이어 자신의 총성보다 한 단계 낮춰 누가 쏘는지 귀로 구분되게 한다.
+	SFX.play_weapon_shot(weapon_id, global_position, -4.0)
 
 
 func _spawn_enemy_muzzle_flash(direction: Vector3) -> void:
@@ -2672,6 +2632,7 @@ func take_melee_hit(amount: int, hit_direction: Vector3, backstab: bool) -> void
 	_spawn_stealth_takedown_flash(hit_direction)
 	_spawn_hit_burst(hit_direction, Color("#fff0a3"), 16, 0.34)
 	_play_hit_reaction(hit_direction)
+	SFX.play("hit_enemy", global_position)
 	get_tree().create_timer(0.24).timeout.connect(func() -> void:
 		if is_instance_valid(self) and not dying:
 			backstab_stunned = false
@@ -2805,6 +2766,8 @@ func take_hit(amount: int, hit_direction: Vector3, is_critical: bool = false, hi
 	stagger_velocity = knockback_direction * HIT_KNOCKBACK_SPEED
 	_spawn_hit_burst(knockback_direction, Color("#ffcf91"), 10, 0.3)
 	_play_hit_reaction(knockback_direction)
+	# 명중음 — 피격 플래시와 같은 프레임에, 적 위치 기준 3D 감쇠로.
+	SFX.play("hit_enemy", global_position)
 	if health <= 0:
 		_start_death(knockback_direction)
 		return

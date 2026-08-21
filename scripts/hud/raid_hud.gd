@@ -9,6 +9,7 @@ extends RefCounted
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const HudStyle := preload("res://scripts/hud/hud_style.gd")
+const SFX := preload("res://scripts/sfx_bank.gd")
 const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
@@ -710,6 +711,8 @@ func push_toast(message: String, accent: Color = HudStyle.GOLD, duration: float 
 	toast.set_meta("repeat_count", 1)
 	toast.set_meta("label", label)
 	toast_stack.add_child(toast)
+	# 새 장이 등장할 때만 아주 작게 "톡"(같은 메시지 ×N 합치기는 조용히).
+	SFX.play("toast_pop")
 	# 넘치면 가장 오래된 장부터 빠르게 물러난다.
 	while toast_stack.get_child_count() > TOAST_LIMIT:
 		var oldest := toast_stack.get_child(0) as Control

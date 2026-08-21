@@ -4,7 +4,14 @@ signal settings_changed
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+const SFX := preload("res://scripts/sfx_bank.gd")
 const SAVE_PATH := "user://accessibility.cfg"
+const SAVED_PROPERTIES := [
+	"ui_scale", "combat_text_scale", "camera_shake_scale", "hit_flash_scale",
+	"vignette_scale", "minimum_brightness", "aim_assist_strength",
+	"damage_numbers_enabled", "auto_reload", "vibration_enabled", "battery_saver",
+	"master_volume", "sfx_volume", "ui_volume",
+]
 
 var ui_scale := 1.0
 var combat_text_scale := 1.0
@@ -18,6 +25,10 @@ var damage_numbers_enabled := true
 var auto_reload := true
 var vibration_enabled := true
 var battery_saver := false
+# 오디오 버스 볼륨(0~100). Master/SFX/UI 버스에 linear_to_db로 반영한다.
+var master_volume := 80.0
+var sfx_volume := 80.0
+var ui_volume := 70.0
 
 var backdrop: ColorRect
 var panel: PanelContainer
@@ -29,6 +40,7 @@ func _ready() -> void:
 	layer = 250
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_load_settings()
+	_apply_audio_volumes()
 	_build_ui()
 	get_viewport().size_changed.connect(_apply_layout)
 	_apply_layout()
@@ -144,6 +156,21 @@ func _build_ui() -> void:
 	_add_slider(content, "화면 가장자리 효과", "피격 시 붉은 비네팅 강도", 0.0, 1.0, 0.05, vignette_scale, func(value: float) -> void: vignette_scale = value)
 	_add_slider(content, "최소 밝기", "밤과 실내의 가장 어두운 정도", 0.0, 0.5, 0.05, minimum_brightness, func(value: float) -> void: minimum_brightness = value)
 	_add_slider(content, "조준 보정", "모바일과 패드의 원뿔 조준 보정", 0.0, 1.0, 0.05, aim_assist_strength, func(value: float) -> void: aim_assist_strength = value)
+	content.add_child(_label("소리", 13, Color("#b9a86a")))
+	_add_slider(content, "전체 음량", "모든 소리의 기준 음량", 0.0, 100.0, 5.0, master_volume, func(value: float) -> void:
+		master_volume = value
+		_apply_audio_volumes()
+	)
+	_add_slider(content, "효과음", "총성·피격·장전·경보", 0.0, 100.0, 5.0, sfx_volume, func(value: float) -> void:
+		sfx_volume = value
+		_apply_audio_volumes()
+	)
+	_add_slider(content, "UI 소리", "버튼 탭·알림·타자기", 0.0, 100.0, 5.0, ui_volume, func(value: float) -> void:
+		ui_volume = value
+		_apply_audio_volumes()
+		# 슬라이더를 움직이는 동안 바로 들어볼 수 있게 UI 탭음을 한 번 낸다.
+		SFX.play("ui_tap")
+	)
 	_add_toggle(content, "피해량 숫자 표시", damage_numbers_enabled, func(value: bool) -> void: damage_numbers_enabled = value)
 	_add_toggle(content, "탄약이 있으면 자동 재장전", auto_reload, func(value: bool) -> void: auto_reload = value)
 	_add_toggle(content, "모바일 햅틱", vibration_enabled, func(value: bool) -> void: vibration_enabled = value)
@@ -223,9 +250,17 @@ func _panel_style() -> StyleBoxFlat:
 	return style
 
 
+func _apply_audio_volumes() -> void:
+	# 버스는 default_bus_layout.tres가 만들지만, SfxBank가 없는 환경에서도
+	# 이름을 보강한 뒤 반영한다(Master/SFX/UI). Music·Ambient는 아직 비어 있다.
+	SFX.set_bus_volume_percent("Master", master_volume)
+	SFX.set_bus_volume_percent("SFX", sfx_volume)
+	SFX.set_bus_volume_percent("UI", ui_volume)
+
+
 func _save_settings() -> void:
 	var config := ConfigFile.new()
-	for property_name in ["ui_scale", "combat_text_scale", "camera_shake_scale", "hit_flash_scale", "vignette_scale", "minimum_brightness", "aim_assist_strength", "damage_numbers_enabled", "auto_reload", "vibration_enabled", "battery_saver"]:
+	for property_name in SAVED_PROPERTIES:
 		config.set_value("accessibility", property_name, get(property_name))
 	config.save(SAVE_PATH)
 
@@ -234,6 +269,6 @@ func _load_settings() -> void:
 	var config := ConfigFile.new()
 	if config.load(SAVE_PATH) != OK:
 		return
-	for property_name in ["ui_scale", "combat_text_scale", "camera_shake_scale", "hit_flash_scale", "vignette_scale", "minimum_brightness", "aim_assist_strength", "damage_numbers_enabled", "auto_reload", "vibration_enabled", "battery_saver"]:
+	for property_name in SAVED_PROPERTIES:
 		if config.has_section_key("accessibility", property_name):
 			set(property_name, config.get_value("accessibility", property_name, get(property_name)))
