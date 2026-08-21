@@ -3076,6 +3076,31 @@ func _on_inventory_item_discard_requested(item_type: String, item_id: String, am
 	_update_medkit_button()
 
 
+func _on_inventory_item_use_requested(item_type: String, item_id: String) -> void:
+	# 가방 상세 패널의 '먹기'. 통조림은 플레이어 소모품이다 — 체력 +18·피로 -12,
+	# 3초 쿨다운, 전투 중에도 먹는다(구급약과 달리 작고 잦은 회복).
+	if item_type != "food" or item_id != "canned_food":
+		hud.inventory_ui.call("apply_use_result", false, "사용할 수 없는 아이템입니다.")
+		return
+	var result: Dictionary = GameState.try_eat_canned_food(player_health, fatigue)
+	if not bool(result.get("ok", false)):
+		hud.inventory_ui.call("apply_use_result", false, GameState.describe_canned_food_eat_failure(result))
+		return
+	player_health = int(result.get("health", player_health))
+	fatigue = clampf(float(result.get("fatigue", fatigue)), 0.0, FATIGUE_MAX)
+	GameState.fatigue = fatigue
+	var health_bar := get_node_or_null("HUD/TopLeft/Margin/VBox/Health") as ProgressBar
+	if health_bar:
+		health_bar.value = player_health
+	_refresh_fatigue_hud()
+	_refresh_top_status_label()
+	_update_equipment_ui()
+	hud.inventory_ui.call("apply_use_result", true, "통조림을 먹었다 · 체력 +%d · 피로 -%d" % [
+		int(result.get("healed", 0)),
+		roundi(float(result.get("fatigue_relief", 0.0))),
+	])
+
+
 func _make_panel_style(background: Color, border: Color, radius: int = 4) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = background

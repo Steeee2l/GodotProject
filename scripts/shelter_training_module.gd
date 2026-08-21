@@ -28,7 +28,7 @@ func _ready() -> void:
 
 
 func get_interaction_prompt() -> String:
-	return "훈련장 · 통조림으로 능력치 강화"
+	return "훈련장 · 고철로 능력치 강화"
 
 
 func get_interaction_radius() -> float:
@@ -37,7 +37,7 @@ func get_interaction_radius() -> float:
 
 func interact() -> String:
 	_open_ui()
-	return "통조림을 투자해 플레이어 능력을 영구 강화합니다."
+	return "고철을 투자해 플레이어 능력을 영구 강화합니다."
 
 
 func set_interaction_focus(value: bool) -> void:
@@ -146,15 +146,16 @@ func _rebuild_ui() -> void:
 	# ELLIPSIS 라벨은 최소 폭이 1px이라, 못 박지 않으면 옆칸에 밀려 글자가 사라진다.
 	title.custom_minimum_size.x = 120.0
 	top_row.add_child(title)
+	# 훈련 화폐는 고철이다(통조림은 플레이어 소모품이 되며 쉘터 비용에서 빠졌다).
 	var resource_panel := _fit_chip_text(SHELTER_UI.make_currency_chip(
-		"food",
-		GameState.format_compact_number(GameState.canned_food),
+		"scrap",
+		GameState.format_compact_number(GameState.scrap),
 		compact_layout,
 		not narrow_layout
-	), "food")
+	), "scrap")
 	resource_panel.custom_minimum_size.x = 104 if compact_layout else 148
 	resource_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var resource_value := resource_panel.find_child("ResourceValue_food", true, false) as Label
+	var resource_value := resource_panel.find_child("ResourceValue_scrap", true, false) as Label
 	if resource_value != null:
 		resource_value.name = "TrainingResourceLabel"
 	top_row.add_child(resource_panel)
@@ -163,7 +164,7 @@ func _rebuild_ui() -> void:
 	close.pressed.connect(func() -> void: ui_layer.queue_free())
 	top_row.add_child(close)
 	var subtitle := _label(
-		"레이드에서 확보한 통조림을 훈련에 투자해 영구 능력을 개방합니다.",
+		"쉘터가 모은 고철을 훈련에 투자해 영구 능력을 개방합니다.",
 		14 if compact_layout else 15,
 		Color("#9eafa6")
 	)
@@ -366,8 +367,8 @@ func _add_training_card(parent: GridContainer, node_id: String) -> void:
 		action_label.text = "선행 필요 · %s" % _training_requirement_text(definition)
 		action_label.add_theme_color_override("font_color", Color("#7f8b85"))
 	else:
-		action_icon.texture = UI_ICONS.get_icon("food", 24, Color("#efbd66"))
-		action_label.text = "x%d 필요" % cost
+		action_icon.texture = UI_ICONS.get_icon("scrap", 24, Color("#d4d9d6"))
+		action_label.text = "x%s 필요" % GameState.format_compact_number(cost)
 	_set_mouse_passthrough(card_body)
 
 
@@ -397,25 +398,25 @@ func _upgrade_training(node_id: String) -> void:
 	var title := str(definition.get("title", node_id))
 	var result := GameState.try_upgrade_training(node_id)
 	if bool(result.get("ok", false)):
-		# 성공도 조용하면 통조림만 줄어든 것처럼 보인다. 무엇이 몇 단계가 됐는지 남긴다.
+		# 성공도 조용하면 고철만 줄어든 것처럼 보인다. 무엇이 몇 단계가 됐는지 남긴다.
 		_set_status(
-			"%s %d단계 훈련 완료 · 통조림 -%d" % [
+			"%s %d단계 훈련 완료 · 고철 -%s" % [
 				title,
 				int(result.get("rank", 0)),
-				int(result.get("cost", 0)),
+				GameState.format_compact_number(int(result.get("cost", 0))),
 			],
 			true
 		)
 		call_deferred("_rebuild_ui")
 		return
 	# 실패 사유를 GameState 반환값 그대로 갈라 준다 — "선행 필요"로 뭉뚱그리면
-	# 최대 단계·통조림 부족을 구분할 수 없다.
+	# 최대 단계·고철 부족을 구분할 수 없다.
 	match str(result.get("reason", "")):
-		"canned_food":
-			var short: int = maxi(0, int(result.get("cost", 0)) - GameState.canned_food)
-			_set_status("통조림이 %d개 부족합니다. (필요 %d개)" % [
-				short,
-				int(result.get("cost", 0)),
+		"scrap":
+			var short: int = maxi(0, int(result.get("cost", 0)) - GameState.scrap)
+			_set_status("고철이 %s 부족합니다. (필요 %s)" % [
+				GameState.format_compact_number(short),
+				GameState.format_compact_number(int(result.get("cost", 0))),
 			], false)
 		"prerequisite":
 			_set_status(
@@ -468,7 +469,7 @@ func _close_button() -> Button:
 
 func _fit_chip_text(chip: PanelContainer, resource_id: String) -> PanelContainer:
 	# 자원 칩 이름 라벨은 ELLIPSIS라 최소 폭이 1px이다 — 옆의 수치 라벨이
-	# EXPAND_FILL로 남는 폭을 다 먹으면 이름("통조림")이 통째로 사라진다.
+	# EXPAND_FILL로 남는 폭을 다 먹으면 이름("고철")이 통째로 사라진다.
 	for label_name in ["ResourceName_%s" % resource_id, "ResourceValue_%s" % resource_id]:
 		var label := chip.find_child(label_name, true, false) as Label
 		if label == null:

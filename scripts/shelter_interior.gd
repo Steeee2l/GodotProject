@@ -104,8 +104,6 @@ var health_value_label: Label
 var resident_meter_label: Label
 var production_meter_rows: Dictionary = {}
 var shelter_currency_labels: Dictionary = {}
-var shelter_runtime_label: Label
-var shelter_runtime_bar: ProgressBar
 var shelter_bgm := BGM_DIRECTOR.new()
 var stats_collapse_button: Button
 var stats_summary_label: Label
@@ -1628,7 +1626,7 @@ func _build_interface() -> void:
 	stats_label.add_theme_font_size_override("font_size", 14)
 	stats_label.add_theme_color_override("font_color", Color("#8fa79c"))
 	header_row.add_child(stats_label)
-	# 접기(더보기) 버튼은 제거했다. 패널 자체를 4재화+가동연료의 컴팩트한 형태로
+	# 접기(더보기) 버튼은 제거했다. 패널 자체를 4재화의 컴팩트한 형태로
 	# 줄였으므로, 항상 펼쳐 두는 쪽이 정보도 더 잘 전달되고 탭 낭비도 없다.
 	outer_box.add_child(_build_health_row())
 	# 접혔을 때도 이 한 줄은 남는다. 나갈 이유를 늘 보여주기 위해서.
@@ -1681,7 +1679,7 @@ func _build_interface() -> void:
 		chip.tooltip_text = str(resource_data[1])
 		resource_grid.add_child(chip)
 		shelter_currency_labels[str(resource_data[0])] = chip.get_meta("value_label")
-	stats_box.add_child(_build_runtime_row())
+	# 잔여 가동시간 행은 없다 — 쉘터 연료 개념이 폐지돼 주민만 있으면 라인은 늘 돈다.
 	shelter_upgrade_button = Button.new()
 	shelter_upgrade_button.icon = UI_ICONS.get_icon("upgrade", 28, Color("#d8c47b"))
 	shelter_upgrade_button.expand_icon = true
@@ -1814,6 +1812,7 @@ func _build_interface() -> void:
 	inventory_ui.connect("weapon_unequipped", _on_inventory_weapon_unequipped)
 	inventory_ui.connect("equipment_changed", _on_inventory_equipment_changed)
 	inventory_ui.connect("item_discard_requested", _on_inventory_item_discard_requested)
+	inventory_ui.connect("item_use_requested", _on_inventory_item_use_requested)
 	_refresh_inventory_state()
 	_build_shelter_weapon_card()
 	roll_cooldown_indicator = ROLL_COOLDOWN_INDICATOR_SCRIPT.new() as Control
@@ -2467,12 +2466,10 @@ func _open_merchant_shop() -> void:
 	var currency_box := HBoxContainer.new()
 	currency_box.add_theme_constant_override("separation", 12)
 	header.add_child(currency_box)
+	# 화폐는 고철 하나다 — 판매 대가도 고철로 받는다(통조림은 더 이상 화폐가 아니다).
 	var scrap_chip := _currency_chip("scrap", "고철", Color("#d4d9d6"), 24, 112)
-	var food_chip := _currency_chip("food", "통조림", Color("#e5b55b"), 24, 112)
 	currency_box.add_child(scrap_chip)
-	currency_box.add_child(food_chip)
 	merchant_shop_currency_labels["scrap"] = scrap_chip.get_meta("value_label")
-	merchant_shop_currency_labels["food"] = food_chip.get_meta("value_label")
 	var close := _shelter_close_button()
 	close.pressed.connect(_close_merchant_ui)
 	header.add_child(close)
@@ -2523,7 +2520,6 @@ func _refresh_merchant_shop() -> void:
 		merchant_shop_list.remove_child(child)
 		child.queue_free()
 	(merchant_shop_currency_labels.get("scrap") as Label).text = "고철  %s" % GameState.format_compact_number(GameState.scrap)
-	(merchant_shop_currency_labels.get("food") as Label).text = "통조림  %s" % GameState.format_compact_number(GameState.canned_food)
 	_update_merchant_tab_styles()
 	var visible_good_count := 0
 	# 구매는 "이번 방문의 매대"를, 판매는 "항상 받아 주는 목록"을 본다.
@@ -2536,7 +2532,7 @@ func _refresh_merchant_shop() -> void:
 		var good: Dictionary = listed[index]
 		if merchant_shop_mode == "sell":
 			var owned := _merchant_item_count(good)
-			if owned <= 0 or int(good.get("sell_cans", 0)) <= 0:
+			if owned <= 0 or int(good.get("sell_scrap", 0)) <= 0:
 				continue
 		merchant_shop_list.add_child(_merchant_trade_row(good, index))
 		visible_good_count += 1
@@ -2631,11 +2627,12 @@ func _update_merchant_tab_styles() -> void:
 
 func _merchant_trade_row(good: Dictionary, stock_index: int = -1) -> Button:
 	var buying := merchant_shop_mode == "buy"
-	var price := int(good["buy_price"] if buying else good.get("sell_cans", 0))
+	var price := int(good["buy_price"] if buying else good.get("sell_scrap", 0))
 	var owned := _merchant_item_count(good)
 	var action := "구매" if buying else "판매"
-	var currency_icon := "scrap" if buying else "food"
-	var currency_name := "고철" if buying else "통조림"
+	# 사고팔기 모두 고철. 색만 갈라 방향(지출/수입)을 읽히게 한다.
+	var currency_icon := "scrap"
+	var currency_name := "고철"
 	var currency_color := Color("#d4d9d6") if buying else Color("#e5b55b")
 	# 재고가 0이면 값이 있어도 못 산다 — 매대는 한 방문에 한 묶음씩만 내놓는다.
 	var stock_left := int(good.get("stock", 0))
@@ -2818,7 +2815,7 @@ func _merchant_trade_chip(
 
 
 func _trade_merchant_good(good: Dictionary, buying: bool, stock_index: int = -1) -> void:
-	var price := int(good["buy_price"] if buying else good.get("sell_cans", 0))
+	var price := int(good["buy_price"] if buying else good.get("sell_scrap", 0))
 	var amount := int(good["amount"])
 	if buying:
 		# 재고 차감과 고철 지불은 GameState가 한 번에 처리한다(UI가 장부를 만지지 않는다).
@@ -2837,10 +2834,13 @@ func _trade_merchant_good(good: Dictionary, buying: bool, stock_index: int = -1)
 			merchant_shop_message_label.text = "판매할 물건이 부족합니다."
 			return
 		_remove_merchant_item(good, amount)
-		GameState.canned_food += price
-		# 창고 재고까지 건드리므로 장부를 바로 남긴다(제작대의 재료 소모와 같은 규약).
-		GameState.save_persistent_state()
-		merchant_shop_message_label.text = "%s을(를) 판매하고 통조림 %d개를 받았습니다." % [str(good["title"]), price]
+		# 대가는 고철 — 입금과 저장은 GameState가 한 번에 처리한다(창고 재고까지 건드리므로
+		# 장부를 바로 남긴다. 제작대의 재료 소모와 같은 규약).
+		GameState.settle_merchant_sale(price)
+		merchant_shop_message_label.text = "%s을(를) 판매하고 고철 %s을(를) 받았습니다." % [
+			str(good["title"]),
+			GameState.format_compact_number(price),
+		]
 	_update_stats()
 	call_deferred("_refresh_merchant_shop")
 
@@ -2857,7 +2857,7 @@ func _merchant_bag_count(good: Dictionary) -> int:
 		"ammo":
 			return GameState.get_ammo_count(str(good["id"]))
 		"food":
-			# 통조림은 쉘터 전체 재고가 곧 보유량이다(창고 보관분도 이미 포함).
+			# 통조림은 가방에만 있다(창고·쉘터 선반 없음).
 			return GameState.canned_food
 		"component":
 			return GameState.get_mod_component_count(str(good["id"]))
@@ -3021,94 +3021,16 @@ func _update_stats_summary() -> void:
 	if not is_instance_valid(stats_summary_label) or stats_panel_expanded:
 		return
 	var reason: String = GameState.get_shelter_stall_reason()
-	var fuel := _format_runtime_duration(GameState.get_shelter_runtime_seconds())
-	match reason:
-		"no_workers":
-			fuel = "주민 미배치"
-		"no_food":
-			fuel = "통조림 없음"
-	stats_summary_label.text = "고철 %s  ·  가동 %s" % [
+	# 연료가 없어졌으니 "언제 멈추나"는 묻지 않는다 — 돌고 있나, 왜 안 도나만 남는다.
+	var line_state := "주민 미배치" if reason == "no_workers" else "생산 중"
+	stats_summary_label.text = "고철 %s  ·  %s" % [
 		GameState.format_compact_number(GameState.scrap),
-		fuel,
+		line_state,
 	]
 	stats_summary_label.add_theme_color_override(
 		"font_color",
 		Color("#c4574f") if not reason.is_empty() else Color("#9db3a9")
 	)
-
-
-func _update_runtime_row() -> void:
-	if not is_instance_valid(shelter_runtime_label) or not is_instance_valid(shelter_runtime_bar):
-		return
-	var seconds: float = GameState.get_shelter_runtime_seconds()
-	var reason: String = GameState.get_shelter_stall_reason()
-	# 8시간을 가득 찬 상태로 본다. 그 이상은 어차피 여유롭다.
-	var ratio := clampf(seconds / (8.0 * 3600.0), 0.0, 1.0)
-	shelter_runtime_bar.value = ratio
-	var fill := shelter_runtime_bar.get_theme_stylebox("fill") as StyleBoxFlat
-	var accent := Color("#6fc4a4")
-	if seconds <= 0.0:
-		accent = Color("#c4574f")
-	elif seconds < 1800.0:
-		accent = Color("#d08a4a")
-	if fill != null:
-		fill.bg_color = accent
-	var text := _format_runtime_duration(seconds)
-	match reason:
-		"no_workers":
-			text = "주민 미배치"
-		"no_food":
-			text = "통조림 없음 · 정지"
-	shelter_runtime_label.text = text
-	shelter_runtime_label.add_theme_color_override("font_color", accent)
-
-
-func _build_runtime_row() -> Control:
-	# 쉘터가 앞으로 얼마나 더 돌 수 있는지. 0에 가까울수록 다음 출정 압박이 커진다.
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 4)
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 8)
-	box.add_child(header)
-	var title_label := Label.new()
-	title_label.text = "가동 연료"
-	title_label.add_theme_font_override("font", FONT)
-	title_label.add_theme_font_size_override("font_size", 13)
-	title_label.add_theme_color_override("font_color", Color("#9db3a9"))
-	header.add_child(title_label)
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(spacer)
-	shelter_runtime_label = Label.new()
-	shelter_runtime_label.add_theme_font_override("font", FONT)
-	shelter_runtime_label.add_theme_font_size_override("font_size", 13)
-	shelter_runtime_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	header.add_child(shelter_runtime_label)
-	shelter_runtime_bar = ProgressBar.new()
-	shelter_runtime_bar.custom_minimum_size.y = 6
-	shelter_runtime_bar.show_percentage = false
-	shelter_runtime_bar.min_value = 0.0
-	shelter_runtime_bar.max_value = 1.0
-	var track := StyleBoxFlat.new()
-	track.bg_color = Color(0.09, 0.12, 0.11, 0.9)
-	track.set_corner_radius_all(3)
-	shelter_runtime_bar.add_theme_stylebox_override("background", track)
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = Color("#6fc4a4")
-	fill.set_corner_radius_all(3)
-	shelter_runtime_bar.add_theme_stylebox_override("fill", fill)
-	box.add_child(shelter_runtime_bar)
-	return box
-
-
-func _format_runtime_duration(seconds: float) -> String:
-	if seconds <= 0.0:
-		return "정지"
-	if seconds >= 3600.0:
-		return "%.1f시간" % (seconds / 3600.0)
-	if seconds >= 60.0:
-		return "%d분" % int(seconds / 60.0)
-	return "%d초" % int(seconds)
 
 
 func _currency_chip(icon_name: String, title: String, color: Color, icon_size: int, minimum_width: float) -> HBoxContainer:
@@ -3209,7 +3131,7 @@ func _apply_shelter_safe_layout() -> void:
 	var stats_panel := get_node_or_null("ShelterHUD/ShelterStatsPanel") as Control
 	if stats_panel:
 		stats_panel.position = Vector2(24.0 + safe.x, 22.0 + safe.y)
-		# 접기 버튼을 없앴으므로 항상 펼친다. 내용 자체를 4재화+연료로 줄여
+		# 접기 버튼을 없앴으므로 항상 펼친다. 내용 자체를 4재화로 줄여
 		# 모바일에서도 패널이 화면을 잠식하지 않는다.
 		if not stats_panel_default_applied:
 			stats_panel_default_applied = true
@@ -3675,7 +3597,6 @@ func _update_stats() -> void:
 		(shelter_currency_labels["catnip"] as Label).text = GameState.format_compact_number(GameState.catnip)
 		(shelter_currency_labels["food"] as Label).text = GameState.format_compact_number(GameState.canned_food)
 		(shelter_currency_labels["churu"] as Label).text = GameState.format_compact_number(GameState.churu)
-	_update_runtime_row()
 	_update_stats_summary()
 	if shelter_upgrade_button:
 		var cost := GameState.get_shelter_upgrade_cost()
@@ -3839,6 +3760,24 @@ func _on_inventory_weapon_unequipped() -> void:
 func _on_inventory_equipment_changed() -> void:
 	GameState.save_persistent_state()
 	_refresh_inventory_state()
+
+
+func _on_inventory_item_use_requested(item_type: String, item_id: String) -> void:
+	# 쉘터에서도 가방의 통조림을 먹을 수 있다(필드·건물과 같은 규약). 복귀가 곧
+	# 완전 회복이라 보통은 할 일이 없지만, 피로가 남은 채 바로 나가려는 때 쓴다.
+	if item_type != "food" or item_id != "canned_food":
+		inventory_ui.call("apply_use_result", false, "사용할 수 없는 아이템입니다.")
+		return
+	var result: Dictionary = GameState.try_eat_canned_food(int(GameState.player_health), float(GameState.fatigue))
+	if not bool(result.get("ok", false)):
+		inventory_ui.call("apply_use_result", false, GameState.describe_canned_food_eat_failure(result))
+		return
+	_update_stats()
+	_refresh_inventory_state()
+	inventory_ui.call("apply_use_result", true, "통조림을 먹었다 · 체력 +%d · 피로 -%d" % [
+		int(result.get("healed", 0)),
+		roundi(float(result.get("fatigue_relief", 0.0))),
+	])
 
 
 func _on_inventory_item_discard_requested(item_type: String, item_id: String, amount: int) -> void:
@@ -4708,7 +4647,8 @@ func _build_return_settlement_card_lines(settlement: Dictionary) -> Array[String
 		return lines
 	var food := int(settlement.get("food", 0))
 	if food > 0:
-		lines.append("통조림 %d개  →  쉘터 연료" % food)
+		# 통조림은 어디로도 안 간다 — 먹거나 던지는 소모품이라 가방에 그대로 남는다.
+		lines.append("통조림 %d개  ·  가방에 보관" % food)
 	var stored := int(settlement.get("stored", 0))
 	if stored > 0:
 		lines.append("재료·장비 %d점  →  창고" % stored)
@@ -4803,7 +4743,7 @@ func _build_return_settlement_text(settlement: Dictionary) -> String:
 	var parts: PackedStringArray = []
 	var food := int(settlement.get("food", 0))
 	if food > 0:
-		parts.append("통조림 %d개 쉘터 귀속" % food)
+		parts.append("통조림 %d개 가방 보관" % food)
 	var stored := int(settlement.get("stored", 0))
 	if stored > 0:
 		parts.append("전리품 %d점 창고 입고" % stored)
@@ -4838,8 +4778,7 @@ func _build_corpse_decay_text(notice: Dictionary) -> String:
 
 func _build_offline_status_text(progress: Dictionary) -> String:
 	# 돌아왔더니 뭔가 쌓여 있다는 감각이 재방문을 만든다. 예전에는 한 줄 토스트로
-	# 지나갔다. 쌓인 것과 함께 "앞으로 얼마나 더 돌아가는지"를 붙여서, 복귀가
-	# 정산이 아니라 다음 출정의 이유가 되게 한다.
+	# 지나갔다. (연료 잔량 예고는 쉘터 연료 폐지와 함께 빠졌다.)
 	var scrap_gain := int(progress.get("scrap", 0))
 	var catnip_gain := int(progress.get("catnip", 0))
 	var repair_gain := float(progress.get("repair", 0.0))
@@ -4855,15 +4794,9 @@ func _build_offline_status_text(progress: Dictionary) -> String:
 		if repair_gain > 0.01:
 			parts.append("내구도 +%.1f%%" % repair_gain)
 		lines.append("자리를 비운 사이 ·  %s" % "  ".join(parts))
-	if has_line:
-		var runtime := GameState.get_shelter_runtime_seconds()
-		if runtime > 0.0:
-			lines.append("남은 통조림으로 %s 더 돌아갑니다." % GameState.format_duration_korean(runtime))
-		elif GameState.get_active_scratcher_workers() + GameState.get_active_catnip_workers() > 0:
-			# 이게 이 게임의 연결 고리다. 라인이 멈췄다는 건 곧 나가야 한다는 뜻이다.
-			lines.append("통조림이 떨어져 생산이 멈췄습니다. 도시에서 더 가져와야 합니다.")
-		elif lines.is_empty():
-			lines.append("쉘터에 복귀했습니다. 생산기에 주민을 배치할 수 있습니다.")
+	if has_line and lines.is_empty():
+		# 연료 잔량 예고는 없다 — 주민만 있으면 라인은 계속 돈다.
+		lines.append("쉘터에 복귀했습니다. 생산기에 주민을 배치할 수 있습니다.")
 	return "\n".join(lines)
 
 

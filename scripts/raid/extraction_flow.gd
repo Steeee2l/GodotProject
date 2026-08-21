@@ -320,22 +320,14 @@ func _show_extraction_result(rescued_count: int) -> void:
 		if int(commission_payout.get("churu", 0)) > 0:
 			commission_text += " · 츄르 +%d" % int(commission_payout.get("churu", 0))
 		host.hud.add_result_reward_chip("churu", commission_text, HudStyle.GOLD)
-	# 가방을 "시간"으로 환산한다. 통조림 12개는 아무 느낌도 없지만
-	# "쉘터 가동 3시간 12분"은 다음 출정의 이유가 된다.
-	var runtime_seconds := GameState.get_canned_food_runtime_seconds()
-	if runtime_seconds > 0.0:
-		host.hud.add_result_reward_chip(
-			"time",
-			"가져온 통조림으로 쉘터가 %s 더 돌아갑니다" % GameState.format_duration_korean(
-				runtime_seconds
-			),
-			HudStyle.GREEN
-		)
 	# 이번 판에 실제로 들고 나온 것 — 숫자보다 이게 먼저 읽혀야 한다.
-	# 종류별로 묶어 칩 하나씩, 쉘터 귀속 규칙(통조림→재화, 재료→창고)과 같은 순서.
+	# 종류별로 묶어 칩 하나씩, 쉘터 귀속 규칙(재료→창고, 귀중품→고철)과 같은 순서.
+	# 통조림은 쉘터 연료가 아니라 플레이어 소모품이다 — 가방에 남아 다음 판에 먹거나 던진다.
 	var haul_food := GameState.get_backpack_storage_count("food", "canned_food")
 	if haul_food > 0:
-		host.hud.add_result_reward_chip("food", "통조림 %d개" % haul_food, HudStyle.GREEN)
+		host.hud.add_result_reward_chip(
+			"food", "통조림 %d개 · 가방에 보관 (먹기·투척)" % haul_food, HudStyle.GREEN
+		)
 	var haul_components := 0
 	var haul_gear := 0
 	var haul_ammo := 0
@@ -382,7 +374,7 @@ func _show_extraction_result(rescued_count: int) -> void:
 	# 귀속 규칙을 여기서 미리 말해 준다 — 쉘터에 도착해서야 알면 늦다.
 	# 귀속 규칙 예고에 귀중품 환전을 빠뜨리면, 쉘터에서 귀중품이 사라진 걸
 	# 보고 "털렸다"고 읽는다.
-	lines.append("통조림은 쉘터 연료로, 재료와 여분 장비는 창고로, 귀중품은 고철로 바뀝니다.")
+	lines.append("통조림·구급약·탄약은 가방에 남고, 재료와 여분 장비는 창고로, 귀중품은 고철로 바뀝니다.")
 	# "탭하면 쉘터로 복귀"는 요약 라벨에서 뺐다 — 레벨업 선택 UI보다 위에 있어
 	# 순서가 거꾸로였다. 안내와 버튼은 선택 UI 아래(hud.extraction_return_row)로.
 	host.hud.extraction_result_summary.text = "\n".join(lines)

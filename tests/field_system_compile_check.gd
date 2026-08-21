@@ -62,8 +62,14 @@ func _initialize() -> void:
 		push_error("FIELD_SYSTEM_COMPILE: field loot must never grant shelter scrap")
 		quit(1)
 		return
+	# 상인 매입 대가는 고철이다(통조림이 플레이어 소모품이 되며 화폐에서 빠짐). 다만 UI가
+	# 장부를 직접 쓰는 건 여전히 금지 — 입금은 GameState.settle_merchant_sale 한 곳에서만.
 	if shelter_source.contains("GameState.scrap +="):
-		push_error("FIELD_SYSTEM_COMPILE: shelter scrap must come from production, not merchant sales")
+		push_error("FIELD_SYSTEM_COMPILE: shelter UI must not write scrap directly (use GameState.settle_merchant_sale)")
+		quit(1)
+		return
+	if not shelter_source.contains("GameState.settle_merchant_sale(price)"):
+		push_error("FIELD_SYSTEM_COMPILE: merchant sales must pay scrap through GameState.settle_merchant_sale")
 		quit(1)
 		return
 	if not main_source.contains("fatigue_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)"):

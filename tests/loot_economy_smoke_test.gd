@@ -14,8 +14,10 @@ func _run() -> void:
 	assert(_container_count(stage_four_profile) == 59)
 	assert(int(stage_one_profile.get("weapon_rarity_cap", 0)) == 1)
 	assert(int(stage_four_profile.get("weapon_rarity_cap", 0)) == 4)
-	assert(LOOT_ECONOMY.get_guaranteed_canned_food_pickup_count(1) == 21)
-	assert(LOOT_ECONOMY.get_guaranteed_canned_food_pickup_count(4) == 27)
+	# 쉘터 연료 싱크가 사라져(통조림 = 플레이어 소모품) 확정 통조림 픽업을 약 60%로
+	# 줄였다: 21/27 → 12/16.
+	assert(LOOT_ECONOMY.get_guaranteed_canned_food_pickup_count(1) == 12)
+	assert(LOOT_ECONOMY.get_guaranteed_canned_food_pickup_count(4) == 16)
 
 	var stage_one_supply := LOOT_ECONOMY.simulate_stage_supply(1, 600, 1103)
 	var stage_four_supply := LOOT_ECONOMY.simulate_stage_supply(4, 600, 2207)
@@ -24,7 +26,9 @@ func _run() -> void:
 	assert(float(stage_one_supply.get("average_weapons", 99.0)) < 0.45)
 	assert(float(stage_one_supply.get("average_ammo", 0.0)) >= 40.0)
 	assert(float(stage_one_supply.get("average_ammo", 999.0)) <= 65.0)
-	assert(float(stage_one_supply.get("average_canned_food", 0.0)) >= 28.0)
+	# 확정 픽업 축소(21→12) 뒤 실측 평균 28.1(컨테이너 드랍 포함) — 기대값을 24로 내려
+	# 난수 여유를 둔다. 연료 싱크가 없으니 "많이"가 아니라 "먹고 던질 만큼"이 목표다.
+	assert(float(stage_one_supply.get("average_canned_food", 0.0)) >= 24.0)
 	assert(float(stage_one_supply.get("average_components", 0.0)) >= 10.0)
 	assert(float(stage_one_supply.get("average_common_supply", 0.0)) >= 20.0)
 	assert(float(stage_one_supply.get("common_supply_success_rate", 0.0)) >= 0.95)

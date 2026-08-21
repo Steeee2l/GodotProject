@@ -310,7 +310,7 @@ func _update_work_indicator() -> void:
 					Color("#aeea78") if assignment_kind == "catnip" else Color("#f1cf68")
 				)
 			else:
-				work_indicator.text = "생산 중단 · 통조림 필요"
+				work_indicator.text = "생산 대기"
 				work_indicator.modulate = Color("#e7836f")
 		work_indicator.modulate.a = 0.72 + sin(work_phase * 4.2) * 0.18
 

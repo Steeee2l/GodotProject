@@ -114,12 +114,14 @@ func _run() -> void:
 		_fail("raid zone close control is not a compact icon button")
 	shelter.call("_close_raid_zone_select")
 	await process_frame
+	# 침대는 폐지됐다(복귀 자체가 완전 회복) — shelter_economy 테스트와 같은 기대값.
+	# 예전 "정확히 1개" 어서션은 스테일이라 HEAD에서 이 테스트가 깨져 있었다.
 	var player_bed_count := 0
 	for child in module_root.get_children():
 		if child.name == "PlayerBed":
 			player_bed_count += 1
-	if player_bed_count != 1:
-		_fail("the shelter must keep exactly one player bed while residents roam freely")
+	if player_bed_count != 0:
+		_fail("the obsolete player bed is still present in the shelter")
 
 	var test_save_path := "res://.godot/shelter_progression_smoke.json"
 	game_state.set("persistence_enabled", true)

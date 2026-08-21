@@ -30,7 +30,7 @@ func _ready() -> void:
 
 
 func get_interaction_prompt() -> String:
-	return "스크래핑 생산기 · 통조림→캣닢 (주민 배치)"
+	return "스크래핑 생산기 · 주민 배치로 캣닢 생산"
 
 
 func get_interaction_radius() -> float:
@@ -375,12 +375,11 @@ func _portrait_card(resident_id: String, is_seat: bool, slots: int) -> Button:
 		button.disabled = not seats_free
 	if not button.disabled:
 		button.pressed.connect(func(): _toggle_worker(resident_id))
-	button.tooltip_text = "%s · %s\n꾹꾹이 x%.2f · 캣닢 x%.2f · 식비 x%.2f\n%s" % [
+	button.tooltip_text = "%s · %s\n꾹꾹이 x%.2f · 캣닢 x%.2f\n%s" % [
 		display_name,
 		str(trait_data.get("name", "")),
 		float(trait_data.get("kneading", 1.0)),
 		float(trait_data.get("catnip", 1.0)),
-		float(trait_data.get("appetite", 1.0)),
 		"좌클릭: 좌석에서 일으키기" if is_seat else "좌클릭: 좌석에 앉히기",
 	]
 	return button

@@ -14,13 +14,15 @@ const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/maga
 # 제작대는 "만드는 곳"이지 "재료를 찍어내는 곳"이 아니다. 원자재 3종(렌즈·패킹·
 # 스프링)과 탄약은 필드에서만 나온다 — 고철만 있으면 무엇이든 나오던 시절엔
 # 출정이 심부름이 되고, 도시를 뒤질 이유가 사라졌다(유저 요구).
+# 통조림은 재료가 아니다 — 플레이어 소모품(먹기·투척)으로 바뀌며 레시피에서 빠졌고,
+# 그 몫은 고철(통조림 1 ≈ 70, 100 단위 반올림)로 접어 넣었다.
 const RECIPES := {
 	"armor": [
 		{
 			"id": "craft_scav_vest",
 			"name": "누더기 방탄 조끼",
 			"desc": "철판을 덧대 꿰맨 생존자 계열 경량 조끼. 첫 방어구로 충분합니다.",
-			"cost": {"scrap": 4000, "rubber_gasket": 1, "canned_food": 4},
+			"cost": {"scrap": 4300, "rubber_gasket": 1},
 			"result": {"equipment": "scav_vest", "amount": 1},
 			"required_tier": 1,
 		},
@@ -28,7 +30,7 @@ const RECIPES := {
 			"id": "craft_patched_sneakers",
 			"name": "기워 붙인 운동화",
 			"desc": "밑창을 갈아 끼운 생존자 계열 신발. 발소리와 냄새를 줄입니다.",
-			"cost": {"scrap": 3000, "rubber_gasket": 1, "canned_food": 3},
+			"cost": {"scrap": 3200, "rubber_gasket": 1},
 			"result": {"equipment": "patched_sneakers", "amount": 1},
 			"required_tier": 1,
 		},
@@ -36,7 +38,7 @@ const RECIPES := {
 			"id": "craft_riot_vest",
 			"name": "진압대 방탄 조끼",
 			"desc": "진압 계열 중량 조끼. 튼튼한 대신 실루엣이 커집니다.",
-			"cost": {"scrap": 14000, "catnip": 800, "rubber_gasket": 2, "canned_food": 8},
+			"cost": {"scrap": 14600, "catnip": 800, "rubber_gasket": 2},
 			"result": {"equipment": "riot_vest", "amount": 1},
 			"required_tier": 2,
 			"required_workbench": 2,
@@ -45,7 +47,7 @@ const RECIPES := {
 			"id": "craft_tactical_helmet",
 			"name": "전술 방탄 헬멧",
 			"desc": "진압 계열 헬멧. 내피를 새로 짜 넣어야 해 작업대 숙련이 필요합니다.",
-			"cost": {"scrap": 22000, "magazine_spring": 1, "rubber_gasket": 1, "canned_food": 10},
+			"cost": {"scrap": 22700, "magazine_spring": 1, "rubber_gasket": 1},
 			"result": {"equipment": "tactical_helmet", "amount": 1},
 			"required_tier": 2,
 			"required_workbench": 3,
@@ -55,8 +57,8 @@ const RECIPES := {
 			"name": "군납 방탄복",
 			"desc": "봉쇄선 규격을 흉내 낸 최상급 방탄복. 쉘터가 다 커야 손을 댈 수 있습니다.",
 			"cost": {
-				"scrap": 70000, "catnip": 5000, "scope_lens": 1,
-				"rubber_gasket": 3, "canned_food": 22,
+				"scrap": 71500, "catnip": 5000, "scope_lens": 1,
+				"rubber_gasket": 3,
 			},
 			"result": {"equipment": "military_vest", "amount": 1},
 			"required_tier": 4,
@@ -113,7 +115,7 @@ const RECIPES := {
 			"id": "m1911",
 			"name": "M1911 솜방망이",
 			"desc": "초반 거지런과 최후의 보루용 권총.",
-			"cost": {"scrap": 8000, "canned_food": 5, "rubber_gasket": 1},
+			"cost": {"scrap": 8400, "rubber_gasket": 1},
 			"result": {"weapon": "m1911", "amount": 1},
 			"required_tier": 1,
 		},
@@ -121,7 +123,7 @@ const RECIPES := {
 			"id": "mp5",
 			"name": "MP5 하악이",
 			"desc": "기동전과 좀비 소탕에 강한 기관단총.",
-			"cost": {"scrap": 20000, "catnip": 1500, "canned_food": 10, "magazine_spring": 2, "rubber_gasket": 1},
+			"cost": {"scrap": 20700, "catnip": 1500, "magazine_spring": 2, "rubber_gasket": 1},
 			"result": {"weapon": "mp5", "amount": 1},
 			"required_tier": 1,
 		},
@@ -129,7 +131,7 @@ const RECIPES := {
 			"id": "ak47",
 			"name": "AK-47 캣라시니코프",
 			"desc": "강한 반동과 총성을 감수하고 화력을 얻는 소총.",
-			"cost": {"scrap": 55000, "catnip": 4200, "canned_food": 18, "scope_lens": 1, "magazine_spring": 2},
+			"cost": {"scrap": 56300, "catnip": 4200, "scope_lens": 1, "magazine_spring": 2},
 			"result": {"weapon": "ak47", "amount": 1},
 			"required_tier": 3,
 			"required_blueprint": "rifle_blueprint",
@@ -138,7 +140,7 @@ const RECIPES := {
 			"id": "double_barrel",
 			"name": "더블배럴 참치 헌터",
 			"desc": "장전 중 무방비가 되지만 초근접 저지력이 강한 산탄총.",
-			"cost": {"scrap": 45000, "catnip": 3400, "canned_food": 15, "rubber_gasket": 3, "magazine_spring": 2},
+			"cost": {"scrap": 46000, "catnip": 3400, "rubber_gasket": 3, "magazine_spring": 2},
 			"result": {"weapon": "double_barrel", "amount": 1},
 			"required_tier": 3,
 			"required_blueprint": "shotgun_blueprint",
@@ -171,7 +173,7 @@ const RECIPES := {
 		{
 			"id": "artisan_roll",
 			"name": "장인 고양이의 야간 제작",
-			"desc": "통조림과 고철을 맡겨 현재 쉘터 Tier에서 제작 가능한 무기 하나를 받습니다. 10회 안에는 최고 등급이 확정됩니다.",
+			"desc": "고철을 맡겨 현재 쉘터 Tier에서 제작 가능한 무기 하나를 받습니다. 10회 안에는 최고 등급이 확정됩니다.",
 			"cost": {},
 			"result": {"artisan": true},
 		},
@@ -419,7 +421,8 @@ func _build_resource_strip() -> Control:
 	strip.add_theme_constant_override("h_separation", 7)
 	strip.add_theme_constant_override("v_separation", 6)
 	var compact := get_viewport().get_visible_rect().size.x < 1040.0
-	for key in ["scrap", "catnip", "canned_food", "scope_lens", "rubber_gasket", "magazine_spring"]:
+	# 통조림은 제작 재료가 아니므로 자원 띠에서 뺐다(플레이어 소모품).
+	for key in ["scrap", "catnip", "scope_lens", "rubber_gasket", "magazine_spring"]:
 		var resource_key := str(key)
 		# 좁은 화면에서 이름까지 넣으면 정작 수치가 잘려 "아이콘 x"만 남는다.
 		# 컴팩트에선 아이콘이 이름을 대신하고 수치만 남긴다.
@@ -952,9 +955,6 @@ func _bag_resource(key: String) -> int:
 			return GameState.scrap
 		"rubber_gasket", "scope_lens", "magazine_spring":
 			return GameState.get_mod_component_count(key)
-		"canned_food":
-			# 통조림은 쉘터 전체 재고가 곧 보유량이다(창고 보관분도 이미 포함).
-			return GameState.canned_food
 		"catnip":
 			return GameState.catnip
 	return 0
@@ -982,8 +982,6 @@ func _consume_resource(key: String, amount: int) -> void:
 				remaining -= from_bag
 			if remaining > 0:
 				GameState.remove_stored_storage_item("component", key, remaining)
-		"canned_food":
-			GameState.canned_food = maxi(0, GameState.canned_food - remaining)
 		"catnip":
 			GameState.catnip = maxi(0, GameState.catnip - remaining)
 

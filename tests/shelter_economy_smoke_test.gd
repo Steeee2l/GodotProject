@@ -175,13 +175,28 @@ func _run() -> void:
 	game_state.call("tick_shelter_live", 60.0)
 	if int(game_state.get("scrap")) <= live_scrap_before:
 		_fail("live shelter worker tick did not add scrap")
-	# 통조림이 떨어지면 생산 라인이 멈춘다("생산 중단 · 통조림 필요").
+	# 쉘터 연료 개념 폐지: 통조림이 0이어도 주민이 배치돼 있으면 라인은 계속 돈다
+	# (통조림은 플레이어 소모품일 뿐, 주민 식비가 아니다). 예전 "통조림 없으면 정지"
+	# 어서션을 뒤집었다.
 	game_state.set("canned_food", 0)
-	game_state.set("shelter_food_fraction", 0.0)
 	var unfed_scrap_before := int(game_state.get("scrap"))
 	game_state.call("tick_shelter_live", 3600.0)
-	if int(game_state.get("scrap")) > unfed_scrap_before + 1:
-		_fail("shelter workers must stop producing without canned food")
+	if int(game_state.get("scrap")) <= unfed_scrap_before:
+		_fail("shelter workers must keep producing with zero canned food (fuel gate removed)")
+	if str(game_state.call("get_shelter_stall_reason")) != "":
+		_fail("shelter must not report a stall reason while workers are assigned")
+	# 오프라인 정산은 '자리 비운 시간' 상한(SHELTER_OFFLINE_MAX_SECONDS)까지만 쳐준다 —
+	# 연료가 사라진 자리에 시간 상한이 들어왔다. 20시간 비워도 8시간치만 들어온다.
+	var offline_scrap_before := int(game_state.get("scrap"))
+	game_state.set("shelter_scrap_fraction", 0.0)
+	game_state.set("shelter_last_progress_time", int(Time.get_unix_time_from_system()) - 20 * 3600)
+	var offline_result := game_state.call("process_shelter_progress") as Dictionary
+	var offline_gain := int(game_state.get("scrap")) - offline_scrap_before
+	var capped_expected := int(floor(float(game_state.call("get_base_scrap_per_hour")) * 8.0))
+	if int(offline_result.get("elapsed", 0)) != int(game_state.SHELTER_OFFLINE_MAX_SECONDS):
+		_fail("offline settlement must clamp elapsed time to SHELTER_OFFLINE_MAX_SECONDS")
+	if offline_gain <= 0 or offline_gain > capped_expected + 1:
+		_fail("offline scrap must be capped at 8 hours of production (got %d, cap %d)" % [offline_gain, capped_expected])
 	game_state.set("canned_food", 20)
 
 	var workbench := get_nodes_in_group("shelter_workbench")[0] as Node
@@ -205,8 +220,11 @@ func _run() -> void:
 	var workbench_resource_strip := workbench_layer.find_child("WorkbenchResourceStrip", true, false) as HFlowContainer
 	if workbench_resource_strip == null:
 		_fail("workbench icon resource strip is missing")
-	for resource_id in ["scrap", "canned_food", "scope_lens", "rubber_gasket", "magazine_spring"]:
+	# 통조림은 제작 재료에서 빠졌다(플레이어 소모품) — 자원 띠에 없어야 한다.
+	for resource_id in ["scrap", "scope_lens", "rubber_gasket", "magazine_spring"]:
 		_assert_resource_icon(workbench_resource_strip, str(resource_id), "workbench")
+	if workbench_resource_strip.find_child("ResourceIcon_canned_food", true, false) != null:
+		_fail("workbench resource strip must not list canned food any more")
 	var workbench_viewport_size := workbench.get_viewport().get_visible_rect().size
 	if (
 		workbench_panel.size.x > workbench_viewport_size.x
@@ -296,7 +314,8 @@ func _run() -> void:
 	var training_scroll := root.find_child("TrainingTreeScroll", true, false) as ScrollContainer
 	if training_panel == null or training_resource == null or training_scroll == null:
 		_fail("training facility responsive panel structure is missing")
-	_assert_resource_icon(training_panel, "food", "training facility")
+	# 훈련 화폐는 고철이다(통조림 → 고철 전환).
+	_assert_resource_icon(training_panel, "scrap", "training facility")
 	_assert_compact_close_button(training_panel, "training facility")
 	if training_resource.autowrap_mode != TextServer.AUTOWRAP_OFF:
 		_fail("training facility resource count can collapse into vertical text")

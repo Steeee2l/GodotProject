@@ -23,7 +23,7 @@ const STAGE_PROFILES := {
 		"enemy_drop_cap": 70,
 		"raid_kill_cap": 40,
 		"weapon_case_chance": 0.16,
-		"guaranteed_canned_food_pickups": 21,
+		"guaranteed_canned_food_pickups": 12,
 		"canned_food_double_stack_chance": 0.22,
 		"container_counts": {
 			"street_cache": 14,
@@ -48,7 +48,7 @@ const STAGE_PROFILES := {
 		"enemy_drop_cap": 95,
 		"raid_kill_cap": 55,
 		"weapon_case_chance": 0.24,
-		"guaranteed_canned_food_pickups": 23,
+		"guaranteed_canned_food_pickups": 14,
 		"canned_food_double_stack_chance": 0.24,
 		"container_counts": {
 			"street_cache": 15,
@@ -75,7 +75,7 @@ const STAGE_PROFILES := {
 		"enemy_drop_cap": 125,
 		"raid_kill_cap": 70,
 		"weapon_case_chance": 0.34,
-		"guaranteed_canned_food_pickups": 25,
+		"guaranteed_canned_food_pickups": 15,
 		"canned_food_double_stack_chance": 0.26,
 		"container_counts": {
 			"street_cache": 14,
@@ -102,7 +102,7 @@ const STAGE_PROFILES := {
 		"enemy_drop_cap": 150,
 		"raid_kill_cap": 85,
 		"weapon_case_chance": 0.42,
-		"guaranteed_canned_food_pickups": 27,
+		"guaranteed_canned_food_pickups": 16,
 		"canned_food_double_stack_chance": 0.28,
 		"container_counts": {
 			"street_cache": 14,
@@ -129,7 +129,7 @@ const STAGE_PROFILES := {
 		"enemy_drop_cap": 175,
 		"raid_kill_cap": 100,
 		"weapon_case_chance": 0.5,
-		"guaranteed_canned_food_pickups": 29,
+		"guaranteed_canned_food_pickups": 17,
 		"canned_food_double_stack_chance": 0.30,
 		"container_counts": {
 			"street_cache": 14,
@@ -707,6 +707,9 @@ static func get_stage_profile(stage_tier: int) -> Dictionary:
 
 
 static func get_guaranteed_canned_food_pickup_count(stage_tier: int) -> int:
+	# 판당 확정 통조림 픽업 수. 쉘터 연료 싱크가 사라지고(주민 식비 폐지) 통조림이
+	# 먹기·투척 소모품만 남으면서 예전 21~29개는 가방에 쌓이기만 했다 — 약 60%
+	# (12~17개)로 줄여 "한 판에 먹을 만큼 + 던질 여분" 선에 맞춘다.
 	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 5)] as Dictionary
 	return maxi(0, int(profile.get("guaranteed_canned_food_pickups", 0)))
 
@@ -1100,8 +1103,8 @@ static func simulate_stage_supply(stage_tier: int, run_count: int, seed_value: i
 		for container_type in build_container_plan(stage_tier, random):
 			for definition in roll_container(container_type, stage_tier, "street_mixed", random):
 				var value := get_definition_value(definition)
-				# 원자재는 전리품이 아니라 연료다. try_register_loot과 마찬가지로
-				# 가치 예산에서 빼야 탄약·부품 스폰을 잠식하지 않는다.
+				# 확정 통조림 픽업은 위 루프에서 따로 세고 가치 예산 밖에 둔다
+				# (try_register_loot과 같은 규약) — 탄약·부품 스폰을 잠식하지 않는다.
 				if run_value + value > int(profile.get("field_value_cap", 0)):
 					continue
 				if (

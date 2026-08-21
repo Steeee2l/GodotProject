@@ -718,6 +718,7 @@ func _build_interface() -> void:
 	inventory_ui.connect("weapon_equipped", _on_inventory_weapon_equipped)
 	inventory_ui.connect("weapon_unequipped", _on_inventory_weapon_unequipped)
 	inventory_ui.connect("open_state_changed", _on_inventory_open_state_changed)
+	inventory_ui.connect("item_use_requested", _on_inventory_item_use_requested)
 	var panel := PanelContainer.new()
 	panel.name = "VitalsPanel"
 	panel.position = Vector2(18, 18)
@@ -2570,6 +2571,25 @@ func _use_quick_medkit() -> void:
 	_show_status("구급약 사용 · 체력 %d/%d" % [GameState.player_health, max_health])
 	if DisplayServer.is_touchscreen_available() and bool(accessibility_settings.vibration_enabled):
 		Input.vibrate_handheld(18)
+
+
+func _on_inventory_item_use_requested(item_type: String, item_id: String) -> void:
+	# 필드 main._on_inventory_item_use_requested와 같은 규약 — 건물 안에서도 먹는다.
+	if item_type != "food" or item_id != "canned_food":
+		inventory_ui.call("apply_use_result", false, "사용할 수 없는 아이템입니다.")
+		return
+	var result: Dictionary = GameState.try_eat_canned_food(int(GameState.player_health), fatigue)
+	if not bool(result.get("ok", false)):
+		inventory_ui.call("apply_use_result", false, GameState.describe_canned_food_eat_failure(result))
+		return
+	fatigue = clampf(float(result.get("fatigue", fatigue)), 0.0, FATIGUE_MAX)
+	GameState.fatigue = fatigue
+	_update_health()
+	_update_fatigue_ui()
+	inventory_ui.call("apply_use_result", true, "통조림을 먹었다 · 체력 +%d · 피로 -%d" % [
+		int(result.get("healed", 0)),
+		roundi(float(result.get("fatigue_relief", 0.0))),
+	])
 
 
 func _update_medkit_button() -> void:

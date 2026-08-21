@@ -50,15 +50,12 @@ var weapon_level: int = 1
 # 구급약 1개를 쥐여 주고 시작한다. 0개로 첫 출정을 보내면 회복 수단이 운빨
 # 루팅(사실상 동전 던지기)이 되고, 사망 화면은 있지도 않던 구급약을 논한다.
 var medkits: int = 1
-# 통조림은 쉘터의 유일한 가동 연료다. 출정에서 가져와 주민 노동을 산다.
-# canned_food는 "쉘터 전체 보유량"이고, 그중 가방에 실제로 들려 칸을 먹는 몫은
-# canned_food - (창고 보관분 + 쉘터 식료 선반)으로 계산한다.
+# 통조림은 플레이어 전용 소모품이다 — 가방에서 먹거나(체력·피로 회복) 던진다
+# (적 유인). 쉘터 연료 개념은 폐지됐다(유저 요구: "쉘터에서 연료 개념은 없애자,
+# 통조림은 플레이어만 쓰는 것으로"). 이 값은 곧 "가방에 든 통조림 수"다 —
+# 창고에도 쉘터 선반에도 들어가지 않고, 복귀 정산에서도 가방에 그대로 남는다
+# (구급약·탄약과 같은 '가방 잔류' 그룹).
 var canned_food: int = 0
-# 복귀 정산으로 쉘터에 귀속된 통조림. 창고 슬롯을 먹지 않고 가방 칸도 먹지 않는
-# 순수 쉘터 재고다 — "복귀 = 정산"이라 가져온 통조림은 다음 출정 가방을 좀먹지
-# 않아야 한다(유저 요구). 소비(주민 식비)는 canned_food에서 빠지고 이 값은
-# _trim_canned_food_reserves가 뒤따라 줄여 준다.
-var shelter_food_reserve: int = 0
 var catnip: int = 0
 var churu: int = 0
 # 귀중품: 용도가 없고 오직 값어치만 있는 물건. 추출 슈터의 핵심 판단축인
@@ -168,7 +165,6 @@ var pre_raid_snapshot: Dictionary = {}
 var workbench_starter_parts_claimed: bool = false
 var shelter_scrap_fraction: float = 0.0
 var shelter_catnip_fraction: float = 0.0
-var shelter_food_fraction: float = 0.0
 # 이번 출정에만 적용되는 츄르 버프. 출정 종료/사망 시 소멸한다.
 var active_churu_buffs: Array[String] = []
 # 판 도중 강제 종료(Alt+F4) 감시 — 출정 시작에 켜고 정상 복귀에 끈다.
@@ -210,25 +206,25 @@ var merchant_missed_visit: bool = false
 const MERCHANT_AMMO_GOODS := [
 	{
 		"id": "762_fmj", "type": "ammo", "title": "7.62mm 보통탄", "amount": 30,
-		"buy_price": 650, "sell_cans": 2, "stock_min": 2, "stock_max": 4,
+		"buy_price": 650, "sell_scrap": 200, "stock_min": 2, "stock_max": 4,
 		"icon": "res://assets/items/ammo_762.png",
 		"description": "AK 계열 총기에 사용하는 보통탄입니다.",
 	},
 	{
 		"id": "9mm_fmj", "type": "ammo", "title": "9mm 보통탄", "amount": 45,
-		"buy_price": 520, "sell_cans": 2, "stock_min": 2, "stock_max": 4,
+		"buy_price": 520, "sell_scrap": 160, "stock_min": 2, "stock_max": 4,
 		"icon": "res://assets/items/ammo_762.png",
 		"description": "기관단총과 권총에 두루 쓰는 가벼운 탄약입니다.",
 	},
 	{
 		"id": "45_fmj", "type": "ammo", "title": ".45 ACP 보통탄", "amount": 24,
-		"buy_price": 480, "sell_cans": 2, "stock_min": 2, "stock_max": 3,
+		"buy_price": 480, "sell_scrap": 140, "stock_min": 2, "stock_max": 3,
 		"icon": "res://assets/items/ammo_762.png",
 		"description": "묵직한 권총탄. 한 발의 무게가 다릅니다.",
 	},
 	{
 		"id": "12g_buckshot", "type": "ammo", "title": "12게이지 벅샷", "amount": 12,
-		"buy_price": 700, "sell_cans": 3, "stock_min": 2, "stock_max": 4,
+		"buy_price": 700, "sell_scrap": 210, "stock_min": 2, "stock_max": 4,
 		"icon": "res://assets/items/ammo_762.png",
 		"description": "근거리 저지력이 높은 산탄입니다.",
 	},
@@ -236,71 +232,80 @@ const MERCHANT_AMMO_GOODS := [
 const MERCHANT_SUNDRY_GOODS := [
 	{
 		"id": "scope_lens", "type": "component", "title": "스코프 렌즈", "amount": 1,
-		"buy_price": 1200, "sell_cans": 5, "stock_min": 1, "stock_max": 3,
+		"buy_price": 1200, "sell_scrap": 360, "stock_min": 1, "stock_max": 3,
 		"icon": "res://assets/items/mod_components/scope_lens.png",
 		"description": "조준경과 정밀 모듈 제작에 사용하는 온전한 렌즈입니다.",
 	},
 	{
 		"id": "rubber_gasket", "type": "component", "title": "고무 패킹", "amount": 1,
-		"buy_price": 950, "sell_cans": 3, "stock_min": 1, "stock_max": 3,
+		"buy_price": 950, "sell_scrap": 290, "stock_min": 1, "stock_max": 3,
 		"icon": "res://assets/items/mod_components/rubber_gasket.png",
 		"description": "소음기와 반동 완충 부품 제작에 사용하는 패킹입니다.",
 	},
 	{
 		"id": "magazine_spring", "type": "component", "title": "탄창 스프링", "amount": 1,
-		"buy_price": 1050, "sell_cans": 4, "stock_min": 1, "stock_max": 3,
+		"buy_price": 1050, "sell_scrap": 320, "stock_min": 1, "stock_max": 3,
 		"icon": "res://assets/items/mod_components/magazine_spring.png",
 		"description": "탄창과 전술 부품 제작에 사용하는 복원력 높은 스프링입니다.",
 	},
 	{
 		"id": "medkit", "type": "medkit", "title": "구급약", "amount": 1,
-		"buy_price": 1600, "sell_cans": 0, "stock_min": 1, "stock_max": 2,
+		"buy_price": 1600, "sell_scrap": 0, "stock_min": 1, "stock_max": 2,
 		"icon": "", "description": "출정 중 체력을 회복하는 응급 처치 키트입니다.",
 	},
 	{
 		"id": "scav_vest", "type": "equipment", "title": "누더기 방탄 조끼", "amount": 1,
-		"buy_price": 5200, "sell_cans": 0, "stock_min": 1, "stock_max": 1,
+		"buy_price": 5200, "sell_scrap": 0, "stock_min": 1, "stock_max": 1,
 		"icon": "", "description": "상인이 어디선가 주워 온 생존자 계열 조끼입니다.",
 	},
 	{
 		"id": "patched_helmet", "type": "equipment", "title": "기워 붙인 헬멧", "amount": 1,
-		"buy_price": 4200, "sell_cans": 0, "stock_min": 1, "stock_max": 1,
+		"buy_price": 4200, "sell_scrap": 0, "stock_min": 1, "stock_max": 1,
 		"icon": "", "description": "금 간 안전모를 보강한 머리 보호구입니다.",
 	},
 ]
 # 판매(매입) 목록은 매대와 별개다 — 상인이 오늘 뭘 파느냐와 내 물건을 사 주느냐는
 # 다른 문제다. 여기 있는 품목은 방문마다 항상 팔 수 있다.
+# 매입 대가는 고철(sell_scrap)이다. 예전엔 통조림으로 쳐줬는데, 통조림이 쉘터
+# 연료에서 플레이어 소모품으로 바뀌면서 화폐 노릇을 그만뒀다. 되팔기 가치는
+# 구매가의 약 30%(10 단위 반올림) — 상인은 사는 쪽이 늘 남는 장사다.
+# 통조림 자체도 매입 품목이다(가방 정리 출구): 1개 = CANNED_FOOD_SCRAP_VALUE.
 const MERCHANT_SELL_GOODS := [
 	{
+		"id": "canned_food", "type": "food", "title": "통조림", "amount": 1,
+		"buy_price": 0, "sell_scrap": 70, "icon": "",
+		"description": "먹거나 던지는 출정 소모품입니다. 남는 만큼 고철로 바꿀 수 있습니다.",
+	},
+	{
 		"id": "762_fmj", "type": "ammo", "title": "7.62mm 보통탄", "amount": 30,
-		"buy_price": 650, "sell_cans": 2, "icon": "res://assets/items/ammo_762.png",
+		"buy_price": 650, "sell_scrap": 200, "icon": "res://assets/items/ammo_762.png",
 		"description": "AK 계열 총기에 사용하는 보통탄입니다.",
 	},
 	{
 		"id": "9mm_fmj", "type": "ammo", "title": "9mm 보통탄", "amount": 45,
-		"buy_price": 520, "sell_cans": 2, "icon": "res://assets/items/ammo_762.png",
+		"buy_price": 520, "sell_scrap": 160, "icon": "res://assets/items/ammo_762.png",
 		"description": "기관단총과 권총에 두루 쓰는 가벼운 탄약입니다.",
 	},
 	{
 		"id": "12g_buckshot", "type": "ammo", "title": "12게이지 벅샷", "amount": 12,
-		"buy_price": 700, "sell_cans": 3, "icon": "res://assets/items/ammo_762.png",
+		"buy_price": 700, "sell_scrap": 210, "icon": "res://assets/items/ammo_762.png",
 		"description": "근거리 저지력이 높은 산탄입니다.",
 	},
 	{
 		"id": "scope_lens", "type": "component", "title": "스코프 렌즈", "amount": 1,
-		"buy_price": 1200, "sell_cans": 5,
+		"buy_price": 1200, "sell_scrap": 360,
 		"icon": "res://assets/items/mod_components/scope_lens.png",
 		"description": "조준경과 정밀 모듈 제작에 사용하는 온전한 렌즈입니다.",
 	},
 	{
 		"id": "rubber_gasket", "type": "component", "title": "고무 패킹", "amount": 1,
-		"buy_price": 950, "sell_cans": 3,
+		"buy_price": 950, "sell_scrap": 290,
 		"icon": "res://assets/items/mod_components/rubber_gasket.png",
 		"description": "소음기와 반동 완충 부품 제작에 사용하는 패킹입니다.",
 	},
 	{
 		"id": "magazine_spring", "type": "component", "title": "탄창 스프링", "amount": 1,
-		"buy_price": 1050, "sell_cans": 4,
+		"buy_price": 1050, "sell_scrap": 320,
 		"icon": "res://assets/items/mod_components/magazine_spring.png",
 		"description": "탄창과 전술 부품 제작에 사용하는 복원력 높은 스프링입니다.",
 	},
@@ -583,26 +588,30 @@ const PLAYER_LEVEL_REWARDS := {
 	"toughness": {"title": "충격 적응", "description": "받는 피해 -2%", "icon": "armor"},
 	"fatigue_resistance": {"title": "현장 적응", "description": "피로 획득 -5%", "icon": "fitness"},
 }
+# 훈련 비용은 고철이다. 예전엔 통조림(8/14/28 + 단계당 6/10/18)이었는데, 통조림이
+# 쉘터 연료에서 플레이어 소모품으로 바뀌며 쉘터 비용 화폐에서 빠졌다. 옛 수치에
+# CANNED_FOOD_SCRAP_VALUE(70)를 곱한 뒤 100 단위로 반올림 — 훈련 전 단계 합계
+# 약 3.8만 고철로, 장인 뽑기 1회(1.2만)·첫 방탄복(4.3천)과 같은 눈금에 놓인다.
 const TRAINING_NODE_DEFS := {
 	"vitality": {
 		"title": "중량 훈련", "description": "랭크마다 최대 체력 +10", "icon": "health",
-		"max_rank": 5, "base_cost": 8, "cost_step": 6, "requires": {},
+		"max_rank": 5, "base_cost": 600, "cost_step": 400, "requires": {},
 	},
 	"endurance": {
 		"title": "유산소 훈련", "description": "랭크마다 최대 스태미나 +12", "icon": "stamina",
-		"max_rank": 5, "base_cost": 8, "cost_step": 6, "requires": {},
+		"max_rank": 5, "base_cost": 600, "cost_step": 400, "requires": {},
 	},
 	"recovery": {
 		"title": "회복 루틴", "description": "랭크마다 스태미나 회복 +8%", "icon": "recovery",
-		"max_rank": 4, "base_cost": 14, "cost_step": 10, "requires": {"vitality": 2},
+		"max_rank": 4, "base_cost": 1000, "cost_step": 700, "requires": {"vitality": 2},
 	},
 	"agility": {
 		"title": "풋워크", "description": "랭크마다 이동 속도 +2%", "icon": "speed",
-		"max_rank": 4, "base_cost": 14, "cost_step": 10, "requires": {"endurance": 2},
+		"max_rank": 4, "base_cost": 1000, "cost_step": 700, "requires": {"endurance": 2},
 	},
 	"fieldcraft": {
 		"title": "현장 체력", "description": "랭크마다 피로 획득 -7%", "icon": "fitness",
-		"max_rank": 3, "base_cost": 28, "cost_step": 18, "requires": {"recovery": 2, "agility": 2},
+		"max_rank": 3, "base_cost": 2000, "cost_step": 1300, "requires": {"recovery": 2, "agility": 2},
 	},
 }
 const RAID_ZONES := {
@@ -715,10 +724,22 @@ const CATNIP_BOOST_COST := 900
 const CATNIP_BOOST_DURATION_SECONDS := 600
 const CATNIP_BOOST_MULTIPLIER := 10.0
 const BASE_CATNIP_PER_WORKER_SECOND := 1.0
-# 통조림 1개 = 주민 1명(식성 1.0) 30분 노동. 6시간이던 시절에는 한 판의
-# 통조림이 이틀치 연료가 되어 출정이 심부름으로 전락했다. 판당 25개면
-# 3~4시간 가동 — "한 판 = 반나절 연료"의 리듬을 만든다.
-const WORKER_HOURS_PER_CANNED_FOOD := 0.5
+# ── 쉘터 오프라인 정산 상한 ────────────────────────────────────
+# 연료 개념이 사라져 주민이 배치돼 있으면 라인은 항상 돈다. 대신 "자리를 비운
+# 시간"에 상한을 둔다 — 예전 연료 게이지가 8시간을 '가득'으로 봤던 눈금을 그대로
+# 시간 상한으로 옮긴 것. 껐다 켜서 하루치를 받는 일은 없다(러버밴딩 아님, 고정 상한).
+const SHELTER_OFFLINE_MAX_SECONDS := 8 * 3600
+
+# ── 통조림 = 플레이어 소모품 ───────────────────────────────────
+# 먹기: 체력 +18 · 피로 -12 · 3초 쿨다운. 구급약(즉시 +36~38, 체력만)과 겹치지
+# 않게 "작고 잦은 회복 + 피로 해소"로 갈라 둔다. 피로는 판에 남은 시간 그 자체라
+# 12면 도보 약 3.6분치(FATIGUE_MOVING_RATE 0.055/s 기준)다.
+const CANNED_FOOD_EAT_HEAL := 18
+const CANNED_FOOD_EAT_FATIGUE_RELIEF := 12.0
+const CANNED_FOOD_EAT_COOLDOWN_MSEC := 3000
+# 상인 매입가이자 쉘터 비용 환산 기준(통조림 1 ≈ 고철 70). 필드 base_value 35의
+# 두 배 — 먹는 쪽이 기본이고, 파는 건 가방 정리 출구라 "탄약 반 박스" 수준에 둔다.
+const CANNED_FOOD_SCRAP_VALUE := 70
 
 # ── 문턱 해금 ──────────────────────────────────────────────────
 #
@@ -783,16 +804,16 @@ const CHURU_BUFFS := {
 
 # 특성은 서열이 아니라 선택이어야 한다. 예전엔 전부 1.0 이상이라
 # "누가 더 좋은가"만 있었고 어디에 넣을지 고민할 이유가 없었다.
-# 이제 각자 잘하는 쪽과 못하는 쪽이 갈리고, 잘하는 만큼 더 먹는다.
-# appetite = 통조림 소비 배율. 고성능 주민은 유지비가 비싸다.
+# 이제 각자 잘하는 쪽과 못하는 쪽이 갈린다.
+# (식비 appetite는 쉘터 연료 폐지와 함께 사라졌다 — 구 세이브의 값은 무시된다.)
 const RESIDENT_TRAIT_PRESETS := [
-	{"name": "말랑 앞발", "kneading": 1.55, "catnip": 0.70, "appetite": 1.25},
-	{"name": "초록 코", "kneading": 0.68, "catnip": 1.60, "appetite": 1.25},
-	{"name": "야무진 발톱", "kneading": 1.20, "catnip": 1.15, "appetite": 1.45},
-	{"name": "밤샘 체질", "kneading": 1.10, "catnip": 1.10, "appetite": 1.00},
-	{"name": "평범한 주민", "kneading": 1.00, "catnip": 1.00, "appetite": 0.85},
-	{"name": "대식가", "kneading": 1.75, "catnip": 1.70, "appetite": 2.30},
-	{"name": "소식가", "kneading": 0.82, "catnip": 0.82, "appetite": 0.45},
+	{"name": "말랑 앞발", "kneading": 1.55, "catnip": 0.70},
+	{"name": "초록 코", "kneading": 0.68, "catnip": 1.60},
+	{"name": "야무진 발톱", "kneading": 1.20, "catnip": 1.15},
+	{"name": "밤샘 체질", "kneading": 1.10, "catnip": 1.10},
+	{"name": "평범한 주민", "kneading": 1.00, "catnip": 1.00},
+	{"name": "대식가", "kneading": 1.75, "catnip": 1.70},
+	{"name": "소식가", "kneading": 0.82, "catnip": 0.82},
 ]
 const RESIDENT_NAME_POOL: Array[String] = [
 	"보리", "두부", "호두", "감자", "밤이", "구름", "탄이", "콩이",
@@ -1148,9 +1169,8 @@ func clear_carried_raid_inventory_after_death() -> void:
 	weapon_inventory.clear()
 	weapon_mod_loadouts.clear()
 	medkits = 0
-	# 죽어도 쉘터 것은 쉘터 것이다 — 창고 보관분과 식료 선반(복귀 정산분)은 남고
-	# 가방에 들려 있던 통조림만 시체와 함께 사라진다.
-	canned_food = get_stored_storage_count("food", "canned_food") + maxi(0, shelter_food_reserve)
+	# 통조림은 가방 소모품이라 구급약과 같이 시체와 함께 사라진다.
+	canned_food = 0
 	churu = 0
 	valuable_inventory.clear()
 	clear_churu_buffs()
@@ -1239,9 +1259,9 @@ func register_shelter_return(survived: bool = true) -> void:
 # ── 복귀 정산 ─────────────────────────────────────────────────
 # 복귀는 "가방을 든 채 쉘터에 서 있는 것"이 아니라 정산이다. 필드에서 주운
 # 것들이 다음 출정 가방을 그대로 좀먹으면, 매 판 시작이 정리 작업이 된다.
-# 통조림 → 쉘터 재고, 재료·부착물·진행품·여분 장비 → 창고, 귀중품 → 고철.
-# 탄약과 구급약만 가방에 남긴다: 다음 출정의 준비물이고, 창고 인출 UI를 매판
-# 거치게 만드는 건 순수한 마찰이다(보관하고 싶으면 창고에서 직접 넣으면 된다).
+# 재료·부착물·진행품·여분 장비 → 창고, 귀중품 → 고철.
+# 탄약·구급약·통조림은 가방에 남긴다: 다음 출정의 준비물이고(통조림은 먹거나 던지는
+# 소모품), 창고 인출 UI를 매판 거치게 만드는 건 순수한 마찰이다.
 func settle_shelter_return_inventory() -> Dictionary:
 	var report := {
 		"food": 0,
@@ -1250,11 +1270,8 @@ func settle_shelter_return_inventory() -> Dictionary:
 		"valuable_count": 0,
 		"valuable_scrap": 0,
 	}
-	# 1) 통조림: 가방 몫 전부를 쉘터 식료 선반으로. 창고 슬롯도 가방 칸도 안 먹는다.
-	var carried_food := get_backpack_storage_count("food", "canned_food")
-	if carried_food > 0:
-		shelter_food_reserve += carried_food
-		report["food"] = carried_food
+	# 1) 통조림: 아무 데도 안 간다. 정산 카드가 "가방에 그대로"를 말해 주기 위한 수치.
+	report["food"] = get_backpack_storage_count("food", "canned_food")
 	# 2) 귀중품: 용도가 없는 물건이다. 쉘터에 오는 순간이 곧 환전이다.
 	var valuable_result := sell_all_valuables()
 	report["valuable_count"] = int(valuable_result.get("count", 0))
@@ -1670,6 +1687,15 @@ func _make_merchant_stock_entry(good: Dictionary, random: RandomNumberGenerator)
 	return entry
 
 
+func settle_merchant_sale(price: int) -> int:
+	# 상인 매입 대가(고철) 입금. UI는 장부를 만지지 않는다 — 구매(buy_merchant_stock)와
+	# 같은 규약. 가격은 MERCHANT_SELL_GOODS.sell_scrap에서만 온다.
+	var paid := maxi(0, price)
+	scrap += paid
+	save_persistent_state()
+	return paid
+
+
 func buy_merchant_stock(stock_index: int) -> Dictionary:
 	# 재고는 방문 한 번의 몫이다. 다 팔리면 그 방문에서는 끝이다.
 	if stock_index < 0 or stock_index >= merchant_stock.size():
@@ -1779,12 +1805,8 @@ func get_backpack_storage_count(item_type: String, item_id: String) -> int:
 			# (가방 '칸'은 안 먹는다 — get_raid_item_slot_cost에서 0으로 친다.)
 			return maxi(0, int(progression_item_inventory.get(item_id, 0)))
 		"food":
-			return maxi(
-				0,
-				canned_food
-				- get_stored_storage_count("food", "canned_food")
-				- maxi(0, shelter_food_reserve)
-			)
+			# 통조림은 창고에도 쉘터 선반에도 안 들어간다 — 보유량이 곧 가방 몫.
+			return maxi(0, canned_food)
 	return 0
 
 
@@ -2163,6 +2185,9 @@ func deposit_storage_item(
 	persist: bool = true
 ) -> Dictionary:
 	_normalize_storage_inventory()
+	if item_type == "food":
+		# 통조림은 플레이어 소모품이라 창고에 안 들어간다 — 먹거나 던지거나 상인에게 판다.
+		return {"ok": false, "moved": 0, "reason": "통조림은 창고에 보관하지 않습니다. 가방에서 먹거나 던지세요."}
 	var available := get_backpack_storage_count(item_type, item_id)
 	var moved := mini(maxi(amount, 0), available)
 	if moved <= 0:
@@ -2296,8 +2321,6 @@ func _get_storage_stack_limit(item_type: String) -> int:
 			return 5
 		"medkit":
 			return 5
-		"food":
-			return 20
 		"progression":
 			# 청사진·키카드는 종류별로 한 장이면 충분하지만, 중복 습득이
 			# 창고 슬롯을 계속 갉아먹지 않게 한 슬롯에 겹쳐 쌓는다.
@@ -2326,10 +2349,6 @@ func _remove_backpack_storage_item(item_type: String, item_id: String, amount: i
 			)
 		"medkit":
 			medkits = maxi(0, medkits - amount)
-		"food":
-			# Food remains part of the shelter-wide currency total. Storage only
-			# records which units are reserved in the warehouse.
-			pass
 		_:
 			return false
 	return true
@@ -2351,8 +2370,6 @@ func _add_backpack_storage_item(item_type: String, item_id: String, amount: int)
 			add_progression_item(item_id, amount)
 		"medkit":
 			medkits += amount
-		"food":
-			pass
 
 
 func _normalize_storage_inventory() -> void:
@@ -2370,29 +2387,19 @@ func _normalize_storage_inventory() -> void:
 	storage_inventory = normalized
 
 
-func _trim_stored_canned_food_to_total() -> void:
-	var remaining := maxi(0, canned_food)
+func _purge_stored_canned_food() -> int:
+	# 구 세이브 마이그레이션: 창고 "food" 슬롯은 더 이상 없다. 예전 장부에서는 창고
+	# 통조림이 canned_food 총량에 이미 포함돼 있었으므로(storage_food_in_total),
+	# 슬롯만 지우면 그 몫이 자동으로 가방 보유량이 된다. 통조림은 몇 개든 가방
+	# 1칸이라 슬롯 초과 환전은 필요 없다. 지운 개수를 돌려준다.
+	var removed := 0
 	for index in range(storage_inventory.size() - 1, -1, -1):
 		var entry := storage_inventory[index]
-		if (
-			str(entry.get("type", "")) != "food"
-			or str(entry.get("id", "")) != "canned_food"
-		):
+		if str(entry.get("type", "")) != "food":
 			continue
-		var kept := mini(maxi(0, int(entry.get("count", 0))), remaining)
-		remaining -= kept
-		if kept <= 0:
-			storage_inventory.remove_at(index)
-		else:
-			entry["count"] = kept
-	# 쉘터 식료 선반은 창고 다음 순위로 줄어든다. 주민 식비가 통조림을 태우면
-	# 가방 몫 → 선반 → 창고 순으로 빠지는 셈이라, 복귀 직후 0칸이던 가방이
-	# 소비 때문에 다시 채워지는 역전은 일어나지 않는다.
-	shelter_food_reserve = clampi(
-		shelter_food_reserve,
-		0,
-		maxi(0, canned_food - get_stored_storage_count("food", "canned_food"))
-	)
+		removed += maxi(0, int(entry.get("count", 0)))
+		storage_inventory.remove_at(index)
+	return removed
 
 
 func get_ammo_count(ammo_id: String) -> int:
@@ -2957,8 +2964,8 @@ func tick_shelter_live(delta: float) -> int:
 	var safe_delta := maxf(delta, 0.0)
 	var scrap_rate := get_scrap_per_second()
 	var catnip_rate := get_catnip_per_second()
-	# 연료는 통조림 하나다. 주민이 먹은 시간만큼 두 라인이 함께 돈다.
-	var work_delta := _consume_worker_food_for_duration(safe_delta)
+	# 연료 게이트는 없다 — 주민이 배치돼 있으면 두 라인은 늘 함께 돈다.
+	var work_delta := safe_delta
 	var gain := scrap_rate * work_delta
 	var catnip_gain := catnip_rate * work_delta
 	shelter_scrap_fraction += gain
@@ -3110,12 +3117,13 @@ func process_shelter_progress() -> Dictionary:
 	if shelter_last_progress_time <= 0:
 		shelter_last_progress_time = now
 		return {"scrap": 0, "catnip": 0, "repair": 0.0, "elapsed": 0}
-	var progress_start := shelter_last_progress_time
-	var elapsed := maxi(0, now - shelter_last_progress_time)
+	# 자리를 비운 시간은 SHELTER_OFFLINE_MAX_SECONDS까지만 쳐준다(연료 대신 시간 상한).
+	var elapsed := mini(maxi(0, now - shelter_last_progress_time), SHELTER_OFFLINE_MAX_SECONDS)
+	var progress_start := now - elapsed
 	shelter_last_progress_time = now
 	var base_scrap_rate := get_base_scrap_per_hour()
 	var catnip_rate := get_catnip_per_hour()
-	var work_seconds := _consume_worker_food_for_duration(float(elapsed))
+	var work_seconds := float(elapsed)
 	var base_scrap_gain := base_scrap_rate * work_seconds / 3600.0
 	var boosted_seconds := mini(roundi(work_seconds), maxi(0, mini(now, catnip_boost_end_time) - progress_start))
 	var boosted_extra := base_scrap_rate * float(boosted_seconds) / 3600.0 * (CATNIP_BOOST_MULTIPLIER - 1.0)
@@ -3142,27 +3150,54 @@ func process_shelter_progress() -> Dictionary:
 	return {"scrap": scrap_gain, "catnip": catnip_gain, "repair": repair_gain, "elapsed": elapsed}
 
 
-func _consume_worker_food_for_duration(requested_seconds: float) -> float:
-	# 통조림은 주민의 노동 시간 그 자체를 산다. 떨어지면 라인 전체가 멈춘다.
-	var worker_count := get_active_scratcher_workers() + get_active_catnip_workers()
-	if worker_count <= 0 or requested_seconds <= 0.0:
-		return maxf(requested_seconds, 0.0)
+# ── 통조림 먹기 ───────────────────────────────────────────────
+# 호스트(필드 main / 건물 내부)가 자기 체력·피로 로컬값을 넘기면 여기서 통조림을
+# 까고 GameState 값까지 갱신해 돌려준다. 전투 중에도 가능, 쿨다운 3초.
+var canned_food_eat_ready_msec: int = 0
+
+
+func try_eat_canned_food(current_health: int, current_fatigue: float) -> Dictionary:
 	if canned_food <= 0:
-		return 0.0
-	# 잘 일하는 주민일수록 많이 먹는다. 배치는 산출만이 아니라 식비의 문제다.
-	var appetite_total := get_total_worker_appetite()
-	var food_per_second := appetite_total / (WORKER_HOURS_PER_CANNED_FOOD * 3600.0)
-	var affordable_seconds := float(canned_food) / maxf(food_per_second, 0.000001)
-	var work_seconds := minf(requested_seconds, affordable_seconds)
-	shelter_food_fraction += work_seconds * food_per_second
-	var consumed := mini(canned_food, int(floor(shelter_food_fraction)))
-	if consumed > 0:
-		canned_food -= consumed
-		shelter_food_fraction -= float(consumed)
-		# 저장이 꺼진 상태(테스트·디버그)에서도 보관 장부가 총량을 넘지 않도록
-		# 소비 직후 즉시 정리한다 — save_persistent_state에만 맡기면 어긋난다.
-		_trim_stored_canned_food_to_total()
-	return work_seconds
+		return {"ok": false, "reason": "no_food"}
+	var now_msec := Time.get_ticks_msec()
+	if now_msec < canned_food_eat_ready_msec:
+		return {
+			"ok": false,
+			"reason": "cooldown",
+			"remaining_seconds": float(canned_food_eat_ready_msec - now_msec) / 1000.0,
+		}
+	var maximum_health := get_max_health()
+	var health_before := clampi(current_health, 0, maximum_health)
+	var fatigue_before := clampf(current_fatigue, 0.0, 100.0)
+	if health_before >= maximum_health and fatigue_before <= 0.0:
+		return {"ok": false, "reason": "not_needed"}
+	canned_food -= 1
+	canned_food_eat_ready_msec = now_msec + CANNED_FOOD_EAT_COOLDOWN_MSEC
+	var health_after := mini(maximum_health, health_before + CANNED_FOOD_EAT_HEAL)
+	var fatigue_after := maxf(0.0, fatigue_before - CANNED_FOOD_EAT_FATIGUE_RELIEF)
+	player_health = health_after
+	fatigue = fatigue_after
+	save_persistent_state()
+	return {
+		"ok": true,
+		"health": health_after,
+		"fatigue": fatigue_after,
+		"healed": health_after - health_before,
+		"fatigue_relief": fatigue_before - fatigue_after,
+		"remaining": canned_food,
+	}
+
+
+static func describe_canned_food_eat_failure(result: Dictionary) -> String:
+	# 호스트(필드·건물·쉘터)가 같은 문구를 쓰도록 한 곳에 둔다.
+	match str(result.get("reason", "")):
+		"no_food":
+			return "통조림이 없습니다."
+		"cooldown":
+			return "아직 씹는 중 · %.1f초" % maxf(0.0, float(result.get("remaining_seconds", 0.0)))
+		"not_needed":
+			return "체력과 피로가 모두 온전합니다."
+	return "지금은 먹을 수 없습니다."
 
 
 func get_valuable_total_value() -> int:
@@ -3240,7 +3275,7 @@ func try_reroll_resident_trait(resident_id: String) -> Dictionary:
 	var picked := candidates[randi() % candidates.size()].duplicate(true)
 	# 이름·초상화 같은 정체성은 유지하고 능력치만 바꾼다.
 	var record := (resident_traits.get(resident_id, {}) as Dictionary).duplicate(true)
-	for key in ["name", "kneading", "catnip", "appetite"]:
+	for key in ["name", "kneading", "catnip"]:
 		record[key] = picked.get(key, record.get(key))
 	resident_traits[resident_id] = record
 	save_persistent_state()
@@ -3281,26 +3316,6 @@ func check_milestone_unlocks() -> Array[Dictionary]:
 	if not newly_unlocked.is_empty():
 		save_persistent_state()
 	return newly_unlocked
-
-
-func get_total_worker_appetite() -> float:
-	# 배치된 주민들의 식욕 합계. 인원수가 아니라 이 값이 통조림 소비를 정한다.
-	var total := 0.0
-	for worker_id in assigned_worker_ids:
-		total += float(get_resident_trait(str(worker_id)).get("appetite", 1.0))
-	for worker_id in assigned_catnip_worker_ids:
-		total += float(get_resident_trait(str(worker_id)).get("appetite", 1.0))
-	return maxf(0.0, total)
-
-
-func get_shelter_runtime_seconds() -> float:
-	# HUD의 "쉘터 잔여 가동" — 연료는 통조림 하나다.
-	if get_active_scratcher_workers() + get_active_catnip_workers() <= 0:
-		return 0.0
-	if canned_food <= 0:
-		return 0.0
-	var appetite := maxf(0.001, get_total_worker_appetite())
-	return float(canned_food) * WORKER_HOURS_PER_CANNED_FOOD * 3600.0 / appetite
 
 
 func capture_pre_raid_snapshot() -> void:
@@ -3350,14 +3365,6 @@ func build_pre_raid_changes() -> Array[String]:
 	if facility_after > facility_before:
 		changes.append("새 시설 %d곳 가동" % (facility_after - facility_before))
 	return changes
-
-
-func get_canned_food_runtime_seconds() -> float:
-	# "통조림 12개"는 아무 느낌도 주지 않는다. "쉘터 가동 3시간 12분"은 준다.
-	# 정산 화면에서 가방을 시간으로 환산해 보여주기 위한 값이다.
-	# 주민이 아직 없어도 0이 되면 안 되므로 주민 1명(식성 1.0) 기준으로 환산한다.
-	var appetite := maxf(1.0, get_total_worker_appetite())
-	return maxf(0.0, float(canned_food) * WORKER_HOURS_PER_CANNED_FOOD * 3600.0 / appetite)
 
 
 static func format_duration_korean(total_seconds: float) -> String:
@@ -3434,10 +3441,9 @@ func get_catnip_boost_cost() -> int:
 
 
 func get_shelter_stall_reason() -> String:
+	# 라인이 멈추는 이유는 이제 하나뿐이다 — 주민 미배치. 연료 부족은 없다.
 	if get_active_scratcher_workers() + get_active_catnip_workers() <= 0:
 		return "no_workers"
-	if canned_food <= 0:
-		return "no_food"
 	return ""
 
 
@@ -3583,19 +3589,19 @@ func try_enhance_mod(mod_id: String) -> bool:
 
 
 func get_artisan_roll_cost() -> Dictionary:
+	# 고철만 받는다. 예전의 통조림 8+4t는 고철 환산(×70)으로 접어 넣었다 — 통조림은
+	# 플레이어 소모품이라 쉘터 비용 화폐가 아니다.
 	var tier_index := maxi(0, shelter_tier - 1)
 	return {
-		"scrap": roundi(12000.0 * pow(3.2, float(tier_index))),
-		"canned_food": 8 + tier_index * 4,
+		"scrap": roundi(12000.0 * pow(3.2, float(tier_index))) + (8 + tier_index * 4) * CANNED_FOOD_SCRAP_VALUE,
 	}
 
 
 func roll_artisan_weapon() -> Dictionary:
 	var cost := get_artisan_roll_cost()
-	if scrap < int(cost["scrap"]) or canned_food < int(cost["canned_food"]):
+	if scrap < int(cost["scrap"]):
 		return {}
 	scrap -= int(cost["scrap"])
-	canned_food -= int(cost["canned_food"])
 	artisan_pity += 1
 	var pool: Array[String] = ["m1911", "mp5"]
 	if shelter_tier >= 2:
@@ -3775,9 +3781,9 @@ func try_upgrade_training(node_id: String) -> Dictionary:
 	if not get_training_requirements_met(node_id):
 		return {"ok": false, "reason": "prerequisite"}
 	var cost := get_training_cost(node_id)
-	if canned_food < cost:
-		return {"ok": false, "reason": "canned_food", "cost": cost}
-	canned_food -= cost
+	if scrap < cost:
+		return {"ok": false, "reason": "scrap", "cost": cost}
+	scrap -= cost
 	training_levels[node_id] = rank + 1
 	if node_id == "vitality":
 		player_health = mini(get_max_health(), player_health + 10)
@@ -4146,7 +4152,6 @@ func save_persistent_state() -> bool:
 	if not persistence_enabled:
 		return false
 	_normalize_storage_inventory()
-	_trim_stored_canned_food_to_total()
 	_normalize_contract_state()
 	_normalize_iron_mission_state()
 	save_equipped_weapon_loadout()
@@ -4164,7 +4169,6 @@ func save_persistent_state() -> bool:
 		"scrap": scrap,
 		"medkits": medkits,
 		"canned_food": canned_food,
-		"shelter_food_reserve": shelter_food_reserve,
 		"catnip": catnip,
 		"churu": churu,
 		"valuable_inventory": valuable_inventory,
@@ -4231,7 +4235,6 @@ func save_persistent_state() -> bool:
 		"workbench_starter_parts_claimed": workbench_starter_parts_claimed,
 		"shelter_scrap_fraction": shelter_scrap_fraction,
 		"shelter_catnip_fraction": shelter_catnip_fraction,
-		"shelter_food_fraction": shelter_food_fraction,
 		"shelter_return_serial": shelter_return_serial,
 		"survived_return_count": survived_return_count,
 		"city_commission": city_commission,
@@ -4332,7 +4335,8 @@ func load_persistent_state() -> bool:
 	scrap = int(data.get("scrap", scrap))
 	medkits = int(data.get("medkits", medkits))
 	canned_food = int(data.get("canned_food", canned_food))
-	shelter_food_reserve = maxi(0, int(data.get("shelter_food_reserve", 0)))
+	# 구 세이브의 쉘터 식료 선반 필드(구 연료 재고)는 읽지 않는다 — 그 몫은 이미
+	# canned_food 총량에 포함돼 있었으므로, 무시하면 그대로 가방 보유량이 된다.
 	catnip = maxi(0, roundi(float(data.get("catnip", catnip))))
 	churu = int(data.get("churu", churu))
 	valuable_inventory = (data.get("valuable_inventory", {}) as Dictionary).duplicate(true)
@@ -4347,8 +4351,8 @@ func load_persistent_state() -> bool:
 	unlocked_milestones = _to_string_array(data.get("unlocked_milestones", []))
 	resident_reroll_counts = (data.get("resident_reroll_counts", {}) as Dictionary).duplicate(true)
 	if int(data.get("version", 0)) < 12:
-		# v12: 원자재 2종을 폐지하고 통조림 단일 연료로 통합했다.
-		# 구세이브의 원자재 잔량은 가동시간이 비슷해지도록 통조림으로 환전한다.
+		# v12: 원자재 2종을 폐지하고 통조림으로 통합했다(당시엔 쉘터 연료였고,
+		# 지금은 가방 소모품). 구세이브의 원자재 잔량은 통조림으로 환전한다.
 		var legacy_raw := maxi(0, int(data.get("raw_scrap", 0))) + maxi(0, int(data.get("raw_catnip", 0)))
 		if legacy_raw > 0:
 			canned_food += maxi(1, ceili(float(legacy_raw) / 4.0))
@@ -4412,7 +4416,9 @@ func load_persistent_state() -> bool:
 	_normalize_storage_inventory()
 	if not bool(data.get("storage_food_in_total", false)):
 		canned_food += get_stored_storage_count("food", "canned_food")
-	_trim_stored_canned_food_to_total()
+	# 창고 통조림 슬롯은 폐지 — 구 세이브의 슬롯은 비우고 그 몫은 가방 보유량으로 남긴다.
+	_purge_stored_canned_food()
+	canned_food = maxi(0, canned_food)
 	catnip_boost_end_time = int(data.get("catnip_boost_end_time", catnip_boost_end_time))
 	catnip_fever_gauge = clampf(
 		float(data.get("catnip_fever_gauge", 0.0)), 0.0, CATNIP_FEVER_GAUGE_MAX
@@ -4427,7 +4433,6 @@ func load_persistent_state() -> bool:
 	workbench_starter_parts_claimed = bool(data.get("workbench_starter_parts_claimed", workbench_starter_parts_claimed))
 	shelter_scrap_fraction = float(data.get("shelter_scrap_fraction", shelter_scrap_fraction))
 	shelter_catnip_fraction = float(data.get("shelter_catnip_fraction", shelter_catnip_fraction))
-	shelter_food_fraction = float(data.get("shelter_food_fraction", shelter_food_fraction))
 	shelter_return_serial = int(data.get("shelter_return_serial", shelter_return_serial))
 	# 구 세이브 호환: 값이 없으면 기존 귀환 수를 생환 수로 간주한다.
 	survived_return_count = int(data.get("survived_return_count", shelter_return_serial))
@@ -4550,7 +4555,6 @@ func reset_run() -> void:
 	weapon_level = 1
 	medkits = 1
 	canned_food = 0
-	shelter_food_reserve = 0
 	last_return_settlement.clear()
 	catnip = 0
 	churu = 0
@@ -4649,7 +4653,6 @@ func reset_run() -> void:
 	workbench_starter_parts_claimed = false
 	shelter_scrap_fraction = 0.0
 	shelter_catnip_fraction = 0.0
-	shelter_food_fraction = 0.0
 	workbench_starter_parts_claimed = false
 	shelter_return_serial = 0
 	survived_return_count = 0

@@ -18,12 +18,13 @@ func _run() -> void:
 	assert(bool(game_state.get("has_ak")))
 	var initial_pickups := main_scene.get("loot_system").ammo_pickups as Array
 	# 첫 판 온보딩 전리품 뭉치가 섞여 있을 수 있다. 이 테스트가 검증하려는 것은
-	# "보장 통조림 보급 21개"이므로 그 집합만 골라 센다.
+	# "보장 통조림 보급"이므로 그 집합만 골라 센다. 21개였던 것이 12개로 줄었다 —
+	# 쉘터 연료 싱크가 사라져(통조림 = 플레이어 소모품) 확정 픽업을 약 60%로 낮췄다.
 	var guaranteed_pickups: Array = []
 	for pickup in initial_pickups:
 		if bool(pickup.get_meta("guaranteed_field_supply", false)):
 			guaranteed_pickups.append(pickup)
-	assert(guaranteed_pickups.size() == 21)
+	assert(guaranteed_pickups.size() == 12)
 	for pickup in guaranteed_pickups:
 		assert(str(pickup.get_meta("loot_type", "")) == "canned_food")
 	# 1단계 컨테이너 36개 = 기존 29 + 생활권 7 (원자재 컨테이너는 v12에서 폐지).

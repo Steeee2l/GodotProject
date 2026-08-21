@@ -31,7 +31,7 @@ func _ready() -> void:
 
 
 func get_interaction_prompt() -> String:
-	return "꾹꾹이 생산기 · 통조림→고철 (주민 배치)"
+	return "꾹꾹이 생산기 · 주민 배치로 고철 생산"
 
 
 func get_interaction_radius() -> float:
@@ -410,12 +410,11 @@ func _portrait_card(resident_id: String, is_seat: bool, slots: int) -> Button:
 		):
 			_reroll_worker(resident_id)
 	)
-	button.tooltip_text = "%s · %s\n꾹꾹이 x%.2f · 캣닢 x%.2f · 식비 x%.2f\n%s\n우클릭: 특성 재굴림 · 츄르 %s" % [
+	button.tooltip_text = "%s · %s\n꾹꾹이 x%.2f · 캣닢 x%.2f\n%s\n우클릭: 특성 재굴림 · 츄르 %s" % [
 		display_name,
 		str(trait_data.get("name", "")),
 		float(trait_data.get("kneading", 1.0)),
 		float(trait_data.get("catnip", 1.0)),
-		float(trait_data.get("appetite", 1.0)),
 		"좌클릭: 좌석에서 일으키기" if is_seat else "좌클릭: 좌석에 앉히기",
 		GameState.format_compact_number(GameState.get_resident_reroll_cost(resident_id)),
 	]

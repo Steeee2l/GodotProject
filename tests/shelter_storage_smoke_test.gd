@@ -46,28 +46,25 @@ func _run() -> void:
 	if int(game_state.call("get_ammo_count", "762_fmj")) != ammo_before:
 		_fail("withdraw did not restore ammo to backpack")
 
+	# 통조림은 더 이상 창고에 들어가지 않는다 — 플레이어 소모품(먹기·투척)이라 가방에만
+	# 산다. 예전 "창고 통조림 = 쉘터 재화 총량의 일부" 어서션을 "입고 거부 + 가방 유지"로 바꿨다.
 	game_state.set("canned_food", 9)
 	var food_result := game_state.call("deposit_storage_item", "food", "canned_food", 5) as Dictionary
-	if not bool(food_result.get("ok", false)):
-		_fail("canned food could not be deposited")
+	if bool(food_result.get("ok", false)):
+		_fail("canned food must be refused by storage (player consumable)")
 	if int(game_state.get("canned_food")) != 9:
-		_fail("stored canned food must remain part of the shelter currency total")
-	if int(game_state.call("get_backpack_storage_count", "food", "canned_food")) != 4:
-		_fail("storage allocation must be excluded from carried canned food")
-	if int(game_state.call("get_stored_storage_count", "food", "canned_food")) != 5:
-		_fail("stored canned food allocation is missing")
-	var food_slot := -1
-	for index in game_state.storage_inventory.size():
-		var entry := game_state.storage_inventory[index] as Dictionary
-		if str(entry.get("type", "")) == "food":
-			food_slot = index
-			break
-	if food_slot < 0:
-		_fail("stored canned food slot is missing")
-	if not bool((game_state.call("withdraw_storage_item", food_slot, 5) as Dictionary).get("ok", false)):
-		_fail("stored canned food could not be withdrawn")
-	if int(game_state.get("canned_food")) != 9:
-		_fail("withdrawing canned food must not duplicate the currency total")
+		_fail("refused canned food deposit must leave the bag count untouched")
+	if int(game_state.call("get_backpack_storage_count", "food", "canned_food")) != 9:
+		_fail("canned food count must equal the bag count (no storage or shelter share)")
+	if int(game_state.call("get_stored_storage_count", "food", "canned_food")) != 0:
+		_fail("storage must hold no canned food")
+	# 구 세이브 마이그레이션: 창고 food 슬롯이 남아 있어도 로드 정리(_purge_stored_canned_food)가
+	# 지우고, 그 몫은 canned_food 총량에 이미 포함돼 있었으므로 가방 보유량으로 남는다.
+	game_state.storage_inventory.append({"type": "food", "id": "canned_food", "count": 5})
+	if int(game_state.call("_purge_stored_canned_food")) != 5:
+		_fail("legacy canned food storage slots must be purged on migration")
+	if int(game_state.call("get_stored_storage_count", "food", "canned_food")) != 0:
+		_fail("legacy canned food slot survived migration")
 
 	game_state.set("scrap", 10_000)
 	game_state.set("churu", 10)

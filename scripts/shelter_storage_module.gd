@@ -555,9 +555,7 @@ func _get_backpack_entries() -> Array[Dictionary]:
 	_append_dictionary_entries(entries, "progression", GameState.progression_item_inventory)
 	if GameState.medkits > 0:
 		entries.append({"type": "medkit", "id": "medkit", "count": GameState.medkits})
-	var carried_food := GameState.get_backpack_storage_count("food", "canned_food")
-	if carried_food > 0:
-		entries.append({"type": "food", "id": "canned_food", "count": carried_food})
+	# 통조림은 창고에 넣지 않는다 — 플레이어 소모품(먹기·투척)이라 가방에만 산다.
 	entries.sort_custom(func(a: Dictionary, b: Dictionary): return _item_name(str(a.get("id", ""))) < _item_name(str(b.get("id", ""))))
 	return entries
 

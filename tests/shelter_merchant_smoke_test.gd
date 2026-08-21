@@ -73,7 +73,8 @@ func _run() -> void:
 	assert(shop_close != null and shop_close.text.is_empty(), "Merchant shop close must be icon-only.")
 	assert(shop_close.custom_minimum_size.x <= 44.0 and shop_close.custom_minimum_size.y <= 44.0, "Merchant shop close must stay compact.")
 	assert(tree_root.find_child("고철Icon", true, false) is TextureRect, "Merchant currency must use a rendered scrap icon instead of an emoji glyph.")
-	assert(tree_root.find_child("통조림Icon", true, false) is TextureRect, "Merchant currency must use a rendered food icon instead of an emoji glyph.")
+	# 통조림은 더 이상 상인 화폐가 아니다(플레이어 소모품) — 화폐 칩은 고철 하나뿐이다.
+	assert(tree_root.find_child("통조림Icon", true, false) == null, "Merchant header must not show a canned food currency chip any more.")
 	var shop_list := shelter.get("merchant_shop_list") as VBoxContainer
 	assert(shop_list.size_flags_horizontal == Control.SIZE_EXPAND_FILL, "Merchant rows must fill the available modal width.")
 	var buy_tab := shelter.get("merchant_buy_tab") as Button
@@ -101,8 +102,9 @@ func _run() -> void:
 	ammo_sell_button.pressed.emit()
 	await get_tree().process_frame
 	assert(int(game_state.call("get_ammo_count", "762_fmj")) == ammo_before)
-	assert(int(game_state.get("scrap")) == 350, "Merchant sales must never create shelter scrap.")
-	assert(int(game_state.get("canned_food")) == canned_food_before + 2)
+	# 매입 대가는 고철이다(통조림 2개 → 고철 200, 구매가 650의 약 30%). 통조림 수는 그대로.
+	assert(int(game_state.get("scrap")) == 350 + 200, "Merchant sales must pay scrap (sell_scrap), not canned food.")
+	assert(int(game_state.get("canned_food")) == canned_food_before)
 
 	print("SHELTER_MERCHANT_OK waiting=true accepted=true idle_frames=4 trade=true")
 	get_tree().quit(0)
