@@ -110,7 +110,7 @@ func build(host: Node) -> void:
 	text_box.add_child(source_label)
 	var separator := HSeparator.new()
 	text_box.add_child(separator)
-	var scroll := ScrollContainer.new()
+	var scroll := HudStyle.make_scroll()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	text_box.add_child(scroll)

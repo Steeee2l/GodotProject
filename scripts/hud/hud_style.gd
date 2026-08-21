@@ -15,6 +15,8 @@ extends RefCounted
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const SFX := preload("res://scripts/sfx_bank.gd")
+# class_name 캐시(.godot)가 갱신되기 전에도 헤드리스 테스트가 돌도록 직접 preload.
+const TOUCH_SCROLL := preload("res://scripts/hud/touch_scroll.gd")
 
 # ── 색 토큰 ────────────────────────────────────────────────────
 const INK := Color(0.014, 0.021, 0.022, 0.96)          # 표준 패널 바탕
@@ -42,6 +44,16 @@ const TYPE_BODY := 14       # 본문
 const TYPE_CAPTION := 12    # 보조 라벨
 const TYPE_FOOTNOTE := 11   # 각주·힌트
 const TYPE_NUMBER := 20     # 강조 수치(탄약 등)
+
+
+# ── 스크롤 영역 ────────────────────────────────────────────────
+
+
+static func make_scroll() -> ScrollContainer:
+	# 모든 UI 스크롤 영역은 이걸로 만든다. 손가락 드래그(스와이프) 스크롤이
+	# 자동으로 붙는다 — 상세는 TouchScroll 참조. ScrollContainer.new()를 직접
+	# 쓰면 버튼 목록 위에서 스와이프가 먹지 않는다(유저 신고).
+	return TOUCH_SCROLL.install(ScrollContainer.new())
 
 
 # ── 패널 프리셋 ────────────────────────────────────────────────

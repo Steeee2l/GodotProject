@@ -286,7 +286,7 @@ func _build_backpack_panel(narrow: bool, list_height: float) -> Control:
 	title_row.add_child(_section_title("가방"))
 	title_row.add_child(_section_value("%d개" % backpack_count, 56.0))
 
-	var scroll := ScrollContainer.new()
+	var scroll := HudStyle.make_scroll()
 	scroll.name = "BackpackItemScroll"
 	scroll.custom_minimum_size.y = list_height
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -335,7 +335,7 @@ func _build_storage_panel(narrow: bool, compact: bool, list_height: float) -> Co
 		94.0
 	))
 
-	var scroll := ScrollContainer.new()
+	var scroll := HudStyle.make_scroll()
 	scroll.name = "StorageGridScroll"
 	scroll.custom_minimum_size.y = list_height
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL

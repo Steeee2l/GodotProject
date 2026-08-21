@@ -210,7 +210,7 @@ func _build_ui() -> void:
 	# 캡션 스타일 — 버튼처럼 보여 눌러 보게 만들던 문구를 안내 문장으로 낮춘다.
 	var section := _label("아래 휴대품을 탭하면 바닥에 내려놓습니다", 12, Color("#8fa79b"))
 	content.add_child(section)
-	var scroll := ScrollContainer.new()
+	var scroll := HudStyle.make_scroll()
 	scroll.custom_minimum_size = Vector2(0, 250)
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED

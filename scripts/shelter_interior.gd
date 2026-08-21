@@ -2491,7 +2491,7 @@ func _open_merchant_shop() -> void:
 	_prepare_merchant_tab(merchant_sell_tab, "sell")
 	tabs.add_child(merchant_sell_tab)
 
-	var scroll := ScrollContainer.new()
+	var scroll := HudStyle.make_scroll()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	box.add_child(scroll)
@@ -2713,12 +2713,21 @@ func _merchant_trade_row(good: Dictionary, stock_index: int = -1) -> Button:
 	description.add_theme_color_override("font_color", Color("#93a29b"))
 	details.add_child(description)
 
+	# 판매 보유량은 가방+창고 합산이다 — 출처를 칩 아래 한 줄로 병기해, "창고에
+	# 있는 건데 왜 팔리지?"도 "가방엔 없는데 왜 떠?"도 없게 한다.
+	var source_note := ""
+	if not buying:
+		var stored_count := _merchant_stored_count(good)
+		if stored_count > 0:
+			source_note = "가방 %d · 창고 %d" % [owned - stored_count, stored_count]
 	row.add_child(_merchant_trade_chip(
 		"backpack",
 		"보유",
 		owned,
 		Color("#a9bbb2"),
-		"OwnedChip"
+		"OwnedChip",
+		source_note,
+		Color("#84938c")
 	))
 	# 못 사는 이유가 화면에 없었다 — 가격 칩에 부족분을 병기한다.
 	var shortage_note := ""
@@ -2763,7 +2772,8 @@ func _merchant_trade_chip(
 	value: int,
 	color: Color,
 	node_name: String,
-	note: String = ""
+	note: String = "",
+	note_color: Color = Color("#d9786c")
 ) -> VBoxContainer:
 	var chip := VBoxContainer.new()
 	chip.name = node_name
@@ -2802,7 +2812,7 @@ func _merchant_trade_chip(
 		note_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		note_label.add_theme_font_override("font", FONT)
 		note_label.add_theme_font_size_override("font_size", 11)
-		note_label.add_theme_color_override("font_color", Color("#d9786c"))
+		note_label.add_theme_color_override("font_color", note_color)
 		chip.add_child(note_label)
 	return chip
 
@@ -2826,18 +2836,28 @@ func _trade_merchant_good(good: Dictionary, buying: bool, stock_index: int = -1)
 		if _merchant_item_count(good) < amount:
 			merchant_shop_message_label.text = "판매할 물건이 부족합니다."
 			return
-		_add_merchant_item(good, -amount)
+		_remove_merchant_item(good, amount)
 		GameState.canned_food += price
+		# 창고 재고까지 건드리므로 장부를 바로 남긴다(제작대의 재료 소모와 같은 규약).
+		GameState.save_persistent_state()
 		merchant_shop_message_label.text = "%s을(를) 판매하고 통조림 %d개를 받았습니다." % [str(good["title"]), price]
 	_update_stats()
 	call_deferred("_refresh_merchant_shop")
 
 
 func _merchant_item_count(good: Dictionary) -> int:
+	# 보유 = 가방 + 창고(유저 요구). 복귀 정산이 재료·여분 탄약을 창고로 보내는데
+	# 상인이 가방만 보면, 팔 물건이 있는데도 판매 목록이 텅 비어 보였다.
+	# 제작대 _owned_resource(bag + stored, 가방 먼저 소모)와 같은 규약.
+	return _merchant_bag_count(good) + _merchant_stored_count(good)
+
+
+func _merchant_bag_count(good: Dictionary) -> int:
 	match str(good["type"]):
 		"ammo":
 			return GameState.get_ammo_count(str(good["id"]))
 		"food":
+			# 통조림은 쉘터 전체 재고가 곧 보유량이다(창고 보관분도 이미 포함).
 			return GameState.canned_food
 		"component":
 			return GameState.get_mod_component_count(str(good["id"]))
@@ -2846,6 +2866,27 @@ func _merchant_item_count(good: Dictionary) -> int:
 		"equipment":
 			return GameState.get_equipment_count(str(good["id"]))
 	return 0
+
+
+func _merchant_stored_count(good: Dictionary) -> int:
+	var item_type := str(good["type"])
+	match item_type:
+		"ammo", "component", "medkit", "equipment":
+			return GameState.get_stored_storage_count(item_type, str(good["id"]))
+	return 0
+
+
+func _remove_merchant_item(good: Dictionary, amount: int) -> void:
+	# 가방 몫을 먼저 비우고, 모자란 만큼만 창고에서 덜어낸다 — 가방이 비는 쪽이
+	# 다음 출정에 이득이다. 장착 중 장비·장착 무기 탄약 규칙은 종전 그대로
+	# (장비는 equipment_inventory의 여분만, 탄약은 ammo_inventory의 예비탄만 센다).
+	var remaining := maxi(0, amount)
+	var from_bag := mini(remaining, _merchant_bag_count(good))
+	if from_bag > 0:
+		_add_merchant_item(good, -from_bag)
+		remaining -= from_bag
+	if remaining > 0:
+		GameState.remove_stored_storage_item(str(good["type"]), str(good["id"]), remaining)
 
 
 func _add_merchant_item(good: Dictionary, amount: int) -> void:
@@ -4052,7 +4093,7 @@ func _open_raid_zone_select() -> void:
 	detail_column.add_theme_constant_override("separation", 10)
 	detail_margin.add_child(detail_column)
 	# 브리핑 본문은 스크롤 안에 둔다. 창이 낮아도 출정 버튼이 잘리지 않아야 한다.
-	var detail_scroll := ScrollContainer.new()
+	var detail_scroll := HudStyle.make_scroll()
 	detail_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	detail_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	detail_column.add_child(detail_scroll)

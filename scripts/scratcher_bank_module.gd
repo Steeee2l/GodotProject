@@ -121,7 +121,7 @@ func _open_ui() -> void:
 	shell.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	shell.add_theme_constant_override("separation", 8)
 	margin.add_child(shell)
-	var panel_scroll := ScrollContainer.new()
+	var panel_scroll := HudStyle.make_scroll()
 	panel_scroll.name = "ScratcherBankScroll"
 	panel_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -232,7 +232,7 @@ func _rebuild_ui() -> void:
 			compact
 		))
 	else:
-		var bench_scroll := ScrollContainer.new()
+		var bench_scroll := HudStyle.make_scroll()
 		bench_scroll.custom_minimum_size = Vector2(0, 150)
 		bench_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		bench_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL

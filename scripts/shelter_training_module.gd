@@ -199,7 +199,7 @@ func _rebuild_ui() -> void:
 	section_hint.autowrap_mode = TextServer.AUTOWRAP_OFF
 	section_hint.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	section_row.add_child(section_hint)
-	var scroll := ScrollContainer.new()
+	var scroll := HudStyle.make_scroll()
 	scroll.name = "TrainingTreeScroll"
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL

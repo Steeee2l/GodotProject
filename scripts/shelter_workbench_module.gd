@@ -480,7 +480,7 @@ func _build_recipe_list() -> Control:
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.035, 0.043, 0.049, 0.86), Color("#456b61"), 1, 8))
 	var margin := _margin(12, 12, 12, 12)
 	panel.add_child(margin)
-	var scroll := ScrollContainer.new()
+	var scroll := HudStyle.make_scroll()
 	scroll.name = "WorkbenchRecipeScroll"
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -509,7 +509,7 @@ func _build_detail_panel() -> Control:
 	shell.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	shell.add_theme_constant_override("separation", 10)
 	margin.add_child(shell)
-	var scroll := ScrollContainer.new()
+	var scroll := HudStyle.make_scroll()
 	scroll.name = "WorkbenchDetailScroll"
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL

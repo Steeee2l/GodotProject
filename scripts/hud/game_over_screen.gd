@@ -206,7 +206,7 @@ func build(host: Node) -> void:
 	loss_margin.add_theme_constant_override("margin_right", 10)
 	loss_margin.add_theme_constant_override("margin_bottom", 8)
 	loss_frame.add_child(loss_margin)
-	var loss_scroll := ScrollContainer.new()
+	var loss_scroll := HudStyle.make_scroll()
 	loss_scroll.custom_minimum_size.y = 94
 	loss_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	loss_margin.add_child(loss_scroll)

@@ -141,7 +141,7 @@ func _build_ui() -> void:
 	header.add_child(close_button)
 	shell.add_child(HSeparator.new())
 
-	var scroll := ScrollContainer.new()
+	var scroll := HudStyle.make_scroll()
 	scroll.name = "SettingsScroll"
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL

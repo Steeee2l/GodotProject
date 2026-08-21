@@ -281,7 +281,7 @@ func _build_inventory_panel() -> Control:
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.035, 0.043, 0.049, 0.98), Color(0.66, 0.78, 0.73, 0.7), 8))
 	var margin := _margin(16, 14, 16, 14)
 	panel.add_child(margin)
-	var panel_scroll := ScrollContainer.new()
+	var panel_scroll := HudStyle.make_scroll()
 	panel_scroll.name = "InventoryPanelScroll"
 	panel_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -369,7 +369,7 @@ func _build_inventory_panel() -> Control:
 
 	box.add_child(_build_item_detail_panel())
 
-	bag_scroll = ScrollContainer.new()
+	bag_scroll = HudStyle.make_scroll()
 	bag_scroll.name = "BagScroll"
 	bag_scroll.custom_minimum_size = Vector2(0, 110)
 	bag_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -465,7 +465,7 @@ func _build_weapon_panel() -> Control:
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.028, 0.035, 0.04, 0.98), Color(0.69, 0.62, 0.4, 0.68), 8))
 	var margin := _margin(18, 14, 18, 16)
 	panel.add_child(margin)
-	var panel_scroll := ScrollContainer.new()
+	var panel_scroll := HudStyle.make_scroll()
 	panel_scroll.name = "WeaponPanelScroll"
 	panel_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
