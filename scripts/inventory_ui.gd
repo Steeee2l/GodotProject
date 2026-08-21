@@ -267,6 +267,10 @@ func _build_modal() -> void:
 	shell.add_child(inventory_panel)
 	shell.add_child(weapon_panel)
 	weapon_panel.visible = false
+	# 표면 연출(셰이더)만 얹는다 — 딤 ColorRect는 그대로 두고 유리 셰이더를 입히며,
+	# 먼지 입자·글리치 고스트가 살 연출 레이어를 모달 맨 위에 둔다(입력 통과).
+	# 열릴 때 스캔 스윕은 modal.visibility_changed에 자동으로 걸린다.
+	HudFx.install_glass_backdrop(modal, dim)
 
 
 func _build_inventory_panel() -> Control:
@@ -295,6 +299,9 @@ func _build_inventory_panel() -> Control:
 	var title := _label("가방", 23, Color("#f0e8d0"))
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
+	# 타이틀 뒤 은은한 골드 글로우 + 7~9초에 한 번 60ms 색수차(단말기 질감). 레이아웃 무변경.
+	HudFx.attach_text_glow(title, HudFx.GOLD)
+	HudFx.attach_title_aberration(title)
 	var close_button := _icon_text_button("닫기", "가방 닫기 [Esc]", "close")
 	close_button.custom_minimum_size = Vector2(62, 34)
 	close_button.pressed.connect(func() -> void: set_open(false))
@@ -335,6 +342,8 @@ func _build_inventory_panel() -> Control:
 	bag_slot_usage_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	bag_slot_usage_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bag_header.add_child(bag_slot_usage_label)
+	# 용량 표시 뒤 약한 글로우 — 만재가 되면 _refresh_contents가 빨강으로 바꾼다.
+	HudFx.attach_text_glow(bag_slot_usage_label, Color(HudFx.GOLD, 0.5))
 	# 인크리멘탈 사다리: 가방 확장(고철)과 시큐어 슬롯(츄르)이 항상 눈앞에 있다.
 	# "조금만 더 모으면 산다"가 파밍의 이유가 된다.
 	bag_expand_button = _icon_text_button("＋칸", "가방 영구 확장", "backpack")
@@ -472,6 +481,7 @@ func _build_weapon_panel() -> Control:
 	weapon_title = _label("총기 상세", 22, Color("#f0e8cf"))
 	weapon_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(weapon_title)
+	HudFx.attach_text_glow(weapon_title, HudFx.GOLD)
 	weapon_state_action_button = _icon_text_button("장착 해제", "현재 무기를 가방으로 내립니다.", "close")
 	weapon_state_action_button.custom_minimum_size = Vector2(94, 34)
 	weapon_state_action_button.pressed.connect(_request_weapon_unequip)
@@ -1162,6 +1172,10 @@ func _refresh_contents() -> void:
 			"font_color",
 			Color("#ff9595") if occupied_slots >= bag_capacity else Color("#b7c8c0")
 		)
+		HudFx.set_text_glow_color(
+			bag_slot_usage_label,
+			Color("#ff6a5a", 0.9) if occupied_slots >= bag_capacity else Color(HudFx.GOLD, 0.5)
+		)
 	if bag_expand_button:
 		var bag_cost := int(game_state.get_bag_upgrade_cost())
 		if bag_cost <= 0:
@@ -1189,6 +1203,7 @@ func _refresh_contents() -> void:
 		_refresh_weapon_detail()
 	_refresh_item_detail()
 	_update_bag_empty_hint()
+	_sync_bag_rim_fx()
 	_apply_responsive_layout()
 
 
@@ -1366,6 +1381,19 @@ func _update_bag_selection_visual(selected_id: String) -> void:
 			(child as Button).set_pressed_no_signal(
 				str(child.name) == "BagItem_%s" % selected_id
 			)
+	_sync_bag_rim_fx()
+
+
+func _sync_bag_rim_fx() -> void:
+	# 눌린(선택된) 칸에만 골드 림라이트 펄스 오버레이를 얹고, 나머지는 뗀다. 표면 연출만.
+	if bag_grid == null:
+		return
+	for child in bag_grid.get_children():
+		if child is Button and str(child.name).begins_with("BagItem_"):
+			if (child as Button).button_pressed:
+				HudFx.attach_rim_pulse(child as Button)
+			else:
+				HudFx.detach_rim_pulse(child as Button)
 
 
 func _refresh_item_detail() -> void:
@@ -1557,6 +1585,9 @@ func _on_selected_item_discard() -> void:
 
 func apply_discard_result(success: bool, message: String) -> void:
 	if success:
+		# 연출: 버린 칸의 타일을 고스트로 떼어내 0.34초 동안 찢어 없앤다. 데이터와 그리드
+		# 갱신은 원래대로 즉시 — 고스트는 새 그리드 위에서 사라진다(로직 타이밍 무변경).
+		_play_discard_glitch(str(selected_item.get("id", "")))
 		selected_item = {}
 		weapon_detail_open = false
 		_refresh_contents()
@@ -1564,6 +1595,20 @@ func apply_discard_result(success: bool, message: String) -> void:
 		message,
 		Color("#e7c26e") if success else Color("#ff9d8f")
 	)
+
+
+func _play_discard_glitch(item_id: String) -> void:
+	if bag_grid == null or item_id.is_empty():
+		return
+	var exact_name := "BagItem_%s" % item_id
+	var span_prefix := "BagItem_%s_" % item_id
+	for child in bag_grid.get_children():
+		if not (child is Button):
+			continue
+		var child_name := str(child.name)
+		if child_name == exact_name or child_name.begins_with(span_prefix):
+			HudFx.detach_rim_pulse(child as Button)
+			HudFx.play_glitch_out(child as Button)
 
 
 func _on_selected_item_action() -> void:

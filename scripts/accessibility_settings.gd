@@ -10,6 +10,7 @@ const SAVED_PROPERTIES := [
 	"ui_scale", "combat_text_scale", "camera_shake_scale", "hit_flash_scale",
 	"vignette_scale", "minimum_brightness", "aim_assist_strength",
 	"damage_numbers_enabled", "auto_reload", "vibration_enabled", "battery_saver",
+	"ui_fx_enabled",
 	"master_volume", "sfx_volume", "ui_volume",
 ]
 
@@ -25,6 +26,8 @@ var damage_numbers_enabled := true
 var auto_reload := true
 var vibration_enabled := true
 var battery_saver := false
+# UI 셰이더 연출(모달 블러·노이즈·먼지·글리치) — 기본 켜짐. 저사양 폰은 끄면 단순 딤으로 폴백.
+var ui_fx_enabled := true
 # 오디오 버스 볼륨(0~100). Master/SFX/UI 버스에 linear_to_db로 반영한다.
 var master_volume := 80.0
 var sfx_volume := 80.0
@@ -175,6 +178,7 @@ func _build_ui() -> void:
 	_add_toggle(content, "탄약이 있으면 자동 재장전", auto_reload, func(value: bool) -> void: auto_reload = value)
 	_add_toggle(content, "모바일 햅틱", vibration_enabled, func(value: bool) -> void: vibration_enabled = value)
 	_add_toggle(content, "모바일 저전력 모드", battery_saver, func(value: bool) -> void: battery_saver = value)
+	_add_toggle(content, "UI 셰이더 효과 (블러·노이즈·입자)", ui_fx_enabled, func(value: bool) -> void: ui_fx_enabled = value)
 	var footer := _label("색상만으로 상태를 구분하지 않으며 아이콘과 문자를 함께 표시합니다.", 12, Color("#8fa59b"))
 	footer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(footer)
