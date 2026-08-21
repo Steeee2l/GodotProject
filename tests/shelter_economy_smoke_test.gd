@@ -197,6 +197,46 @@ func _run() -> void:
 		_fail("offline settlement must clamp elapsed time to SHELTER_OFFLINE_MAX_SECONDS")
 	if offline_gain <= 0 or offline_gain > capped_expected + 1:
 		_fail("offline scrap must be capped at 8 hours of production (got %d, cap %d)" % [offline_gain, capped_expected])
+	# 특성 오프라인 규칙 — 연료(식비) 폐지로 사라진 대식가/소식가의 트레이드오프를
+	# '자리 비움' 규칙으로 대체했다. 대식가만 배치하면 오프라인 생산 0, 소식가는
+	# 8h 상한 대신 16h까지 쌓인다. 특성이 없는 주민은 종전 계산과 같다.
+	var trait_assigned := game_state.get("assigned_worker_ids") as Array
+	if not trait_assigned.is_empty():
+		var probe_id := str(trait_assigned[0])
+		var traits_dict := game_state.get("resident_traits") as Dictionary
+		var saved_traits := traits_dict.duplicate(true)
+		var saved_assigned := trait_assigned.duplicate()
+		trait_assigned.clear()
+		trait_assigned.append(probe_id)
+		var glutton := (traits_dict[probe_id] as Dictionary).duplicate(true)
+		for key in game_state.RESIDENT_TRAIT_PRESETS[5]:
+			glutton[key] = game_state.RESIDENT_TRAIT_PRESETS[5][key]
+		traits_dict[probe_id] = glutton
+		game_state.set("shelter_scrap_fraction", 0.0)
+		var glutton_before := int(game_state.get("scrap"))
+		game_state.set("shelter_last_progress_time", int(Time.get_unix_time_from_system()) - 10 * 3600)
+		game_state.call("process_shelter_progress")
+		if int(game_state.get("scrap")) != glutton_before:
+			_fail("대식가 must not produce while the player is away (offline factor 0)")
+		var frugal := (traits_dict[probe_id] as Dictionary).duplicate(true)
+		frugal.erase("offline")
+		for key in game_state.RESIDENT_TRAIT_PRESETS[6]:
+			frugal[key] = game_state.RESIDENT_TRAIT_PRESETS[6][key]
+		traits_dict[probe_id] = frugal
+		game_state.set("shelter_scrap_fraction", 0.0)
+		var frugal_before := int(game_state.get("scrap"))
+		game_state.set("shelter_last_progress_time", int(Time.get_unix_time_from_system()) - 30 * 3600)
+		game_state.call("process_shelter_progress")
+		var frugal_gain := int(game_state.get("scrap")) - frugal_before
+		var frugal_expected := int(floor(float(game_state.call("get_base_scrap_per_hour")) * 16.0))
+		if frugal_gain < frugal_expected - 1 or frugal_gain > frugal_expected + 1:
+			_fail("소식가 must accrue 16 hours offline (got %d, expected %d)" % [frugal_gain, frugal_expected])
+		traits_dict.clear()
+		for key in saved_traits:
+			traits_dict[key] = saved_traits[key]
+		trait_assigned.clear()
+		for id in saved_assigned:
+			trait_assigned.append(id)
 	game_state.set("canned_food", 20)
 
 	var workbench := get_nodes_in_group("shelter_workbench")[0] as Node

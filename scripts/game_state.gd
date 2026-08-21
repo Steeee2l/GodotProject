@@ -812,8 +812,18 @@ const RESIDENT_TRAIT_PRESETS := [
 	{"name": "야무진 발톱", "kneading": 1.20, "catnip": 1.15},
 	{"name": "밤샘 체질", "kneading": 1.10, "catnip": 1.10},
 	{"name": "평범한 주민", "kneading": 1.00, "catnip": 1.00},
-	{"name": "대식가", "kneading": 1.75, "catnip": 1.70},
-	{"name": "소식가", "kneading": 0.82, "catnip": 0.82},
+	# 연료(식비)가 폐지되면서 대식가/소식가의 트레이드오프가 사라졌다 — 대식가가
+	# 순수 상위 특성이 되는 걸 막기 위해 '자리 비움(오프라인)' 규칙으로 대가를 둔다.
+	# 대식가: 보는 사람 없으면 먹으러 간다 → 오프라인 생산 0.
+	# 소식가: 꾸준하다 → 오프라인 누적 상한 8h 대신 16h.
+	{
+		"name": "대식가", "kneading": 1.75, "catnip": 1.70,
+		"offline": 0.0, "quirk": "자리를 비우면 먹으러 간다 · 오프라인 생산 없음",
+	},
+	{
+		"name": "소식가", "kneading": 0.82, "catnip": 0.82,
+		"offline_cap_hours": 16, "quirk": "꾸준하다 · 자리를 비워도 16시간까지 쌓인다",
+	},
 ]
 const RESIDENT_NAME_POOL: Array[String] = [
 	"보리", "두부", "호두", "감자", "밤이", "구름", "탄이", "콩이",
@@ -2788,6 +2798,34 @@ func get_resident_trait(worker_id: String) -> Dictionary:
 	return (resident_traits.get(worker_id, RESIDENT_TRAIT_PRESETS[4]) as Dictionary).duplicate(true)
 
 
+func _resident_trait_field(worker_id: String, key: String, default_value: Variant) -> Variant:
+	# 특성 기록에 키가 없으면(연료 폐지 이전 세이브) 같은 이름의 프리셋에서 찾는다.
+	var trait_data := get_resident_trait(worker_id)
+	if trait_data.has(key):
+		return trait_data[key]
+	var trait_name := str(trait_data.get("name", ""))
+	for preset in RESIDENT_TRAIT_PRESETS:
+		if str((preset as Dictionary).get("name", "")) == trait_name:
+			return (preset as Dictionary).get(key, default_value)
+	return default_value
+
+
+func get_worker_offline_factor(worker_id: String) -> float:
+	# 자리를 비운 동안 이 주민의 생산이 얼마나 쌓이는가(1.0 = 전량, 0.0 = 없음).
+	return clampf(float(_resident_trait_field(worker_id, "offline", 1.0)), 0.0, 1.0)
+
+
+func get_worker_offline_cap_seconds(worker_id: String) -> int:
+	var cap_hours := int(_resident_trait_field(worker_id, "offline_cap_hours", 0))
+	if cap_hours <= 0:
+		return SHELTER_OFFLINE_MAX_SECONDS
+	return cap_hours * 3600
+
+
+func get_resident_trait_quirk(worker_id: String) -> String:
+	return str(_resident_trait_field(worker_id, "quirk", ""))
+
+
 func get_worker_production_per_second(worker_id: String, production_kind: String) -> float:
 	var trait_data := get_resident_trait(worker_id)
 	match production_kind:
@@ -3118,19 +3156,36 @@ func process_shelter_progress() -> Dictionary:
 		shelter_last_progress_time = now
 		return {"scrap": 0, "catnip": 0, "repair": 0.0, "elapsed": 0}
 	# 자리를 비운 시간은 SHELTER_OFFLINE_MAX_SECONDS까지만 쳐준다(연료 대신 시간 상한).
-	var elapsed := mini(maxi(0, now - shelter_last_progress_time), SHELTER_OFFLINE_MAX_SECONDS)
+	var raw_elapsed := maxi(0, now - shelter_last_progress_time)
+	var elapsed := mini(raw_elapsed, SHELTER_OFFLINE_MAX_SECONDS)
 	var progress_start := now - elapsed
 	shelter_last_progress_time = now
 	var base_scrap_rate := get_base_scrap_per_hour()
-	var catnip_rate := get_catnip_per_hour()
+	# 주민마다 오프라인 규칙이 다르다(대식가 0배 / 소식가 16h 상한). 기본값은
+	# 전량·8h라 특성이 없는 주민은 종전 계산과 같다.
+	var base_scrap_gain := 0.0
+	if is_shelter_facility_unlocked("scratcher_bank"):
+		for worker_id in assigned_worker_ids:
+			var worker_rate_per_hour := get_worker_production_per_second(worker_id, "kneading") * 3600.0
+			var worker_seconds := float(mini(raw_elapsed, get_worker_offline_cap_seconds(worker_id)))
+			base_scrap_gain += worker_rate_per_hour * worker_seconds / 3600.0 * get_worker_offline_factor(worker_id)
+	var catnip_gain_raw := 0.0
+	if is_shelter_facility_unlocked("catnip_scraper"):
+		var catnip_line_multiplier := (
+			(1.0 + INFUSION_BONUS_PER_LEVEL * catnip_infusion_level)
+			* get_active_catnip_fever_multiplier()
+		)
+		for worker_id in assigned_catnip_worker_ids:
+			var worker_catnip_per_second := get_worker_production_per_second(worker_id, "catnip") * catnip_line_multiplier
+			var worker_seconds := float(mini(raw_elapsed, get_worker_offline_cap_seconds(worker_id)))
+			catnip_gain_raw += worker_catnip_per_second * worker_seconds * get_worker_offline_factor(worker_id)
 	var work_seconds := float(elapsed)
-	var base_scrap_gain := base_scrap_rate * work_seconds / 3600.0
 	var boosted_seconds := mini(roundi(work_seconds), maxi(0, mini(now, catnip_boost_end_time) - progress_start))
 	var boosted_extra := base_scrap_rate * float(boosted_seconds) / 3600.0 * (CATNIP_BOOST_MULTIPLIER - 1.0)
 	shelter_scrap_fraction += base_scrap_gain + boosted_extra
 	var scrap_gain := int(floor(shelter_scrap_fraction))
 	shelter_scrap_fraction -= float(scrap_gain)
-	shelter_catnip_fraction += catnip_rate * work_seconds / 3600.0
+	shelter_catnip_fraction += catnip_gain_raw
 	var catnip_gain := int(floor(shelter_catnip_fraction))
 	shelter_catnip_fraction -= float(catnip_gain)
 	catnip += catnip_gain
@@ -3277,6 +3332,12 @@ func try_reroll_resident_trait(resident_id: String) -> Dictionary:
 	var record := (resident_traits.get(resident_id, {}) as Dictionary).duplicate(true)
 	for key in ["name", "kneading", "catnip"]:
 		record[key] = picked.get(key, record.get(key))
+	# 오프라인 규칙 같은 부가 키는 새 특성 기준으로 갈아끼운다 — 지난 특성의
+	# 페널티가 남으면 '대식가였던 평범한 주민'이 계속 오프라인 0이 된다.
+	for key in ["offline", "offline_cap_hours", "quirk"]:
+		record.erase(key)
+		if picked.has(key):
+			record[key] = picked[key]
 	resident_traits[resident_id] = record
 	save_persistent_state()
 	return {"ok": true, "cost": cost, "trait": record}
