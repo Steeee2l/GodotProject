@@ -98,26 +98,26 @@ func _build_wall(side: String) -> void:
 func _build_furniture() -> void:
 	match room_type:
 		"storage":
-			_add_image_furniture("StorageNorth", STORAGE_TEXTURE_PATH, Vector3(-6.5, 0, -4.0), 0.0043, [
+			_add_image_furniture("StorageNorth", STORAGE_TEXTURE_PATH, Vector3(-6.5, 0, -4.0), 6.0286, [
 				{"position": Vector3(0, 0.8, 0), "size": Vector3(6.0, 1.6, 3.7)},
 			])
-			_add_image_furniture("StorageSouth", STORAGE_TEXTURE_PATH, Vector3(6.5, 0, 4.0), 0.0043, [
+			_add_image_furniture("StorageSouth", STORAGE_TEXTURE_PATH, Vector3(6.5, 0, 4.0), 6.0286, [
 				{"position": Vector3(0, 0.8, 0), "size": Vector3(6.0, 1.6, 3.7)},
 			], true)
 		"server":
-			_add_image_furniture("ServerWest", SERVER_TEXTURE_PATH, Vector3(-7.2, 0, -4.0), 0.0042, [
+			_add_image_furniture("ServerWest", SERVER_TEXTURE_PATH, Vector3(-7.2, 0, -4.0), 5.2668, [
 				{"position": Vector3(0, 0.95, 0), "size": Vector3(4.8, 1.9, 2.8)},
 			])
-			_add_image_furniture("ServerEast", SERVER_TEXTURE_PATH, Vector3(7.2, 0, 4.0), 0.0042, [
+			_add_image_furniture("ServerEast", SERVER_TEXTURE_PATH, Vector3(7.2, 0, 4.0), 5.2668, [
 				{"position": Vector3(0, 0.95, 0), "size": Vector3(4.8, 1.9, 2.8)},
 			], true)
 		"meeting":
-			_add_image_furniture("MeetingTable", MEETING_TEXTURE_PATH, Vector3(0, 0, 0), 0.0048, [
+			_add_image_furniture("MeetingTable", MEETING_TEXTURE_PATH, Vector3(0, 0, 0), 7.3728, [
 				{"position": Vector3(0, 0.7, 0), "size": Vector3(7.2, 1.4, 4.6)},
 			])
 		"executive":
 			_add_workstation_module("ExecutiveWorkstation", Vector3(0, 0, -4.6), false)
-			_add_image_furniture("ExecutiveLounge", EXECUTIVE_TEXTURE_PATH, Vector3(6.5, 0, 4.2), 0.0047, [
+			_add_image_furniture("ExecutiveLounge", EXECUTIVE_TEXTURE_PATH, Vector3(6.5, 0, 4.2), 7.2192, [
 				{"position": Vector3(0.5, 0.7, 0), "size": Vector3(6.6, 1.4, 4.4)},
 			], true)
 		_:
@@ -128,14 +128,16 @@ func _build_furniture() -> void:
 
 
 func _add_workstation_module(node_name: String, local_position: Vector3, mirrored: bool) -> void:
-	_add_image_furniture(node_name, WORKSTATION_TEXTURE_PATH, local_position, 0.0056, [
+	_add_image_furniture(node_name, WORKSTATION_TEXTURE_PATH, local_position, 8.6016, [
 		{"position": Vector3(-2.0, 0.7, -1.65), "size": Vector3(2.15, 1.4, 1.05)},
 		{"position": Vector3(1.45, 0.7, -1.65), "size": Vector3(2.15, 1.4, 1.05)},
 		{"position": Vector3(-0.25, 0.7, -0.62), "size": Vector3(1.15, 1.4, 1.35)},
 	], mirrored)
 
 
-func _add_image_furniture(node_name: String, texture_path: String, local_position: Vector3, pixel_size: float, footprints: Array, mirrored: bool = false) -> void:
+# world_width: 가구 스프라이트의 월드 가로 길이(m). pixel_size 는 런타임 텍스처 폭으로 나눠
+# 구한다 — 임포트 size_limit 으로 텍스처가 줄어도 가구 크기가 변하지 않는다.
+func _add_image_furniture(node_name: String, texture_path: String, local_position: Vector3, world_width: float, footprints: Array, mirrored: bool = false) -> void:
 	var module := Node3D.new()
 	module.name = node_name
 	module.position = local_position
@@ -143,6 +145,7 @@ func _add_image_furniture(node_name: String, texture_path: String, local_positio
 	module.set_meta("module_type", texture_path.get_file().get_basename())
 	add_child(module)
 	var texture := load(texture_path) as Texture2D
+	var pixel_size := world_width / float(maxi(1, texture.get_width()))
 	var sprite := Sprite3D.new()
 	sprite.name = "GeneratedFurnitureVisual"
 	sprite.texture = texture

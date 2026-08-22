@@ -204,7 +204,8 @@ func _raid_item_from_definition(definition: Dictionary) -> Dictionary:
 
 func _build_visual() -> void:
 	var texture: Texture2D = SALVAGE_TEXTURE
-	var pixel_size := 0.00105
+	# 월드 폭 기준(1.41m) — 텍스처 해상도(size_limit)가 바뀌어도 같은 크기.
+	var pixel_size := 1.4143 / float(maxi(1, SALVAGE_TEXTURE.get_width()))
 	var icon_name := "backpack"
 	var tint := Color("#8ea097")
 	if not container_type.is_empty():
@@ -238,7 +239,7 @@ func _build_visual() -> void:
 			"mod_component":
 				var component_id := str(data.get("component_id", "rubber_gasket"))
 				texture = COMPONENT_TEXTURES.get(component_id, COMPONENT_TEXTURES["rubber_gasket"])
-				pixel_size = 0.00075
+				pixel_size = 0.9405 / float(maxi(1, texture.get_width()))
 				icon_name = "parts"
 			"progression_item":
 				var progression_item_id := str(data.get("progression_item_id", "rifle_blueprint"))

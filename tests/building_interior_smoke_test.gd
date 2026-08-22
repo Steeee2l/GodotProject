@@ -104,7 +104,8 @@ func _initialize() -> void:
 		_assert(loot.get_node_or_null("GeneratedLootVisual") != null, "루팅 오브젝트는 박스 메시가 아닌 이미지여야 합니다.")
 		var loot_visual := loot.get_node("GeneratedLootVisual") as Sprite3D
 		if str(loot.get_meta("loot_type", "")) == "component":
-			_assert(loot_visual.pixel_size <= 0.0008, "총기 부품 이미지는 탄약 상자보다 작고 현실적인 크기여야 합니다.")
+			# 텍스처 다이어트(size_limit) 이후 pixel_size 는 텍스처 폭에 따라 달라진다 — 월드 폭(≤1.0m)으로 검증.
+			_assert(loot_visual.pixel_size * float(loot_visual.texture.get_width()) <= 1.0, "총기 부품 이미지는 탄약 상자보다 작고 현실적인 크기여야 합니다.")
 	var ammo_before := int(game_state.magazine_ammo)
 	var fatigue_before := float(game_state.fatigue)
 	var left_click := InputEventMouseButton.new()

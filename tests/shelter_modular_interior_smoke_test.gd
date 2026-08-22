@@ -50,7 +50,8 @@ func _run() -> void:
 	assert(outside_mesh.size == Vector2(240.0, 240.0))
 	var pipe := shelter.get_node("EscapePipe") as Sprite3D
 	assert(pipe.texture.resource_path == PIPE_TEXTURE_PATH)
-	assert(is_equal_approx(pipe.pixel_size, 0.0043))
+	# 텍스처 다이어트(size_limit) 이후 pixel_size 는 텍스처 폭에 따라 달라진다 — 월드 폭(4.82m)으로 검증.
+	assert(absf(pipe.pixel_size * float(pipe.texture.get_width()) - 4.8246) < 0.01)
 	assert(pipe.is_in_group("shelter_exit_pipe"))
 	assert(shelter.get_node("EscapePipeCollision") is StaticBody3D)
 	var camera := shelter.get_node("ShelterCamera") as Camera3D

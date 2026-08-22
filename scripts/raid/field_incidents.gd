@@ -95,20 +95,21 @@ func _build_high_value_hotspot_prop(point: Node3D, hotspot_type: String) -> void
 	sprite.render_priority = 9
 	sprite.position.y = 0.72
 	var color := Color("#dfb85d")
+	# pixel_size 는 월드 폭(m)/텍스처 폭 — 임포트 size_limit 으로 해상도가 바뀌어도 같은 크기.
 	match hotspot_type:
 		"pharmacy":
 			sprite.texture = PHARMACY_EMERGENCY_CACHE_TEXTURE
-			sprite.pixel_size = 0.00145
+			sprite.pixel_size = 1.8183 / float(maxi(1, sprite.texture.get_width()))
 			sprite.position.y = 1.02
 			color = Color("#62d5d8")
 		"sealed_parts":
 			sprite.texture = SECURE_MILITARY_CACHE_TEXTURE
-			sprite.pixel_size = 0.00185
+			sprite.pixel_size = 2.3199 / float(maxi(1, sprite.texture.get_width()))
 			sprite.modulate = Color("#b6cee0")
 			color = Color("#8fb9db")
 		_:
 			sprite.texture = SECURE_MILITARY_CACHE_TEXTURE
-			sprite.pixel_size = 0.00185
+			sprite.pixel_size = 2.3199 / float(maxi(1, sprite.texture.get_width()))
 	point.add_child(sprite)
 	host._add_interaction_marker(point, color, 1.55, false)
 	var marker := Sprite3D.new()
@@ -306,7 +307,8 @@ func _spawn_dynamic_convoy_incident(world: ProceduralCityMap) -> void:
 	var sprite := Sprite3D.new()
 	sprite.name = "ConvoyWreck"
 	sprite.texture = CRASHED_CONVOY_CACHE_TEXTURE
-	sprite.pixel_size = 0.0019
+	# 월드 폭 2.92m 고정(텍스처 해상도 무관).
+	sprite.pixel_size = 2.9184 / float(maxi(1, sprite.texture.get_width()))
 	sprite.position.y = 0.86
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.shaded = false

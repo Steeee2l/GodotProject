@@ -113,7 +113,7 @@ func _create_loot_pickup(loot_type: String, world_position: Vector3, data: Dicti
 			highlight_color = Color("#83c99a")
 		"churu":
 			sprite.texture = CHURU_TEXTURE
-			sprite.pixel_size = 0.0011
+			sprite.pixel_size = _pickup_pixel_size(sprite.texture, 1.3794)
 			highlight_color = Color("#f2bd55")
 		"valuable":
 			sprite.texture = UI_ICONS.get_icon("loot", 96, Color("#e6c979"))
@@ -126,7 +126,7 @@ func _create_loot_pickup(loot_type: String, world_position: Vector3, data: Dicti
 		"mod_component":
 			var component_id := str(data.get("component_id", "rubber_gasket"))
 			sprite.texture = _get_mod_component_texture(component_id)
-			sprite.pixel_size = 0.00105
+			sprite.pixel_size = _pickup_pixel_size(sprite.texture, 1.3167)
 			highlight_color = _get_mod_component_color(component_id)
 		"weapon_mod":
 			sprite.texture = UI_ICONS.get_icon("mod", 96, Color("#dfc879"))

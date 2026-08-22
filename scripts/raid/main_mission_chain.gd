@@ -32,6 +32,18 @@ const PROP_TEXTURES := {
 	"pharmacy_cache": preload("res://assets/events/pharmacy_emergency_cache_v1.png"),
 	"military_cache": preload("res://assets/events/secure_military_cache_v1.png"),
 }
+# 포인트 프롭의 월드 가로 길이(m). pixel_size 는 런타임 텍스처 폭으로 나눠 구한다 —
+# 임포트 size_limit 으로 텍스처가 줄어도 프롭 크기가 변하지 않는다(과거 0.0011 × 원본 px).
+const PROP_WORLD_WIDTHS := {
+	"manifest_terminal": 1.3794,
+	"generator": 1.3794,
+	"sealed_cargo": 1.3794,
+	"convoy_cache": 1.6896,
+	"pharmacy_cache": 1.3794,
+	"military_cache": 1.3794,
+}
+# 들고 나르는 화물 스프라이트는 포인트 프롭의 0.4364배(과거 0.00048/0.0011).
+const CARRIED_PROP_SCALE := 0.43636
 
 var host: Node
 var cinematic := FIELD_CINEMATIC.new()
@@ -167,8 +179,7 @@ func _spawn_point(index: int) -> void:
 		site.set_meta("locked_reason", str(point.get("locked_reason", "열쇠가 필요하다")))
 	_build_point_prop(
 		site,
-		PROP_TEXTURES.get(str(point.get("prop", "manifest_terminal")), PROP_TEXTURES["manifest_terminal"]),
-		0.0011,
+		str(point.get("prop", "manifest_terminal")),
 		Color(str(point.get("color", "#e7a847"))),
 		0.86
 	)
@@ -198,11 +209,12 @@ func _spawn_point_guards(world: ProceduralCityMap) -> void:
 
 func _build_point_prop(
 	point: Node3D,
-	texture: Texture2D,
-	pixel_size: float,
+	prop_key: String,
 	color: Color,
 	height: float
 ) -> void:
+	var texture: Texture2D = PROP_TEXTURES.get(prop_key, PROP_TEXTURES["manifest_terminal"])
+	var pixel_size := _prop_pixel_size(prop_key, texture, 1.0)
 	var sprite := Sprite3D.new()
 	# 이름은 예전 잭팟 그대로 둔다 — 스모크 테스트와 렌더 정렬이 이 이름을 본다.
 	sprite.name = "JackpotPropSprite"
@@ -229,6 +241,13 @@ func _build_point_prop(
 	beacon.render_priority = 122
 	beacon.modulate = color
 	point.add_child(beacon)
+
+
+func _prop_pixel_size(prop_key: String, texture: Texture2D, scale: float) -> float:
+	# 목표 월드 폭 × scale / 실제 텍스처 폭.
+	var world_width := float(PROP_WORLD_WIDTHS.get(prop_key, PROP_WORLD_WIDTHS["manifest_terminal"]))
+	var texture_width := float(texture.get_width()) if texture != null else 0.0
+	return world_width * scale / maxf(1.0, texture_width)
 
 
 # ── 배너 · 지도 ────────────────────────────────────────────────
@@ -555,10 +574,9 @@ func _attach_carry_visual() -> void:
 	var recovery := stage.get("recovery", {}) as Dictionary
 	carried_sprite = Sprite3D.new()
 	carried_sprite.name = "CarriedMainMissionCargo"
-	carried_sprite.texture = PROP_TEXTURES.get(
-		str(recovery.get("prop", "sealed_cargo")), PROP_TEXTURES["sealed_cargo"]
-	)
-	carried_sprite.pixel_size = 0.00048
+	var carried_key := str(recovery.get("prop", "sealed_cargo"))
+	carried_sprite.texture = PROP_TEXTURES.get(carried_key, PROP_TEXTURES["sealed_cargo"])
+	carried_sprite.pixel_size = _prop_pixel_size(carried_key, carried_sprite.texture, CARRIED_PROP_SCALE)
 	carried_sprite.position = Vector3(-0.62, 0.48, 0.42)
 	carried_sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	carried_sprite.shaded = false

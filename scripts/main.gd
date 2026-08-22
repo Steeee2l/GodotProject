@@ -5553,7 +5553,8 @@ func _build_world_lore_board(point: Node3D) -> void:
 	poster.name = "LoreNoticeBoard"
 	poster.texture = LORE_POSTER_TEXTURE
 	poster.position = Vector3(0.0, 1.48, 0.0)
-	poster.pixel_size = 0.00245
+	# 월드 폭 3.76m 고정 — 텍스처 해상도(size_limit)와 무관하게 같은 크기로 보인다.
+	poster.pixel_size = 3.7632 / maxf(1.0, float(LORE_POSTER_TEXTURE.get_width()))
 	poster.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	poster.shaded = true
 	poster.transparent = false
@@ -6136,7 +6137,8 @@ func _build_sentry_prop(point: Node3D) -> void:
 	sprite.name = "BrokenSentry"
 	sprite.texture = BROKEN_SENTRY_TEXTURE
 	sprite.position = Vector3(0, 0.7, 0)
-	sprite.pixel_size = 0.00215
+	# 월드 폭 2.70m 고정(텍스처 해상도 무관).
+	sprite.pixel_size = 2.6961 / maxf(1.0, float(BROKEN_SENTRY_TEXTURE.get_width()))
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.shaded = false
 	sprite.transparent = true

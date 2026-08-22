@@ -2,26 +2,29 @@ class_name WeaponVisualCatalog
 extends RefCounted
 
 
+# world_width: 스프라이트 한 장의 월드 가로 길이(m). pixel_size 는 런타임 텍스처 폭으로
+# 나눠 구한다(get_world_pixel_size) — 임포트 size_limit 으로 텍스처가 줄어도 손 스프라이트
+# 크기가 변하지 않게 하려고 원본 px 기준 pixel_size 상수를 버렸다.
 const CATALOG := {
 	"m1911": {
 		"display_name": "M1911",
 		"texture_path": "res://assets/weapons/catalog/generated/m1911.png",
-		"world_pixel_size": 0.00068,
+		"world_width": 1.04448,
 	},
 	"ak47": {
 		"display_name": "AK-47",
 		"texture_path": "res://assets/weapons/catalog/generated/ak47.png",
-		"world_pixel_size": 0.001,
+		"world_width": 1.651,
 	},
 	"mp5": {
 		"display_name": "MP5",
 		"texture_path": "res://assets/weapons/catalog/generated/mp5.png",
-		"world_pixel_size": 0.0009,
+		"world_width": 1.3824,
 	},
 	"double_barrel": {
 		"display_name": "더블배럴 산탄총",
 		"texture_path": "res://assets/weapons/catalog/generated/double_barrel.png",
-		"world_pixel_size": 0.0009,
+		"world_width": 1.5966,
 	},
 	# ── 무기 사다리 신규 3종 ──
 	# AKM은 정식 아트가 아직 없다 — AK-47 스프라이트를 코드에서 틴트(어두운
@@ -30,31 +33,31 @@ const CATALOG := {
 	"akm": {
 		"display_name": "AKM",
 		"texture_path": "res://assets/weapons/catalog/generated/ak47.png",
-		"world_pixel_size": 0.001,
+		"world_width": 1.651,
 		"tint": Color(0.16, 0.2, 0.26, 0.48),
 	},
 	# K2·펌프 산탄총은 assets/weapons/catalog에 이미 있던(미사용) 같은 화풍의
 	# 1254² 스프라이트를 쓴다 — 틴트보다 식별이 훨씬 낫다. 여백이 커서
-	# pixel_size를 AK(1651px·0.001)와 비슷한 실물 폭이 되도록 잡는다.
+	# world_width 를 AK(1.651)와 비슷한 실물 폭이 되도록 잡는다.
 	"k2": {
 		"display_name": "K2",
 		"texture_path": "res://assets/weapons/catalog/rifle_ar_platform.png",
-		"world_pixel_size": 0.00125,
+		"world_width": 1.5675,
 	},
 	"pump_shotgun": {
 		"display_name": "펌프 산탄총",
 		"texture_path": "res://assets/weapons/catalog/shotgun_pump.png",
-		"world_pixel_size": 0.00125,
+		"world_width": 1.5675,
 	},
 	"baseball_bat": {
 		"display_name": "야구 방망이",
 		"texture_path": "res://assets/weapons/catalog/generated/baseball_bat.png",
-		"world_pixel_size": 0.00058,
+		"world_width": 1.02892,
 	},
 	"rocket_launcher": {
 		"display_name": "로켓런처",
 		"texture_path": "res://assets/weapons/catalog/generated/rocket_launcher.png",
-		"world_pixel_size": 0.001,
+		"world_width": 1.551,
 	},
 }
 
@@ -109,8 +112,14 @@ static func _build_tinted_texture(weapon_id: String, texture_path: String, tint:
 
 
 static func get_world_pixel_size(weapon_id: String, fallback: float = 0.0042) -> float:
+	# 목표 월드 폭 / 실제 텍스처 폭. 텍스처가 없으면(카탈로그 밖 무기) fallback.
 	var entry: Dictionary = CATALOG.get(weapon_id, {})
-	return float(entry.get("world_pixel_size", fallback))
+	if not entry.has("world_width"):
+		return fallback
+	var texture := get_weapon_texture(weapon_id)
+	if texture == null or texture.get_width() <= 0:
+		return fallback
+	return float(entry["world_width"]) / float(texture.get_width())
 
 
 static func get_inventory_textures() -> Dictionary:

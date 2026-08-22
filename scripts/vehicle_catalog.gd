@@ -38,6 +38,7 @@ const DEFINITIONS := {
 	"luxury_sedan": {
 		"texture_path": "res://assets/vehicles/wrecked_luxury_sedan_v1.png",
 		"collision_profile": "vehicle_standard",
+		"source_size": Vector2i(1254, 1254),
 		"collision_size": Vector3(5.25, 1.5, 1.95),
 		"footprint_corners_px": [
 			Vector2(28, 811),

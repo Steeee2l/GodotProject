@@ -597,7 +597,8 @@ func _create_extraction_beacon(world_position: Vector3, index: int) -> Node3D:
 	# The generated beacon is a taller freestanding prop than the old flat hatch.
 	# Keep its footprint inside the extraction ring and lift the visual bottom to
 	# the ground line instead of letting the transparent canvas sink below it.
-	sewer_sprite.pixel_size = 0.0022
+	# 월드 폭 2.76m 고정 — 텍스처 해상도(size_limit)와 무관.
+	sewer_sprite.pixel_size = 2.7588 / float(maxi(1, EXTRACTION_BEACON_TEXTURE.get_width()))
 	sewer_sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sewer_sprite.shaded = false
 	sewer_sprite.transparent = true

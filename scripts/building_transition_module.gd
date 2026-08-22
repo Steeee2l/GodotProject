@@ -66,7 +66,8 @@ func _build_generated_elevator() -> void:
 	sprite.name = "GeneratedElevatorVisual"
 	sprite.texture = load(ELEVATOR_TEXTURE_PATH) as Texture2D
 	sprite.position = Vector3(0, 2.6, 0.12)
-	sprite.pixel_size = 0.0034
+	# 월드 폭 3.48m 고정(텍스처 해상도 무관).
+	sprite.pixel_size = 3.4816 / float(maxi(1, sprite.texture.get_width()))
 	sprite.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 	sprite.shaded = false
 	sprite.transparent = true

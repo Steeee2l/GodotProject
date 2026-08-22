@@ -512,7 +512,8 @@ func _build_escape_pipe() -> void:
 	pipe.name = "EscapePipe"
 	pipe.position = Vector3(pipe_station.x, 2.15, -half.y + 0.38)
 	pipe.texture = load(ESCAPE_PIPE_TEXTURE_PATH) as Texture2D
-	pipe.pixel_size = 0.0043
+	# 월드 폭 4.82m 고정(텍스처 해상도 무관).
+	pipe.pixel_size = 4.8246 / float(maxi(1, pipe.texture.get_width()))
 	pipe.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	pipe.shaded = false
 	pipe.transparent = true

@@ -379,17 +379,18 @@ func _build_environment() -> void:
 	)
 	_add_bridge_rail(-6.15)
 	_add_bridge_rail(6.15)
-	_add_vehicle("res://assets/opening/opening_wrecked_taxi_v1.png", Vector3(-3.5, 0.84, 27.0), 0.0036, 12.0, Vector3(1.75, 1.1, 4.0))
+	# 차량 인자 셋째는 월드 폭(m) — 텍스처 해상도(size_limit)와 무관하게 같은 크기.
+	_add_vehicle("res://assets/opening/opening_wrecked_taxi_v1.png", Vector3(-3.5, 0.84, 27.0), 4.5144, 12.0, Vector3(1.75, 1.1, 4.0))
 	_add_vehicle(
 		"res://assets/opening/opening_wrecked_truck_v1.png",
 		Vector3(2.4, 0.95, 2.0),
-		0.0040,
+		5.016,
 		-8.0,
 		Vector3(2.05, 1.3, 4.8),
 		Vector3(-0.23, -0.2, 0.23)
 	)
-	_add_vehicle("res://assets/opening/opening_wrecked_taxi_v1.png", Vector3(3.7, 0.82, -19.0), 0.0032, -18.0, Vector3(1.6, 1.0, 3.55))
-	_add_vehicle("res://assets/opening/opening_wrecked_bus_v1.png", Vector3(-1.8, 1.0, -35.0), 0.0044, 4.0, Vector3(2.15, 1.3, 5.65))
+	_add_vehicle("res://assets/opening/opening_wrecked_taxi_v1.png", Vector3(3.7, 0.82, -19.0), 4.0128, -18.0, Vector3(1.6, 1.0, 3.55))
+	_add_vehicle("res://assets/opening/opening_wrecked_bus_v1.png", Vector3(-1.8, 1.0, -35.0), 5.5176, 4.0, Vector3(2.15, 1.3, 5.65))
 	_add_fire(Vector3(-3.2, 0.35, 26.7), 0.72)
 	_add_fire(Vector3(2.9, 0.4, 1.8), 0.82)
 	_add_fire(Vector3(-5.5, 0.3, -27.0), 0.62)
@@ -510,7 +511,7 @@ func _add_bridge_rail(x_position: float) -> void:
 func _add_vehicle(
 	texture_path: String,
 	world_position: Vector3,
-	pixel_size: float,
+	world_width: float,
 	screen_rotation: float,
 	collision_size: Vector3,
 	collision_offset: Vector3 = Vector3(0.0, -0.2, 0.0)
@@ -523,6 +524,7 @@ func _add_vehicle(
 	body.collision_mask = 0
 	var sprite := Sprite3D.new()
 	sprite.texture = load(texture_path) as Texture2D
+	var pixel_size := world_width / float(maxi(1, sprite.texture.get_width()))
 	sprite.pixel_size = pixel_size
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.shaded = false
@@ -749,7 +751,8 @@ func _build_player() -> void:
 	weapon_sprite = Sprite3D.new()
 	weapon_sprite.name = "OpeningAK47"
 	weapon_sprite.texture = load("res://assets/weapons/catalog/generated/ak47.png") as Texture2D
-	weapon_sprite.pixel_size = 0.00115
+	# 월드 폭 1.90m 고정(텍스처 해상도 무관).
+	weapon_sprite.pixel_size = 1.89865 / float(maxi(1, weapon_sprite.texture.get_width()))
 	weapon_sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	weapon_sprite.shaded = false
 	weapon_sprite.transparent = true
@@ -832,7 +835,8 @@ func _build_extraction() -> void:
 	add_child(sewer_exit)
 	var sprite := Sprite3D.new()
 	sprite.texture = load("res://assets/opening/opening_sewer_exit_v2.png") as Texture2D
-	sprite.pixel_size = 0.0038
+	# 월드 폭 4.77m 고정(텍스처 해상도 무관).
+	sprite.pixel_size = 4.7652 / float(maxi(1, sprite.texture.get_width()))
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.shaded = false
 	sprite.transparent = true

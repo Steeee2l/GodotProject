@@ -3,10 +3,13 @@ extends RefCounted
 
 const MODULES_PER_CELL := 10
 
+# footprint_corners_px 는 원본 아트 픽셀 좌표, source_size 는 그 좌표계 크기(임포트
+# size_limit 보정용 — procedural_map._texture_space_footprint_corners 참고).
 const DEFINITIONS := {
 	"playground": {
 		"node_name": "UrbanPlayground",
 		"texture_path": "res://assets/landmarks/urban_playground_8x8_sealed_aligned.png",
+		"source_size": Vector2i(1254, 1254),
 		"footprint_modules": Vector2i(8, 8),
 		"footprint_corners_px": [
 			Vector2(25, 598),
@@ -21,6 +24,7 @@ const DEFINITIONS := {
 	"subway_entrance": {
 		"node_name": "SubwayEntrance",
 		"texture_path": "res://assets/landmarks/subway_entrance_4x4_aligned.png",
+		"source_size": Vector2i(1254, 1254),
 		"footprint_modules": Vector2i(4, 4),
 		"footprint_corners_px": [
 			Vector2(157, 885),
@@ -35,6 +39,7 @@ const DEFINITIONS := {
 	"apartment_complex": {
 		"node_name": "KoreanApartmentGateway",
 		"texture_path": "res://assets/landmarks/korean_apartment_gateway_36x32_v2.png",
+		"source_size": Vector2i(1536, 1024),
 		"footprint_modules": Vector2i(36, 32),
 		"footprint_corners_px": [
 			Vector2(20, 566),

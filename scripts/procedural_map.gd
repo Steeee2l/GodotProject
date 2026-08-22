@@ -36,6 +36,7 @@ const DISTRICT_MIN_SEPARATION_CELLS := 6
 const ROAD_COVER_DEFINITIONS := {
 	"concrete_barricade_axis_a": {
 		"texture_path": "res://assets/props/road_cover/concrete_barricade_axis_a_v1.png",
+		"source_size": Vector2i(1536, 1024),
 		"collision_size": Vector3(0.82, 1.2, 6.10),
 		"pixel_size": 0.00375,
 		"footprint_corners_px": [
@@ -47,6 +48,7 @@ const ROAD_COVER_DEFINITIONS := {
 	},
 	"concrete_barricade_axis_b": {
 		"texture_path": "res://assets/props/road_cover/concrete_barricade_axis_b_v1.png",
+		"source_size": Vector2i(1536, 1024),
 		"collision_size": Vector3(5.15, 1.2, 0.82),
 		"pixel_size": 0.00375,
 		"footprint_corners_px": [
@@ -58,6 +60,7 @@ const ROAD_COVER_DEFINITIONS := {
 	},
 	"rubble_wall_axis_a": {
 		"texture_path": "res://assets/props/road_cover/rubble_wall_axis_a_v1.png",
+		"source_size": Vector2i(1536, 1024),
 		"collision_size": Vector3(1.12, 1.45, 4.45),
 		"pixel_size": 0.00355,
 		"footprint_corners_px": [
@@ -69,6 +72,7 @@ const ROAD_COVER_DEFINITIONS := {
 	},
 	"rubble_wall_axis_b": {
 		"texture_path": "res://assets/props/road_cover/rubble_wall_axis_b_v1.png",
+		"source_size": Vector2i(1536, 1024),
 		"collision_size": Vector3(4.82, 1.45, 1.12),
 		"pixel_size": 0.00355,
 		"footprint_corners_px": [
@@ -81,6 +85,8 @@ const ROAD_COVER_DEFINITIONS := {
 }
 const MARKET_HANDCART_TEXTURE_PATH := "res://assets/props/market_handcart_v1.png"
 const MARKET_HANDCART_COLLISION_SIZE := Vector3(4.2, 1.55, 2.15)
+# 발자국 px 좌표계(원본 아트 크기) — 임포트 size_limit 보정용.
+const MARKET_HANDCART_SOURCE_SIZE := Vector2i(1254, 1254)
 const MARKET_HANDCART_FOOTPRINT_CORNERS := [
 	Vector2(67, 870),
 	Vector2(785, 510),
@@ -924,7 +930,8 @@ func _spawn_road_cover_obstacle(cell: Vector2i, center: Vector3, vertical: bool)
 	sprite.texture = texture
 	sprite.modulate = _zone_tint("prop_tint")
 	var collision_size: Vector3 = definition.get("collision_size", Vector3(4.0, 1.4, 1.4))
-	var footprint_corners: Array = definition.get("footprint_corners_px", [])
+	# 발자국 좌표를 런타임 텍스처 크기로 보정한다(size_limit 로 줄어든 텍스처 대응).
+	var footprint_corners: Array = _texture_space_footprint_corners(definition, texture)
 	if footprint_corners.size() >= 4:
 		var left_corner := footprint_corners[0] as Vector2
 		var right_corner := footprint_corners[2] as Vector2
@@ -1197,10 +1204,14 @@ func _spawn_market_handcart(cell: Vector2i, frontage: String, instance_index: in
 	sprite.name = "HandcartSprite"
 	sprite.texture = texture
 	sprite.modulate = _zone_tint("prop_tint")
-	var base_pixel_width := absf(MARKET_HANDCART_FOOTPRINT_CORNERS[2].x - MARKET_HANDCART_FOOTPRINT_CORNERS[0].x)
+	var handcart_corners: Array[Vector2] = _texture_space_footprint_corners({
+		"footprint_corners_px": MARKET_HANDCART_FOOTPRINT_CORNERS,
+		"source_size": MARKET_HANDCART_SOURCE_SIZE,
+	}, texture)
+	var base_pixel_width := absf(handcart_corners[2].x - handcart_corners[0].x)
 	var projected_width := (base_size.x + base_size.z) / sqrt(2.0)
 	sprite.pixel_size = projected_width / base_pixel_width
-	var bottom_corner: Vector2 = MARKET_HANDCART_FOOTPRINT_CORNERS[3]
+	var bottom_corner: Vector2 = handcart_corners[3]
 	var horizontal_offset := texture.get_width() * 0.5 - bottom_corner.x
 	var flip_prop := not along_z
 	sprite.offset.x = -horizontal_offset if flip_prop else horizontal_offset

@@ -4,10 +4,13 @@ extends RefCounted
 const MODULE_SIZE := 1.0
 const MODULES_PER_CELL := 10
 
+# footprint_corners_px 는 원본 아트 픽셀 좌표다. source_size 는 그 좌표계의 크기 —
+# 임포트 size_limit 으로 텍스처가 줄어도 런타임 텍스처 크기/source_size 로 보정된다.
 const DEFINITIONS := {
 	"hanbit_apartment_8x4": {
 		"node_name": "HanbitApartment",
 		"texture_path": "res://assets/buildings/hanbit_apartment_8x4.png",
+		"source_size": Vector2i(1536, 1536),
 		"footprint_modules": Vector2i(8, 4),
 		"height_world": 12.5,
 		"footprint_corners_px": [
@@ -23,6 +26,7 @@ const DEFINITIONS := {
 	"academy_tower_6x4": {
 		"node_name": "AcademyTower",
 		"texture_path": "res://assets/buildings/academy_tower_6x4.png",
+		"source_size": Vector2i(1536, 1536),
 		"footprint_modules": Vector2i(6, 4),
 		"height_world": 16.0,
 		"footprint_corners_px": [
@@ -38,6 +42,7 @@ const DEFINITIONS := {
 	"gangnam_single_story_8x4_aligned": {
 		"node_name": "GangnamSingleStory",
 		"texture_path": "res://assets/buildings/gangnam_single_story_8x4_aligned.png",
+		"source_size": Vector2i(1254, 1254),
 		"footprint_modules": Vector2i(8, 4),
 		"height_world": 3.6,
 		"footprint_corners_px": [
@@ -53,6 +58,7 @@ const DEFINITIONS := {
 	"gangnam_ruined_lowrise_6x8_aligned": {
 		"node_name": "GangnamRuinedLowrise",
 		"texture_path": "res://assets/buildings/gangnam_ruined_lowrise_6x8_aligned.png",
+		"source_size": Vector2i(1254, 1254),
 		"footprint_modules": Vector2i(6, 8),
 		"height_world": 8.5,
 		"footprint_corners_px": [
@@ -68,6 +74,7 @@ const DEFINITIONS := {
 	"gangnam_glass_tower_6x4_aligned": {
 		"node_name": "GangnamGlassTower",
 		"texture_path": "res://assets/buildings/gangnam_glass_tower_6x4_aligned.png",
+		"source_size": Vector2i(1254, 1254),
 		"footprint_modules": Vector2i(6, 4),
 		"height_world": 15.5,
 		"footprint_corners_px": [
@@ -83,6 +90,7 @@ const DEFINITIONS := {
 	"gangnam_lowrise_commercial_8x4_aligned": {
 		"node_name": "GangnamLowriseCommercial",
 		"texture_path": "res://assets/buildings/gangnam_lowrise_commercial_8x4_aligned.png",
+		"source_size": Vector2i(1536, 1024),
 		# The generated artwork's long axis runs along world Z. Treating it as
 		# 8x4 rotated its collision box ninety degrees away from the storefront.
 		"footprint_modules": Vector2i(4, 8),
@@ -100,6 +108,7 @@ const DEFINITIONS := {
 	"gangnam_lowrise_garage_8x4_aligned": {
 		"node_name": "GangnamLowriseGarage",
 		"texture_path": "res://assets/buildings/gangnam_lowrise_garage_8x4_aligned.png",
+		"source_size": Vector2i(1254, 1254),
 		"footprint_modules": Vector2i(8, 4),
 		"height_world": 3.8,
 		"footprint_corners_px": [
@@ -115,6 +124,7 @@ const DEFINITIONS := {
 	"gangnam_clinic_pharmacy_6x4_aligned": {
 		"node_name": "GangnamClinicPharmacy",
 		"texture_path": "res://assets/buildings/gangnam_clinic_pharmacy_6x4_aligned.png",
+		"source_size": Vector2i(1536, 1024),
 		"footprint_modules": Vector2i(6, 4),
 		"height_world": 8.0,
 		"footprint_corners_px": [
@@ -130,6 +140,7 @@ const DEFINITIONS := {
 	"gangnam_food_alley_4x6_aligned": {
 		"node_name": "GangnamFoodAlley",
 		"texture_path": "res://assets/buildings/gangnam_food_alley_4x6_aligned.png",
+		"source_size": Vector2i(1024, 1536),
 		"footprint_modules": Vector2i(4, 6),
 		"height_world": 5.4,
 		"footprint_corners_px": [
@@ -145,6 +156,7 @@ const DEFINITIONS := {
 	"gangnam_damaged_officetel_6x6_aligned": {
 		"node_name": "GangnamDamagedOfficetel",
 		"texture_path": "res://assets/buildings/gangnam_damaged_officetel_6x6_aligned.png",
+		"source_size": Vector2i(1254, 1254),
 		"footprint_modules": Vector2i(6, 6),
 		"height_world": 13.0,
 		"footprint_corners_px": [
@@ -160,6 +172,7 @@ const DEFINITIONS := {
 	"seoul_market_row_8x4_v1": {
 		"node_name": "SeoulMarketRow",
 		"texture_path": "res://assets/buildings/seoul_market_row_8x4_v1.png",
+		"source_size": Vector2i(1254, 1254),
 		"footprint_modules": Vector2i(8, 4),
 		"height_world": 6.2,
 		"footprint_corners_px": [
@@ -176,6 +189,7 @@ const DEFINITIONS := {
 	"seoul_multifamily_villa_6x6_v1": {
 		"node_name": "SeoulMultifamilyVilla",
 		"texture_path": "res://assets/buildings/seoul_multifamily_villa_6x6_v1.png",
+		"source_size": Vector2i(1254, 1254),
 		"footprint_modules": Vector2i(6, 6),
 		"height_world": 10.5,
 		"footprint_corners_px": [
@@ -192,6 +206,7 @@ const DEFINITIONS := {
 	"gangnam_luxury_showroom_6x6_v1": {
 		"node_name": "GangnamLuxuryShowroom",
 		"texture_path": "res://assets/buildings/gangnam_luxury_showroom_6x6_v1.png",
+		"source_size": Vector2i(1254, 1254),
 		"footprint_modules": Vector2i(6, 6),
 		"height_world": 17.5,
 		"footprint_corners_px": [
