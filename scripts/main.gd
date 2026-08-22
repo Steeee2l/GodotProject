@@ -65,6 +65,7 @@ const WEAPON_VISUAL_PIXEL_SIZE := 0.0018
 const AK_DIRECTIONAL_TEXTURE := preload("res://assets/weapons/ak47_directional.png")
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
 const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
+const ACTIVE_TUTORIAL_SCRIPT := preload("res://scripts/shelter/active_tutorial.gd")
 const PERCEPTION_SYSTEM_SCRIPT := preload("res://scripts/perception_system.gd")
 const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
 const LOOT_CONTAINER_VISUALS := preload("res://scripts/loot_container_visual_catalog.gd")
@@ -324,6 +325,9 @@ var corpse_recovery_point: Node3D
 var game_over_screen := GameOverScreen.new()
 var lore_reader := LoreReader.new()
 var hud := RaidHud.new()
+# 액티브 튜토리얼(필드 가방 먹기 · 정산 성장 선택). 스텝 표·포인터·저장은 모듈이 쥔다.
+# class_name 캐시(.godot)가 갱신되기 전에도 헤드리스 테스트가 돌도록 preload로 만든다.
+var active_tutorial := ACTIVE_TUTORIAL_SCRIPT.new()
 var main_mission := MainMissionChain.new()
 var field_missions := FieldMissionController.new()
 var incidents := FieldIncidents.new()
@@ -520,6 +524,7 @@ func _ready() -> void:
 	stealth.attach(self)
 	weapon_combat.attach(self)
 	can_throw.attach(self)
+	active_tutorial.attach(self)
 	# 발각 방향 인디케이터 — 화면 밖(또는 안개에 가려진) 경계 상태 적의 방향을
 	# 화면 가장자리에 느낌표로 띄운다. 시야가 좁은 모바일에서 "어디서 걸렸는지"를
 	# 보고 도망칠 수 있게 하는 장치인데, 클래스만 있고 어디서도 생성되지 않았다.
@@ -548,6 +553,9 @@ func _ready() -> void:
 	_setup_weather_effects()
 	_spawn_ammo_pickups()
 	hud.build(self)
+	# 액티브 튜토리얼 레이어는 HUD(가방 버튼·정산 패널)가 선 뒤에 붙는다. 오프닝은 제외.
+	if GameState.opening_completed:
+		active_tutorial.build(self, ["field", "extraction"])
 	# 출정 보급 훈련 — 판 시작(오프닝·건물 내부 복귀 제외)에 장착 구경 탄창을 예비탄에 넣는다.
 	# 모듈 attach와 HUD(토스트) 빌드 뒤에 불러야 한다.
 	if GameState.opening_completed and not bool(BuildingRunState.pending_field_return):
@@ -3094,6 +3102,7 @@ func _on_inventory_item_use_requested(item_type: String, item_id: String) -> voi
 	player_health = int(result.get("health", player_health))
 	fatigue = clampf(float(result.get("fatigue", fatigue)), 0.0, FATIGUE_MAX)
 	GameState.fatigue = fatigue
+	active_tutorial.notify("ate_food")
 	var health_bar := get_node_or_null("HUD/TopLeft/Margin/VBox/Health") as ProgressBar
 	if health_bar:
 		health_bar.value = player_health
@@ -7075,6 +7084,10 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
+		# 튜토리얼 카드의 건너뛰기는 조이스틱 영역과 겹칠 수 있어 제일 먼저 본다.
+		if touch.pressed and active_tutorial.handle_touch(touch.position):
+			get_viewport().set_input_as_handled()
+			return
 		if (
 			_is_inventory_open()
 			or _is_tactical_map_open()

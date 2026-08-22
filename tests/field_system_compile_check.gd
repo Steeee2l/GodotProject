@@ -25,6 +25,7 @@ const SCRIPTS := [
 	"res://scripts/shelter_resident_cat.gd",
 	"res://scripts/shelter_contract_trainer.gd",
 	"res://scripts/shelter_interior.gd",
+	"res://scripts/shelter/active_tutorial.gd",
 	"res://scripts/tactical_map.gd",
 	"res://scripts/field_mission_catalog.gd",
 	"res://scripts/raid_extraction_policy.gd",

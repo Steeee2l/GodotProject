@@ -12,6 +12,7 @@ const CATNIP_SCRAPER_MODULE_SCRIPT := preload("res://scripts/catnip_scraper_modu
 const STORAGE_MODULE_SCRIPT := preload("res://scripts/shelter_storage_module.gd")
 const TRAINING_MODULE_SCRIPT := preload("res://scripts/shelter_training_module.gd")
 const SHELTER_OPS_CONSOLE_SCRIPT := preload("res://scripts/hud/shelter_ops_console.gd")
+const ACTIVE_TUTORIAL_SCRIPT := preload("res://scripts/shelter/active_tutorial.gd")
 const SHELTER_RESIDENT_SCRIPT := preload("res://scripts/shelter_resident_cat.gd")
 const SHELTER_MERCHANT_SCRIPT := preload("res://scripts/shelter_merchant.gd")
 const SHELTER_CONTRACT_TRAINER_SCRIPT := preload("res://scripts/shelter_contract_trainer.gd")
@@ -156,6 +157,9 @@ var contract_agent: Node3D
 var iron_trainer: Node3D
 var juhong_character: Node3D
 var ops_console: ShelterOpsConsole
+# 액티브 튜토리얼(가리키고·해보게 하는 안내) — 스텝 표·포인터·저장은 전부 모듈이 쥔다.
+# class_name 캐시가 갱신되기 전에도 헤드리스 테스트가 돌도록 preload로 만든다.
+var active_tutorial := ACTIVE_TUTORIAL_SCRIPT.new()
 var facility_logic: Dictionary = {}
 var current_chat_resident: Node3D
 var resident_chat_random := RandomNumberGenerator.new()
@@ -341,6 +345,10 @@ func _show_catnip_fever_lesson_once() -> void:
 	if GameState.catnip_fever_lesson_seen:
 		return
 	if not GameState.is_shelter_facility_unlocked("catnip_scraper"):
+		return
+	# 액티브 스텝(피버 충전)이 이미 가르쳤으면 읽는 안내는 생략한다 — 같은 말을 두 번 하지 않는다.
+	if GameState.is_tutorial_step_done("fever_charge"):
+		GameState.catnip_fever_lesson_seen = true
 		return
 	GameState.catnip_fever_lesson_seen = true
 	GameState.save_persistent_state()
@@ -1837,6 +1845,8 @@ func _build_interface() -> void:
 	roll_cooldown_indicator.name = "ShelterRollCooldownIndicator"
 	canvas.add_child(roll_cooldown_indicator)
 	_build_touch_stick(canvas)
+	active_tutorial.attach(self)
+	active_tutorial.build(self, ["shelter"])
 
 
 func _build_merchant_arrival_notice(canvas: CanvasLayer) -> void:
@@ -2864,6 +2874,8 @@ func _trade_merchant_good(good: Dictionary, buying: bool, stock_index: int = -1)
 			str(good["title"]),
 			GameState.format_compact_number(price),
 		]
+		if active_tutorial != null:
+			active_tutorial.notify("merchant_sold")
 	_update_stats()
 	call_deferred("_refresh_merchant_shop")
 
@@ -5075,6 +5087,10 @@ func _input(event: InputEvent) -> void:
 			_unlock_all_facilities_debug()
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
+		# 튜토리얼 카드(건너뛰기·목표 줄 탭)는 조이스틱 영역과 겹치므로 제일 먼저 본다.
+		if touch.pressed and active_tutorial != null and active_tutorial.handle_touch(touch.position):
+			get_viewport().set_input_as_handled()
+			return
 		# 운영 독을 가장 먼저 본다. 가방 버튼과 독은 둘 다 우상단에 있어 화면이
 		# 좁아지면 사각형이 겹치는데, 가방 판정이 먼저였던 탓에 독의 윗칸을
 		# 눌러도 가방만 열렸다 — 가로에서 창고에 못 들어가던 원인 중 하나.

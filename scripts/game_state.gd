@@ -196,6 +196,9 @@ var fatigue_lesson_seen: bool = false
 var extraction_choice_lesson_seen: bool = false
 # 캣닢 피버는 시설이 아니라 '사건'이라 아무도 설명해 주지 않았다 — 해금 1회 레슨.
 var catnip_fever_lesson_seen: bool = false
+# 액티브 튜토리얼(ActiveTutorial)에서 끝낸(또는 건너뛴) 스텝 id. 위 레슨 플래그들과 달리
+# 읽는 안내가 아니라 "행동하면 넘어가는" 안내의 진행도다. 설정의 '안내 다시 보기'가 비운다.
+var tutorial_steps_done: Array[String] = []
 var unlocked_milestones: Array[String] = []
 var pending_milestone_unlocks: Array[Dictionary] = []
 var resident_reroll_counts: Dictionary = {}
@@ -1637,6 +1640,7 @@ func get_pending_shelter_story_event() -> Dictionary:
 	# 팔 것밖에 없다"는 인상이 생기기 전에, 부품→개조→강화 루프를 사자가 짚어 준다.
 	if (
 		not workbench_lesson_seen
+		and not is_tutorial_step_done("workbench_craft")
 		and is_shelter_facility_unlocked("workbench")
 		and _count_total_mod_components() > 0
 	):
@@ -4655,6 +4659,7 @@ func save_persistent_state() -> bool:
 		"fatigue_lesson_seen": fatigue_lesson_seen,
 		"extraction_choice_lesson_seen": extraction_choice_lesson_seen,
 		"catnip_fever_lesson_seen": catnip_fever_lesson_seen,
+		"tutorial_steps_done": tutorial_steps_done,
 		"unlocked_milestones": unlocked_milestones,
 		"resident_reroll_counts": resident_reroll_counts,
 		"fatigue": fatigue,
@@ -4824,6 +4829,7 @@ func load_persistent_state() -> bool:
 	fatigue_lesson_seen = bool(data.get("fatigue_lesson_seen", fatigue_lesson_seen))
 	extraction_choice_lesson_seen = bool(data.get("extraction_choice_lesson_seen", extraction_choice_lesson_seen))
 	catnip_fever_lesson_seen = bool(data.get("catnip_fever_lesson_seen", catnip_fever_lesson_seen))
+	tutorial_steps_done = _to_string_array(data.get("tutorial_steps_done", []))
 	unlocked_milestones = _to_string_array(data.get("unlocked_milestones", []))
 	resident_reroll_counts = (data.get("resident_reroll_counts", {}) as Dictionary).duplicate(true)
 	if int(data.get("version", 0)) < 12:
@@ -4990,6 +4996,26 @@ func load_persistent_state() -> bool:
 	return true
 
 
+# ── 액티브 튜토리얼 진행도 ───────────────────────────────────────
+
+
+func is_tutorial_step_done(step_id: String) -> bool:
+	return tutorial_steps_done.has(step_id)
+
+
+func mark_tutorial_step_done(step_id: String) -> void:
+	if step_id.is_empty() or tutorial_steps_done.has(step_id):
+		return
+	tutorial_steps_done.append(step_id)
+	save_persistent_state()
+
+
+func reset_tutorial_steps() -> void:
+	# 설정의 '안내 다시 보기' — 모든 스텝을 처음 상태로. 기존 1회성 레슨 플래그는 건드리지 않는다.
+	tutorial_steps_done.clear()
+	save_persistent_state()
+
+
 func _to_string_array(value: Variant) -> Array[String]:
 	var result: Array[String] = []
 	if value is Array:
@@ -5056,6 +5082,7 @@ func reset_run() -> void:
 	field_controls_lesson_seen = false
 	extraction_choice_lesson_seen = false
 	catnip_fever_lesson_seen = false
+	tutorial_steps_done.clear()
 	unlocked_milestones.clear()
 	resident_reroll_counts.clear()
 	fatigue = 0.0

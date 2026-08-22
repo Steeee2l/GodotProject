@@ -10,7 +10,7 @@ const SAVED_PROPERTIES := [
 	"ui_scale", "combat_text_scale", "camera_shake_scale", "hit_flash_scale",
 	"vignette_scale", "minimum_brightness", "aim_assist_strength",
 	"damage_numbers_enabled", "auto_reload", "vibration_enabled", "battery_saver",
-	"ui_fx_enabled",
+	"ui_fx_enabled", "active_tutorial_enabled",
 	"master_volume", "sfx_volume", "ui_volume",
 ]
 
@@ -28,6 +28,8 @@ var vibration_enabled := true
 var battery_saver := false
 # UI 셰이더 연출(모달 블러·노이즈·먼지·글리치) — 기본 켜짐. 저사양 폰은 끄면 단순 딤으로 폴백.
 var ui_fx_enabled := true
+# 액티브 안내(가리키고·해보게 하는 튜토리얼 포인터) — 기본 켜짐. 끄면 스텝 UI가 뜨지 않는다.
+var active_tutorial_enabled := true
 # 오디오 버스 볼륨(0~100). Master/SFX/UI 버스에 linear_to_db로 반영한다.
 var master_volume := 80.0
 var sfx_volume := 80.0
@@ -179,6 +181,12 @@ func _build_ui() -> void:
 	_add_toggle(content, "모바일 햅틱", vibration_enabled, func(value: bool) -> void: vibration_enabled = value)
 	_add_toggle(content, "모바일 저전력 모드", battery_saver, func(value: bool) -> void: battery_saver = value)
 	_add_toggle(content, "UI 셰이더 효과 (블러·노이즈·입자)", ui_fx_enabled, func(value: bool) -> void: ui_fx_enabled = value)
+	content.add_child(_label("안내", 13, Color("#b9a86a")))
+	_add_toggle(content, "액티브 안내 (화살표로 가리키는 튜토리얼)", active_tutorial_enabled, func(value: bool) -> void: active_tutorial_enabled = value)
+	_add_action(content, "안내 다시 보기", "끝낸 안내를 전부 되돌려 처음부터 다시 가리킵니다.", func() -> String:
+		GameState.reset_tutorial_steps()
+		return "안내를 처음부터 다시 보여줍니다."
+	)
 	var footer := _label("색상만으로 상태를 구분하지 않으며 아이콘과 문자를 함께 표시합니다.", 12, Color("#8fa59b"))
 	footer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(footer)
@@ -206,6 +214,34 @@ func _add_slider(parent: VBoxContainer, title: String, description: String, mini
 		settings_changed.emit()
 	)
 	row.add_child(slider)
+
+
+func _add_action(parent: VBoxContainer, title: String, description: String, action: Callable) -> void:
+	# 한 번 누르는 행동(리셋류). 결과 문구는 설명 자리에 잠시 띄운다.
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	parent.add_child(row)
+	var text_box := VBoxContainer.new()
+	text_box.custom_minimum_size.x = 185
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(text_box)
+	text_box.add_child(_label(title, 14, Color("#d8ded9")))
+	var description_label := _label(description, 11, Color("#81938c"))
+	description_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	text_box.add_child(description_label)
+	var button := Button.new()
+	button.name = "SettingsAction_%s" % title
+	button.text = title
+	button.custom_minimum_size = Vector2(150, 44)
+	HudStyle.style_button(button, HudStyle.LINE_FOCUS)
+	button.pressed.connect(func() -> void:
+		var result := str(action.call())
+		if not result.is_empty():
+			description_label.text = result
+			description_label.add_theme_color_override("font_color", Color("#9de0b1"))
+		settings_changed.emit()
+	)
+	row.add_child(button)
 
 
 func _add_toggle(parent: VBoxContainer, title: String, value: bool, callback: Callable) -> void:
