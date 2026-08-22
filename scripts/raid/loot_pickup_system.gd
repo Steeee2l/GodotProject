@@ -8,6 +8,7 @@ extends RefCounted
 const AIM_REVEAL_BUILDING_ALPHA := 0.28
 const AK_DROP_TEXTURE := preload("res://assets/weapons/ak47_drop.png")
 const SFX := preload("res://scripts/sfx_bank.gd")
+const SHELTER_REQUISITION := preload("res://scripts/shelter/requisition.gd")
 const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
 const BASE_ENEMY_COUNT := 24
@@ -402,6 +403,12 @@ func _collect_nearby_ammo() -> void:
 				updated_ammo_count,
 			]
 	host.hud.push_toast(toast_text, toast_accent, toast_seconds)
+	# 쉘터 다음 목표(티어 확장)에 필요한 품목이면 진행도를 한 줄 더 — 필드에서
+	# "왜 줍나"가 쉘터 화면의 목표 줄과 같은 숫자로 이어진다.
+	if loot_type == "churu":
+		var goal_note: String = SHELTER_REQUISITION.describe_progress_after_pickup("churu")
+		if not goal_note.is_empty():
+			host.hud.push_toast(goal_note, HudStyle.GOLD, 2.6)
 	SFX.play("pickup")
 	host._update_equipment_ui()
 	host._update_medkit_button()
@@ -676,6 +683,9 @@ func _raid_item_display_name(item_type: String, item_id: String) -> String:
 		"rifle_blueprint": "소총 제작 청사진",
 		"shotgun_blueprint": "산탄총 제작 청사진",
 		"sealed_zone_keycard": "봉인구역 키카드",
+		"namdaemun_depot_plans": "남대문 창고 설계도",
+		"euljiro_grid_schematic": "을지로 배전 도면",
+		"yongsan_control_key": "용산 통제 키",
 	}
 	return str(names.get(item_id, item_id))
 

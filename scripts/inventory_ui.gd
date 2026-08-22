@@ -2453,6 +2453,12 @@ func _progression_item_name(item_id: String) -> String:
 			return "산탄총 제작 청사진"
 		"sealed_zone_keycard":
 			return "봉인구역 키카드"
+		"namdaemun_depot_plans":
+			return "남대문 창고 설계도"
+		"euljiro_grid_schematic":
+			return "을지로 배전 도면"
+		"yongsan_control_key":
+			return "용산 통제 키"
 	return item_id
 
 
@@ -2464,6 +2470,12 @@ func _progression_item_description(item_id: String) -> String:
 			return "고화력 산탄총 제작법을 해금하는 희귀 청사진입니다."
 		"sealed_zone_keycard":
 			return "Stage 4 봉인구역 진입에 필요한 보안 키카드입니다."
+		"namdaemun_depot_plans":
+			return "쉘터 Tier 3 확장에 필요한 설계도입니다. 가방 칸을 차지하지 않습니다."
+		"euljiro_grid_schematic":
+			return "쉘터 Tier 4 확장에 필요한 배전 도면입니다. 가방 칸을 차지하지 않습니다."
+		"yongsan_control_key":
+			return "쉘터 Tier 5 확장에 필요한 통제 키입니다. 가방 칸을 차지하지 않습니다."
 	return "상위 스테이지 진행에 사용하는 희귀 물품입니다."
 
 

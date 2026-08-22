@@ -10,6 +10,7 @@ const COMPONENT_TEXTURES := {
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
 const SFX := preload("res://scripts/sfx_bank.gd")
+const SHELTER_REQUISITION := preload("res://scripts/shelter/requisition.gd")
 const FLOOR_DROP_MAX_WIDTH := 0.9
 const FLOOR_DROP_MAX_HEIGHT := 0.72
 
@@ -127,6 +128,7 @@ func interact() -> String:
 	if not GameState.can_add_raid_items(pending_items):
 		return "가방이 꽉 찼습니다. 가방에서 물품을 버린 뒤 다시 시도하세요."
 	var acquired_names: Array[String] = []
+	var goal_note := ""
 	for definition in definitions:
 		if (
 			fixed_definition.is_empty()
@@ -141,6 +143,9 @@ func interact() -> String:
 		var granted := _grant_definition(definition)
 		if not granted.is_empty():
 			acquired_names.append(granted)
+			# 쉘터 다음 목표 품목(츄르)이면 진행도 한 줄 — 필드 토스트와 같은 문구.
+			if str(_raid_item_from_definition(definition).get("type", "")) == "churu":
+				goal_note = SHELTER_REQUISITION.describe_progress_after_pickup("churu")
 	BuildingRunState.mark_loot_collected(floor_number, loot_key)
 	GameState.save_persistent_state()
 	# 컨테이너 수색은 열기 소리, 바닥 픽업은 주머니 소리.
@@ -148,6 +153,8 @@ func interact() -> String:
 	var description := "비어 있습니다."
 	if not acquired_names.is_empty():
 		description = "획득 · %s" % " / ".join(acquired_names)
+		if not goal_note.is_empty():
+			description += "   ·   %s" % goal_note
 	collected.emit(loot_key, description)
 	queue_free()
 	return description

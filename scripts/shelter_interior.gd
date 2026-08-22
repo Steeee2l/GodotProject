@@ -33,6 +33,8 @@ const SCRAP_AMMO_BUNDLE_COST := 350
 const SCRAP_MEDKIT_COST := 700
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
+# 쉘터 "다음 목표"(티어 확장 요구) 문구·판정 — 데이터는 GameState, 말은 이 모듈.
+const SHELTER_REQUISITION := preload("res://scripts/shelter/requisition.gd")
 const AMMO_TEXTURE := preload("res://assets/items/ammo_762.png")
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
 const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
@@ -112,6 +114,9 @@ var stats_panel_expanded := true
 var stats_panel_default_applied := false
 var scrap_gain_label: Label
 var shelter_upgrade_button: Button
+# 스탯 패널 "다음 목표" 줄 — 확장 요구를 조각별로 색 입혀 보여준다. 문구가 바뀔 때만 재구성.
+var shelter_goal_row: HFlowContainer
+var shelter_goal_cache := ""
 var interact_button: Button
 var dash_button: Button
 var shelter_medkit_button: Button
@@ -185,6 +190,8 @@ var raid_zone_detail_rule: Label
 var raid_zone_detail_reward: Label
 var raid_zone_detail_loadout: Label
 var raid_zone_detail_requirement: Label
+# 브리핑 "다음 목표" 줄 — 쉘터 확장에 모자란 것 + 출처만.
+var raid_zone_detail_goal: Label
 var raid_zone_launch_button: Button
 var raid_zone_resupply_button: Button
 var auto_paused_for_background := false
@@ -290,6 +297,9 @@ func _ready() -> void:
 		get_viewport().size_changed.connect(_apply_shelter_safe_layout)
 	_apply_shelter_safe_layout()
 	_setup_merchant_visit()
+	# 체인을 끝냈는데 확장 키가 없는 상태(키 도입 전 세이브·시체와 함께 분실)를 여기서도
+	# 보정한다 — 로드 시점뿐 아니라 같은 세션의 복귀에서도 목표 줄이 거짓말하지 않게.
+	SHELTER_REQUISITION.ensure_story_key_items()
 	_update_stats()
 	# 복귀 정산이 무엇을 어디로 옮겼는지 먼저 말한다 — 가방이 조용히 비면
 	# 플레이어는 잃어버린 줄 안다.
@@ -1690,6 +1700,13 @@ func _build_interface() -> void:
 	shelter_upgrade_button.add_theme_font_size_override("font_size", 13)
 	shelter_upgrade_button.pressed.connect(_upgrade_shelter_tier)
 	stats_box.add_child(shelter_upgrade_button)
+	# 다음 목표 줄 — 버튼은 한 색뿐이라 요구 조각(충족 ✓ 초록 / 미충족 빨강 + 출처)은
+	# 따로 둔다. HFlow라 370px 패널 폭에서 저절로 줄바꿈된다.
+	shelter_goal_row = HFlowContainer.new()
+	shelter_goal_row.name = "ShelterGoalRow"
+	shelter_goal_row.add_theme_constant_override("h_separation", 0)
+	shelter_goal_row.add_theme_constant_override("v_separation", 0)
+	stats_box.add_child(shelter_goal_row)
 	scrap_gain_label = Label.new()
 	scrap_gain_label.add_theme_font_override("font", FONT)
 	scrap_gain_label.add_theme_font_size_override("font_size", 14)
@@ -2223,6 +2240,11 @@ func _claim_current_contract() -> void:
 		)
 		if not construction_line.is_empty():
 			reward_line += construction_line
+		# 계약 보상에 츄르가 있었으면 쉘터 다음 목표 진행도를 한 줄 더.
+		if int((result.get("reward", {}) as Dictionary).get("churu", 0)) > 0:
+			var goal_note: String = SHELTER_REQUISITION.describe_progress_after_pickup("churu")
+			if not goal_note.is_empty():
+				reward_line += "\n%s" % goal_note
 		story_lines.append(reward_line)
 		_show_status(
 			"사자가 %s 공사를 완료했습니다." % str(result.get("facility_name", "새 시설"))
@@ -3604,26 +3626,26 @@ func _update_stats() -> void:
 			shelter_upgrade_button.text = "쉘터 최고 Tier"
 			shelter_upgrade_button.disabled = true
 		else:
-			var scrap_cost := int(cost.get("scrap", 0))
-			var churu_cost := int(cost.get("churu", 0))
-			var next_tier := GameState.shelter_tier + 1
 			# 확장이 뭘 바꾸는지 버튼이 직접 말한다. 다음 티어로 열리는 출정 구역이
-			# 있으면 그것부터 — 구역 해금이 확장의 가장 큰 이유다.
-			var unlock_hint := ""
-			for zone_id in GameState.get_raid_zone_ids():
-				var zone: Dictionary = GameState.get_raid_zone(str(zone_id))
-				if int(zone.get("required_tier", 1)) == next_tier:
-					unlock_hint = "%s 해금" % str(zone.get("name", ""))
-					break
-			if unlock_hint.is_empty():
-				unlock_hint = "수용·생산 슬롯 확장"
-			shelter_upgrade_button.text = "Tier %d 확장 → %s  ·  고철 %s + 츄르 %s" % [
-				next_tier,
-				unlock_hint,
-				GameState.format_compact_number(scrap_cost),
-				GameState.format_compact_number(churu_cost),
+			# 있으면 그것부터 — 구역 해금이 확장의 가장 큰 이유다. 비용·충족 여부는
+			# 바로 아래 "다음 목표" 줄(조각별 색)이 맡는다 — 버튼에 숫자를 겹쳐 쓰지 않는다.
+			var goal: Dictionary = SHELTER_REQUISITION.get_next_goal()
+			var all_met := bool(goal.get("all_met", false))
+			shelter_upgrade_button.text = "%s → %s%s" % [
+				str(goal.get("title", "Tier %d 확장" % (GameState.shelter_tier + 1))),
+				str(goal.get("unlock_hint", "")),
+				"  ·  지금 확장 가능" if all_met else "",
 			]
-			shelter_upgrade_button.disabled = GameState.scrap < scrap_cost or GameState.churu < churu_cost
+			# 서사 키까지 포함해 전부 충족했을 때만 눌린다(try_upgrade와 같은 판정).
+			shelter_upgrade_button.disabled = not all_met
+			# 전부 충족 → 버튼 금색 강조. "이제 누르면 된다"가 눈에 먼저 들어와야 한다.
+			if all_met:
+				shelter_upgrade_button.add_theme_color_override("font_color", Color("#f3d77a"))
+				shelter_upgrade_button.icon = UI_ICONS.get_icon("upgrade", 28, Color("#f3d77a"))
+			else:
+				shelter_upgrade_button.remove_theme_color_override("font_color")
+				shelter_upgrade_button.icon = UI_ICONS.get_icon("upgrade", 28, Color("#d8c47b"))
+	_update_shelter_goal_row()
 	_update_shelter_medkit_button()
 
 
@@ -3853,16 +3875,94 @@ func _upgrade_shelter_tier() -> void:
 
 
 func _shelter_tier_upgrade_failure_reason() -> String:
-	if GameState.shelter_tier >= 5:
-		return "쉘터가 이미 최고 Tier(5)입니다."
-	var cost: Dictionary = GameState.get_shelter_upgrade_cost()
-	var scrap_gap := int(cost.get("scrap", 0)) - GameState.scrap
-	if scrap_gap > 0:
-		return "확장 불가 · 고철 %s 부족" % GameState.format_compact_number(scrap_gap)
-	var churu_gap := int(cost.get("churu", 0)) - GameState.churu
-	if churu_gap > 0:
-		return "확장 불가 · 츄르 %d개 부족" % churu_gap
-	return "쉘터를 지금 확장할 수 없습니다."
+	# 사유는 목표 모듈이 만든다 — 고철/츄르 부족에 더해 서사 키가 없으면 어디서
+	# 구하는지까지 한 줄로("확장 불가 · 남대문 창고 설계도 필요 — …").
+	var reason: String = SHELTER_REQUISITION.get_upgrade_block_reason()
+	return reason if not reason.is_empty() else "쉘터를 지금 확장할 수 없습니다."
+
+
+# ── 다음 목표 줄(스탯 패널) ────────────────────────────────────
+# 힌트까지 붙인 전체 줄이 이 길이를 넘으면 힌트를 뺀다 — 370px 패널·12px 글자에서
+# 한글 30자+숫자 30자쯤이 2줄이다(실측: 57자 줄이 1.6줄). 티어 3의 세 항목 전부
+# 미충족(약 95자)이면 힌트 없이 항목만 남긴다.
+const SHELTER_GOAL_LINE_HINT_MAX_CHARS := 72
+
+
+func _update_shelter_goal_row() -> void:
+	if not is_instance_valid(shelter_goal_row):
+		return
+	var goal: Dictionary = SHELTER_REQUISITION.get_next_goal()
+	var full_line: String = SHELTER_REQUISITION.format_goal_line(goal, true)
+	var with_hints := full_line.length() <= SHELTER_GOAL_LINE_HINT_MAX_CHARS
+	var all_met := bool(goal.get("all_met", false))
+	var cache_key := "%s|%s|%s" % [full_line, str(with_hints), str(all_met)]
+	if cache_key == shelter_goal_cache:
+		return
+	shelter_goal_cache = cache_key
+	for child in shelter_goal_row.get_children():
+		child.queue_free()
+	if goal.is_empty():
+		_add_shelter_goal_piece(SHELTER_REQUISITION.get_final_tier_text(), Color("#9db3a9"))
+		shelter_goal_row.tooltip_text = ""
+		return
+	# 툴팁엔 긴 출처를 전부 — 줄에서 생략됐어도 마우스를 올리면 읽힌다.
+	var tooltip_lines: Array[String] = []
+	var segments: Array[Dictionary] = SHELTER_REQUISITION.build_goal_segments(goal)
+	for index in segments.size():
+		var segment: Dictionary = segments[index]
+		var state := str(segment.get("state", ""))
+		var color := Color("#9db3a9")
+		match state:
+			"ok":
+				color = Color("#7fc79e")
+			"missing":
+				color = Color("#e06c5c")
+		# 전부 충족이면 줄 전체가 금색 — 빨강/초록 구분은 더 이상 정보가 아니다.
+		if all_met:
+			color = Color("#f3d77a")
+		if index > 0:
+			_add_shelter_goal_piece(" · ", Color("#6f837b"))
+		_add_shelter_goal_piece(str(segment.get("text", "")), color)
+		var hint := str(segment.get("hint", ""))
+		if not hint.is_empty():
+			if with_hints:
+				_add_shelter_goal_piece(" — %s" % hint, Color("#c29a6b"))
+	for requirement in goal.get("requirements", []) as Array:
+		var item := requirement as Dictionary
+		if not bool(item.get("ok", false)) and not str(item.get("hint", "")).is_empty():
+			tooltip_lines.append("%s · %s" % [str(item.get("label", "")), str(item.get("hint", ""))])
+	shelter_goal_row.tooltip_text = "\n".join(tooltip_lines)
+
+
+func _add_shelter_goal_piece(text: String, color: Color) -> void:
+	var piece := Label.new()
+	piece.text = text
+	piece.add_theme_font_override("font", FONT)
+	piece.add_theme_font_size_override("font_size", 12)
+	piece.add_theme_color_override("font_color", color)
+	piece.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shelter_goal_row.add_child(piece)
+
+
+func _update_raid_zone_goal_line(zone_id: String) -> void:
+	# 브리핑 한 줄: 모자란 것 + 출처만. 이 구역이 그 품목의 출처면 덧붙인다.
+	if not is_instance_valid(raid_zone_detail_goal):
+		return
+	var goal: Dictionary = SHELTER_REQUISITION.get_next_goal()
+	if goal.is_empty():
+		raid_zone_detail_goal.visible = false
+		return
+	var text := ""
+	if bool(goal.get("all_met", false)):
+		text = "다음 → %s · 조건 충족 ✓ — 쉘터로 돌아가면 확장할 수 있다" % str(goal.get("title", ""))
+		raid_zone_detail_goal.add_theme_color_override("font_color", Color("#f3d77a"))
+	else:
+		text = SHELTER_REQUISITION.format_goal_line(goal, true, true)
+		if SHELTER_REQUISITION.get_goal_zone_ids().has(zone_id):
+			text += "\n이 구역에서 구할 수 있다"
+		raid_zone_detail_goal.add_theme_color_override("font_color", Color("#e3cf67"))
+	raid_zone_detail_goal.text = text
+	raid_zone_detail_goal.visible = not text.is_empty()
 
 
 func _update_live_shelter_income(delta: float) -> void:
@@ -4108,6 +4208,16 @@ func _open_raid_zone_select() -> void:
 	raid_zone_detail_requirement.add_theme_color_override("font_color", Color("#d78371"))
 	raid_zone_detail_requirement.visible = false
 	detail_box.add_child(raid_zone_detail_requirement)
+	# 다음 목표 — 쉘터 확장에 모자란 것 + 출처. 나가기 직전에 "이번 판에 뭘
+	# 노리나"가 보여야 출정이 심부름이 아니라 투자가 된다.
+	raid_zone_detail_goal = Label.new()
+	raid_zone_detail_goal.name = "RaidZoneGoalLine"
+	raid_zone_detail_goal.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	raid_zone_detail_goal.add_theme_font_override("font", FONT)
+	raid_zone_detail_goal.add_theme_font_size_override("font_size", 13)
+	raid_zone_detail_goal.add_theme_color_override("font_color", Color("#e3cf67"))
+	raid_zone_detail_goal.visible = false
+	detail_box.add_child(raid_zone_detail_goal)
 	raid_zone_resupply_button = _merchant_button("창고에서 빠른 보충", false, "backpack")
 	raid_zone_resupply_button.name = "RaidZoneResupplyButton"
 	raid_zone_resupply_button.custom_minimum_size.y = 44
@@ -4179,6 +4289,24 @@ func _build_raid_zone_map_marker(zone_id: String, zone_index: int) -> Control:
 	zone_name.add_theme_color_override("font_outline_color", Color(0.005, 0.008, 0.008, 1.0))
 	zone_name.add_theme_constant_override("outline_size", 5)
 	wrapper.add_child(zone_name)
+	# 쉘터 다음 목표에 모자란 품목이 나오는 구역이면 작은 "목표" 칩 — 어디로 가야
+	# 쉘터가 크는지 지도에서 바로 읽힌다.
+	if SHELTER_REQUISITION.get_goal_zone_ids().has(zone_id):
+		var goal_chip := Label.new()
+		goal_chip.name = "GoalChip"
+		goal_chip.position = Vector2(88, -6)
+		goal_chip.size = Vector2(40, 18)
+		goal_chip.text = "목표"
+		goal_chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		goal_chip.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		goal_chip.add_theme_font_override("font", FONT)
+		goal_chip.add_theme_font_size_override("font_size", 11)
+		goal_chip.add_theme_color_override("font_color", Color("#1d170a"))
+		goal_chip.add_theme_stylebox_override(
+			"normal", _rounded_panel_style(Color("#e3c66a"), Color("#f6e2a0"), 3)
+		)
+		goal_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		wrapper.add_child(goal_chip)
 	return wrapper
 
 
@@ -4248,6 +4376,7 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 		raid_zone_detail_description.text += "\n\n지난 출정 이후 ·  %s" % "    ".join(growth)
 	raid_zone_detail_description.tooltip_text = base_description
 	raid_zone_detail_reward.text = str(zone.get("loot_focus", zone.get("reward", "-")))
+	_update_raid_zone_goal_line(zone_id)
 	var threat_percent := roundi(float(zone.get("threat", 0.0)) * 100.0)
 	if unlocked:
 		# 위협도는 헤더 칩에 등급으로만. 낮음/보통/높음/극심.
@@ -4661,6 +4790,12 @@ func _build_return_settlement_card_lines(settlement: Dictionary) -> Array[String
 	var overflow := int(settlement.get("overflow", 0))
 	if overflow > 0:
 		lines.append("창고가 꽉 차 %d점은 가방에 남았습니다" % overflow)
+	# 마지막 줄 — 이번 귀환으로 쉘터 다음 목표에 얼마나 가까워졌나. 영수증 끝에
+	# "다음엔 뭘 위해 나가나"가 이어져야 한다. 카드가 뜰 때만 붙인다.
+	if not lines.is_empty():
+		var goal_line: String = SHELTER_REQUISITION.get_settlement_line()
+		if not goal_line.is_empty():
+			lines.append(goal_line)
 	return lines
 
 
@@ -4718,7 +4853,12 @@ func _show_return_settlement_card(lines: Array) -> void:
 		entry.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		entry.add_theme_font_override("font", FONT)
 		entry.add_theme_font_size_override("font_size", 15)
-		entry.add_theme_color_override("font_color", Color("#dfe8e1"))
+		# 다음 목표 줄(마지막)은 금색 — 영수증 항목과 한 덩어리로 읽히면 안 된다.
+		var is_goal_line := (
+			str(line_value) == str(SHELTER_REQUISITION.get_settlement_line())
+			and not str(line_value).is_empty()
+		)
+		entry.add_theme_color_override("font_color", Color("#f3d77a") if is_goal_line else Color("#dfe8e1"))
 		box.add_child(entry)
 	var confirm := _merchant_button("확인", true, "check")
 	confirm.name = "ReturnSettlementConfirmButton"

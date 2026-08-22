@@ -18,6 +18,7 @@ extends RefCounted
 
 const MAIN_MISSION_CATALOG := preload("res://scripts/raid/main_mission_catalog.gd")
 const FIELD_CINEMATIC := preload("res://scripts/raid/field_cinematic.gd")
+const SHELTER_REQUISITION := preload("res://scripts/shelter/requisition.gd")
 const ALARM_WAVE_COUNT := 3
 const ALARM_WAVE_INTERVAL := 9.0
 const DEFENSE_HOLD_RADIUS := 9.0
@@ -632,6 +633,15 @@ func settle() -> Dictionary:
 			str(component_id), int((reward["components"] as Dictionary)[component_id])
 		)
 	var summary := str(reward.get("summary", "회수물 정산"))
+	# 서사 키(쉘터 확장 키 등) — 첫 회수 보상에만 들어 있다. 받는 순간 "이게 어디에
+	# 쓰이는지" 한 줄을 정산 요약에 붙인다. 가방 칸은 0(progression 타입).
+	for progression_item_id in (reward.get("progression_items", {}) as Dictionary).keys():
+		GameState.add_progression_item(
+			str(progression_item_id), int((reward["progression_items"] as Dictionary)[progression_item_id])
+		)
+		var grant_line := SHELTER_REQUISITION.describe_key_item_grant(str(progression_item_id))
+		if not grant_line.is_empty():
+			summary += "\n%s" % grant_line
 	if not already_recovered:
 		var lore := str(stage.get("lore", ""))
 		if not lore.is_empty() and not GameState.unlocked_contract_lore.has(lore):

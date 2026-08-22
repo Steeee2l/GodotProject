@@ -76,6 +76,10 @@ var progression_item_inventory: Dictionary = {
 	"rifle_blueprint": 0,
 	"shotgun_blueprint": 0,
 	"sealed_zone_keycard": 0,
+	# 쉘터 티어 3~5 확장 키(SHELTER_UPGRADE_COSTS.key_item). 메인 미션 보상 전용.
+	"namdaemun_depot_plans": 0,
+	"euljiro_grid_schematic": 0,
+	"yongsan_control_key": 0,
 }
 var weapon_mod_inventory: Dictionary = {
 	"scope_2x": 0,
@@ -703,11 +707,16 @@ const CATNIP_SLOTS_BY_TIER := {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
 # 예전 곡선은 티어마다 약 13배(30k→400k→5M→60M)라 중반부터 출정이 재미가
 # 아니라 고철 대기가 됐다. 스텝을 약 5배로 낮춰 진행이 계단이 아니라
 # 곡선이 되게 한다. 츄르 요구는 완만히 유지해 성취감은 남긴다.
+#
+# key_item(티어 3~5): 가방 칸을 안 먹는 서사 키 1개. 메인 미션 체인 3단계 완료
+# 보상으로만 나온다(상인 매대 금지) — "다음 쉘터는 다음 도시의 이야기를 끝내야
+# 열린다". 티어 2는 키 없음(첫 확장은 츄르 1개면 충분해야 한다). 키는 소모하지
+# 않는다(설계도는 남는다). 표시·문구는 scripts/shelter/requisition.gd가 맡는다.
 const SHELTER_UPGRADE_COSTS := {
 	2: {"scrap": 30000, "churu": 1},
-	3: {"scrap": 150000, "churu": 2},
-	4: {"scrap": 750000, "churu": 4},
-	5: {"scrap": 3500000, "churu": 8},
+	3: {"scrap": 150000, "churu": 2, "key_item": "namdaemun_depot_plans"},
+	4: {"scrap": 750000, "churu": 4, "key_item": "euljiro_grid_schematic"},
+	5: {"scrap": 3500000, "churu": 8, "key_item": "yongsan_control_key"},
 }
 # ── 캣닢 경제 ──────────────────────────────────────────────────
 # 캣닢은 시설 하나를 통째로 쓰면서 소비처가 부스트 하나뿐이었다.
@@ -1038,6 +1047,27 @@ func mark_field_cinematic_seen(cinematic_id: String) -> void:
 		return
 	seen_field_cinematics.append(cinematic_id)
 	save_persistent_state()
+
+
+func ensure_story_key_items() -> Array[String]:
+	# 안전망: 메인 미션 체인 단계를 끝냈는데 그 단계의 서사 키(쉘터 확장 키 등)가
+	# 없는 세이브에 키를 보정 지급한다 — 키 도입 전 클리어한 구세이브, 시체와 함께
+	# 분실한 경우. 키는 첫 회수에만 나와 두 번 받을 길이 없고, 없으면 티어가 영원히
+	# 막히므로 "끝냈는데 없다"를 허용하지 않는다. 멱등 — 이미 있으면 아무것도 안 한다.
+	# (이 파일은 requisition.gd를 preload하지 않는다 — 그 모듈이 GameState를 참조해
+	#  autoload 초기화 전 컴파일 순환이 생긴다. 문구는 모듈, 지급은 여기.)
+	var granted: Array[String] = []
+	for zone_id in MAIN_MISSION_CATALOG.ZONE_ORDER:
+		var progress := get_main_mission_progress(zone_id)
+		for stage_index in progress:
+			var stage := MAIN_MISSION_CATALOG.get_stage(zone_id, stage_index)
+			var items := (stage.get("reward", {}) as Dictionary).get("progression_items", {}) as Dictionary
+			for item_id in items.keys():
+				if get_progression_item_count(str(item_id)) > 0:
+					continue
+				add_progression_item(str(item_id), maxi(1, int(items[item_id])))
+				granted.append(str(item_id))
+	return granted
 
 
 func _migrate_main_mission_progress() -> void:
@@ -3521,6 +3551,11 @@ func try_upgrade_shelter_tier() -> bool:
 	var churu_cost := int(cost.get("churu", 0))
 	if scrap < scrap_cost or churu < churu_cost:
 		return false
+	# 서사 키(티어 3~5). 소급 없음 — 이미 그 티어 이상인 세이브는 다음 티어 키만 본다.
+	# 키는 소모하지 않는다.
+	var key_item := str(cost.get("key_item", ""))
+	if not key_item.is_empty() and get_progression_item_count(key_item) <= 0:
+		return false
 	scrap -= scrap_cost
 	churu -= churu_cost
 	shelter_tier = next_tier
@@ -4427,7 +4462,10 @@ func load_persistent_state() -> bool:
 	progression_item_inventory = (
 		data.get("progression_item_inventory", progression_item_inventory) as Dictionary
 	).duplicate(true)
-	for progression_item_id in ["rifle_blueprint", "shotgun_blueprint", "sealed_zone_keycard"]:
+	for progression_item_id in [
+		"rifle_blueprint", "shotgun_blueprint", "sealed_zone_keycard",
+		"namdaemun_depot_plans", "euljiro_grid_schematic", "yongsan_control_key",
+	]:
 		if not progression_item_inventory.has(progression_item_id):
 			progression_item_inventory[progression_item_id] = 0
 	weapon_mod_inventory = (data.get("weapon_mod_inventory", weapon_mod_inventory) as Dictionary).duplicate(true)
@@ -4465,6 +4503,9 @@ func load_persistent_state() -> bool:
 	seen_field_cinematics = _to_string_array(data.get("seen_field_cinematics", []))
 	saja_seen_main_mission_zones = _to_string_array(data.get("saja_seen_main_mission_zones", []))
 	_migrate_main_mission_progress()
+	# 구세이브 보정: 키 도입 전에 체인 3단계를 끝낸 세이브에 쉘터 확장 키를 준다.
+	# progression_item_inventory 로드 뒤(위쪽)여야 "이미 있음"을 제대로 본다.
+	ensure_story_key_items()
 	shelter_workbench_level = clampi(int(data.get("shelter_workbench_level", shelter_workbench_level)), 1, 5)
 	shelter_tier = clampi(int(data.get("shelter_tier", shelter_tier)), 1, 5)
 	scratcher_bank_level = clampi(int(data.get("scratcher_bank_level", scratcher_bank_level)), 1, 5)
@@ -4643,6 +4684,9 @@ func reset_run() -> void:
 		"rifle_blueprint": 0,
 		"shotgun_blueprint": 0,
 		"sealed_zone_keycard": 0,
+		"namdaemun_depot_plans": 0,
+		"euljiro_grid_schematic": 0,
+		"yongsan_control_key": 0,
 	}
 	weapon_mod_inventory = {
 		"scope_2x": 0,

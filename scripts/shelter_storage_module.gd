@@ -39,6 +39,9 @@ const ITEM_NAMES := {
 	"rifle_blueprint": "소총 제작 청사진",
 	"shotgun_blueprint": "산탄총 제작 청사진",
 	"sealed_zone_keycard": "봉쇄구역 키카드",
+	"namdaemun_depot_plans": "남대문 창고 설계도",
+	"euljiro_grid_schematic": "을지로 배전 도면",
+	"yongsan_control_key": "용산 통제 키",
 }
 
 const COMPONENT_TEXTURES := {

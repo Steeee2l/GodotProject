@@ -22,7 +22,8 @@ extends RefCounted
 #   carry_detail        회수 후 배너 세부 문구
 #   carry_notice        회수 순간의 필드 알림
 #   carry_monologue     단계 완료 독백 2줄(하드보일드, 세계관 한 겹)
-#   reward              첫 회수 보상 {canned_food, churu, components:{}, xp, summary}
+#   reward              첫 회수 보상 {canned_food, churu, components:{}, progression_items:{}, xp, summary}
+#                       progression_items = 쉘터 확장 키 등 0칸 서사 아이템(첫 회수에만, 재회수 없음)
 #   repeat_reward       재회수 보상(축소판) — 반복 파밍 방지
 #   lore                있으면 unlocked_contract_lore에 기록으로 남는다
 #
@@ -952,6 +953,8 @@ const CHAINS := {
 				"canned_food": 22,
 				"churu": 3,
 				"components": {"scope_lens": 2},
+				# 쉘터 Tier 3 확장 키 — 장부 마지막 장이 창고 설계도다. 첫 회수에만.
+				"progression_items": {"namdaemun_depot_plans": 1},
 				"xp": 820,
 				"summary": "조합 장부 해독 · 통조림 +22 · 츄르 +3 · 스코프 렌즈 +2 · XP +820\n새 세계 기록 · ‘조합 열쇠 장부’ 해금",
 			},
@@ -1141,6 +1144,8 @@ const CHAINS := {
 				"canned_food": 30,
 				"churu": 4,
 				"components": {"scope_lens": 3},
+				# 쉘터 Tier 4 확장 키 — 관제실 로그에 딸려 온 배전 도면. 첫 회수에만.
+				"progression_items": {"euljiro_grid_schematic": 1},
 				"xp": 1350,
 				"summary": "격리 로그 해독 · 통조림 +30 · 츄르 +4 · 스코프 렌즈 +3 · XP +1350\n새 세계 기록 · ‘외부 발신 격리 명령’ 해금",
 			},
@@ -1330,6 +1335,8 @@ const CHAINS := {
 				"canned_food": 42,
 				"churu": 6,
 				"components": {"scope_lens": 4},
+				# 쉘터 Tier 5 확장 키 — 사령부 금고의 통제 키. 첫 회수에만.
+				"progression_items": {"yongsan_control_key": 1},
 				"xp": 2400,
 				"summary": "보호소 배치도 해독 · 통조림 +42 · 츄르 +6 · 스코프 렌즈 +4 · XP +2400\n새 세계 기록 · ‘보호소 27 배치도’ 해금",
 			},

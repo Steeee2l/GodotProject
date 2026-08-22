@@ -7,6 +7,7 @@ extends RefCounted
 
 const BROKEN_SENTRY_TEXTURE := preload("res://assets/props/broken_sentry_salvage.png")
 const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
+const SHELTER_REQUISITION := preload("res://scripts/shelter/requisition.gd")
 const COWERING_RESIDENT_TEXTURE_PATHS := {
 	"n": "res://assets/characters/cowering_resident/up_action-frame-0.png",
 	"ne": "res://assets/characters/cowering_resident/up_right_action-frame-0.png",
@@ -364,6 +365,11 @@ func _show_extraction_result(rescued_count: int) -> void:
 		host.hud.add_result_reward_chip("secure", "청사진·열쇠 %d점" % haul_progression, HudStyle.GOLD)
 	if haul_ammo > 0:
 		host.hud.add_result_reward_chip("ammo", "탄약 %d발" % haul_ammo, HudStyle.TEXT_DIM)
+	# 마지막 칩 — 쉘터 다음 목표까지의 거리. 정산은 "이번 판" 영수증이지만, 다음 판을
+	# 왜 나가야 하는지는 여기서 이어져야 한다. 보상(츄르·키)은 위에서 전부 지급된 뒤다.
+	var shelter_goal_line: String = SHELTER_REQUISITION.get_settlement_line()
+	if not shelter_goal_line.is_empty():
+		host.hud.add_result_reward_chip("upgrade", "쉘터 · %s" % shelter_goal_line, HudStyle.GOLD)
 	var lines: PackedStringArray = [mission_summary]
 	if cargo_summary != "특별 화물 없음":
 		lines.append(cargo_summary)

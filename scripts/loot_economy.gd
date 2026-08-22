@@ -472,6 +472,37 @@ const ITEM_CATALOG := {
 		"rarity_tier": 4,
 		"minimum_stage": 3,
 	},
+	# ── 쉘터 확장 키(티어 3·4·5) ──
+	# 메인 미션 체인 3단계 보상 전용. 드랍 테이블·상인 매대 어디에도 넣지 않는다 —
+	# 카탈로그에 두는 이유는 이름·가치 조회(정산·창고 표시)를 한 곳에서 하기 위해서다.
+	# progression 타입이라 가방 칸은 0(get_raid_item_slot_cost).
+	"namdaemun_depot_plans": {
+		"loot_type": "progression_item",
+		"progression_item_id": "namdaemun_depot_plans",
+		"display_name": "남대문 창고 설계도",
+		"base_value": 2400,
+		"slot_size": 1,
+		"rarity_tier": 4,
+		"minimum_stage": 2,
+	},
+	"euljiro_grid_schematic": {
+		"loot_type": "progression_item",
+		"progression_item_id": "euljiro_grid_schematic",
+		"display_name": "을지로 배전 도면",
+		"base_value": 3600,
+		"slot_size": 1,
+		"rarity_tier": 4,
+		"minimum_stage": 3,
+	},
+	"yongsan_control_key": {
+		"loot_type": "progression_item",
+		"progression_item_id": "yongsan_control_key",
+		"display_name": "용산 통제 키",
+		"base_value": 5200,
+		"slot_size": 1,
+		"rarity_tier": 5,
+		"minimum_stage": 4,
+	},
 	"m1911": {
 		"loot_type": "weapon",
 		"weapon_id": "m1911",
