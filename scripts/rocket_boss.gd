@@ -56,6 +56,8 @@ func configure_rocket_boss(target_body: CharacterBody3D, initial_threat: float) 
 	super.configure("pistol", target_body, {}, maxf(0.65, initial_threat), "ak47")
 	enemy_kind = "rocket_boss"
 	weapon_id = "rocket_launcher"
+	# 보스 표식 — 헤드샷 배율(×1.35)·포이즈 가중(×1.5) 분기가 읽는다(디렉터도 같은 메타를 단다).
+	set_meta("raid_boss", true)
 	magazine_size = ROCKET_MAGAZINE_SIZE
 	magazine_ammo = ROCKET_MAGAZINE_SIZE
 	reload_duration = ROCKET_RELOAD_DURATION
@@ -248,7 +250,8 @@ func _absorbs_hit_stagger(amount: int) -> bool:
 	# 탄환 한 발마다 비틀거리지 않는다. 누적 피해가 문턱(최대 체력 16%)을
 	# 넘는 순간에만 길게 그로기 — 퍼붓기의 보상이 '무력화'가 아니라
 	# '보상 창'이 되도록. 그로기 중 진행하던 패턴은 취소된다.
-	poise_damage_accumulated += float(amount)
+	# 헤드샷은 포이즈 누적 ×1.5(피해 배율은 ×1.35로 낮은 대신) — enemy.take_projectile_hit가 세팅.
+	poise_damage_accumulated += float(amount) * maxf(1.0, last_hit_poise_multiplier)
 	hit_flash_timer = 0.1
 	var threshold := _poise_threshold()
 	if poise_damage_accumulated < threshold:
@@ -337,6 +340,8 @@ func _check_enrage() -> void:
 func _start_rocket_aim() -> void:
 	boss_action = "aim"
 	boss_action_elapsed = 0.0
+	aim_line_shown = false
+	_clear_telegraphs()
 	boss_action_duration = ROCKET_AIM_TIME * (0.72 if _boss_enraged() else 1.0)
 	velocity = Vector3.ZERO
 	_set_motion_state("attack")
@@ -352,9 +357,15 @@ func _update_rocket_aim(delta: float, direction: Vector3) -> void:
 	_set_facing_from_world_direction(direction)
 	threat_marker.visible = true
 	threat_marker.scale = Vector3.ONE * (1.35 + sin(boss_action_elapsed * 18.0) * 0.16)
+	# 조준선 예고 — 사수와 같은 규격(발사 0.35s 전 깜빡이는 선 + 총구 반짝).
+	var remaining := boss_action_duration - boss_action_elapsed
+	if not aim_line_shown and remaining <= RANGED_AIM_LINE_LEAD + 0.0001:
+		pending_attack_direction = direction
+		_show_aim_line_telegraph(remaining)
 	if boss_action_elapsed < boss_action_duration:
 		return
 	threat_marker.visible = false
+	_clear_telegraphs()
 	_fire_rocket(direction)
 	boss_action = "recovery"
 	boss_action_elapsed = 0.0
@@ -620,6 +631,16 @@ func get_projectile_hit_center() -> Vector3:
 
 func get_projectile_hit_radius() -> float:
 	return 0.78
+
+
+func get_world_height() -> float:
+	# 보스 스프라이트(0.0108×256)의 실제 몸 높이 — 일반 적(1.62)보다 크다.
+	return 2.1
+
+
+func get_head_zone_ratio() -> float:
+	# 덩치가 큰 만큼 머리 비율은 조금 작다(상단 24%).
+	return 0.24
 
 
 func get_rocket_magazine_ammo() -> int:

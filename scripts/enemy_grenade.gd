@@ -160,14 +160,15 @@ func _explode() -> void:
 		if offset.length() <= blast_radius and _has_clear_blast_path(target_body):
 			var falloff := 1.0 - clampf(offset.length() / blast_radius, 0.0, 0.72)
 			var applied_damage := maxi(8, roundi(float(damage) * falloff))
+			# 4번째 인자(폭심 위치)는 엄폐 판정용 — 던진 적이 아니라 폭발 지점 기준.
 			if target_body.has_method("take_hostile_hit"):
-				target_body.call("take_hostile_hit", applied_damage, offset.normalized(), source_body)
+				_deliver_blast_hit(target_body, applied_damage, offset.normalized())
 			elif target_body.has_method("take_damage"):
 				target_body.call("take_damage", applied_damage)
 			elif target_body.get_parent() != null:
 				var parent := target_body.get_parent()
 				if parent.has_method("take_hostile_hit"):
-					parent.call("take_hostile_hit", applied_damage, offset.normalized(), source_body)
+					_deliver_blast_hit(parent, applied_damage, offset.normalized())
 				elif parent.has_method("take_damage"):
 					parent.call("take_damage", applied_damage)
 	_spawn_explosion_fx()
@@ -187,6 +188,15 @@ func _has_clear_blast_path(body: CollisionObject3D) -> bool:
 		query.exclude = [source_body.get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	return hit.is_empty() or hit.get("collider") == body
+
+
+func _deliver_blast_hit(receiver: Object, applied_damage: int, hit_direction: Vector3) -> void:
+	# 폭심 좌표(4번째 인자)는 엄폐 판정을 하는 플레이어만 받는다. 적·테스트
+	# 더미는 3인자 시그니처라 인자 수를 확인하지 않으면 호출 자체가 실패한다.
+	if receiver.get_method_argument_count("take_hostile_hit") >= 4:
+		receiver.call("take_hostile_hit", applied_damage, hit_direction, source_body, global_position)
+	else:
+		receiver.call("take_hostile_hit", applied_damage, hit_direction, source_body)
 
 
 func _spawn_explosion_fx() -> void:

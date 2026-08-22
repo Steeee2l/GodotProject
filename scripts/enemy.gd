@@ -15,6 +15,7 @@ const DAMAGE_FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const DAMAGE_NUMBER_SCRIPT := preload("res://scripts/damage_number.gd")
 const KILL_IMPACT := preload("res://scripts/kill_impact.gd")
 const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
+const TELEGRAPH := preload("res://scripts/raid/telegraph_fx.gd")
 const MELEE_SPEED := 5.1
 const PISTOL_SPEED := 3.15
 const PATROL_SPEED := 1.35
@@ -57,9 +58,23 @@ const ELITE_SPRITE_SCALE := 1.18
 const ELITE_HEALTH_MULTIPLIER := 2.6
 const ELITE_DAMAGE_MULTIPLIER := 1.4
 const ELITE_SPEED_MULTIPLIER := 1.12
-const MELEE_WINDUP_TIME := 0.46
+# 전투 숙련도 패키지 — 공격 예고(telegraph). 예고는 '읽을 거리'이지 적 약화가
+# 아니다: 와인드업을 늘린 만큼 쿨다운을 깎아 공격 주기(=DPS 총량)는 그대로 둔다.
+#   근접: 이미 0.46s 와인드업 + 돌진이 있다 → 수치 불변, 예고(화살표·스케일 펀치)만 추가
+#   척탄병: 와인드업 0.72→0.90 (+0.18) ↔ 투척 쿨다운 6.8~9.5 → 6.62~9.32
+#   사수: 첫 발 조준선 예고 0.35s(엘리트 0.25s) — 와인드업이 그보다 짧으면 예고
+#        시간까지 늘리고, 늘린 만큼 점사 후 쿨다운에서 뺀다(_start_pistol_burst).
+# legacy_attack_timing(프로브 전용)은 예고 전 수치로 되돌려 DPS 동일성을 A/B로 잰다.
+const MELEE_WINDUP_TIME := 0.5
 const MELEE_STRIKE_TIME := 0.16
 const MELEE_RECOVERY_TIME := 0.34
+# 근접 돌진 예고는 와인드업 0.50s 동안 떠 있다(사양값). 예전 0.46에서 +0.04 늘린
+# 만큼 돌진 쿨다운을 −0.04 해 근접 공격 주기(=DPS 총량)는 그대로 둔다.
+const LEGACY_MELEE_WINDUP_TIME := 0.46
+const MELEE_COOLDOWN_MAX := 1.16
+const MELEE_COOLDOWN_MIN := 0.78
+const LEGACY_MELEE_COOLDOWN_MAX := 1.2
+const LEGACY_MELEE_COOLDOWN_MIN := 0.82
 const HIT_STAGGER_TIME := 0.13
 # 피격 미세 넉백 — 스태거 0.13초 동안 감속(18/s)하며 총 ~0.4u 밀린다.
 # 이동 AI와 충돌하지 않게 velocity 임펄스(stagger_velocity)로만 민다.
@@ -102,8 +117,25 @@ const COMBAT_MEMORY_BASE := 14.0
 const COMBAT_MEMORY_THREAT_BONUS := 8.0
 const MELEE_DISENGAGE_DISTANCE := 52.0
 const RANGED_DISENGAGE_DISTANCE := 76.0
-const GRENADE_WINDUP_TIME := 0.72
+const GRENADE_WINDUP_TIME := 0.9
 const GRENADE_RECOVERY_TIME := 0.9
+const GRENADE_COOLDOWN_MIN := 6.62
+const GRENADE_COOLDOWN_MAX := 9.32
+const LEGACY_GRENADE_WINDUP_TIME := 0.72
+const LEGACY_GRENADE_COOLDOWN_MIN := 6.8
+const LEGACY_GRENADE_COOLDOWN_MAX := 9.5
+const GRENADE_DAMAGE := 28
+const GRENADE_BLAST_RADIUS := 3.15
+const GRENADE_FLIGHT_TIME := 0.88
+const RANGED_AIM_LINE_LEAD := 0.35
+const ELITE_AIM_LINE_LEAD := 0.25
+# 약점(헤드샷) — 적 발 위치 기준 월드 높이의 상단 28%가 머리. 텍스처 크기가 아니라
+# 종류별 상수로 둬서 스프라이트 다이어트 뒤에도 판정이 같다.
+const ENEMY_WORLD_HEIGHT := 1.62
+const HEAD_ZONE_RATIO_BY_KIND := {"melee": 0.28, "ranged": 0.28, "grenadier": 0.28}
+const HEADSHOT_DAMAGE_MULTIPLIER := 1.6
+const ELITE_HEADSHOT_DAMAGE_MULTIPLIER := 1.35
+const HEADSHOT_POISE_MULTIPLIER := 1.5
 const STEERING_LOCK_MSEC := 220
 const FACING_STABILITY_MSEC := 120
 const SENTRY_LOOK_INTERVAL_MIN := 0.75
@@ -225,6 +257,20 @@ var elite_damage_multiplier := 1.0
 var elite_speed_multiplier := 1.0
 var elite_icon: Sprite3D
 var elite_name_label: Label3D
+# 공격 예고 노드(풀링된 TelegraphFx) — 공격이 끊기면(경직·사망) 즉시 거둔다.
+var telegraph_nodes: Array[Node3D] = []
+var ranged_windup_extension := 0.0
+var aim_line_shown := false
+var last_aim_line_remaining := -1.0
+var last_burst_cooldown := -1.0
+# 예고로 늘린 와인드업을 실제로 되돌려준 시간(쿨다운 차감분 또는 장전 선행분) — 프로브용.
+var last_windup_compensation := -1.0
+# 프로브 전용 — 예고 도입 전 타이밍(DPS 동일성 A/B 측정용). 게임에선 항상 false.
+var legacy_attack_timing := false
+# 헤드샷이 보스 포이즈에 주는 가중치(rocket_boss._absorbs_hit_stagger가 읽는다).
+var last_hit_poise_multiplier := 1.0
+var last_hit_was_headshot := false
+var headshots_taken := 0
 static var weapon_texture_cache: Dictionary = {}
 static var health_bar_texture_cache: Dictionary = {}
 static var reload_texture_cache: Dictionary = {}
@@ -1448,6 +1494,86 @@ func get_projectile_hit_radius() -> float:
 	return 0.62
 
 
+# ── 약점(헤드샷) 판정 기준 ─────────────────────────────────────────
+# bullet_projectile이 "조준 높이 / 월드 높이" 비율로 머리를 판정할 때 쓴다.
+func get_feet_world_y() -> float:
+	# 캡슐 중심이 global_position, 발(그림자)은 0.7 아래.
+	return global_position.y - 0.7
+
+
+func get_world_height() -> float:
+	return ENEMY_WORLD_HEIGHT * (ELITE_SPRITE_SCALE if elite else 1.0)
+
+
+func get_head_zone_ratio() -> float:
+	return float(HEAD_ZONE_RATIO_BY_KIND.get(enemy_kind, 0.28))
+
+
+# ── 공격 예고 ─────────────────────────────────────────────────────
+func _get_aim_line_lead() -> float:
+	return ELITE_AIM_LINE_LEAD if elite else RANGED_AIM_LINE_LEAD
+
+
+func _get_melee_windup_time() -> float:
+	return LEGACY_MELEE_WINDUP_TIME if legacy_attack_timing else MELEE_WINDUP_TIME
+
+
+func _show_aim_line_telegraph(remaining: float) -> void:
+	aim_line_shown = true
+	last_aim_line_remaining = remaining
+	if not is_instance_valid(target) or get_parent() == null:
+		return
+	var from := _get_weapon_muzzle_position(pending_attack_direction)
+	var to := target.global_position + Vector3(0.0, 0.45, 0.0)
+	var line := TELEGRAPH.show_aim_line(from, to, maxf(0.05, remaining), get_parent())
+	if line != null:
+		telegraph_nodes.append(line)
+	_notify_telegraph("ranged")
+
+
+func _show_grenade_telegraph() -> void:
+	_clear_telegraphs()
+	if get_parent() == null or legacy_attack_timing:
+		return
+	# 착탄 원은 실제 폭발 반경 그대로, 와인드업 + 비행 시간 동안 유지(수류탄이
+	# 떨어지면 자기 경고 원이 이어받는다). 예고 중 원 밖으로 나가면 피한다.
+	var hold := GRENADE_WINDUP_TIME + GRENADE_FLIGHT_TIME
+	var circle := TELEGRAPH.show_landing_circle(
+		Vector3(grenade_target_position.x, get_feet_world_y(), grenade_target_position.z),
+		GRENADE_BLAST_RADIUS, hold, get_parent()
+	)
+	if circle != null:
+		telegraph_nodes.append(circle)
+	var start := global_position + pending_attack_direction * 0.72 + Vector3(0.0, 0.62, 0.0)
+	var arc := TELEGRAPH.show_arc(start, grenade_target_position, GRENADE_WINDUP_TIME, get_parent())
+	if arc != null:
+		telegraph_nodes.append(arc)
+	SFX.play("grenade_whistle", global_position)
+	_notify_telegraph("grenade")
+
+
+func _clear_telegraphs() -> void:
+	for node in telegraph_nodes:
+		if is_instance_valid(node):
+			TELEGRAPH.release(node)
+	telegraph_nodes.clear()
+
+
+func get_active_telegraph_count() -> int:
+	var count := 0
+	for node in telegraph_nodes:
+		if is_instance_valid(node) and node.visible:
+			count += 1
+	return count
+
+
+func _notify_telegraph(kind: String) -> void:
+	# 첫 예고 목격 레슨 등 — 호스트가 있으면 알린다(필드·건물 내부 공용).
+	var host := _raid_host()
+	if host != null and host.has_method("notify_enemy_telegraph"):
+		host.call("notify_enemy_telegraph", kind, self)
+
+
 func _update_patrol(delta: float) -> void:
 	if perception_state == "return":
 		var return_target := squad_anchor + squad_formation_offset if squad_id >= 0 else patrol_origin
@@ -2084,13 +2210,28 @@ func _start_melee_windup(direction: Vector3) -> void:
 		attack_cooldown = 0.45
 		return
 	combat_state = "melee_windup"
-	state_timer = MELEE_WINDUP_TIME
+	var windup := _get_melee_windup_time()
+	state_timer = windup
 	pending_attack_direction = direction
-	attack_cooldown = lerpf(1.2, 0.82, threat_level)
+	attack_cooldown = (
+		lerpf(LEGACY_MELEE_COOLDOWN_MAX, LEGACY_MELEE_COOLDOWN_MIN, threat_level)
+		if legacy_attack_timing
+		else lerpf(MELEE_COOLDOWN_MAX, MELEE_COOLDOWN_MIN, threat_level)
+	)
 	velocity = Vector3.ZERO
 	_set_motion_state("attack")
 	threat_marker.visible = true
 	_start_windup_pose()
+	# 돌진 예고 — 바닥 화살표(돌진 방향) + 스프라이트 스케일 펀치(_start_windup_pose).
+	_clear_telegraphs()
+	if legacy_attack_timing:
+		return
+	var arrow := TELEGRAPH.show_dash_arrow(
+		global_position + Vector3(0.0, -0.68, 0.0), direction, windup, get_parent()
+	)
+	if arrow != null:
+		telegraph_nodes.append(arrow)
+	_notify_telegraph("melee")
 
 
 func _update_pistol(direction: Vector3, distance: float, delta: float) -> void:
@@ -2151,7 +2292,14 @@ func _start_pistol_burst(direction: Vector3) -> void:
 	# 예비동작은 위협도에 반비례한다. 초반 존(0.15)은 0.4초 남짓으로 사람이
 	# 반응할 수 있게, 심층 존은 0.18초로 날카롭게. 예전 고정 0.18초 + 인지 0.12초
 	# = 0.3초는 게임에서 가장 치명적인 공격이 가장 안 읽히는 상태였다.
-	state_timer = lerpf(0.44, RANGED_WINDUP_TIME, clampf(threat_level, 0.0, 1.0))
+	var base_windup := lerpf(0.44, RANGED_WINDUP_TIME, clampf(threat_level, 0.0, 1.0))
+	# 조준선 예고는 첫 발 0.35s(엘리트 0.25s) 전에 뜬다. 와인드업이 그보다 짧으면
+	# 예고가 보일 시간까지 늘리고, 늘린 만큼 점사 후 쿨다운에서 뺀다(DPS 총량 불변).
+	var aim_lead := _get_aim_line_lead()
+	ranged_windup_extension = 0.0 if legacy_attack_timing else maxf(0.0, aim_lead - base_windup)
+	state_timer = base_windup + ranged_windup_extension
+	aim_line_shown = false
+	_clear_telegraphs()
 	pending_attack_direction = direction
 	velocity = Vector3.ZERO
 	_set_motion_state("attack")
@@ -2165,13 +2313,14 @@ func _update_grenadier(direction: Vector3, distance: float, delta: float) -> voi
 	if grenade_cooldown <= 0.0 and distance >= 7.0 and distance <= 28.0 and _has_line_of_sight():
 		grenade_target_position = target.global_position + target.velocity * 0.32
 		combat_state = "grenade_windup"
-		state_timer = GRENADE_WINDUP_TIME
+		state_timer = LEGACY_GRENADE_WINDUP_TIME if legacy_attack_timing else GRENADE_WINDUP_TIME
 		velocity = Vector3.ZERO
 		pending_attack_direction = direction
 		_set_motion_state("attack")
 		threat_marker.text = "◆"
 		threat_marker.modulate = _with_player_visibility(Color("#ffb84f"))
 		threat_marker.visible = true
+		_show_grenade_telegraph()
 		return
 	if distance > 20.0:
 		velocity = _steer_around_obstacles(direction) * movement_speed
@@ -2193,10 +2342,18 @@ func _throw_grenade() -> void:
 	var grenade := Node3D.new()
 	grenade.name = "EnemyGrenade"
 	grenade.set_script(GRENADE_PROJECTILE)
-	grenade.call("configure", self, target, start, grenade_target_position, 28, 3.15, 2.45)
+	grenade.call(
+		"configure", self, target, start, grenade_target_position,
+		GRENADE_DAMAGE, GRENADE_BLAST_RADIUS, 2.45
+	)
 	get_parent().add_child(grenade)
 	grenade.global_position = start
-	grenade_cooldown = weapon_random.randf_range(6.8, 9.5)
+	# 와인드업 +0.18 만큼 쿨다운 −0.18(6.8~9.5 → 6.62~9.32) — 투척 주기 불변.
+	grenade_cooldown = (
+		weapon_random.randf_range(LEGACY_GRENADE_COOLDOWN_MIN, LEGACY_GRENADE_COOLDOWN_MAX)
+		if legacy_attack_timing
+		else weapon_random.randf_range(GRENADE_COOLDOWN_MIN, GRENADE_COOLDOWN_MAX)
+	)
 
 
 func _get_weapon_engagement_range() -> float:
@@ -2234,8 +2391,11 @@ func _update_combat_state(delta: float) -> void:
 		velocity = Vector3.ZERO
 		_set_facing_from_world_direction(pending_attack_direction)
 		_update_threat_marker()
+		if not aim_line_shown and not legacy_attack_timing and state_timer <= _get_aim_line_lead() + 0.0001:
+			_show_aim_line_telegraph(state_timer)
 		if state_timer <= 0.0:
 			threat_marker.visible = false
+			_clear_telegraphs()
 			burst_shots_remaining = mini(
 				magazine_ammo - 1,
 				maxi(0, _get_weapon_burst_size() - 1)
@@ -2260,6 +2420,7 @@ func _update_combat_state(delta: float) -> void:
 		_update_threat_marker()
 		if state_timer <= 0.0:
 			threat_marker.visible = false
+			_clear_telegraphs()
 			combat_state = "melee_strike"
 			state_timer = MELEE_STRIKE_TIME
 			velocity = pending_attack_direction * 2.2
@@ -2288,8 +2449,21 @@ func _update_combat_state(delta: float) -> void:
 			burst_shots_remaining = 0
 			if magazine_ammo <= 0:
 				_start_reload()
+				# 탄창을 다 비우는 점사(m1911 고위협 등)는 아래 쿨다운 분기를 아예
+				# 타지 않아 조준선 예고로 늘린 와인드업이 순손실로 남았다. 장전
+				# 진행도를 그만큼 앞당겨 갚는다 — 사격 주기(DPS 총량) 불변.
+				if combat_state == "reloading":
+					last_windup_compensation = minf(
+						ranged_windup_extension, reload_duration * 0.5
+					)
+					reload_elapsed = last_windup_compensation
+					ranged_windup_extension = 0.0
 			else:
-				attack_cooldown = _get_weapon_burst_cooldown()
+				# 조준선 예고로 늘린 와인드업만큼 쿨다운에서 뺀다 — 점사 주기 불변.
+				attack_cooldown = maxf(0.05, _get_weapon_burst_cooldown() - ranged_windup_extension)
+				last_burst_cooldown = attack_cooldown
+				last_windup_compensation = ranged_windup_extension
+				ranged_windup_extension = 0.0
 				combat_state = "normal"
 				_reset_sprite_pose()
 				_set_motion_state("idle")
@@ -2503,9 +2677,15 @@ func _start_windup_pose() -> void:
 	_kill_visual_tween()
 	visual_tween = create_tween()
 	visual_tween.set_parallel(true)
-	visual_tween.tween_property(sprite, "scale", Vector3(0.9, 1.08, 1.0), MELEE_WINDUP_TIME)
-	visual_tween.tween_property(sprite, "rotation", Vector3(0, 0, deg_to_rad(-8.0 if not sprite.flip_h else 8.0)), MELEE_WINDUP_TIME)
-	visual_tween.tween_property(sprite, "position", SPRITE_BASE_POSITION - pending_attack_direction * 0.1, MELEE_WINDUP_TIME)
+	# 스케일 펀치(몸 흔들림) — 돌진 예고. 옆으로 훅 부풀었다가 웅크린다.
+	var punch_scale := Vector3(1.18, 0.86, 1.0) * (ELITE_SPRITE_SCALE if elite else 1.0)
+	var crouch_scale := Vector3(0.9, 1.08, 1.0) * (ELITE_SPRITE_SCALE if elite else 1.0)
+	visual_tween.tween_property(sprite, "scale", punch_scale, 0.09).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	var windup := _get_melee_windup_time()
+	visual_tween.chain().tween_property(sprite, "scale", crouch_scale, maxf(0.05, windup - 0.09))
+	visual_tween.set_parallel(true)
+	visual_tween.tween_property(sprite, "rotation", Vector3(0, 0, deg_to_rad(-8.0 if not sprite.flip_h else 8.0)), windup)
+	visual_tween.tween_property(sprite, "position", SPRITE_BASE_POSITION - pending_attack_direction * 0.1, windup)
 
 
 func _start_strike_pose() -> void:
@@ -2732,9 +2912,25 @@ func take_projectile_hit(
 	attacker = null
 ) -> void:
 	_alert_to_projectile_attacker(attacker)
-	# hit_zone은 탄도의 명중 등급("center"/"normal"/"graze")이다. 예전 "head" 비교는
-	# 어떤 경로로도 올 수 없는 값이라 죽은 분기였다.
+	# hit_zone은 탄도의 명중 등급("center"/"normal"/"graze") 또는 약점 "head"다.
+	# 헤드샷(bullet_projectile이 조준 높이로 판정): 피해 ×1.6, 엘리트·보스 ×1.35
+	# (대신 포이즈 누적 ×1.5로 보상). 적 체력·피해는 플레이어 상태를 보지 않는다.
 	var final_damage := roundi(float(amount) * critical_multiplier) if is_critical else amount
+	last_hit_was_headshot = hit_zone == "head"
+	last_hit_poise_multiplier = 1.0
+	if last_hit_was_headshot:
+		var boss_or_elite := elite or bool(get_meta("raid_boss", false))
+		final_damage = maxi(1, roundi(float(final_damage) * (
+			ELITE_HEADSHOT_DAMAGE_MULTIPLIER if boss_or_elite else HEADSHOT_DAMAGE_MULTIPLIER
+		)))
+		if boss_or_elite:
+			last_hit_poise_multiplier = HEADSHOT_POISE_MULTIPLIER
+		headshots_taken += 1
+		# '크리' 사운드 — 짧은 딱. 일반 명중음(hit_enemy) 위에 얹힌다.
+		SFX.play("crit_hit", global_position)
+		var host := _raid_host()
+		if host != null and host.has_method("notify_player_headshot"):
+			host.call("notify_player_headshot", self, final_damage)
 	# 무기 돌파 +70 보너스 — 플레이어 탄환이 엘리트·보스를 때릴 때만 +20%(일반 적 제외).
 	# 배율의 단일 지점은 GameState.get_player_elite_damage_multiplier(장착 무기 기준). 오토로드
 	# 식별자를 직접 쓰면 --script 콜드 스타트에서 enemy.gd 컴파일이 깨지므로 노드 경로로 찾는다.
@@ -2750,6 +2946,7 @@ func take_projectile_hit(
 			if elite_multiplier > 1.0:
 				final_damage = maxi(1, roundi(float(final_damage) * elite_multiplier))
 	take_hit(final_damage, hit_direction, is_critical, hit_zone)
+	last_hit_poise_multiplier = 1.0
 
 
 func _alert_to_projectile_attacker(attacker = null) -> void:
@@ -2807,6 +3004,8 @@ func take_hit(amount: int, hit_direction: Vector3, is_critical: bool = false, hi
 		return
 	if _absorbs_hit_stagger(amount):
 		return
+	# 경직으로 공격이 끊기면 예고도 거둔다 — 안 올 공격의 예고는 거짓말이다.
+	_clear_telegraphs()
 	combat_state = "stagger"
 	state_timer = HIT_STAGGER_TIME
 	_set_motion_state("hit")
@@ -2988,6 +3187,7 @@ func _apply_weapon_base_modulate() -> void:
 func _start_death(hit_direction: Vector3) -> void:
 	dying = true
 	_cancel_reinforcement_call()
+	_clear_telegraphs()
 	if reload_indicator:
 		reload_indicator.visible = false
 	if detection_indicator:

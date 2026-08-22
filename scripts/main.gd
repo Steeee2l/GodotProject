@@ -337,6 +337,10 @@ var loot_system := LootPickupSystem.new()
 var bgm := BgmDirector.new()
 var stealth := StealthSystem.new()
 var weapon_combat := WeaponCombat.new()
+var cover_system := CoverSystem.new()
+# 전투 숙련도 — 이번 판 헤드샷 수·1회성 레슨(판 안에서 예고 종류별 1회).
+var run_headshots := 0
+var mastery_lessons_shown: Dictionary = {}
 var can_throw := CanThrowSystem.new()
 var monologue := FieldMonologue.new()
 var raid_zone_data: Dictionary = {}
@@ -523,6 +527,7 @@ func _ready() -> void:
 	loot_system.attach(self)
 	stealth.attach(self)
 	weapon_combat.attach(self)
+	cover_system.attach(self)
 	can_throw.attach(self)
 	active_tutorial.attach(self)
 	# 발각 방향 인디케이터 — 화면 밖(또는 안개에 가려진) 경계 상태 적의 방향을
@@ -863,9 +868,11 @@ func _physics_process(delta: float) -> void:
 	loot_system._update_ammo_pickups(delta)
 	_refresh_mobile_context_button()
 	weapon_combat._update_firing(delta)
+	cover_system.update(delta)
 	_update_aim_feedback(delta)
 	_update_camera_occluders(delta)
 	_update_player_combat_feedback(delta)
+	_update_cover_feedback()
 	_update_camera_follow(delta)
 	_update_building_overlays()
 	stealth._update_visibility_fog()
@@ -3286,16 +3293,19 @@ func _update_combat_feedback_overlay() -> void:
 	# ① 오토에임 타깃 브래킷 (터치 전용) — 발사 버튼이 지금 누굴 겨누는가.
 	var target = weapon_combat.mobile_assist_target
 	if (
-		DisplayServer.is_touchscreen_available()
+		not weapon_combat._uses_mouse_aim()
 		and is_instance_valid(target)
 		and not bool(target.get("dying"))
 		and target.visible
 		and not camera.is_position_behind(target.global_position)
 	):
-		var center := camera.unproject_position(target.global_position + Vector3(0, 0.45, 0))
-		var top := camera.unproject_position(target.global_position + Vector3(0, 1.1, 0))
-		var half := clampf(center.distance_to(top) * 0.9, 18.0, 46.0)
-		hud.combat_feedback.set_bracket(center, half)
+		var raised := weapon_combat.is_steady_aim_raised()
+		# 정조준 상승 중엔 브래킷이 머리로 올라가고 주황으로 바뀐다(헤드샷 가능 표시).
+		var bracket_height := 0.95 if raised else 0.45
+		var center := camera.unproject_position(target.global_position + Vector3(0, bracket_height, 0))
+		var top := camera.unproject_position(target.global_position + Vector3(0, bracket_height + 0.65, 0))
+		var half := clampf(center.distance_to(top) * (0.7 if raised else 0.9), 14.0, 46.0)
+		hud.combat_feedback.set_bracket(center, half, raised)
 	else:
 		hud.combat_feedback.clear_bracket()
 	# ③ 재장전 링 — 발사 버튼 테두리가 진행바다.
@@ -4159,7 +4169,19 @@ func take_hit(amount: int, hit_direction: Vector3) -> void:
 		_trigger_hit_stop(0.045)
 
 
-func take_hostile_hit(amount: int, hit_direction: Vector3, attacker = null) -> void:
+func take_hostile_hit(
+	amount: int,
+	hit_direction: Vector3,
+	attacker = null,
+	source_position: Vector3 = Vector3.INF
+) -> void:
+	# 엄폐 — 공격원(또는 폭심) 기준으로 엄폐물 건너편이면 ×0.55. 사격 노출 중엔 없음.
+	var cover_source := source_position
+	if cover_source == Vector3.INF and is_instance_valid(attacker) and attacker is Node3D:
+		cover_source = (attacker as Node3D).global_position
+	var covered_amount := cover_system.apply_to_damage(amount, cover_source)
+	last_cover_blocked = maxi(0, amount - covered_amount)
+	amount = covered_amount
 	var multiplier := GameState.get_damage_taken_multiplier()
 	last_damage_blocked = maxi(0, amount - maxi(1, roundi(float(amount) * multiplier)))
 	last_damage_source_name = "적대 생존자"
@@ -4171,6 +4193,62 @@ func take_hostile_hit(amount: int, hit_direction: Vector3, attacker = null) -> v
 	take_hit(amount, hit_direction)
 	if last_damage_blocked > 0 and player_health > 0 and hud.ammo_notice:
 		hud.push_toast("방어구가 피해 %d을 막았다" % last_damage_blocked, Color("#8ed9ff"), 1.1)
+	if last_cover_blocked > 0 and player_health > 0 and hud.ammo_notice:
+		hud.push_toast("엄폐가 피해 %d을 막았다" % last_cover_blocked, HudStyle.GREEN, 1.1)
+
+
+var last_cover_blocked := 0
+
+
+func _update_cover_feedback() -> void:
+	if hud.cover_chip == null or player == null:
+		return
+	var anchor := camera.unproject_position(player.global_position + Vector3(0, 2.15, 0)) + Vector2(0.0, 9.0)
+	hud.update_cover_chip(
+		cover_system.in_cover,
+		cover_system.is_exposed(),
+		anchor,
+		not camera.is_position_behind(player.global_position)
+	)
+
+
+func notify_player_headshot(_enemy: Node, _damage: int) -> void:
+	# 적(enemy.take_projectile_hit)이 헤드샷을 확정하면 부른다 — 통계 + 첫 레슨.
+	run_headshots += 1
+	GameState.raid_headshots += 1
+	_show_mastery_lesson("headshot", "헤드샷! 머리를 노리면 피해 1.6배")
+
+
+func notify_enemy_telegraph(kind: String, _enemy: Node) -> void:
+	# 첫 예고 목격 레슨 — 종류별 문장(판 안에서 종류당 1회, 저장은 첫 1회).
+	match kind:
+		"grenade":
+			_show_mastery_lesson("telegraph", "붉은 원은 착탄 지점 — 벗어나세요", "telegraph_grenade")
+		"ranged":
+			_show_mastery_lesson("telegraph", "깜빡이는 조준선 — 첫 발이 온다, 옆으로 비키세요", "telegraph_ranged")
+		"melee":
+			_show_mastery_lesson("telegraph", "바닥 화살표는 돌진 방향 — 옆으로 비키세요", "telegraph_melee")
+
+
+func _show_mastery_lesson(key: String, text: String, run_key: String = "") -> void:
+	# 1회성 필드 레슨(field_controls_lesson 패턴) — 저장 플래그는 키당 1회, 판 안에서는
+	# run_key(예고 종류)당 1회. 액티브 튜토리얼 파일과 무관하게 토스트로 띄운다.
+	var flag_name := "%s_lesson_seen" % key
+	var resolved_run_key := run_key if not run_key.is_empty() else key
+	if mastery_lessons_shown.has(resolved_run_key):
+		return
+	var persisted_seen := bool(GameState.get(flag_name))
+	if persisted_seen and run_key.is_empty():
+		return
+	mastery_lessons_shown[resolved_run_key] = true
+	if not persisted_seen:
+		GameState.set(flag_name, true)
+		GameState.save_persistent_state()
+	elif not run_key.is_empty():
+		# 이미 배운 종류의 예고는 판마다 다시 말하지 않는다 — 처음 보는 종류만.
+		return
+	if hud != null and hud.has_method("push_toast"):
+		hud.push_toast(text, HudStyle.GOLD, 3.4)
 
 
 func _show_damage_direction(hit_direction: Vector3) -> void:

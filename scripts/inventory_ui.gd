@@ -1199,8 +1199,9 @@ func _refresh_contents() -> void:
 			secure_expand_button.visible = true
 			secure_expand_button.text = "시큐어 츄르%d" % secure_cost
 			secure_expand_button.disabled = int(game_state.churu) < secure_cost
-			secure_expand_button.tooltip_text = "죽어도 지키는 칸 +1 (%d/3) · 츄르 %d" % [
-				int(game_state.secure_dog_slots), secure_cost
+			# 실제 칸 수는 get_secure_slot_count()(츄르 칸 + 방어구 돌파 +90 보너스)가 단일 지점이다.
+			secure_expand_button.tooltip_text = "죽어도 지키는 칸 +1 · 현재 %s · 츄르 %d" % [
+				_secure_slot_summary(), secure_cost
 			]
 
 	if scrap_label:
@@ -1796,10 +1797,20 @@ func _on_bag_expand_pressed() -> void:
 		_show_inventory_feedback("고철이 부족합니다", Color("#ee806c"))
 
 
+func _secure_slot_summary() -> String:
+	# "3칸 (츄르 2/3 + 방어구 돌파 1)" — 츄르로 산 칸과 방어구 +90 돌파 보너스를 갈라 읽힌다.
+	var total := int(game_state.get_secure_slot_count())
+	var bought := int(game_state.secure_dog_slots)
+	var bonus := total - bought
+	if bonus > 0:
+		return "%d칸 (츄르 %d/3 + 방어구 돌파 %d)" % [total, bought, bonus]
+	return "%d칸 (츄르 %d/3)" % [total, bought]
+
+
 func _on_secure_expand_pressed() -> void:
 	if game_state.try_upgrade_secure_dog():
 		_show_inventory_feedback(
-			"시큐어 슬롯 +1 · 죽어도 %d칸은 지킨다" % int(game_state.secure_dog_slots),
+			"시큐어 슬롯 +1 · 죽어도 %d칸은 지킨다" % int(game_state.get_secure_slot_count()),
 			Color("#a3ff92")
 		)
 		_refresh_contents()

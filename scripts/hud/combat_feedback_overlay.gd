@@ -8,6 +8,8 @@ extends Control
 # 전부 draw 호출이라 노드 낭비가 없고, HudStyle 색 문법을 따른다.
 
 const BRACKET_COLOR := Color("#e08a58")
+# 정조준 상승(머리 조준) 중 브래킷 색 — 헤드샷 팝과 같은 주황.
+const BRACKET_RAISED_COLOR := Color("#ff8a2a")
 const HIT_COLOR := Color("#f2e7c5")
 const KILL_COLOR := Color("#ff6b52")
 const RELOAD_COLOR := Color("#e3bd67")
@@ -15,6 +17,7 @@ const RELOAD_COLOR := Color("#e3bd67")
 var bracket_visible := false
 var bracket_center := Vector2.ZERO
 var bracket_half := 26.0
+var bracket_raised := false
 var reload_progress := -1.0
 var reload_center := Vector2.ZERO
 var reload_radius := 60.0
@@ -27,10 +30,11 @@ func _ready() -> void:
 	z_index = 210
 
 
-func set_bracket(center: Vector2, half_extent: float) -> void:
+func set_bracket(center: Vector2, half_extent: float, raised: bool = false) -> void:
 	bracket_visible = true
 	bracket_center = center
 	bracket_half = half_extent
+	bracket_raised = raised
 
 
 func clear_bracket() -> void:
@@ -81,10 +85,14 @@ func _draw_bracket() -> void:
 	var half := bracket_half * pulse
 	var arm := maxf(7.0, half * 0.42)
 	var width := 3.0
+	var color := BRACKET_RAISED_COLOR if bracket_raised else BRACKET_COLOR
 	for corner: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
 		var tip: Vector2 = bracket_center + corner * half
-		draw_line(tip, tip - Vector2(corner.x * arm, 0.0), BRACKET_COLOR, width)
-		draw_line(tip, tip - Vector2(0.0, corner.y * arm), BRACKET_COLOR, width)
+		draw_line(tip, tip - Vector2(corner.x * arm, 0.0), color, width)
+		draw_line(tip, tip - Vector2(0.0, corner.y * arm), color, width)
+	if bracket_raised:
+		# 머리 조준 표식 — 브래킷 위 작은 점.
+		draw_circle(bracket_center + Vector2(0.0, -half - 7.0), 3.0, color)
 
 
 func _draw_reload_ring() -> void:

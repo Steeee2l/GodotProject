@@ -51,6 +51,11 @@ const SOUNDS := {
 	"toast_pop": {"bus": "UI", "volume_db": -17.0, "pitch_jitter": 0.06, "min_interval_ms": 120, "unit_size": 6.0, "max_distance": 30.0},
 	# 작업대 강화 성공 — 금속 "챙" 한 번(연타 0.11s 간격이라 최소 간격은 짧게).
 	"enhance_clink": {"bus": "UI", "volume_db": -12.0, "pitch_jitter": 0.05, "min_interval_ms": 40, "unit_size": 6.0, "max_distance": 30.0},
+	# 전투 숙련도 패키지 — 예고·약점·엄폐 소리.
+	"grenade_whistle": {"bus": "SFX", "volume_db": -7.0, "pitch_jitter": 0.04, "min_interval_ms": 200, "unit_size": 8.0, "max_distance": 60.0},
+	"crit_hit": {"bus": "SFX", "volume_db": -6.0, "pitch_jitter": 0.06, "min_interval_ms": 0, "unit_size": 7.0, "max_distance": 40.0},
+	"cover_enter": {"bus": "UI", "volume_db": -14.0, "pitch_jitter": 0.03, "min_interval_ms": 150, "unit_size": 6.0, "max_distance": 30.0},
+	"cover_exit": {"bus": "UI", "volume_db": -15.0, "pitch_jitter": 0.03, "min_interval_ms": 150, "unit_size": 6.0, "max_distance": 30.0},
 }
 
 static var bank_node: Node
@@ -312,6 +317,10 @@ static func _synthesize(id: String) -> PackedFloat32Array:
 		"ui_tap": return _synth_ui_tap()
 		"toast_pop": return _synth_toast_pop()
 		"enhance_clink": return _synth_enhance_clink()
+		"grenade_whistle": return _synth_grenade_whistle()
+		"crit_hit": return _synth_crit_hit()
+		"cover_enter": return _synth_cover_enter()
+		"cover_exit": return _synth_cover_exit()
 	return PackedFloat32Array()
 
 
@@ -652,6 +661,64 @@ static func _synth_enhance_clink() -> PackedFloat32Array:
 		var overtone := sin(TAU * 3900.0 * time) * exp(-time * 52.0) * 0.45
 		var strike := rng.randf_range(-1.0, 1.0) * exp(-time * 520.0) * 0.5
 		buffer[index] = ring + overtone + strike
+	return buffer
+
+
+static func _synth_grenade_whistle() -> PackedFloat32Array:
+	# 척탄병 와인드업 휘슬 — 1.6k→2.3kHz 짧게 올라가는 톤 + 숨결 노이즈. "던진다"의 예고.
+	var duration := 0.34
+	var buffer := _new_buffer(duration)
+	var rng := _rng(77010)
+	var phase := 0.0
+	var band := 0.0
+	for index in buffer.size():
+		var time := float(index) / MIX_RATE
+		var frequency := lerpf(1600.0, 2300.0, minf(1.0, time / 0.28))
+		phase += TAU * frequency / MIX_RATE
+		var envelope := minf(1.0, time / 0.03) * exp(-maxf(0.0, time - 0.22) * 18.0)
+		var noise := rng.randf_range(-1.0, 1.0)
+		band += (noise - band) * 0.35
+		buffer[index] = (sin(phase) * 0.8 + band * 0.22) * envelope
+	return buffer
+
+
+static func _synth_crit_hit() -> PackedFloat32Array:
+	# 헤드샷 '크리' — 짧은 딱. 3.2kHz 클릭 + 900Hz 바디, 아주 빠른 감쇠. 명중음 위에 얹힌다.
+	var duration := 0.08
+	var buffer := _new_buffer(duration)
+	var rng := _rng(77020)
+	for index in buffer.size():
+		var time := float(index) / MIX_RATE
+		var click := sin(TAU * 3200.0 * time) * exp(-time * 140.0) * 0.9
+		var body := sin(TAU * 900.0 * time) * exp(-time * 70.0) * 0.5
+		var crack := rng.randf_range(-1.0, 1.0) * exp(-time * 600.0) * 0.6
+		buffer[index] = click + body + crack
+	return buffer
+
+
+static func _synth_cover_enter() -> PackedFloat32Array:
+	# 엄폐 진입 — 낮은 "툭" (천이 벽에 닿는 느낌). 260→180Hz 하강, 부드러운 감쇠.
+	var duration := 0.12
+	var buffer := _new_buffer(duration)
+	var rng := _rng(77030)
+	var low_pass := 0.0
+	for index in buffer.size():
+		var time := float(index) / MIX_RATE
+		var frequency := lerpf(260.0, 180.0, minf(1.0, time / 0.08))
+		var noise := rng.randf_range(-1.0, 1.0)
+		low_pass += (noise - low_pass) * 0.12
+		buffer[index] = sin(TAU * frequency * time) * exp(-time * 34.0) * 0.8 + low_pass * exp(-time * 60.0) * 0.5
+	return buffer
+
+
+static func _synth_cover_exit() -> PackedFloat32Array:
+	# 엄폐 해제 — 진입의 반대로 살짝 올라가는 짧은 톤(180→240Hz).
+	var duration := 0.1
+	var buffer := _new_buffer(duration)
+	for index in buffer.size():
+		var time := float(index) / MIX_RATE
+		var frequency := lerpf(180.0, 240.0, minf(1.0, time / 0.07))
+		buffer[index] = sin(TAU * frequency * time) * exp(-time * 38.0)
 	return buffer
 
 

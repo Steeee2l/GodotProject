@@ -148,6 +148,8 @@ var raid_weapon_drops_generated: int = 0
 var raid_enemy_weapon_drops_generated: int = 0
 var raid_enemy_drops_generated: int = 0
 var raid_kills: int = 0
+# 전투 숙련도 — 이번 판 헤드샷 횟수(정산 칩 "헤드샷 N회 · 경험치 +N").
+var raid_headshots: int = 0
 var raid_special_cargo: Dictionary = {}
 var recovered_story_cargo_ids: Array[String] = []
 var subway_story_stage: int = 0
@@ -199,6 +201,10 @@ var bag_pressure_lesson_seen: bool = false
 var workbench_lesson_seen: bool = false
 # 첫 출정에서 키 조작(TAB/R/SHIFT/E/SPACE)을 한 번 가르쳤는지.
 var field_controls_lesson_seen: bool = false
+# 전투 숙련도 1회성 필드 레슨 — 첫 예고 목격 / 첫 헤드샷 / 첫 엄폐.
+var telegraph_lesson_seen: bool = false
+var headshot_lesson_seen: bool = false
+var cover_lesson_seen: bool = false
 var fatigue_lesson_seen: bool = false
 var extraction_choice_lesson_seen: bool = false
 # 캣닢 피버는 시설이 아니라 '사건'이라 아무도 설명해 주지 않았다 — 해금 1회 레슨.
@@ -1043,6 +1049,7 @@ func reset_raid_supply_counters() -> void:
 	raid_enemy_weapon_drops_generated = 0
 	raid_enemy_drops_generated = 0
 	raid_kills = 0
+	raid_headshots = 0
 
 
 func build_raid_loadout_manifest(zone_id: String = "") -> Dictionary:
@@ -5182,6 +5189,9 @@ func save_persistent_state() -> bool:
 		"bag_pressure_lesson_seen": bag_pressure_lesson_seen,
 		"workbench_lesson_seen": workbench_lesson_seen,
 		"field_controls_lesson_seen": field_controls_lesson_seen,
+		"telegraph_lesson_seen": telegraph_lesson_seen,
+		"headshot_lesson_seen": headshot_lesson_seen,
+		"cover_lesson_seen": cover_lesson_seen,
 		"fatigue_lesson_seen": fatigue_lesson_seen,
 		"extraction_choice_lesson_seen": extraction_choice_lesson_seen,
 		"catnip_fever_lesson_seen": catnip_fever_lesson_seen,
@@ -5355,6 +5365,9 @@ func load_persistent_state() -> bool:
 	bag_pressure_lesson_seen = bool(data.get("bag_pressure_lesson_seen", bag_pressure_lesson_seen))
 	workbench_lesson_seen = bool(data.get("workbench_lesson_seen", workbench_lesson_seen))
 	field_controls_lesson_seen = bool(data.get("field_controls_lesson_seen", field_controls_lesson_seen))
+	telegraph_lesson_seen = bool(data.get("telegraph_lesson_seen", telegraph_lesson_seen))
+	headshot_lesson_seen = bool(data.get("headshot_lesson_seen", headshot_lesson_seen))
+	cover_lesson_seen = bool(data.get("cover_lesson_seen", cover_lesson_seen))
 	fatigue_lesson_seen = bool(data.get("fatigue_lesson_seen", fatigue_lesson_seen))
 	extraction_choice_lesson_seen = bool(data.get("extraction_choice_lesson_seen", extraction_choice_lesson_seen))
 	catnip_fever_lesson_seen = bool(data.get("catnip_fever_lesson_seen", catnip_fever_lesson_seen))
@@ -5629,6 +5642,9 @@ func reset_run() -> void:
 	bag_pressure_lesson_seen = false
 	fatigue_lesson_seen = false
 	field_controls_lesson_seen = false
+	telegraph_lesson_seen = false
+	headshot_lesson_seen = false
+	cover_lesson_seen = false
 	extraction_choice_lesson_seen = false
 	catnip_fever_lesson_seen = false
 	tutorial_steps_done.clear()

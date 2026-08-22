@@ -73,6 +73,10 @@ var aim_reticle: Control
 var ammo_notice: Label
 var toast_stack: VBoxContainer
 var combat_feedback: CombatFeedbackOverlay
+var cover_chip: PanelContainer
+var cover_chip_label: Label
+var cover_chip_icon: TextureRect
+var cover_chip_state := ""
 var ammo_pickup_button: Button
 var ammo_prompt_panel: PanelContainer
 var dash_button: Button
@@ -1368,6 +1372,53 @@ void fragment() {
 	reload_reticle_indicator.name = "ReloadReticleIndicator"
 	reload_reticle_indicator.scale = Vector2.ONE * 1.25
 	aim_canvas.add_child(reload_reticle_indicator)
+	build_cover_chip()
+
+
+func build_cover_chip() -> void:
+	# 엄폐 칩 — 플레이어 머리 위 체력바 아래에 작게. "엄폐"(방패) / 사격 노출 중 "노출".
+	cover_chip = PanelContainer.new()
+	cover_chip.name = "CoverChip"
+	cover_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cover_chip.add_theme_stylebox_override("panel", HudStyle.chip(HudStyle.GREEN))
+	cover_chip.visible = false
+	cover_chip.z_index = 118
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cover_chip.add_child(row)
+	cover_chip_icon = TextureRect.new()
+	cover_chip_icon.texture = UI_ICONS.get_icon("armor", 14, HudStyle.GREEN)
+	cover_chip_icon.custom_minimum_size = Vector2(14, 14)
+	cover_chip_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	cover_chip_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(cover_chip_icon)
+	cover_chip_label = HudStyle.label("엄폐", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT)
+	cover_chip_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(cover_chip_label)
+	aim_canvas.add_child(cover_chip)
+
+
+func update_cover_chip(in_cover: bool, exposed: bool, anchor: Vector2, visible_now: bool = true) -> void:
+	if cover_chip == null:
+		return
+	var next_state := "" if not in_cover else ("exposed" if exposed else "covered")
+	if next_state != cover_chip_state:
+		cover_chip_state = next_state
+		match next_state:
+			"covered":
+				cover_chip_label.text = "엄폐"
+				cover_chip_label.add_theme_color_override("font_color", HudStyle.TEXT)
+				cover_chip_icon.texture = UI_ICONS.get_icon("armor", 14, HudStyle.GREEN)
+				cover_chip.add_theme_stylebox_override("panel", HudStyle.chip(HudStyle.GREEN))
+			"exposed":
+				cover_chip_label.text = "노출"
+				cover_chip_label.add_theme_color_override("font_color", HudStyle.WARN)
+				cover_chip_icon.texture = UI_ICONS.get_icon("armor", 14, HudStyle.WARN)
+				cover_chip.add_theme_stylebox_override("panel", HudStyle.chip(HudStyle.WARN))
+	cover_chip.visible = visible_now and not next_state.is_empty()
+	if cover_chip.visible:
+		cover_chip.position = anchor - Vector2(cover_chip.size.x * 0.5, 0.0)
 
 
 

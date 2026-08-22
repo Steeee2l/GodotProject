@@ -6,6 +6,11 @@ extends RefCounted
 
 
 const AIM_HOLD_DURATION := 0.55
+# 모바일 '정조준 상승' — 정지한 채 0.5s 조준을 유지하면(또는 식빵 자세) 어시스트의
+# 조준점이 몸(0.5)에서 머리(0.86 — 상단 28% 안)로 올라간다. PC는 마우스 위치 그대로.
+const STEADY_AIM_RAISE_SECONDS := 0.5
+const MOBILE_BODY_AIM_RATIO := 0.5
+const MOBILE_HEAD_AIM_RATIO := 0.86
 const AK_DIRECTIONAL_TEXTURE := preload("res://assets/weapons/ak47_directional.png")
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
 const BASE_CAMERA_SIZE := 28.0
@@ -144,6 +149,9 @@ func _fire_ak47() -> void:
 	if host.has_method("break_raid_entry_grace"):
 		host.break_raid_entry_grace()
 	_apply_weapon_recoil(aim_direction)
+	# 엄폐 중 사격 = 0.4s 노출(쏘고 숨기의 리듬).
+	if host.get("cover_system") != null:
+		host.cover_system.notify_player_fired()
 	# 발사 반동을 화면에도 아주 약하게 싣는다. 산탄(다연발)은 조금 더 묵직하게.
 	var recoil_kick := 0.032 if pellet_count <= 1 else 0.062
 	host.camera_shake_time = maxf(host.camera_shake_time, 0.05)
@@ -187,12 +195,20 @@ func _spawn_weapon_projectile(direction: Vector3, pellet_index: int) -> void:
 	projectile.set("effective_range", range_profile.x)
 	projectile.set("maximum_range", range_profile.y)
 	projectile.set("minimum_damage_multiplier", range_profile.z)
+	# 약점 판정 입력 — 마우스는 발사 순간의 화면 레이, 모바일은 어시스트 조준 높이.
+	if _uses_mouse_aim():
+		var mouse_position: Vector2 = host.get_viewport().get_mouse_position() + host.recoil_reticle_offset
+		projectile.set("aim_ray_origin", camera.project_ray_origin(mouse_position))
+		projectile.set("aim_ray_direction", camera.project_ray_normal(mouse_position))
+	else:
+		projectile.set("aim_height_ratio", get_mobile_aim_height_ratio())
 	projectile.position = _get_weapon_muzzle_position(direction)
 	host.add_child(projectile)
 
 
 func _update_firing(delta: float) -> void:
 	host.fire_cooldown = maxf(0.0, host.fire_cooldown - delta)
+	_update_steady_aim(delta)
 	if host.roll_active or host.melee_attack_active or host.loafing:
 		return
 	var firing_held: bool = host.fire_button_held or host.mouse_fire_held
@@ -468,10 +484,38 @@ func _get_mouse_world_direction() -> Vector3:
 
 
 func _uses_mouse_aim() -> bool:
+	if force_touch_aim_for_test:
+		return false
 	return not DisplayServer.is_touchscreen_available()
 
 
 var mobile_assist_target: CharacterBody3D
+# 프로브용 — 데스크톱 헤드리스에서 모바일 조준 경로를 강제한다.
+var force_touch_aim_for_test := false
+var steady_aim_time := 0.0
+
+
+func _update_steady_aim(delta: float) -> void:
+	# 정지 + 조준 유지 시간. 움직이거나 구르거나 손을 떼면 0으로.
+	if _uses_mouse_aim():
+		steady_aim_time = 0.0
+		return
+	var aiming: bool = host.fire_button_held or host.laser_aim_held
+	var moving: bool = player.velocity.length_squared() > 0.09
+	if not aiming or moving or host.roll_active:
+		steady_aim_time = 0.0
+		return
+	steady_aim_time += delta
+
+
+func is_steady_aim_raised() -> bool:
+	if _uses_mouse_aim():
+		return false
+	return bool(host.loafing) or steady_aim_time >= STEADY_AIM_RAISE_SECONDS
+
+
+func get_mobile_aim_height_ratio() -> float:
+	return MOBILE_HEAD_AIM_RATIO if is_steady_aim_raised() else MOBILE_BODY_AIM_RATIO
 
 
 func _acquire_mobile_fire_target(force_for_test := false) -> void:

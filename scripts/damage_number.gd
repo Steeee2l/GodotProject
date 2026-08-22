@@ -25,9 +25,13 @@ static func acquire(parent: Node) -> Label3D:
 	# 풀에서 유휴 라벨을 꺼내 필요하면 새 부모(다른 씬 포함)로 옮긴다.
 	# 없으면 null — 호출자가 새로 만든다(생성은 자연히 동시 표시 수만큼).
 	while not idle_pool.is_empty():
-		var candidate: Label3D = idle_pool.pop_back()
-		if not is_instance_valid(candidate) or candidate.is_queued_for_deletion():
+		# 씬 전환으로 이미 해제된 항목이 남아 있을 수 있다. 타입 있는 변수에 freed
+		# 인스턴스를 대입하면 그 자체가 에러("previously freed instance")이므로
+		# 타입 없는 Variant로 꺼내 유효성을 먼저 본다(TelegraphFx._acquire와 같은 규약).
+		var raw = idle_pool.pop_back()
+		if not is_instance_valid(raw) or (raw as Node).is_queued_for_deletion():
 			continue
+		var candidate := raw as Label3D
 		if candidate.get_parent() != parent:
 			if candidate.get_parent() != null:
 				candidate.get_parent().remove_child(candidate)
@@ -79,6 +83,10 @@ func setup(
 	elif hit_grade == "graze":
 		grade_size = 46
 		base_color = Color("#9fb2c4")
+	elif hit_grade == "head":
+		# 헤드샷 — 주황. 정조준(호박색)보다 붉고 크리티컬(노랑)과도 구분된다.
+		grade_size = 70
+		base_color = Color("#ff8a2a")
 	# 엘리트 표적은 금색 — 정예 토스트·확정 전리품과 같은 색으로
 	# "가치 있는 표적을 때리고 있다"가 숫자만 봐도 읽히게 한다.
 	if elite_target:

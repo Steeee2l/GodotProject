@@ -213,6 +213,10 @@ func _show_extraction_result(rescued_count: int) -> void:
 	# 엘리트 킬은 일반의 ~3배 — run_kills에 이미 1회분(22)이 포함되므로 +44.
 	# get_raid_experience_reward 시그니처는 건드리지 않고 여기서 얹는다.
 	combat_xp += host.enemy_director.run_elite_kills * 44
+	# 헤드샷 보너스 — 킬 XP(22)의 1/4 남짓(6). 조준 실력이 숫자로 돌아온다.
+	var headshot_count := maxi(0, int(GameState.raid_headshots))
+	var headshot_xp := headshot_count * 6
+	combat_xp += headshot_xp
 	var cargo_result: Dictionary = host.main_mission.settle()
 	var cargo_xp := int(cargo_result.get("xp", 0))
 	var base_xp_reward: int = combat_xp + host.completed_mission_xp + cargo_xp
@@ -299,6 +303,10 @@ func _show_extraction_result(rescued_count: int) -> void:
 	if stealth_xp > 0:
 		host.hud.add_result_reward_chip(
 			"melee", "몰래 처치 %d회 · 경험치 +%d" % [host.run_stealth_kills, stealth_xp], HudStyle.GREEN
+		)
+	if headshot_xp > 0:
+		host.hud.add_result_reward_chip(
+			"weapon", "헤드샷 %d회 · 경험치 +%d" % [headshot_count, headshot_xp], HudStyle.GOLD
 		)
 	if route_xp_bonus > 0:
 		host.hud.add_result_reward_chip(

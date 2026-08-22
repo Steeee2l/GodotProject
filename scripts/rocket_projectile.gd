@@ -1,6 +1,7 @@
 extends Node3D
 
 const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
+const TELEGRAPH := preload("res://scripts/raid/telegraph_fx.gd")
 
 signal exploded(world_position: Vector3, radius: float)
 
@@ -95,58 +96,18 @@ func _has_blast_line_of_sight(body: CollisionObject3D) -> bool:
 
 
 func _build_target_marker() -> void:
-	target_marker = Node3D.new()
-	target_marker.name = "RocketImpactTelegraph"
-	get_parent().add_child(target_marker)
-	target_marker.global_position = impact_position + Vector3(0.0, 0.035, 0.0)
-
-	var disc_material := StandardMaterial3D.new()
-	disc_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	disc_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	disc_material.albedo_color = Color(0.85, 0.07, 0.025, 0.18)
-	disc_material.emission_enabled = true
-	disc_material.emission = Color("#ff351d")
-	disc_material.emission_energy_multiplier = 1.6
-	var disc_mesh := CylinderMesh.new()
-	disc_mesh.top_radius = blast_radius
-	disc_mesh.bottom_radius = blast_radius
-	disc_mesh.height = 0.025
-	disc_mesh.radial_segments = 48
-	disc_mesh.material = disc_material
-	var disc := MeshInstance3D.new()
-	disc.name = "DangerDisc"
-	disc.mesh = disc_mesh
-	disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	target_marker.add_child(disc)
-
-	var ring_material := StandardMaterial3D.new()
-	ring_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	ring_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	ring_material.albedo_color = Color(1.0, 0.3, 0.08, 0.92)
-	ring_material.emission_enabled = true
-	ring_material.emission = Color("#ff4b18")
-	ring_material.emission_energy_multiplier = 4.2
-	var ring_mesh := TorusMesh.new()
-	ring_mesh.inner_radius = blast_radius - 0.10
-	ring_mesh.outer_radius = blast_radius
-	ring_mesh.rings = 48
-	ring_mesh.ring_segments = 8
-	ring_mesh.material = ring_material
-	var ring := MeshInstance3D.new()
-	ring.name = "DangerRing"
-	ring.mesh = ring_mesh
-	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	target_marker.add_child(ring)
+	# 착탄 원 — 척탄병 예고와 같은 데칼(TelegraphFx 표준). 반경은 실제 폭발 반경,
+	# 수명은 비행 시간(착탄 시 release). 풀링된 노드라 여기서 직접 만들지 않는다.
+	target_marker = TELEGRAPH.show_landing_circle(
+		impact_position, blast_radius, FLIGHT_DURATION + 0.3, get_parent()
+	)
+	if target_marker != null:
+		target_marker.name = "RocketImpactTelegraph_%d" % get_instance_id()
 
 
-func _update_target_marker(progress: float) -> void:
-	if not is_instance_valid(target_marker):
-		return
-	var pulse := 1.0 + sin(progress * TAU * 5.0) * 0.035
-	target_marker.scale = Vector3.ONE * pulse
-	var disc := target_marker.get_node_or_null("DangerDisc") as MeshInstance3D
-	if disc != null:
-		disc.transparency = lerpf(0.45, 0.0, progress)
+func _update_target_marker(_progress: float) -> void:
+	# 맥동·채움은 TelegraphFx의 트윈이 맡는다.
+	pass
 
 
 func _build_rocket_visual() -> void:
@@ -230,14 +191,35 @@ func _detonate() -> void:
 			var falloff := lerpf(1.0, 0.52, distance / blast_radius)
 			var applied_damage := maxi(1, roundi(float(damage) * falloff))
 			var hit_direction := offset.normalized() if distance > 0.01 else Vector3.RIGHT
-			if target_body.has_method("take_hit"):
+			# take_hostile_hit(…, attacker, source_position) — 사망 화면에 '누가 쐈는지'가
+			# 찍히고, 엄폐 판정은 폭심 위치를 기준으로 한다. 없으면 예전 take_hit 경로.
+			var receiver: Object = null
+			if target_body.has_method("take_hostile_hit"):
+				receiver = target_body
+			elif target_body.get_parent() != null and target_body.get_parent().has_method("take_hostile_hit"):
+				receiver = target_body.get_parent()
+			if receiver != null:
+				# 폭심 좌표는 플레이어(엄폐 판정)만 받는다. 적·더미는 3인자
+				# 시그니처라 인자 수를 확인하지 않고 넘기면 호출 자체가 실패한다.
+				if receiver.get_method_argument_count("take_hostile_hit") >= 4:
+					receiver.call(
+						"take_hostile_hit",
+						applied_damage,
+						hit_direction,
+						source_body,
+						impact_position
+					)
+				else:
+					receiver.call("take_hostile_hit", applied_damage, hit_direction, source_body)
+			elif target_body.has_method("take_hit"):
 				target_body.call("take_hit", applied_damage, hit_direction)
 			elif target_body.get_parent() != null and target_body.get_parent().has_method("take_hit"):
 				target_body.get_parent().call("take_hit", applied_damage, hit_direction)
 	_spawn_explosion_visual()
 	exploded.emit(impact_position, blast_radius)
 	if is_instance_valid(target_marker):
-		target_marker.queue_free()
+		TELEGRAPH.release(target_marker)
+		target_marker = null
 	if is_instance_valid(rocket_visual):
 		rocket_visual.visible = false
 	get_tree().create_timer(0.48).timeout.connect(queue_free)

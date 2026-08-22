@@ -10,6 +10,7 @@ extends SceneTree
 #   ③ workbench_board_gate                돌파 관문(+10 미돌파 → 붉은 [돌파 · 장인에게])
 #   ④ workbench_board_locked              미제작 장비(K2 조각 1/3) 카드
 #   ⑤ workbench_board_craft_tab           제작 탭(16종 · 제작됨/조각 n/3)
+#   ⑥ workbench_board_breakthrough_glitch 돌파 성공 직후(글리치 펄스 + 골드 플래시, 카드 유지)
 # 동작(헤드리스 포함): [강화 +1] 길게 누름 연타(0.42s 뒤 0.11s 간격) · [가능한 만큼] 돌파 관문 정지 ·
 # [돌파] 호출(try_breakthrough) · 모달 rect가 화면 안(세로/가로).
 
@@ -175,7 +176,14 @@ func _run() -> void:
 	game_state.call("add_progression_item", "artisan_seal", int(gate_cost.get("artisan_seal", 1)))
 	var seals_before := int(game_state.call("get_progression_item_count", "artisan_seal"))
 	primary.pressed.emit()
-	await _sleep(0.3)
+	# 돌파 성공 연출 — 카드 위 글리치 펄스(GlitchPulseFx, 0.3s 복원형) + 골드 플래시. 카드는 남아야 한다.
+	await _sleep(0.08)
+	var enhance_card := layer.find_child("WorkbenchEnhanceCard", true, false) as Control
+	_check(enhance_card != null and enhance_card.get_node_or_null("GlitchPulseFx") != null, "돌파 직후 카드에 글리치 펄스 오버레이")
+	_check(enhance_card != null and enhance_card.get_node_or_null("GoldFlash") != null, "돌파 직후 카드에 골드 플래시")
+	await _capture("workbench_board_breakthrough_glitch")
+	await _sleep(0.4)
+	_check(enhance_card != null and is_instance_valid(enhance_card) and enhance_card.is_visible_in_tree() and enhance_card.get_node_or_null("GlitchPulseFx") == null, "0.3s 뒤 오버레이 제거 · 카드는 그대로 남음")
 	_check(int(game_state.call("get_breakthrough_level_done", "weapon", "ak47")) == 30, "try_breakthrough 성공 → 돌파 기록 +30")
 	_check(int(game_state.call("get_progression_item_count", "artisan_seal")) == seals_before - int(gate_cost.get("artisan_seal", 1)), "인장 소모")
 	_check(primary.text.begins_with("강화 +1"), "돌파 뒤 주 버튼 복귀 '강화 +1' (실제: %s)" % primary.text)

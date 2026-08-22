@@ -1946,6 +1946,8 @@ func _play_breakthrough_fx() -> void:
 	SFX.play("enhance_clink")
 	if not is_instance_valid(enhance_card) or not HudFx.fx_enabled():
 		return
+	# 돌파 = 벽이 깨지는 순간 — 카드를 0.3초 찢었다 되돌리는 글리치(복원형) 위에 골드 플래시.
+	HudFx.play_glitch_pulse(enhance_card, 0.3)
 	var flash := ColorRect.new()
 	flash.name = "GoldFlash"
 	flash.color = Color(GOLD_BRIGHT, 0.55)

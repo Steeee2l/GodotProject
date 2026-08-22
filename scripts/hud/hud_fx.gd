@@ -9,6 +9,7 @@ extends RefCounted
 #                                           열릴 때 스캔 스윕(visibility_changed에 자동 연결)
 #  attach_rim_pulse(control) / detach_rim_pulse(control)  선택 칸 골드 림라이트 펄스
 #  play_glitch_out(control)                 칸을 0.34초 동안 찢어 없앤다(고스트로 떼어내 연출)
+#  play_glitch_pulse(control, duration)     칸을 0.3초 동안 찢었다 되돌린다(슬라이스 오프셋만, 알파 컷 없음)
 #  attach_text_glow(label, color) / set_text_glow_color(label, color)  라벨 뒤 은은한 글로우
 #  attach_title_aberration(label)           7~9초마다 60ms R/B 색수차 깜빡임
 #
@@ -19,12 +20,14 @@ extends RefCounted
 const GLASS_SHADER := preload("res://scripts/shaders/ui_glass.gdshader")
 const RIM_SHADER := preload("res://scripts/shaders/ui_rim_pulse.gdshader")
 const GLITCH_SHADER := preload("res://scripts/shaders/ui_glitch_out.gdshader")
+const GLITCH_PULSE_SHADER := preload("res://scripts/shaders/ui_glitch_pulse.gdshader")
 const ABERRATION_SHADER := preload("res://scripts/shaders/ui_text_aberration.gdshader")
 
 const GOLD := Color("#f0d77d")
 const SWEEP_GREEN := Color(0.667, 0.886, 0.745, 0.16)
 const SWEEP_DURATION := 1.1
 const GLITCH_DURATION := 0.34
+const GLITCH_PULSE_DURATION := 0.3
 const DUST_AMOUNT := 48
 const NOISE_TEXTURE_SIZE := 128
 
@@ -248,6 +251,45 @@ static func play_glitch_out(control: Control, on_done: Callable = Callable(), du
 		if on_done.is_valid():
 			on_done.call()
 		ghost.queue_free()
+	)
+	return true
+
+
+# ── 글리치 펄스(복원형) ───────────────────────────────────────────────────
+
+# control 위에 화면 읽기 오버레이를 잠깐 얹어 가로 슬라이스를 찢었다 되돌린다. 트리·레이아웃은
+# 건드리지 않고(떼어내지 않음) duration 뒤 오버레이만 제거한다 — 돌파 성공처럼 "카드는 남아야
+# 하는" 강조에 쓴다. 연출 OFF·안 보이는 칸이면 false.
+static func play_glitch_pulse(control: Control, duration := GLITCH_PULSE_DURATION) -> bool:
+	if control == null or not control.is_inside_tree() or not fx_enabled():
+		return false
+	if not control.is_visible_in_tree():
+		return false
+	# 같은 캔버스 레이어에서 한 번 백버퍼를 복사하면(유리 배경의 BackBufferCopy) 그 뒤 화면 읽기
+	# 머티리얼은 그 사본(모달 뒤 장면)을 재사용한다 — 오버레이 바로 앞에 복사 노드를 두어
+	# '카드가 그려진 지금 화면'을 새로 뜬다. 0.3초짜리 전체 복사라 비용은 무시할 수준.
+	var copy := BackBufferCopy.new()
+	copy.name = "GlitchPulseBackBuffer"
+	copy.copy_mode = BackBufferCopy.COPY_MODE_VIEWPORT
+	control.add_child(copy)
+	var overlay := ColorRect.new()
+	overlay.name = "GlitchPulseFx"
+	overlay.color = Color.WHITE
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.process_mode = Node.PROCESS_MODE_ALWAYS
+	var material := ShaderMaterial.new()
+	material.shader = GLITCH_PULSE_SHADER
+	material.set_shader_parameter("progress", 0.0)
+	overlay.material = material
+	control.add_child(overlay)
+	# 컨테이너 부모(PanelContainer 등)는 자식을 제 크기로 맞춘다. 아닌 경우를 위해 직접도 덮는다.
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var tween := overlay.create_tween()
+	tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	tween.tween_property(material, "shader_parameter/progress", 1.0, maxf(0.05, duration)).from(0.0)
+	tween.tween_callback(func() -> void:
+		copy.queue_free()
+		overlay.queue_free()
 	)
 	return true
 

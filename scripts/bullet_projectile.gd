@@ -30,6 +30,16 @@ var minimum_damage_multiplier := 0.35
 var spawn_position := Vector3.ZERO
 var processed_body_ids: Dictionary = {}
 var last_motion_origin := Vector3.INF
+# ── 약점(헤드샷) 판정 입력 ──────────────────────────────────────────
+# 탄은 수평으로 날아가므로 충돌점 y로는 머리를 알 수 없다. 대신 '조준 높이'를 탄에
+# 싣는다: 마우스 조준은 발사 순간의 화면 레이(aim_ray_*) — 맞은 적의 수직축과 레이의
+# 최근접점 y를 적의 발 위치·월드 높이(get_world_height)로 나눠 비율을 얻는다. 모바일은
+# 에임 어시스트가 정한 높이 비율(aim_height_ratio: 몸 0.5 / 정조준 상승 0.86)을 그대로.
+var aim_ray_origin := Vector3.INF
+var aim_ray_direction := Vector3.ZERO
+var aim_height_ratio := -1.0
+var last_hit_zone := "body"
+var last_hit_height_ratio := -1.0
 
 
 func _ready() -> void:
@@ -215,6 +225,52 @@ func _get_hit_damage_scale(body: Object, trajectory_origin: Vector3) -> float:
 	return 0.65
 
 
+func _resolve_hit_zone(body: Object) -> String:
+	# "head" 또는 "body". 적이 높이 API(get_world_height 등)를 내놓을 때만 판정한다.
+	last_hit_height_ratio = -1.0
+	if hostile or not body is Node3D:
+		return "body"
+	if not (
+		body.has_method("get_world_height")
+		and body.has_method("get_feet_world_y")
+		and body.has_method("get_head_zone_ratio")
+	):
+		return "body"
+	var height := maxf(0.2, float(body.call("get_world_height")))
+	var feet_y := float(body.call("get_feet_world_y"))
+	var head_zone := clampf(float(body.call("get_head_zone_ratio")), 0.05, 0.6)
+	var ratio := -1.0
+	if aim_height_ratio >= 0.0:
+		ratio = aim_height_ratio
+	elif aim_ray_origin != Vector3.INF and aim_ray_direction.length_squared() > 0.0001:
+		ratio = _aim_ray_height_ratio(body as Node3D, feet_y, height)
+	if ratio < 0.0:
+		return "body"
+	last_hit_height_ratio = ratio
+	# 상단 head_zone(기본 28%) 안이면 머리. 머리 위 살짝(15%)까지는 관용 — 스프라이트
+	# 머리 윗선 근처를 겨눈 탄이 몸으로 떨어지면 억울하다.
+	return "head" if ratio >= 1.0 - head_zone and ratio <= 1.15 else "body"
+
+
+func _aim_ray_height_ratio(target_node: Node3D, feet_y: float, height: float) -> float:
+	# 화면 레이와 적 수직축의 수평 최근접점 — 거기서의 레이 y가 '겨눈 높이'다.
+	# 커서가 실루엣(명중 반경) 밖이면 이 적을 겨눈 게 아니다 → 판정 없음(-1).
+	var axis := Vector2(target_node.global_position.x, target_node.global_position.z)
+	var origin_xz := Vector2(aim_ray_origin.x, aim_ray_origin.z)
+	var direction_xz := Vector2(aim_ray_direction.x, aim_ray_direction.z)
+	if direction_xz.length_squared() <= 0.000001:
+		return -1.0
+	var radius := DEFAULT_TARGET_HIT_RADIUS
+	if target_node.has_method("get_projectile_hit_radius"):
+		radius = maxf(0.05, float(target_node.call("get_projectile_hit_radius")))
+	var t := (axis - origin_xz).dot(direction_xz) / direction_xz.length_squared()
+	var closest := origin_xz + direction_xz * t
+	if closest.distance_to(axis) > radius:
+		return -1.0
+	var aim_y := aim_ray_origin.y + aim_ray_direction.y * t
+	return (aim_y - feet_y) / height
+
+
 func _apply_hit(body: Object, trajectory_origin: Vector3 = Vector3.INF) -> bool:
 	if body == null:
 		queue_free()
@@ -226,6 +282,9 @@ func _apply_hit(body: Object, trajectory_origin: Vector3 = Vector3.INF) -> bool:
 		return true
 	var damaged := false
 	last_hit_damage_scale = _get_hit_damage_scale(body, trajectory_origin)
+	# 약점 — 머리면 명중 등급 대신 "head"를 넘긴다(피해 배율·팝 색·소리는 적이 정한다).
+	last_hit_zone = _resolve_hit_zone(body)
+	var reported_grade := "head" if last_hit_zone == "head" else last_hit_grade
 	var adjusted_damage := maxi(1, roundi(float(damage) * last_hit_damage_scale))
 	var traveled_distance := spawn_position.distance_to(global_position)
 	var range_factor := 1.0
@@ -244,7 +303,7 @@ func _apply_hit(body: Object, trajectory_origin: Vector3 = Vector3.INF) -> bool:
 			direction,
 			last_hit_was_critical,
 			critical_multiplier,
-			last_hit_grade,
+			reported_grade,
 			source_body
 		)
 		damaged = true
@@ -266,7 +325,7 @@ func _apply_hit(body: Object, trajectory_origin: Vector3 = Vector3.INF) -> bool:
 				direction,
 				last_hit_was_critical,
 				critical_multiplier,
-				last_hit_grade,
+				reported_grade,
 				source_body
 			)
 			damaged = true
