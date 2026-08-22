@@ -17,7 +17,7 @@ dest_files=["res://.godot/imported/enemy_melee_anim_s.png-864ca7cd244fe40d5d85f9
 
 compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.75
+compress/lossy_quality=0.55
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

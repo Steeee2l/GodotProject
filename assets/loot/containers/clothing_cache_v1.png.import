@@ -17,7 +17,7 @@ dest_files=["res://.godot/imported/clothing_cache_v1.png-d79f69d5bd339ff3c39f2e8
 
 compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.75
+compress/lossy_quality=0.55
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

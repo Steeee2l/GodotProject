@@ -17,7 +17,7 @@ dest_files=["res://.godot/imported/sewer_entry_v2.png-453f9e0d12a6ae571f63a2f65d
 
 compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.75
+compress/lossy_quality=0.55
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

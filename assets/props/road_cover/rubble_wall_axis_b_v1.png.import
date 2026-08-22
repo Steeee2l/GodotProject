@@ -17,7 +17,7 @@ dest_files=["res://.godot/imported/rubble_wall_axis_b_v1.png-eee1c08f4ed24c0840a
 
 compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.75
+compress/lossy_quality=0.55
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

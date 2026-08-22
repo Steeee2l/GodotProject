@@ -17,7 +17,7 @@ dest_files=["res://.godot/imported/market_handcart_v1.png-39b4424e439b72f70bff55
 
 compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.75
+compress/lossy_quality=0.55
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

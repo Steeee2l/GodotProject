@@ -17,7 +17,7 @@ dest_files=["res://.godot/imported/enemy_pistol_anim_ne.png-134711a4a57ef008f442
 
 compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.75
+compress/lossy_quality=0.55
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

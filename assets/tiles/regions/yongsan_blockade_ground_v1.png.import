@@ -17,7 +17,7 @@ dest_files=["res://.godot/imported/yongsan_blockade_ground_v1.png-c21dc578d3ae44
 
 compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.75
+compress/lossy_quality=0.55
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

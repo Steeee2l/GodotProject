@@ -17,7 +17,7 @@ dest_files=["res://.godot/imported/academy_tower_6x4.png-95e05c5010f0b570adb1d4b
 
 compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.75
+compress/lossy_quality=0.55
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
