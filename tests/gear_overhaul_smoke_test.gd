@@ -236,29 +236,33 @@ func _check_breakthrough(game_state: Node) -> void:
 	_check(bool(game_state.call("is_breakthrough_required", "weapon", "ak47")), "④ +10에서 돌파 필요")
 	_check(not bool(game_state.call("try_enhance_weapon", "ak47")), "④ 돌파 전 강화 막힘")
 	var cost: Dictionary = game_state.call("get_breakthrough_cost", "weapon", "ak47")
-	_check(int(cost.get("artisan_seal", 0)) == 1 and int(cost.get("precision_gear", 0)) == 1 and not cost.has("military_alloy"), "④ +10 돌파 비용: 인장 1 · 정밀 기어 1 (got %s)" % JSON.stringify(cost))
+	# 대개편 3단계: 정밀 기어 (L/10)×2 → +10은 2개 (인장 1, 합금 없음).
+	_check(int(cost.get("artisan_seal", 0)) == 1 and int(cost.get("precision_gear", 0)) == 2 and not cost.has("military_alloy"), "④ +10 돌파 비용: 인장 1 · 정밀 기어 2 (got %s)" % JSON.stringify(cost))
 	_check(int(cost.get("scrap", 0)) == int(game_state.call("get_weapon_enhancement_cost", "ak47")) * 3, "④ 돌파 고철 = 단계 비용 × 3")
 	_check(not bool(game_state.call("try_breakthrough", "weapon", "ak47")), "④ 인장 없으면 돌파 실패")
 	_check(str(game_state.call("get_breakthrough_block_reason", "weapon", "ak47")).contains("장인의 인장"), "④ 사유: 인장 부족")
 	game_state.call("add_progression_item", "artisan_seal", 2)
+	# 대개편 3단계: +10 돌파 기어 2개 — 가방 1 + 창고 2를 두고 가방 우선 소모(창고 1 남음)를 본다.
 	game_state.call("add_mod_component", "precision_gear", 1)
-	(game_state.get("storage_inventory") as Array).append({"type": "component", "id": "precision_gear", "count": 1})
+	(game_state.get("storage_inventory") as Array).append({"type": "component", "id": "precision_gear", "count": 2})
 	var scrap_before := int(game_state.get("scrap"))
 	_check(bool(game_state.call("try_breakthrough", "weapon", "ak47")), "④ 인장+기어+고철 → 돌파 성공")
 	_check(int(game_state.call("get_progression_item_count", "artisan_seal")) == 1, "④ 인장 1 소모")
-	_check(int(game_state.call("get_owned_component_total", "precision_gear")) == 1, "④ 정밀 기어 1 소모(가방 우선)")
+	_check(int(game_state.call("get_owned_component_total", "precision_gear")) == 1 and int(game_state.call("get_mod_component_count", "precision_gear")) == 0, "④ 정밀 기어 2 소모(가방 우선, 창고 1 남음)")
 	_check(int(game_state.get("scrap")) == scrap_before - int(cost.get("scrap", 0)), "④ 고철 소모")
 	_check(not bool(game_state.call("is_breakthrough_required", "weapon", "ak47")), "④ 돌파 뒤 게이트 해제")
 	_check(bool(game_state.call("try_enhance_weapon", "ak47")) and int(game_state.call("get_weapon_enhancement_level", "ak47")) == 11, "④ +11 강화 열림")
 	_check(not bool(game_state.call("try_breakthrough", "weapon", "ak47")), "④ 돌파 단계 아니면 거절")
-	# +50 돌파는 군용 합금 (50−40)/10 = 1, +90은 5. 정밀 기어 L/10.
+	# 대개편 3단계 돌파 재료: 인장 L/10 · 정밀 기어 (L/10)×2 · 군용 합금(+50~) (L−40)/5.
+	# +50: 인장 5 · 기어 10 · 합금 2, +90: 인장 9 · 기어 18 · 합금 10.
 	(game_state.get("weapon_enhancement_levels") as Dictionary)["ak47"] = 50
 	var cost50: Dictionary = game_state.call("get_breakthrough_cost", "weapon", "ak47")
-	_check(int(cost50.get("precision_gear", 0)) == 5 and int(cost50.get("military_alloy", 0)) == 1, "④ +50 돌파: 기어 5 · 합금 1 (got %s)" % JSON.stringify(cost50))
+	_check(int(cost50.get("artisan_seal", 0)) == 5 and int(cost50.get("precision_gear", 0)) == 10 and int(cost50.get("military_alloy", 0)) == 2, "④ +50 돌파: 인장 5 · 기어 10 · 합금 2 (got %s)" % JSON.stringify(cost50))
 	(game_state.get("weapon_enhancement_levels") as Dictionary)["ak47"] = 90
 	var cost90: Dictionary = game_state.call("get_breakthrough_cost", "weapon", "ak47")
-	_check(int(cost90.get("precision_gear", 0)) == 9 and int(cost90.get("military_alloy", 0)) == 5, "④ +90 돌파: 기어 9 · 합금 5")
-	# 강화 부품 단계: +31 정밀 기어 1, +61 기어 1 + 합금 1, +30 이하 희귀 없음.
+	_check(int(cost90.get("artisan_seal", 0)) == 9 and int(cost90.get("precision_gear", 0)) == 18 and int(cost90.get("military_alloy", 0)) == 10, "④ +90 돌파: 인장 9 · 기어 18 · 합금 10")
+	# 강화 부품 단계(대개편 3단계): +31~80 정밀 기어 1, +81~ 기어 2. 군용 합금은 돌파 전용(강화에 없음).
+	# 종류당 개수 +1~40 1 · +41~80 2 · +81~99 3.
 	(game_state.get("weapon_enhancement_levels") as Dictionary)["ak47"] = 29
 	var parts30: Dictionary = game_state.call("get_weapon_enhancement_part_cost", "ak47")
 	_check(not parts30.has("precision_gear") and not parts30.has("military_alloy"), "④ +30까지 일반 부품만")
@@ -267,12 +271,15 @@ func _check_breakthrough(game_state: Node) -> void:
 	_check(int(parts31.get("precision_gear", 0)) == 1 and not parts31.has("military_alloy"), "④ +31부터 정밀 기어 1")
 	(game_state.get("weapon_enhancement_levels") as Dictionary)["ak47"] = 60
 	var parts61: Dictionary = game_state.call("get_weapon_enhancement_part_cost", "ak47")
-	_check(int(parts61.get("precision_gear", 0)) == 1 and int(parts61.get("military_alloy", 0)) == 1, "④ +61부터 희귀 2개/단계")
+	_check(int(parts61.get("precision_gear", 0)) == 1 and not parts61.has("military_alloy") and int(parts61.get("magazine_spring", 0)) == 2, "④ +61 기어 1 · 합금 없음 · 일반 부품 종류당 2 (got %s)" % JSON.stringify(parts61))
+	(game_state.get("weapon_enhancement_levels") as Dictionary)["ak47"] = 80
+	var parts81: Dictionary = game_state.call("get_weapon_enhancement_part_cost", "ak47")
+	_check(int(parts81.get("precision_gear", 0)) == 2 and int(parts81.get("magazine_spring", 0)) == 3, "④ +81부터 기어 2 · 일반 종류당 3")
 	# 방어구 돌파도 같은 규칙(+10 게이트)
 	game_state.call("add_equipment", "scav_vest", 1)
 	(game_state.get("armor_enhancement_levels") as Dictionary)["scav_vest"] = 10
 	_check(not bool(game_state.call("try_enhance_armor", "scav_vest")), "④ 방어구 +10 돌파 게이트")
-	game_state.call("add_mod_component", "precision_gear", 1)
+	game_state.call("add_mod_component", "precision_gear", 2)
 	_check(bool(game_state.call("try_breakthrough", "armor", "scav_vest")), "④ 방어구 돌파 성공(마지막 인장 소모)")
 	_check(int(game_state.call("get_progression_item_count", "artisan_seal")) == 0, "④ 인장 0")
 	_check(bool(game_state.call("try_enhance_armor", "scav_vest")) and int(game_state.call("get_armor_enhancement_level", "scav_vest")) == 11, "④ 방어구 +11")
@@ -323,15 +330,15 @@ func _check_armor_enhancement(game_state: Node) -> void:
 	var capped := float(game_state.call("get_equipment_damage_multiplier"))
 	_check(is_equal_approx(capped, 0.30), "⑤ 합산 상한 0.70 → 배율 0.30 (got %.3f)" % capped)
 	_check(float(game_state.call("get_damage_taken_multiplier")) <= 0.30 + 0.0001, "⑤ 피해 계산 단일 함수 경유")
-	# 비용 곡선 600×가족계수×1.26^L
+	# 비용 곡선 400×가족계수×1.26^L(+1~30; 대개편 3단계에서 기본 600 → 400, +31부터 3구간 지수)
 	(game_state.get("armor_enhancement_levels") as Dictionary)["scav_vest"] = 0
 	(game_state.get("armor_enhancement_levels") as Dictionary)["riot_vest"] = 0
 	(game_state.get("armor_enhancement_levels") as Dictionary)["military_vest"] = 0
-	_check(int(game_state.call("get_armor_enhancement_cost", "scav_vest")) == 600, "⑤ T1 +0→+1 600")
-	_check(int(game_state.call("get_armor_enhancement_cost", "riot_vest")) == 900, "⑤ T2 ×1.5")
-	_check(int(game_state.call("get_armor_enhancement_cost", "military_vest")) == 1320, "⑤ T3 ×2.2")
+	_check(int(game_state.call("get_armor_enhancement_cost", "scav_vest")) == 400, "⑤ T1 +0→+1 400")
+	_check(int(game_state.call("get_armor_enhancement_cost", "riot_vest")) == 600, "⑤ T2 ×1.5")
+	_check(int(game_state.call("get_armor_enhancement_cost", "military_vest")) == 880, "⑤ T3 ×2.2")
 	(game_state.get("armor_enhancement_levels") as Dictionary)["scav_vest"] = 10
-	_check(int(game_state.call("get_armor_enhancement_cost", "scav_vest")) == roundi(600.0 * pow(1.26, 10.0)), "⑤ +10 비용 600×1.26^10")
+	_check(int(game_state.call("get_armor_enhancement_cost", "scav_vest")) == roundi(400.0 * pow(1.26, 10.0)), "⑤ +10 비용 400×1.26^10")
 	# 이관 60%: 누더기 조끼 +10 → 진압 조끼 첫 보유 +6, 1회만.
 	game_state.call("reset_run")
 	game_state.call("add_equipment", "scav_vest", 1)

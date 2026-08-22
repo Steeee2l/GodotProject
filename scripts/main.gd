@@ -4117,6 +4117,8 @@ func take_damage(amount: int) -> void:
 		space_hold_consumed = true
 		_set_loafing(false)
 	var applied_damage := maxi(1, roundi(float(amount) * GameState.get_damage_taken_multiplier()))
+	# 방어구 돌파 +50 — 직전 피격 1.5s 안의 추가 피해 −20%(피격 시각 기록도 GameState가 맡는다).
+	applied_damage = GameState.apply_post_hit_guard(applied_damage)
 	_add_fatigue(minf(1.8, float(applied_damage) * FATIGUE_DAMAGE_PER_POINT))
 	player_health = maxi(0, player_health - applied_damage)
 	GameState.player_health = player_health
@@ -4148,7 +4150,8 @@ func take_hit(amount: int, hit_direction: Vector3) -> void:
 	take_damage(amount)
 	hit_direction.y = 0.0
 	if player_health > 0 and hit_direction.length_squared() > 0.01:
-		recoil_velocity += hit_direction.normalized() * 1.35
+		# 방어구(몸) 돌파 +30 — 넉백 저항 50%(배율의 단일 지점은 GameState).
+		recoil_velocity += hit_direction.normalized() * 1.35 * GameState.get_armor_knockback_multiplier()
 		player_hit_stun_time = maxf(player_hit_stun_time, 0.24)
 		_show_damage_direction(hit_direction)
 		camera_shake_time = 0.22
@@ -7310,6 +7313,13 @@ func _find_reinforcement_position() -> Vector3:
 
 func _on_enemy_died(enemy: CharacterBody3D) -> void:
 	enemy_director._on_enemy_died(enemy)
+	# 무기 돌파 +90 — 처치마다 탄창의 10%를 예비탄으로 환급(스탯 키 kill_ammo_refund, 0이면 없음).
+	var refund_ratio := float(weapon_stats.get("kill_ammo_refund", 0.0))
+	if refund_ratio > 0.0 and player_health > 0:
+		var refund := maxi(1, roundi(float(weapon_stats.get("magazine_size", 30)) * refund_ratio))
+		reserve_ammo += refund
+		GameState.reserve_ammo = reserve_ammo
+		_update_equipment_ui()
 
 func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 	return enemy_director._spawn_enemy_loot(enemy)

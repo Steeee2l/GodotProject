@@ -66,6 +66,10 @@ var churu: int = 0
 # 귀중품: 용도가 없고 오직 값어치만 있는 물건. 추출 슈터의 핵심 판단축인
 # "칸당 가치"를 순수하게 만드는 아이템 계열이다. 쉘터에서 고철로 환전한다.
 var valuable_inventory: Dictionary = {}
+# 귀중품 가치 원장(id → 누적 고철 가치). 귀중품은 존 배율(LootEconomy.VALUABLE_STAGE_MULTIPLIER)을
+# 받아 같은 id라도 주운 존에 따라 값이 다르다 — 개수(valuable_inventory)만으로는 환전액을 못 구해
+# 주울 때 가치를 함께 적는다. 원장이 없는(구세이브) id는 카탈로그 base_value×개수로 환산.
+var valuable_value_ledger: Dictionary = {}
 var fatigue: float = 0.0
 var rescued_workers: int = 0
 var resident_cat_ids: Array[String] = []
@@ -389,10 +393,45 @@ const ARMOR_FAMILY_LADDER := {
 	"feet": ["patched_sneakers", "tactical_boots", "assault_boots"],
 }
 const ARMOR_FAMILY_FACTORS := [1.0, 1.5, 2.2]
-const ARMOR_ENHANCEMENT_BASE_COST := 600.0
-const ARMOR_ENHANCEMENT_COST_GROWTH := 1.26
+# ── 강화 비용 곡선: 3구간 지수(대개편 3단계 · 시뮬 재조정, tmp/econ_model.py) ──
+# 단일 지수(무기 ×1.28 / 방어구 ×1.26)는 +40 17.7M → +60 2.6B → +99 36T로 터져
+# 60대 이후가 사실상 없는 구간이었다. 구간별로 꺾는다:
+#   무기  +1~30 ×1.28 · +31~60 ×1.10 · +61~99 ×1.055  → K2 누적(돌파 포함) +30 11.4M · +50 213M · +99 8.9B
+#   방어구 +1~30 ×1.26 · +31~60 ×1.09 · +61~99 ×1.045 → T3 세트(3피스) +99 ≈ 5.0B
+# [상한 레벨, 그 구간의 단계당 배율] — _segmented_growth가 구간별 pow를 곱한다.
+const WEAPON_ENHANCEMENT_SEGMENTS := [[30, 1.28], [60, 1.10], [99, 1.055]]
+const ARMOR_ENHANCEMENT_SEGMENTS := [[30, 1.26], [60, 1.09], [99, 1.045]]
+const ARMOR_ENHANCEMENT_BASE_COST := 400.0  # 600 → 400: 세 슬롯을 같이 키우는 방어구는 한 피스가 무기의 ~1/2.
 # 돌파 단계 간격 — +10, +20, …, +90에서 한 번씩.
 const BREAKTHROUGH_STEP := 10
+# 돌파 정체성 보너스 단계 — get_breakthrough_perks / describe_breakthrough_perk가 이 표를 본다.
+const BREAKTHROUGH_PERK_LEVELS: Array[int] = [30, 50, 70, 90]
+const WEAPON_PERK_ELITE_DAMAGE_BONUS := 0.20     # +70: 엘리트·보스 피해 +20%(일반 적 제외)
+const WEAPON_PERK_MAGAZINE_BONUS := 0.25        # +50: 탄창 +25%
+const WEAPON_PERK_RELOAD_MULTIPLIER := 0.85     # +50: 장전 −15%
+const WEAPON_PERK_KILL_AMMO_REFUND := 0.10      # +90: 처치 시 탄창 10% 탄약 환급 · 내구 소모 0
+const ARMOR_PERK_KNOCKBACK_RESIST := 0.50       # +30(몸): 넉백 저항 50%
+const ARMOR_PERK_POST_HIT_WINDOW_SEC := 1.5     # +50: 피격 후 1.5s 추가 피해 −20%
+const ARMOR_PERK_POST_HIT_DAMAGE_MULTIPLIER := 0.80
+const ARMOR_PERK_FATIGUE_MULTIPLIER := 0.85     # +70: 피로 누적 −15%
+const ARMOR_PERK_SECURE_SLOT_BONUS := 1         # +90: 시큐어 슬롯 +1
+
+
+static func _segmented_growth(level: int, segments: Array) -> float:
+	# 구간별 지수 성장 누적 — level(=현재 강화 단계, 다음 단계 비용의 지수)까지 각 구간의
+	# 배율을 구간 길이만큼 곱한다. 예) level 45, 무기: 1.28^30 × 1.10^15.
+	var growth := 1.0
+	var previous_cap := 0
+	for segment in segments:
+		var cap := int(segment[0])
+		var ratio := float(segment[1])
+		var steps := clampi(level, previous_cap, cap) - previous_cap
+		if steps > 0:
+			growth *= pow(ratio, float(steps))
+		previous_cap = cap
+		if level <= cap:
+			break
+	return growth
 const CONTRACT_AGENT_UNLOCK_RETURN := 1
 const SHELTER_FACILITY_NAMES := {
 	"bed": "개인 침대",
@@ -745,11 +784,14 @@ const RAID_ZONES := {
 }
 
 const WORKBENCH_UPGRADE_COSTS := {2: 7500, 3: 40000, 4: 180000, 5: 800000}
-const SCRATCHER_UPGRADE_COSTS := {2: 12000, 3: 60000, 4: 280000, 5: 1300000}
+# 꾹꾹이 생산기 최대 Lv 5 → 8(대개편 3단계). Lv5에서 수입이 멈추면 +60 이후 강화 구간이
+# '기다림'뿐이라, 수입 성장 수단을 Lv8(×1.9^7 ≈ ×89)까지 연장한다. 비용은 ×5 계단 유지.
+const SCRATCHER_BANK_MAX_LEVEL := 8
+const SCRATCHER_UPGRADE_COSTS := {2: 12000, 3: 60000, 4: 280000, 5: 1300000, 6: 6000000, 7: 30000000, 8: 150000000}
 # 고철 생산기 확장에는 캣닢이 함께 든다. 캣닢은 출정 버프를 잃은 대신
 # "고철 라인을 키우는 재료"가 됐다 — 착즙 라인을 키워야 꾹꾹이 라인이 큰다.
 # 요구량은 대략 해당 시점 착즙 생산 30분~2시간치를 노린 지수 곡선이다.
-const SCRATCHER_UPGRADE_CATNIP_COSTS := {2: 900, 3: 4500, 4: 22000, 5: 110000}
+const SCRATCHER_UPGRADE_CATNIP_COSTS := {2: 900, 3: 4500, 4: 22000, 5: 110000, 6: 500000, 7: 2500000, 8: 12000000}
 const CATNIP_SCRAPER_UPGRADE_COSTS := {2: 10000, 3: 50000, 4: 230000, 5: 1000000}
 const STORAGE_GRID_BY_LEVEL := {
 	1: Vector2i(6, 5),
@@ -765,7 +807,8 @@ const STORAGE_UPGRADE_COSTS := {
 	5: {"scrap": 700000, "churu": 4},
 }
 const SHELTER_CAPACITY_BY_TIER := {1: 5, 2: 10, 3: 20, 4: 35, 5: 50}
-const KNEADING_SLOTS_BY_TIER := {1: 3, 2: 6, 3: 10, 4: 15, 5: 20}
+# 티어 5 좌석 20 → 24(대개편 3단계): 최종 티어 수입 상한을 한 칸 더 연다.
+const KNEADING_SLOTS_BY_TIER := {1: 3, 2: 6, 3: 10, 4: 15, 5: 24}
 const CATNIP_SLOTS_BY_TIER := {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
 # 예전 곡선은 티어마다 약 13배(30k→400k→5M→60M)라 중반부터 출정이 재미가
 # 아니라 고철 대기가 됐다. 스텝을 약 5배로 낮춰 진행이 계단이 아니라
@@ -1288,6 +1331,7 @@ func clear_carried_raid_inventory_after_death() -> void:
 	canned_food = 0
 	churu = 0
 	valuable_inventory.clear()
+	valuable_value_ledger.clear()
 	clear_churu_buffs()
 	magazine_ammo = 0
 	reserve_ammo = 0
@@ -1961,8 +2005,13 @@ func consume_merchant_missed_notice() -> bool:
 	return missed
 
 
+func get_secure_slot_count() -> int:
+	# 시큐어 슬롯 수의 단일 지점 — 츄르로 산 칸(secure_dog_slots, 최대 3) + 방어구 돌파 +90 보너스.
+	return secure_dog_slots + (ARMOR_PERK_SECURE_SLOT_BONUS if has_armor_breakthrough_perk(90) else 0)
+
+
 func store_secure_item(item: Dictionary) -> bool:
-	if secure_dog_items.size() >= secure_dog_slots:
+	if secure_dog_items.size() >= get_secure_slot_count():
 		return false
 	secure_dog_items.append(item.duplicate(true))
 	return true
@@ -2062,15 +2111,20 @@ func try_upgrade_bag_capacity() -> bool:
 	return true
 
 
+const OVERCLOCK_COST_GROWTH := 1.5
+const OVERCLOCK_CATNIP_COST_GROWTH := 1.5
+
+
 func get_overclock_cost() -> int:
-	# ×1.55 → ×1.8. 오버클럭은 수입을 +8%/Lv 올리는 싱크라, 비용이 수입보다
-	# 확실히 빨리 커야 되먹임이 폭주하지 않는다(Lv10 321K, Lv15 6M).
-	return roundi(900.0 * pow(1.8, scratcher_overclock_level) / 10.0) * 10
+	# ×1.8 → ×1.5(대개편 3단계). 1.8은 회수 10h 기준 Lv12~13에서 멈춰 후반 수입 성장 수단이
+	# 사라졌다. 1.5면 Lv20 ≈ 3M, Lv25 ≈ 23M — 티어 5 수입(수백만/h)에서도 계속 살 수 있는
+	# 싱크가 된다. 수입 +8%/Lv(선형)이므로 지수 비용이면 폭주하지 않는다.
+	return roundi(900.0 * pow(OVERCLOCK_COST_GROWTH, scratcher_overclock_level) / 10.0) * 10
 
 
 func get_overclock_catnip_cost() -> int:
-	# 오버클럭도 고철 단독이 아니다. 캣닢 없이는 꾹꾹이 라인이 한 칸도 못 큰다.
-	return roundi(60.0 * pow(1.7, scratcher_overclock_level) / 5.0) * 5
+	# 오버클럭도 고철 단독이 아니다. 캣닢 없이는 꾹꾹이 라인이 한 칸도 못 큰다. ×1.7 → ×1.5.
+	return roundi(60.0 * pow(OVERCLOCK_CATNIP_COST_GROWTH, scratcher_overclock_level) / 5.0) * 5
 
 
 func try_upgrade_scratcher_overclock() -> bool:
@@ -2306,6 +2360,7 @@ func try_add_raid_item(item_type: String, item_id: String, amount: int = 1) -> b
 			churu += amount
 		"valuable":
 			valuable_inventory[item_id] = int(valuable_inventory.get(item_id, 0)) + amount
+			valuable_value_ledger[item_id] = int(valuable_value_ledger.get(item_id, 0)) + amount * get_valuable_unit_value(item_id)
 		_:
 			return false
 	return true
@@ -2338,7 +2393,12 @@ func remove_raid_bag_item(item_type: String, item_id: String, amount: int) -> in
 		"churu":
 			churu = maxi(0, churu - removable)
 		"valuable":
-			valuable_inventory[item_id] = maxi(0, int(valuable_inventory.get(item_id, 0)) - removable)
+			var count_before := maxi(0, int(valuable_inventory.get(item_id, 0)))
+			valuable_inventory[item_id] = maxi(0, count_before - removable)
+			# 원장은 개수 비율만큼 덜어낸다(같은 id 안에서는 평균 단가).
+			if count_before > 0 and valuable_value_ledger.has(item_id):
+				var ledger_before := int(valuable_value_ledger.get(item_id, 0))
+				valuable_value_ledger[item_id] = maxi(0, ledger_before - roundi(float(ledger_before) * float(removable) / float(count_before)))
 		"special_cargo":
 			raid_special_cargo.clear()
 	return removable
@@ -3599,11 +3659,27 @@ static func describe_canned_food_eat_failure(result: Dictionary) -> String:
 	return "지금은 먹을 수 없습니다."
 
 
+func get_current_raid_stage_tier() -> int:
+	# 선택(진행) 중인 출정 존의 스테이지 티어 — 귀중품 존 가치 배율의 기준.
+	return LOOT_ECONOMY.get_stage_for_zone(get_raid_zone())
+
+
+func get_valuable_unit_value(valuable_id: String, stage_tier: int = -1) -> int:
+	# 귀중품 1개의 환전 가치 = 카탈로그 base_value × 존 배율(기본: 현재 출정 존).
+	var base := int((LOOT_ECONOMY.ITEM_CATALOG.get(valuable_id, {}) as Dictionary).get("base_value", 0))
+	var tier := get_current_raid_stage_tier() if stage_tier <= 0 else stage_tier
+	return int(round(float(base) * LOOT_ECONOMY.get_valuable_stage_multiplier(tier)))
+
+
 func get_valuable_total_value() -> int:
 	var total := 0
 	for valuable_id in valuable_inventory.keys():
 		var amount := maxi(0, int(valuable_inventory[valuable_id]))
 		if amount <= 0:
+			continue
+		# 원장(주운 존의 배율이 반영된 누적 가치)이 있으면 그 값, 없으면(구세이브) 카탈로그×개수.
+		if valuable_value_ledger.has(valuable_id) and int(valuable_value_ledger[valuable_id]) > 0:
+			total += int(valuable_value_ledger[valuable_id])
 			continue
 		total += amount * int(
 			(LOOT_ECONOMY.ITEM_CATALOG.get(str(valuable_id), {}) as Dictionary).get("base_value", 0)
@@ -3640,6 +3716,7 @@ func sell_all_valuables() -> Dictionary:
 	if total <= 0:
 		return {"scrap": 0, "count": 0}
 	valuable_inventory.clear()
+	valuable_value_ledger.clear()
 	scrap += total
 	save_persistent_state()
 	return {"scrap": total, "count": count}
@@ -3902,7 +3979,7 @@ func try_upgrade_workbench() -> bool:
 
 func try_upgrade_scratcher_bank() -> bool:
 	var next_level := scratcher_bank_level + 1
-	if next_level > 5:
+	if next_level > SCRATCHER_BANK_MAX_LEVEL:
 		return false
 	var cost := int(SCRATCHER_UPGRADE_COSTS.get(next_level, 0))
 	var catnip_cost := int(SCRATCHER_UPGRADE_CATNIP_COSTS.get(next_level, 0))
@@ -3959,11 +4036,12 @@ func get_weapon_enhancement_cost(weapon_id: String) -> int:
 		"akm": weapon_factor = 1.7
 		"pump_shotgun": weapon_factor = 1.5
 		"k2": weapon_factor = 2.0
-	# ×1.11 → ×1.28. 쉘터 수입이 지수(생산기 Lv당 ×1.9, 주민 수)로 크는데 강화
-	# 비용은 완만해 티어 3쯤엔 한 시간 수입으로 +40을 찍었다 — 싱크가 아니라
-	# 파워 폭주 경로였다. 이제 +10 10.6K, +20 126K, +30 1.5M, +40 17.7M:
+	# ×1.11 → ×1.28(+1~30) → 3구간(대개편 3단계). 쉘터 수입이 지수(생산기 Lv당 ×1.9, 주민 수)로
+	# 크는데 강화 비용은 완만해 티어 3쯤엔 한 시간 수입으로 +40을 찍었다 — 싱크가 아니라
+	# 파워 폭주 경로였다. 반대로 ×1.28 단일 지수는 +60 이후가 영원히 닿지 않는 구간이었다.
+	# WEAPON_ENHANCEMENT_SEGMENTS: +10 10.6K, +30 1.5M(×1.28) → +31~60 ×1.10 → +61~99 ×1.055.
 	# '항상 다음 버튼이 있지만 공짜는 아닌' 인크리멘탈 곡선.
-	return maxi(900, roundi(900.0 * weapon_factor * pow(1.28, float(level))))
+	return maxi(900, roundi(900.0 * weapon_factor * _segmented_growth(level, WEAPON_ENHANCEMENT_SEGMENTS)))
 
 
 const WEAPON_ENHANCEMENT_PART_CYCLE: Array[String] = ["magazine_spring", "rubber_gasket", "scope_lens"]
@@ -3971,8 +4049,10 @@ const WEAPON_ENHANCEMENT_PART_CYCLE: Array[String] = ["magazine_spring", "rubber
 
 func get_weapon_enhancement_part_cost(weapon_id: String) -> Dictionary:
 	# 고단계 강화는 고철만으로 안 된다 — 필드 부품이 들어간다. +10까지는 고철만,
-	# +11~20 일반 부품 1종, +21~30 2종, +31부터 3종(한 종류씩) + 희귀 부품:
-	# +31~60 정밀 기어 1, +61~99 정밀 기어 1 + 군용 합금 1(= 희귀 2개/단계).
+	# +11~20 일반 부품 1종, +21~30 2종, +31부터 3종(한 종류씩). 종류당 개수는
+	# +1~40 1개 · +41~80 2개 · +81~99 3개(대개편 3단계 — 출정이 후반에도 이유가 되게).
+	# 희귀 부품: +31~80 정밀 기어 1, +81~99 정밀 기어 2. 군용 합금은 돌파(get_breakthrough_cost)
+	# 전용으로 옮겨 "합금 = 돌파 재료"라는 정체성을 준다.
 	# 부품은 필드 전용이라 넘치는 고철에 '출정 이유'를 한 번 더 묶는다. 부품 종류는
 	# 단계마다 돌아가며 요구해 한 종류만 쌓아 두는 플레이를 막는다.
 	return _gear_enhancement_part_cost(get_weapon_enhancement_level(weapon_id) + 1, MAX_WEAPON_ENHANCEMENT)
@@ -3989,13 +4069,14 @@ func _gear_enhancement_part_cost(next_level: int, max_level: int) -> Dictionary:
 		part_kinds = 2
 	elif next_level > 10:
 		part_kinds = 1
+	# 종류당 개수: 1 + (next−1)/40 → +1~40 1개 · +41~80 2개 · +81~99 3개.
+	var per_kind := 1 + (next_level - 1) / 40
 	var cost := {}
 	for offset in part_kinds:
 		var part_id := WEAPON_ENHANCEMENT_PART_CYCLE[(next_level + offset) % WEAPON_ENHANCEMENT_PART_CYCLE.size()]
-		cost[part_id] = int(cost.get(part_id, 0)) + 1
-	if next_level > 60:
-		cost["precision_gear"] = int(cost.get("precision_gear", 0)) + 1
-		cost["military_alloy"] = int(cost.get("military_alloy", 0)) + 1
+		cost[part_id] = int(cost.get(part_id, 0)) + per_kind
+	if next_level > 80:
+		cost["precision_gear"] = int(cost.get("precision_gear", 0)) + 2
 	elif next_level > 30:
 		cost["precision_gear"] = int(cost.get("precision_gear", 0)) + 1
 	return cost
@@ -4022,8 +4103,9 @@ func try_enhance_weapon(weapon_id: String) -> bool:
 
 
 # ── 방어구 +99 강화 ─────────────────────────────────────────────
-# 무기와 같은 규칙(부품 단계·돌파)이되 비용 곡선은 600×가족계수(T1 1.0/T2 1.5/T3 2.2)
-# ×1.26^L — 무기(900×1.28^L)보다 완만하다. 세 슬롯을 같이 키워야 하므로.
+# 무기와 같은 규칙(부품 단계·돌파)이되 비용 곡선은 400×가족계수(T1 1.0/T2 1.5/T3 2.2)
+# ×ARMOR_ENHANCEMENT_SEGMENTS(+1~30 ×1.26 · +31~60 ×1.09 · +61~99 ×1.045) — 무기보다
+# 완만하다. 세 슬롯을 같이 키워야 하므로(T3 세트 +99 ≈ 5.0B ≈ K2 +99의 절반 남짓).
 # 키는 기본 id(레벨 접미사 없음). 보유(가방·창고·장착 어디든) 중인 방어구만 강화된다.
 
 
@@ -4051,7 +4133,7 @@ func get_armor_enhancement_cost(equipment_id: String) -> int:
 	if level >= MAX_ARMOR_ENHANCEMENT:
 		return 0
 	var family_factor := float(ARMOR_FAMILY_FACTORS[clampi(get_armor_family_index(equipment_id), 0, ARMOR_FAMILY_FACTORS.size() - 1)])
-	return maxi(600, roundi(ARMOR_ENHANCEMENT_BASE_COST * family_factor * pow(ARMOR_ENHANCEMENT_COST_GROWTH, float(level))))
+	return maxi(400, roundi(ARMOR_ENHANCEMENT_BASE_COST * family_factor * _segmented_growth(level, ARMOR_ENHANCEMENT_SEGMENTS)))
 
 
 func get_armor_enhancement_part_cost(equipment_id: String) -> Dictionary:
@@ -4059,11 +4141,15 @@ func get_armor_enhancement_part_cost(equipment_id: String) -> Dictionary:
 
 
 func get_armor_enhancement_multiplier(equipment_id: String) -> float:
+	return armor_enhancement_multiplier_for_level(get_armor_enhancement_level(equipment_id))
+
+
+func armor_enhancement_multiplier_for_level(level: int) -> float:
 	# 효과 배율 = 1 + 0.6×(1−0.96^L): +10 ×1.20 · +30 ×1.42 · +50 ×1.52 · +99 ×1.59(수렴 1.6).
-	var level := get_armor_enhancement_level(equipment_id)
+	# 레벨 인자 버전은 작업대 강화 보드의 "현재 ▲ 다음" 미리보기가 같은 곡선을 보게 하려는 것.
 	if level <= 0:
 		return 1.0
-	return 1.0 + 0.6 * (1.0 - pow(0.96, float(level)))
+	return 1.0 + 0.6 * (1.0 - pow(0.96, float(clampi(level, 0, MAX_ARMOR_ENHANCEMENT))))
 
 
 func is_armor_base_owned(base_id: String) -> bool:
@@ -4198,14 +4284,19 @@ func get_breakthrough_cost(kind: String, item_id: String) -> Dictionary:
 	# 돌파가 필요 없는 상태면 빈 딕셔너리.
 	if not is_breakthrough_required(kind, item_id):
 		return {}
+	# 대개편 3단계 — 돌파가 '출정 이유'가 되게 희귀 재료를 단계에 비례시킨다.
+	#   인장: 무기 L/10(+10 1 … +90 9) · 방어구 L/20(+10~+30 1 … +90 4) — 방어구는 피스 3개라 절반.
+	#   정밀 기어: (L/10)×2 → +10 2 · +50 10 · +90 18.
+	#   군용 합금(+50~): (L−40)/5 → +50 2 · +70 6 · +90 10. 강화 단계 부품에서는 뺐다(돌파 전용).
 	var level := get_gear_enhancement_level(kind, item_id)
+	var seal_divisor := BREAKTHROUGH_STEP * 2 if kind == "armor" else BREAKTHROUGH_STEP
 	var cost := {
 		"scrap": get_gear_enhancement_cost(kind, item_id) * 3,
-		ARTISAN_SEAL_ID: 1,
-		"precision_gear": maxi(1, level / BREAKTHROUGH_STEP),
+		ARTISAN_SEAL_ID: maxi(1, level / seal_divisor),
+		"precision_gear": maxi(1, level / BREAKTHROUGH_STEP) * 2,
 	}
 	if level >= 50:
-		cost["military_alloy"] = maxi(1, (level - 40) / BREAKTHROUGH_STEP)
+		cost["military_alloy"] = maxi(1, (level - 40) / 5)
 	return cost
 
 
@@ -4274,6 +4365,99 @@ func try_breakthrough(kind: String, item_id: String) -> bool:
 	gear_breakthroughs[gear_breakthrough_key(kind, item_id)] = get_gear_enhancement_level(kind, item_id)
 	save_persistent_state()
 	return true
+
+
+# ── 돌파 정체성 보너스(대개편 3단계) ─────────────────────────────
+# 돌파는 비용 게이트만이 아니라 '정체성'을 준다. 단계(+30/+50/+70/+90)마다 하나씩,
+# 판정은 "그 단계의 돌파를 마쳤는가"(gear_breakthroughs 기록 ≥ 단계, 또는 강화 레벨이
+# 단계를 넘어섰으면 이미 돌파한 것). 적용 지점은 각 계산의 단일 함수:
+#   무기 — build_player_weapon_stats(관통·탄창·장전·내구·스탯 키), enemy.take_projectile_hit(엘리트 피해),
+#          main._on_enemy_died(처치 탄약 환급)
+#   방어구 — main.take_hit(넉백 저항) · main/building_interior.take_damage(피격 후 추가 피해 −20%) ·
+#          get_fatigue_gain_multiplier(피로) · get_secure_slot_count(시큐어 슬롯)
+# 방어구는 장착 중인 피스 기준: +30(넉백)은 몸 슬롯만, 나머지는 장착 피스 중 하나라도 달성하면(중첩 없음).
+const BREAKTHROUGH_PERKS := {
+	"weapon": {
+		30: {"id": "pierce", "label": "관통 +1", "description": "탄환이 적 하나를 더 꿰뚫는다."},
+		50: {"id": "magazine", "label": "탄창 +25% · 장전 −15%", "description": "장탄수가 늘고 장전이 빨라진다."},
+		70: {"id": "elite_damage", "label": "엘리트·보스 피해 +20%", "description": "일반 적에게는 적용되지 않는다."},
+		90: {"id": "kill_refund", "label": "처치 시 탄약 10% 환급 · 내구 소모 0", "description": "적을 쓰러뜨릴 때마다 탄창의 10%가 예비탄으로 돌아오고, 사격으로 내구도가 닳지 않는다."},
+	},
+	"armor": {
+		30: {"id": "knockback_resist", "label": "넉백 저항 50% (몸 방어구)", "description": "피격 밀림이 절반으로 준다."},
+		50: {"id": "post_hit_guard", "label": "피격 후 1.5초 추가 피해 −20%", "description": "연타를 맞을 때 뒤이은 피해가 줄어든다."},
+		70: {"id": "fatigue_guard", "label": "피로 누적 −15%", "description": "필드에 더 오래 머물 수 있다."},
+		90: {"id": "secure_slot", "label": "시큐어 슬롯 +1", "description": "죽어도 지키는 칸이 하나 늘어난다."},
+	},
+}
+
+
+func is_breakthrough_perk_unlocked(kind: String, item_id: String, perk_level: int) -> bool:
+	# 그 단계의 돌파를 마쳤는가 — 돌파 기록이 단계 이상이거나, 강화 레벨이 단계를 넘어섰으면 참.
+	if not BREAKTHROUGH_PERK_LEVELS.has(perk_level):
+		return false
+	var level := get_gear_enhancement_level(kind, item_id)
+	if level > perk_level:
+		return true
+	return level >= perk_level and get_breakthrough_level_done(kind, item_id) >= perk_level
+
+
+func get_breakthrough_perks(kind: String, item_id: String) -> Array[String]:
+	# 열린 보너스 id 목록(낮은 단계부터). 무기: pierce/magazine/elite_damage/kill_refund,
+	# 방어구: knockback_resist/post_hit_guard/fatigue_guard/secure_slot.
+	var perks: Array[String] = []
+	var table: Dictionary = BREAKTHROUGH_PERKS.get(kind, {})
+	for perk_level in BREAKTHROUGH_PERK_LEVELS:
+		if table.has(perk_level) and is_breakthrough_perk_unlocked(kind, item_id, perk_level):
+			perks.append(str((table[perk_level] as Dictionary).get("id", "")))
+	return perks
+
+
+func describe_breakthrough_perk(kind: String, perk_level: int) -> String:
+	# UI용 한 줄 — "+30 돌파: 관통 +1". 표에 없는 단계면 빈 문자열.
+	var table: Dictionary = BREAKTHROUGH_PERKS.get(kind, {})
+	if not table.has(perk_level):
+		return ""
+	return "+%d 돌파: %s" % [perk_level, str((table[perk_level] as Dictionary).get("label", ""))]
+
+
+func has_weapon_breakthrough_perk(perk_level: int) -> bool:
+	# 장착 무기 기준.
+	return is_breakthrough_perk_unlocked("weapon", equipped_weapon_id, perk_level)
+
+
+func get_player_elite_damage_multiplier() -> float:
+	# 무기 돌파 +70 — 장착 무기 기준 엘리트·보스 피해 배율. enemy.take_projectile_hit이 읽는다.
+	return 1.0 + WEAPON_PERK_ELITE_DAMAGE_BONUS if has_weapon_breakthrough_perk(70) else 1.0
+
+
+func has_armor_breakthrough_perk(perk_level: int) -> bool:
+	# 장착 방어구 기준. +30(넉백 저항)은 몸 슬롯 전용, 나머지는 장착 피스 중 하나라도.
+	if perk_level == 30:
+		return not equipped_body_armor_id.is_empty() and is_breakthrough_perk_unlocked("armor", equipped_body_armor_id, perk_level)
+	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
+		if not str(equipment_id).is_empty() and is_breakthrough_perk_unlocked("armor", str(equipment_id), perk_level):
+			return true
+	return false
+
+
+func get_armor_knockback_multiplier() -> float:
+	# 피격 넉백 배율의 단일 지점 — main.take_hit이 recoil_velocity에 곱한다.
+	return 1.0 - ARMOR_PERK_KNOCKBACK_RESIST if has_armor_breakthrough_perk(30) else 1.0
+
+
+var last_player_hit_msec: int = -100000
+
+
+func apply_post_hit_guard(amount: int) -> int:
+	# 방어구 +50 보너스 — 직전 피격 후 1.5s 안에 들어온 피해는 −20%. 피격 시각도 여기서 기록한다
+	# (필드 main.take_damage · 건물 내부 take_damage 공용). 보너스가 없으면 그대로 돌려준다.
+	var now := Time.get_ticks_msec()
+	var guarded := amount
+	if has_armor_breakthrough_perk(50) and now - last_player_hit_msec <= int(ARMOR_PERK_POST_HIT_WINDOW_SEC * 1000.0):
+		guarded = maxi(1, roundi(float(amount) * ARMOR_PERK_POST_HIT_DAMAGE_MULTIPLIER))
+	last_player_hit_msec = now
+	return guarded
 
 
 # ── 설계도 조각 · 제작 해금 ─────────────────────────────────────
@@ -4493,7 +4677,11 @@ func get_damage_taken_multiplier() -> float:
 func get_fatigue_gain_multiplier() -> float:
 	var reduction := float(player_stat_levels.get("fatigue_resistance", 0)) * 0.05
 	reduction += float(training_levels.get("fieldcraft", 0)) * 0.07
-	return maxf(0.45, 1.0 - reduction)
+	var multiplier := maxf(0.45, 1.0 - reduction)
+	# 방어구 돌파 +70 보너스 — 피로 누적 −15%(피로 계산의 단일 지점은 여기).
+	if has_armor_breakthrough_perk(70):
+		multiplier *= ARMOR_PERK_FATIGUE_MULTIPLIER
+	return multiplier
 
 
 func get_recoil_control_multiplier() -> float:
@@ -4547,6 +4735,20 @@ func build_player_weapon_stats(
 	stats["magazine_size"] = base_magazine + get_magazine_capacity_bonus(base_magazine)
 	stats["base_reload_time"] = float(stats.get("reload_time", 2.15))
 	stats["reload_time"] = float(stats.get("reload_time", 2.15)) * get_reload_time_multiplier()
+	# 무기 돌파 정체성 보너스(+30 관통 · +50 탄창/장전 · +70 엘리트 피해 · +90 환급/내구) —
+	# 스탯으로 표현되는 것은 전부 여기서 얹는다. 엘리트 피해·탄약 환급은 스탯 키로 실어
+	# 각 적용 지점(enemy.take_projectile_hit / main._on_enemy_died)이 읽는다.
+	var perks := get_breakthrough_perks("weapon", weapon_id)
+	if perks.has("pierce"):
+		stats["penetration_count"] = int(stats.get("penetration_count", 0)) + 1
+	if perks.has("magazine"):
+		stats["magazine_size"] = int(ceil(float(stats.get("magazine_size", 0)) * (1.0 + WEAPON_PERK_MAGAZINE_BONUS)))
+		stats["reload_time"] = float(stats.get("reload_time", 2.15)) * WEAPON_PERK_RELOAD_MULTIPLIER
+	stats["elite_damage_multiplier"] = 1.0 + WEAPON_PERK_ELITE_DAMAGE_BONUS if perks.has("elite_damage") else 1.0
+	stats["kill_ammo_refund"] = WEAPON_PERK_KILL_AMMO_REFUND if perks.has("kill_refund") else 0.0
+	if perks.has("kill_refund"):
+		stats["durability_loss"] = 0.0
+	stats["breakthrough_perks"] = perks
 	return stats
 
 
@@ -4974,6 +5176,7 @@ func save_persistent_state() -> bool:
 		"catnip": catnip,
 		"churu": churu,
 		"valuable_inventory": valuable_inventory,
+		"valuable_value_ledger": valuable_value_ledger,
 		"active_churu_buffs": active_churu_buffs,
 		"raid_in_progress": raid_in_progress,
 		"bag_pressure_lesson_seen": bag_pressure_lesson_seen,
@@ -5146,6 +5349,7 @@ func load_persistent_state() -> bool:
 	catnip = maxi(0, roundi(float(data.get("catnip", catnip))))
 	churu = int(data.get("churu", churu))
 	valuable_inventory = (data.get("valuable_inventory", {}) as Dictionary).duplicate(true)
+	valuable_value_ledger = (data.get("valuable_value_ledger", {}) as Dictionary).duplicate(true)
 	active_churu_buffs = _to_string_array(data.get("active_churu_buffs", []))
 	raid_in_progress = bool(data.get("raid_in_progress", false))
 	bag_pressure_lesson_seen = bool(data.get("bag_pressure_lesson_seen", bag_pressure_lesson_seen))
@@ -5229,7 +5433,7 @@ func load_persistent_state() -> bool:
 	ensure_story_key_items()
 	shelter_workbench_level = clampi(int(data.get("shelter_workbench_level", shelter_workbench_level)), 1, 5)
 	shelter_tier = clampi(int(data.get("shelter_tier", shelter_tier)), 1, 5)
-	scratcher_bank_level = clampi(int(data.get("scratcher_bank_level", scratcher_bank_level)), 1, 5)
+	scratcher_bank_level = clampi(int(data.get("scratcher_bank_level", scratcher_bank_level)), 1, SCRATCHER_BANK_MAX_LEVEL)
 	# 저장값을 믿지 않고 레벨에서 재계산 — 배율 곡선을 바꿔도 구세이브가 따라온다.
 	scratcher_multiplier = pow(1.9, float(scratcher_bank_level - 1))
 	catnip_scraper_level = clampi(int(data.get("catnip_scraper_level", catnip_scraper_level)), 1, 5)
@@ -5420,6 +5624,7 @@ func reset_run() -> void:
 	catnip = 0
 	churu = 0
 	valuable_inventory.clear()
+	valuable_value_ledger.clear()
 	active_churu_buffs.clear()
 	bag_pressure_lesson_seen = false
 	fatigue_lesson_seen = false

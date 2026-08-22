@@ -246,13 +246,44 @@ func _run() -> void:
 	if workbench_layer == null:
 		_fail("workbench did not create an interaction layer")
 	_assert_compact_close_button(workbench_layer, "workbench")
+	# 2026-08 2단계: 작업대의 기본 탭은 '강화 보드'(보유 장비 목록 · 강화 카드 · 재료 · 고정 액션 바).
+	# 옛 목록+상세 구조는 제작/개조·보급 탭으로 옮겨 갔으므로 그쪽은 아래에서 탭을 바꿔 검사한다.
 	var workbench_panel := workbench_layer.find_child("WorkbenchPanel", true, false) as PanelContainer
+	var enhance_board := workbench_layer.find_child("WorkbenchEnhanceBoard", true, false) as BoxContainer
+	var gear_list := workbench_layer.find_child("WorkbenchGearList", true, false) as BoxContainer
+	var enhance_card := workbench_layer.find_child("WorkbenchEnhanceCard", true, false) as PanelContainer
+	var enhance_button := workbench_layer.find_child("WorkbenchEnhanceButton", true, false) as Button
+	var enhance_max_button := workbench_layer.find_child("WorkbenchEnhanceMaxButton", true, false) as Button
+	var materials_panel := workbench_layer.find_child("WorkbenchMaterialsPanel", true, false) as Control
+	if (
+		workbench_panel == null
+		or enhance_board == null
+		or gear_list == null
+		or enhance_card == null
+		or enhance_button == null
+		or enhance_max_button == null
+		or materials_panel == null
+	):
+		_fail("workbench enhance board structure is missing")
+	if gear_list.find_child("WorkbenchGearRow_ak47", true, false) == null:
+		_fail("workbench enhance board must list the owned AK-47")
+	if enhance_button.custom_minimum_size.y < 44.0 or enhance_max_button.custom_minimum_size.y < 44.0:
+		_fail("workbench enhance actions must be touch-sized (>= 44px)")
+	for resource_id in ["magazine_spring", "rubber_gasket", "scope_lens", "precision_gear", "military_alloy", "artisan_seal"]:
+		_assert_resource_icon(materials_panel, str(resource_id), "workbench materials")
+	var workbench_viewport_size := workbench.get_viewport().get_visible_rect().size
+	if workbench_panel.size.x > workbench_viewport_size.x or workbench_panel.size.y > workbench_viewport_size.y:
+		_fail("workbench enhance board panel exceeds the viewport")
+	# 제작 탭(옛 레시피 목록 + 상세 + 고정 제작 버튼) — 옛 카테고리 이름으로 잡아도 탭으로 접힌다.
+	workbench.set("selected_category", "armor")
+	workbench.set("selected_recipe_id", "craft_scav_vest")
+	workbench.call("_rebuild_ui")
+	await process_frame
 	var workbench_body := workbench_layer.find_child("WorkbenchBody", true, false) as BoxContainer
 	var workbench_recipe_panel := workbench_layer.find_child("WorkbenchRecipePanel", true, false) as PanelContainer
 	var workbench_detail_scroll := workbench_layer.find_child("WorkbenchDetailScroll", true, false) as ScrollContainer
 	if (
-		workbench_panel == null
-		or workbench_body == null
+		workbench_body == null
 		or workbench_recipe_panel == null
 		or workbench_detail_scroll == null
 	):
@@ -265,9 +296,10 @@ func _run() -> void:
 		_assert_resource_icon(workbench_resource_strip, str(resource_id), "workbench")
 	if workbench_resource_strip.find_child("ResourceIcon_canned_food", true, false) != null:
 		_fail("workbench resource strip must not list canned food any more")
-	var workbench_viewport_size := workbench.get_viewport().get_visible_rect().size
+	workbench_panel = workbench_layer.find_child("WorkbenchPanel", true, false) as PanelContainer
 	if (
-		workbench_panel.size.x > workbench_viewport_size.x
+		workbench_panel == null
+		or workbench_panel.size.x > workbench_viewport_size.x
 		or workbench_panel.size.y > workbench_viewport_size.y
 		or workbench_recipe_panel.size.x < 260.0
 	):
@@ -276,12 +308,9 @@ func _run() -> void:
 	# 방어구 카테고리로 같은 레이아웃 불변식을 검사한다.
 	if workbench.RECIPES.has("ammo") or workbench.RECIPES.has("parts"):
 		_fail("workbench must no longer craft ammo or raw parts")
-	workbench.set("selected_category", "armor")
-	workbench.set("selected_recipe_id", "craft_scav_vest")
-	workbench.call("_rebuild_ui")
-	await process_frame
 	var armor_title := workbench_layer.find_child("WorkbenchRecipeTitle", true, false) as Label
-	var armor_tab := workbench_layer.find_child("WorkbenchTab_armor", true, false) as Button
+	# 2단계: 방어구·무기 탭은 '제작' 탭 하나로 합쳐졌다(WorkbenchTab_craft).
+	var armor_tab := workbench_layer.find_child("WorkbenchTab_craft", true, false) as Button
 	var armor_detail_scroll := workbench_layer.find_child("WorkbenchDetailScroll", true, false) as ScrollContainer
 	if (
 		armor_title == null

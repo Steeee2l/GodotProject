@@ -53,9 +53,10 @@ const STEPS := [
 		"targets": ["dock:training", "find:TrainingCard_magazine_drill"],
 	},
 	{
-		"id": "workbench_craft", "zone": "shelter", "title": "작업대 — 제작/강화",
-		"text": "부품과 고철이 모였습니다. 작업대 방어구 탭에서 첫 장비를 만들어 보세요.",
-		"targets": ["dock:workbench", "find:WorkbenchTab_armor", "find:WorkbenchCraftButton"],
+		# 2단계 강화 보드: 독 버튼 → 강화 카드 → [강화 +1] 버튼(WorkbenchEnhanceButton) 순으로 깊어진다.
+		"id": "workbench_craft", "zone": "shelter", "title": "작업대 — 강화",
+		"text": "첫 강화를 해보세요 — 장비는 평생 내 것이고 끝없이 오릅니다.",
+		"targets": ["dock:workbench", "find:WorkbenchEnhanceCard", "find:WorkbenchEnhanceButton"],
 	},
 	{
 		"id": "merchant_sell", "zone": "shelter", "title": "상인 — 판매",
@@ -547,8 +548,11 @@ func _equipment_total() -> int:
 
 
 func _enhancement_total() -> int:
+	# 강화 합계 — 무기·파츠에 방어구(+99 보드)도 더한다. 보드에서 무엇을 올리든 완료.
 	var total := 0
 	for level in GameState.weapon_enhancement_levels.values():
+		total += maxi(0, int(level))
+	for level in GameState.armor_enhancement_levels.values():
 		total += maxi(0, int(level))
 	for level in GameState.mod_enhancement_levels.values():
 		total += maxi(0, int(level))

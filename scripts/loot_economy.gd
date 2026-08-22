@@ -22,6 +22,14 @@ extends RefCounted
 # blueprint_shard_case_chance: 봉인 보급함·잠긴 장비 상자가 조각 1개를 남길 확률(40%).
 # 러버밴딩 없음: 모든 확률은 존 티어 상수다. 조각의 '종류'만 "이미 완성한 레시피
 # 제외(미완성 우선)"로 고른다 — 확률이 아니라 낭비를 줄이는 선택.
+# ── 귀중품 존 가치 배율(대개편 3단계) ─────────────────────────────
+# 귀중품 base_value는 존 1 기준이다. 상위 존의 같은 귀중품이 같은 값이면 출정 수입이 존을 따라
+# 크지 않아(존1 869 → 존5 6.7K/판) 후반 강화(수억~수십억)에서 출정이 '이유'가 못 됐다.
+# 존 티어마다 ×1/×2/×4/×10/×25 — 러버밴딩 아님, 전부 존 상수. _materialize_item이 base_value에
+# 곱하고, 판 가치 캡(field/enemy/total_value_cap)도 같은 배율로 늘린다 — 캡은 존1 기준 숫자라
+# 그대로 두면 ×25 귀중품 하나가 캡을 넘겨 등록이 거부된다(get_stage_value_cap).
+const VALUABLE_STAGE_MULTIPLIER := {1: 1.0, 2: 2.0, 3: 4.0, 4: 10.0, 5: 25.0}
+
 const STAGE_PROFILES := {
 	1: {
 		"name": "초반 생존 구역",
@@ -1128,6 +1136,16 @@ static func roll_boss_drops(stage_tier: int, random: RandomNumberGenerator) -> A
 	return results
 
 
+static func get_valuable_stage_multiplier(stage_tier: int) -> float:
+	return float(VALUABLE_STAGE_MULTIPLIER.get(clampi(stage_tier, 1, 5), 1.0))
+
+
+static func get_stage_value_cap(stage_tier: int, cap_key: String) -> int:
+	# 판 가치 캡(field_value_cap / enemy_value_cap / total_value_cap) — 프로필 값 × 귀중품 존 배율.
+	var profile: Dictionary = STAGE_PROFILES.get(clampi(stage_tier, 1, 5), STAGE_PROFILES[1])
+	return int(round(float(profile.get(cap_key, 0)) * get_valuable_stage_multiplier(stage_tier)))
+
+
 static func get_definition_value(definition: Dictionary) -> int:
 	var data := definition.get("data", {}) as Dictionary
 	return maxi(
@@ -1178,15 +1196,15 @@ static func try_register_loot(
 		):
 			return false
 		var source_value := int(game_state.get("raid_field_loot_value_generated"))
-		var source_cap := int(profile.get("field_value_cap", 0))
+		var source_cap := get_stage_value_cap(stage_tier, "field_value_cap")
 		if source == "enemy":
 			source_value = int(game_state.get("raid_enemy_loot_value_generated"))
-			source_cap = int(profile.get("enemy_value_cap", 0))
+			source_cap = get_stage_value_cap(stage_tier, "enemy_value_cap")
 		if source_value + value > source_cap:
 			return false
 		if (
 			int(game_state.get("raid_total_loot_value_generated")) + value
-			> int(profile.get("total_value_cap", 0))
+			> get_stage_value_cap(stage_tier, "total_value_cap")
 		):
 			return false
 	game_state.set(
@@ -1250,7 +1268,7 @@ static func simulate_stage_supply(stage_tier: int, run_count: int, seed_value: i
 				var value := get_definition_value(definition)
 				# 확정 통조림 픽업은 위 루프에서 따로 세고 가치 예산 밖에 둔다
 				# (try_register_loot과 같은 규약) — 탄약·부품 스폰을 잠식하지 않는다.
-				if run_value + value > int(profile.get("field_value_cap", 0)):
+				if run_value + value > get_stage_value_cap(stage_tier, "field_value_cap"):
 					continue
 				if (
 					str(definition.get("type", "")) == "weapon"
@@ -1392,6 +1410,9 @@ static func _materialize_item(
 	data["amount"] = amount
 	data["item_id"] = item_id
 	data["stage_tier"] = clampi(stage_tier, 1, 5)
+	if loot_type == "valuable":
+		# 귀중품 존 가치 — 존 배율(VALUABLE_STAGE_MULTIPLIER)을 base_value에 곱한다.
+		data["base_value"] = int(round(float(data.get("base_value", 0)) * get_valuable_stage_multiplier(stage_tier)))
 	if loot_type == "armor":
 		# 장비 레벨은 도시 티어를 따라 굴린다 — 상위 도시일수록 같은 장비도
 		# 좋은 개체가 나와 갈아 끼우는 맛을 만든다. 가치도 레벨을 따라 오른다.

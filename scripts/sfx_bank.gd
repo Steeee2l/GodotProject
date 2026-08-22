@@ -49,6 +49,8 @@ const SOUNDS := {
 	"container_open": {"bus": "SFX", "volume_db": -9.0, "pitch_jitter": 0.06, "min_interval_ms": 120, "unit_size": 6.0, "max_distance": 30.0},
 	"ui_tap": {"bus": "UI", "volume_db": -13.0, "pitch_jitter": 0.05, "min_interval_ms": 40, "unit_size": 6.0, "max_distance": 30.0},
 	"toast_pop": {"bus": "UI", "volume_db": -17.0, "pitch_jitter": 0.06, "min_interval_ms": 120, "unit_size": 6.0, "max_distance": 30.0},
+	# 작업대 강화 성공 — 금속 "챙" 한 번(연타 0.11s 간격이라 최소 간격은 짧게).
+	"enhance_clink": {"bus": "UI", "volume_db": -12.0, "pitch_jitter": 0.05, "min_interval_ms": 40, "unit_size": 6.0, "max_distance": 30.0},
 }
 
 static var bank_node: Node
@@ -309,6 +311,7 @@ static func _synthesize(id: String) -> PackedFloat32Array:
 		"container_open": return _synth_container_open()
 		"ui_tap": return _synth_ui_tap()
 		"toast_pop": return _synth_toast_pop()
+		"enhance_clink": return _synth_enhance_clink()
 	return PackedFloat32Array()
 
 
@@ -635,6 +638,20 @@ static func _synth_ui_tap() -> PackedFloat32Array:
 		var tone := sin(TAU * 1200.0 * time) * exp(-time * 150.0)
 		var transient := rng.randf_range(-1.0, 1.0) * exp(-time * 400.0) * 0.35
 		buffer[index] = tone + transient
+	return buffer
+
+
+static func _synth_enhance_clink() -> PackedFloat32Array:
+	# 강화 "챙" — 2.6kHz·3.9kHz 비조화 두 음(망치 친 쇠) + 아주 짧은 노이즈 타격, 빠른 감쇠.
+	var duration := 0.13
+	var buffer := _new_buffer(duration)
+	var rng := _rng(20260822)
+	for index in buffer.size():
+		var time := float(index) / MIX_RATE
+		var ring := sin(TAU * 2600.0 * time) * exp(-time * 38.0) * 0.7
+		var overtone := sin(TAU * 3900.0 * time) * exp(-time * 52.0) * 0.45
+		var strike := rng.randf_range(-1.0, 1.0) * exp(-time * 520.0) * 0.5
+		buffer[index] = ring + overtone + strike
 	return buffer
 
 

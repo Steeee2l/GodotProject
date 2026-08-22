@@ -468,6 +468,8 @@ func take_damage(amount: int) -> void:
 	if player_death_sequence_active:
 		return
 	var applied_damage := maxi(1, roundi(float(amount) * GameState.get_damage_taken_multiplier()))
+	# 방어구 돌파 +50 — 필드(main.take_damage)와 같은 규칙(피격 후 1.5s 추가 피해 −20%).
+	applied_damage = GameState.apply_post_hit_guard(applied_damage)
 	GameState.player_health = maxi(0, GameState.player_health - applied_damage)
 	_update_health()
 	SFX.play("hit_player")

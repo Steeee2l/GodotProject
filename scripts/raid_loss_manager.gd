@@ -123,7 +123,8 @@ static func fill_secure_slots_from_loot(loot: Dictionary) -> void:
 		{"key": "medkits", "type": "consumable", "id": "medkit"},
 	]
 	for candidate in candidates:
-		if GameState.secure_dog_items.size() >= GameState.secure_dog_slots:
+		# 슬롯 수는 단일 지점(방어구 돌파 +90 보너스 포함).
+		if GameState.secure_dog_items.size() >= GameState.get_secure_slot_count():
 			break
 		var key := str(candidate.key)
 		if loot.get(key) is Dictionary:

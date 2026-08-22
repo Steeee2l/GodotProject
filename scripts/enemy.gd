@@ -2735,6 +2735,20 @@ func take_projectile_hit(
 	# hit_zone은 탄도의 명중 등급("center"/"normal"/"graze")이다. 예전 "head" 비교는
 	# 어떤 경로로도 올 수 없는 값이라 죽은 분기였다.
 	var final_damage := roundi(float(amount) * critical_multiplier) if is_critical else amount
+	# 무기 돌파 +70 보너스 — 플레이어 탄환이 엘리트·보스를 때릴 때만 +20%(일반 적 제외).
+	# 배율의 단일 지점은 GameState.get_player_elite_damage_multiplier(장착 무기 기준). 오토로드
+	# 식별자를 직접 쓰면 --script 콜드 스타트에서 enemy.gd 컴파일이 깨지므로 노드 경로로 찾는다.
+	if (
+		(elite or bool(get_meta("raid_boss", false)))
+		and is_instance_valid(attacker)
+		and attacker is Node
+		and (attacker as Node).is_in_group("player")
+	):
+		var game_state := get_node_or_null("/root/GameState")
+		if game_state != null:
+			var elite_multiplier := float(game_state.call("get_player_elite_damage_multiplier"))
+			if elite_multiplier > 1.0:
+				final_damage = maxi(1, roundi(float(final_damage) * elite_multiplier))
 	take_hit(final_damage, hit_direction, is_critical, hit_zone)
 
 

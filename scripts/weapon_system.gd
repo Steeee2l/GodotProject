@@ -363,6 +363,10 @@ static func build_stats(
 		var damage_bonus := 0.03 * float(level)
 		if level > 10:
 			damage_bonus = 0.30 + 0.60 * (1.0 - pow(0.94, float(level - 10)))
+		# 대개편 3단계 — 수렴 곡선 위에 +51부터 선형 꼬리(+0.4%/Lv)를 얹는다. +50까지는 그대로,
+		# +70 ×1.97, +99 ≈ ×2.09. 3구간 비용 곡선으로 +60 이후가 실제로 닿는 구간이 됐으니,
+		# 그 구간에도 체감되는 파워가 있어야 한다(여전히 예전 선형 +3.5%/Lv의 ×2.75보다 낮다).
+		damage_bonus += 0.004 * float(maxi(0, level - 50))
 		stats["damage"] = float(stats.get("damage", 1.0)) * (1.0 + damage_bonus)
 		stats["base_spread_deg"] = float(stats.get("base_spread_deg", 2.0)) * maxf(0.72, 1.0 - float(level) * 0.003)
 		stats["recoil"] = float(stats.get("recoil", 1.0)) * maxf(0.76, 1.0 - float(level) * 0.0025)

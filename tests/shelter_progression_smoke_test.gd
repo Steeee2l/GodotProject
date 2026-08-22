@@ -46,7 +46,8 @@ func _run() -> void:
 	if bool(game_state.call("try_enhance_weapon", "ak47")):
 		_fail("+10 weapon must require a breakthrough before enhancing")
 	game_state.call("add_progression_item", "artisan_seal", 1)
-	game_state.call("add_mod_component", "precision_gear", 1)
+	# 대개편 3단계: +10 돌파 정밀 기어 (L/10)×2 = 2개.
+	game_state.call("add_mod_component", "precision_gear", 2)
 	if not bool(game_state.call("try_breakthrough", "weapon", "ak47")):
 		_fail("breakthrough with seal + gear + scrap must succeed")
 	if not bool(game_state.call("try_enhance_weapon", "ak47")):
