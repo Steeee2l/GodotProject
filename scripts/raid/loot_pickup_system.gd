@@ -182,7 +182,7 @@ func _loot_weapon_pixel_size(texture: Texture2D, weapon_id: String) -> float:
 			target_long_edge = 0.72
 		"mp5":
 			target_long_edge = 1.1
-		"double_barrel":
+		"double_barrel", "pump_shotgun":
 			target_long_edge = 1.3
 	var texture_long_edge := float(maxi(texture.get_width(), texture.get_height()))
 	return target_long_edge / maxf(texture_long_edge, 1.0)
@@ -369,6 +369,10 @@ func _collect_nearby_ammo() -> void:
 				str(host.nearby_ammo_pickup.get_meta("display_name", "무기")),
 				amount,
 			]
+			# 사다리 상위 무기를 처음 주웠다면 강화 이관을 한 줄 더 띄운다.
+			var transfer_notice := GameState.take_weapon_enhancement_transfer_notice()
+			if not transfer_notice.is_empty():
+				host.hud.push_toast(transfer_notice, HudStyle.GOLD, 3.4)
 		"valuable":
 			# 엘리트 확정 드랍으로 귀중품이 바닥 픽업으로 흔해졌다. 이 match에
 			# "valuable" 분기가 없어서 아래 탄약 분기로 떨어져 762탄이 지급되던
@@ -682,6 +686,8 @@ func _raid_item_display_name(item_type: String, item_id: String) -> String:
 		"churu": "희귀 츄르",
 		"rifle_blueprint": "소총 제작 청사진",
 		"shotgun_blueprint": "산탄총 제작 청사진",
+		"akm_blueprint": "AKM 개조 청사진",
+		"pump_blueprint": "펌프 산탄총 청사진",
 		"sealed_zone_keycard": "봉인구역 키카드",
 		"namdaemun_depot_plans": "남대문 창고 설계도",
 		"euljiro_grid_schematic": "을지로 배전 도면",

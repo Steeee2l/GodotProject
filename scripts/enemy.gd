@@ -25,6 +25,10 @@ const ENEMY_MAGAZINE_CAPACITY := {
 	"mp5": 14,
 	"ak47": 12,
 	"double_barrel": 2,
+	# 사다리 상위 기종 — 적 손에선 같은 계열 아키타입으로 다룬다.
+	"akm": 12,
+	"k2": 12,
+	"pump_shotgun": 3,
 }
 const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const ENEMY_ANIMATION_ROOT := "res://assets/enemies/character_5"
@@ -1992,11 +1996,16 @@ func _update_weapon_visual() -> void:
 	weapon_visual.visible = not dying
 
 
+func _is_shotgun() -> bool:
+	# 산탄 계열(더블배럴·펌프) 공용 판정 — 펠릿 수·총구 거리에 쓴다.
+	return str(weapon_stats.get("category", "")) == "산탄총"
+
+
 func _get_weapon_muzzle_position(direction: Vector3) -> Vector3:
 	var reach := 0.78
 	if weapon_id == "m1911":
 		reach = 0.58
-	elif weapon_id == "double_barrel":
+	elif _is_shotgun():
 		reach = 0.88
 	return global_position + direction * reach + Vector3(0, 0.48, 0)
 
@@ -2088,10 +2097,10 @@ func _update_pistol(direction: Vector3, distance: float, delta: float) -> void:
 		"mp5":
 			preferred_min = 10.0
 			preferred_max = 22.0
-		"ak47":
+		"ak47", "akm", "k2":
 			preferred_min = 15.0
 			preferred_max = 30.0
-		"double_barrel":
+		"double_barrel", "pump_shotgun":
 			preferred_min = 4.0
 			preferred_max = 9.0
 	if opening_pressure_time > 0.0 and distance > 3.0:
@@ -2186,9 +2195,9 @@ func _get_weapon_engagement_range() -> float:
 	match weapon_id:
 		"mp5":
 			return 38.0
-		"ak47":
+		"ak47", "akm", "k2":
 			return 48.0
-		"double_barrel":
+		"double_barrel", "pump_shotgun":
 			return 12.0
 		_:
 			return 24.0
@@ -2353,9 +2362,9 @@ func _get_weapon_burst_size() -> int:
 	# 초반 최대의 억울한 죽음 원인이었다. 위협도가 높을수록 점사가 길어진다.
 	match weapon_id:
 		"mp5": return mini(magazine_size, 4 + roundi(4.0 * threat_level))
-		"ak47": return mini(magazine_size, 3 + roundi(4.0 * threat_level))
+		"ak47", "akm", "k2": return mini(magazine_size, 3 + roundi(4.0 * threat_level))
 		"m1911": return mini(magazine_size, 3 + roundi(3.0 * threat_level))
-		"double_barrel": return 1
+		"double_barrel", "pump_shotgun": return 1
 	return 1
 
 
@@ -2367,8 +2376,8 @@ func _get_enemy_fire_interval() -> float:
 func _get_weapon_burst_cooldown() -> float:
 	match weapon_id:
 		"mp5": return lerpf(0.72, 0.34, threat_level)
-		"ak47": return lerpf(0.88, 0.4, threat_level)
-		"double_barrel": return lerpf(2.3, 1.25, threat_level)
+		"ak47", "akm", "k2": return lerpf(0.88, 0.4, threat_level)
+		"double_barrel", "pump_shotgun": return lerpf(2.3, 1.25, threat_level)
 	return lerpf(1.05, 0.58, threat_level)
 
 
@@ -2377,7 +2386,10 @@ func _get_enemy_bullet_damage() -> int:
 	match weapon_id:
 		"mp5": base_damage = 6 + roundi(3.0 * threat_level)
 		"ak47": base_damage = 9 + roundi(4.0 * threat_level)
-		"double_barrel": base_damage = 5 + roundi(2.0 * threat_level)
+		# 상위 소총을 든 적은 한 발이 조금 더 아프다(+1) — 총의 정체성은 지키되
+		# 존 체력 곡선(러버밴딩 없음)은 그대로다. 적 무장은 존 threat이 정한다.
+		"akm", "k2": base_damage = 10 + roundi(4.0 * threat_level)
+		"double_barrel", "pump_shotgun": base_damage = 5 + roundi(2.0 * threat_level)
 	# 엘리트 배율(일반 1.0) — 존 티어 스탯 위에 곱한다.
 	return roundi(float(base_damage) * elite_damage_multiplier)
 
@@ -2403,7 +2415,7 @@ func _fire_weapon(direction: Vector3) -> void:
 		return
 	magazine_ammo -= 1
 	_play_enemy_gunshot()
-	var pellet_count := 6 if weapon_id == "double_barrel" else 1
+	var pellet_count := 6 if _is_shotgun() else 1
 	var base_spread := float(weapon_stats.get("base_spread_deg", 2.0))
 	var accuracy_multiplier := lerpf(1.55, 0.72, threat_level)
 	for pellet_index in pellet_count:
@@ -2428,10 +2440,10 @@ func _fire_weapon(direction: Vector3) -> void:
 
 func _get_weapon_range_profile() -> Vector3:
 	match weapon_id:
-		"double_barrel": return Vector3(6.5, 15.0, 0.16)
+		"double_barrel", "pump_shotgun": return Vector3(6.5, 15.0, 0.16)
 		"mp5": return Vector3(13.0, 29.0, 0.32)
 		"m1911": return Vector3(17.0, 34.0, 0.42)
-		"ak47": return Vector3(25.0, 46.0, 0.58)
+		"ak47", "akm", "k2": return Vector3(25.0, 46.0, 0.58)
 	return Vector3(16.0, 34.0, 0.35)
 
 
@@ -2504,7 +2516,7 @@ func _start_recoil_pose() -> void:
 	visual_tween.tween_property(sprite, "position", SPRITE_BASE_POSITION, 0.12)
 	if weapon_visual:
 		var weapon_base_position := weapon_visual.position
-		var weapon_recoil := 0.13 if weapon_id == "ak47" else 0.08
+		var weapon_recoil := 0.13 if weapon_id in ["ak47", "akm", "k2"] else 0.08
 		var weapon_tween := create_tween()
 		weapon_tween.tween_property(
 			weapon_visual,

@@ -3344,10 +3344,12 @@ func _on_dash_button_pressed() -> void:
 
 func _get_weapon_range_profile(weapon_id: String) -> Vector3:
 	match weapon_id:
-		"double_barrel": return Vector3(6.5, 15.0, 0.16)
+		"double_barrel", "pump_shotgun": return Vector3(6.5, 15.0, 0.16)
 		"mp5": return Vector3(13.0, 29.0, 0.32)
 		"m1911": return Vector3(17.0, 34.0, 0.42)
-		"ak47": return Vector3(25.0, 46.0, 0.58)
+		"ak47", "akm": return Vector3(25.0, 46.0, 0.58)
+		# K2 — 사다리 3단 소총, 사거리가 조금 더 길다.
+		"k2": return Vector3(28.0, 50.0, 0.6)
 	return Vector3(16.0, 34.0, 0.35)
 
 
@@ -3355,7 +3357,7 @@ func _get_weapon_critical_chance() -> float:
 	match equipped_weapon_id:
 		"m1911": return 0.16
 		"mp5": return 0.08
-		"double_barrel": return 0.11
+		"double_barrel", "pump_shotgun": return 0.11
 		_: return 0.12
 
 

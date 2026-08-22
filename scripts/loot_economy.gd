@@ -463,6 +463,27 @@ const ITEM_CATALOG := {
 		"rarity_tier": 3,
 		"minimum_stage": 3,
 	},
+	# ── 무기 사다리 청사진 ──
+	# 메인 미션 체인 2단계 보상 전용(을지로 2단계 → AKM, 남대문 2단계 → 펌프).
+	# 드랍 테이블·상인 매대에 넣지 않는다. progression 타입이라 가방 칸 0.
+	"akm_blueprint": {
+		"loot_type": "progression_item",
+		"progression_item_id": "akm_blueprint",
+		"display_name": "AKM 개조 청사진",
+		"base_value": 2600,
+		"slot_size": 1,
+		"rarity_tier": 3,
+		"minimum_stage": 3,
+	},
+	"pump_blueprint": {
+		"loot_type": "progression_item",
+		"progression_item_id": "pump_blueprint",
+		"display_name": "펌프 산탄총 청사진",
+		"base_value": 2200,
+		"slot_size": 1,
+		"rarity_tier": 3,
+		"minimum_stage": 2,
+	},
 	"sealed_zone_keycard": {
 		"loot_type": "progression_item",
 		"progression_item_id": "sealed_zone_keycard",
@@ -542,6 +563,40 @@ const ITEM_CATALOG := {
 		"rarity_tier": 3,
 		"minimum_stage": 3,
 		"weight": 3.0,
+	},
+	# ── 무기 사다리 상위 기종 ──
+	# akm·pump_shotgun은 존3+ 적 무장 풀과 weapon_case에 낮은 비율로 들어간다.
+	# k2는 카탈로그에만 있다(정산·창고 표시용) — 적 풀·상자 어디에도 안 넣는다.
+	# 용산 통제 키로 작업대에서만 만든다(_roll_weapon_id 목록에서도 제외).
+	"akm": {
+		"loot_type": "weapon",
+		"weapon_id": "akm",
+		"display_name": "AKM",
+		"base_value": 3600,
+		"slot_size": 10,
+		"rarity_tier": 3,
+		"minimum_stage": 3,
+		"weight": 1.4,
+	},
+	"pump_shotgun": {
+		"loot_type": "weapon",
+		"weapon_id": "pump_shotgun",
+		"display_name": "펌프 산탄총",
+		"base_value": 2900,
+		"slot_size": 9,
+		"rarity_tier": 3,
+		"minimum_stage": 3,
+		"weight": 1.6,
+	},
+	"k2": {
+		"loot_type": "weapon",
+		"weapon_id": "k2",
+		"display_name": "K2",
+		"base_value": 6400,
+		"slot_size": 10,
+		"rarity_tier": 4,
+		"minimum_stage": 5,
+		"weight": 0.0,
 	},
 	"ammo_9mm_fmj": {
 		"loot_type": "ammo",
@@ -1179,7 +1234,8 @@ static func simulate_stage_supply(stage_tier: int, run_count: int, seed_value: i
 
 static func _roll_weapon_id(stage_tier: int, random: RandomNumberGenerator) -> String:
 	var weighted: Array = []
-	for item_id_value in ["m1911", "mp5", "double_barrel", "ak47"]:
+	# k2는 의도적으로 뺀다 — 용산 통제 키 전용 제작 무기.
+	for item_id_value in ["m1911", "mp5", "double_barrel", "ak47", "akm", "pump_shotgun"]:
 		var item_id := str(item_id_value)
 		var definition := ITEM_CATALOG[item_id] as Dictionary
 		if _item_allowed(definition, stage_tier):
@@ -1415,10 +1471,10 @@ static func _enemy_ammo_item_id(
 		"mp5":
 			ordinary_id = "ammo_9mm_fmj"
 			high_tier_id = "ammo_9mm_ap"
-		"double_barrel":
+		"double_barrel", "pump_shotgun":
 			ordinary_id = "ammo_12g_buckshot"
 			high_tier_id = "ammo_12g_slug"
-		"ak47":
+		"ak47", "akm", "k2":
 			ordinary_id = "ammo_762_fmj"
 			high_tier_id = "ammo_762_ap"
 		_:

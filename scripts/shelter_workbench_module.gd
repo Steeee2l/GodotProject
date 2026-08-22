@@ -6,6 +6,7 @@ const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
 const SHELTER_UI := preload("res://scripts/shelter_ui_components.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
+const SHELTER_REQUISITION := preload("res://scripts/shelter/requisition.gd")
 const AMMO_TEXTURE := preload("res://assets/items/ammo_762.png")
 const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
@@ -127,14 +128,20 @@ const RECIPES := {
 			"result": {"weapon": "mp5", "amount": 1},
 			"required_tier": 1,
 		},
+		# ── 무기 사다리 ──
+		# AK-47 레시피는 뺐다 — 시작 무기라 만들 이유가 없었다. 그 자리에 AKM(2단).
+		# 청사진은 메인 미션 2단계 보상이 확정 경로, 기존 소총 청사진(봉인 보급함
+		# 드랍)도 대체 해금으로 인정한다(required_blueprint_alternatives).
+		# 상위 기종을 처음 만들면 아래 단계 강화의 60%가 자동 이관된다.
 		{
-			"id": "ak47",
-			"name": "AK-47 캣라시니코프",
-			"desc": "강한 반동과 총성을 감수하고 화력을 얻는 소총.",
-			"cost": {"scrap": 56300, "catnip": 4200, "scope_lens": 1, "magazine_spring": 2},
-			"result": {"weapon": "ak47", "amount": 1},
+			"id": "akm",
+			"name": "AKM 개조형",
+			"desc": "AK를 손본 개조 소총. 40발 탄창, 더 묵직하고 덜 튄다. 첫 제작 시 AK-47 강화의 60%를 이어받습니다.",
+			"cost": {"scrap": 60000, "catnip": 4200, "scope_lens": 1, "magazine_spring": 2},
+			"result": {"weapon": "akm", "amount": 1},
 			"required_tier": 3,
-			"required_blueprint": "rifle_blueprint",
+			"required_blueprint": "akm_blueprint",
+			"required_blueprint_alternatives": ["rifle_blueprint"],
 		},
 		{
 			"id": "double_barrel",
@@ -144,6 +151,26 @@ const RECIPES := {
 			"result": {"weapon": "double_barrel", "amount": 1},
 			"required_tier": 3,
 			"required_blueprint": "shotgun_blueprint",
+		},
+		{
+			"id": "pump_shotgun",
+			"name": "펌프 산탄총 하울러",
+			"desc": "6발 튜브 탄창 산탄총. 두 발 쏘고 숨을 일이 없다. 첫 제작 시 참치 헌터 강화의 60%를 이어받습니다.",
+			"cost": {"scrap": 50000, "catnip": 3600, "rubber_gasket": 3, "magazine_spring": 2},
+			"result": {"weapon": "pump_shotgun", "amount": 1},
+			"required_tier": 3,
+			"required_blueprint": "pump_blueprint",
+		},
+		{
+			# 3단 — 청사진이 아니라 용산 통제 키(메인 미션 3단계 키, Tier 5 확장 키와
+			# 같은 물건)를 본다. 적 풀·상자·뽑기 어디에도 없는 작업대 전용 무기.
+			"id": "k2",
+			"name": "K2 전투소총",
+			"desc": "용산 봉쇄선의 군용 전투소총. 관통 2, 안정된 반동. 첫 제작 시 AKM(또는 AK) 강화의 60%를 이어받습니다.",
+			"cost": {"scrap": 250000, "catnip": 9000, "scope_lens": 3, "rubber_gasket": 3, "magazine_spring": 3},
+			"result": {"weapon": "k2", "amount": 1},
+			"required_tier": 4,
+			"required_blueprint": "yongsan_control_key",
 		},
 	],
 	"supplies": [
@@ -712,11 +739,7 @@ func _can_craft(recipe: Dictionary) -> bool:
 		return false
 	if GameState.shelter_workbench_level < int(recipe.get("required_workbench", 1)):
 		return false
-	var required_blueprint := str(recipe.get("required_blueprint", ""))
-	if (
-		not required_blueprint.is_empty()
-		and GameState.get_progression_item_count(required_blueprint) <= 0
-	):
+	if not _has_required_blueprint(recipe):
 		return false
 	for key in _effective_cost(recipe).keys():
 		if _owned_resource(str(key)) < int(_effective_cost(recipe)[key]):
@@ -763,7 +786,11 @@ func _craft(recipe: Dictionary) -> void:
 		var artisan_result := GameState.roll_artisan_weapon()
 		if not artisan_result.is_empty():
 			selected_recipe_id = "artisan_roll"
-			_set_craft_feedback("장인의 손길 — 결과를 확인하세요")
+			var artisan_transfer := GameState.take_weapon_enhancement_transfer_notice()
+			_set_craft_feedback(
+				"장인의 손길 — 결과를 확인하세요" if artisan_transfer.is_empty()
+				else "장인의 손길 — %s" % artisan_transfer
+			)
 		_refresh_after_change()
 		return
 	if bool(result.get("enhance", false)):
@@ -818,7 +845,12 @@ func _craft(recipe: Dictionary) -> void:
 	elif result.has("repair"):
 		GameState.weapon_durability = minf(100.0, GameState.weapon_durability + float(result["repair"]))
 	GameState.save_persistent_state()
-	_set_craft_feedback("제작 완료 · %s" % str(recipe.get("name", "")))
+	var transfer_notice := GameState.take_weapon_enhancement_transfer_notice()
+	if transfer_notice.is_empty():
+		_set_craft_feedback("제작 완료 · %s" % str(recipe.get("name", "")))
+	else:
+		# 사다리 상위 무기 첫 제작 — 강화 이관 결과를 완료 문구에 붙인다.
+		_set_craft_feedback("제작 완료 · %s · %s" % [str(recipe.get("name", "")), transfer_notice])
 	_refresh_after_change()
 
 
@@ -899,6 +931,13 @@ func _blueprint_hint_text(blueprint_id: String) -> String:
 	var blueprint_name := str(
 		(LOOT_ECONOMY.ITEM_CATALOG.get(blueprint_id, {}) as Dictionary).get("display_name", blueprint_id)
 	)
+	# 메인 미션 보상 청사진·키는 그 단계를 가리킨다(카탈로그가 유일한 진실).
+	var mission_source: Dictionary = SHELTER_REQUISITION.get_key_item_source(blueprint_id)
+	if not mission_source.is_empty():
+		var zone_name := str(GameState.get_raid_zone(str(mission_source.get("zone_id", ""))).get("name", ""))
+		return "%s · %s 메인 미션 %d단계 보상" % [
+			blueprint_name, zone_name, int(mission_source.get("stage_index", 0)) + 1,
+		]
 	var source := "봉인 보급함"
 	for container_id in LOOT_ECONOMY.CONTAINER_DEFINITIONS.keys():
 		var table := LOOT_ECONOMY.CONTAINER_DEFINITIONS[container_id] as Dictionary
@@ -1015,11 +1054,22 @@ func _is_recipe_locked(recipe: Dictionary) -> bool:
 		return true
 	if GameState.shelter_workbench_level < int(recipe.get("required_workbench", 1)):
 		return true
+	return not _has_required_blueprint(recipe)
+
+
+func _has_required_blueprint(recipe: Dictionary) -> bool:
+	# required_blueprint(주 경로) 또는 required_blueprint_alternatives(대체 경로)
+	# 중 하나라도 보유하면 해금. 키 아이템(용산 통제 키)도 같은 칸에 둔다 —
+	# get_progression_item_count가 가방+창고를 함께 본다.
 	var required_blueprint := str(recipe.get("required_blueprint", ""))
-	return (
-		not required_blueprint.is_empty()
-		and GameState.get_progression_item_count(required_blueprint) <= 0
-	)
+	if required_blueprint.is_empty():
+		return true
+	if GameState.get_progression_item_count(required_blueprint) > 0:
+		return true
+	for alternative in (recipe.get("required_blueprint_alternatives", []) as Array):
+		if GameState.get_progression_item_count(str(alternative)) > 0:
+			return true
+	return false
 
 
 func _recipe_state_color(recipe: Dictionary) -> Color:
@@ -1032,11 +1082,10 @@ func _recipe_state_color(recipe: Dictionary) -> Color:
 
 func _recipe_list_subtitle(recipe: Dictionary) -> String:
 	var required_blueprint := str(recipe.get("required_blueprint", ""))
-	if (
-		not required_blueprint.is_empty()
-		and GameState.get_progression_item_count(required_blueprint) <= 0
-	):
+	if not _has_required_blueprint(recipe):
 		# 어느 청사진인지, 어디서 나오는지까지 말한다.
+		if SHELTER_REQUISITION.is_key_item(required_blueprint):
+			return "키 필요 · %s" % _blueprint_hint_text(required_blueprint)
 		return "청사진 필요 · %s" % _blueprint_hint_text(required_blueprint)
 	var required_tier := int(recipe.get("required_tier", 1))
 	if GameState.shelter_tier < required_tier:
@@ -1311,10 +1360,34 @@ func _build_result_preview(recipe: Dictionary) -> Control:
 	if not stat_line.is_empty():
 		var stat_label := _label(stat_line, 13, Color("#9fc4b4"))
 		stat_label.name = "ResultPreviewStats"
+		# 이관 안내가 둘째 줄로 붙는다(\n) — 줄바꿈은 살리고 가로만 자른다.
 		stat_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 		stat_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		text_box.add_child(stat_label)
 	return card
+
+
+func _enhancement_transfer_preview(weapon_id: String) -> String:
+	# 사다리 상위 무기의 결과 미리보기 한 줄 — "AK-47 +10 → AKM +6 (강화 60% 이관)".
+	# 이미 이관을 받은(또는 보유한) 무기는 비운다.
+	if GameState.weapon_enhancement_transfers_done.has(weapon_id):
+		return ""
+	var lower_ids: Array[String] = WeaponSystem.get_lower_ladder_weapons(weapon_id)
+	if lower_ids.is_empty():
+		return ""
+	var from_id := ""
+	var from_level := 0
+	for candidate_id in lower_ids:
+		var level := GameState.get_weapon_enhancement_level(candidate_id)
+		if level > from_level:
+			from_level = level
+			from_id = candidate_id
+	if from_id.is_empty():
+		return "첫 제작 시 하위 무기 강화 60% 이관"
+	var transferred := int(floor(float(from_level) * WeaponSystem.ENHANCEMENT_TRANSFER_RATIO))
+	return "첫 제작 시 %s +%d → %s +%d (강화 60%% 이관)" % [
+		_resource_name(from_id).split(" ")[0], from_level, _resource_name(weapon_id).split(" ")[0], transferred,
+	]
 
 
 func _result_stat_line(recipe: Dictionary) -> String:
@@ -1326,11 +1399,15 @@ func _result_stat_line(recipe: Dictionary) -> String:
 		if weapon.is_empty():
 			return ""
 		var interval := maxf(0.01, float(weapon.get("fire_interval", 0.2)))
-		return "피해 %d · 탄창 %d · 연사 %.1f/s" % [
+		var line := "피해 %d · 탄창 %d · 연사 %.1f/s" % [
 			int(weapon.get("damage", 0)),
 			int(weapon.get("magazine_size", 0)),
 			1.0 / interval,
 		]
+		var transfer_line := _enhancement_transfer_preview(str(result["weapon"]))
+		if not transfer_line.is_empty():
+			line += "\n" + transfer_line
+		return line
 	if result.has("weapon_mod"):
 		var mod := WeaponSystem.get_mod(str(result["weapon_mod"])) as Dictionary
 		return str(mod.get("slot", "")).to_upper() if not mod.is_empty() else ""
@@ -1363,6 +1440,12 @@ func _resource_name(key: String) -> String:
 			return "AK-47 캣라시니코프"
 		"double_barrel":
 			return "더블배럴 참치 헌터"
+		"akm":
+			return "AKM 개조형"
+		"pump_shotgun":
+			return "펌프 산탄총 하울러"
+		"k2":
+			return "K2 전투소총"
 		"canned_food":
 			return "통조림"
 	# 방어구 ID는 장비 정의가 이름을 안다(레벨 접미사까지 해석한다).

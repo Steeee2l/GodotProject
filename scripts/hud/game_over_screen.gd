@@ -407,6 +407,9 @@ func _get_loot_weapon_name(weapon_id: String) -> String:
 		"m1911": return "M1911"
 		"mp5": return "MP5"
 		"double_barrel": return "Shotgun"
+		"pump_shotgun": return "Pump"
+		"akm": return "AKM"
+		"k2": return "K2"
 		"baseball_bat": return "Bat"
 		_: return "AK-47"
 

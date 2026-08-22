@@ -75,6 +75,9 @@ var mod_component_inventory: Dictionary = {
 var progression_item_inventory: Dictionary = {
 	"rifle_blueprint": 0,
 	"shotgun_blueprint": 0,
+	# 무기 사다리 청사진 — 메인 미션 2단계 보상(을지로 → AKM, 남대문 → 펌프).
+	"akm_blueprint": 0,
+	"pump_blueprint": 0,
 	"sealed_zone_keycard": 0,
 	# 쉘터 티어 3~5 확장 키(SHELTER_UPGRADE_COSTS.key_item). 메인 미션 보상 전용.
 	"namdaemun_depot_plans": 0,
@@ -758,9 +761,21 @@ const CANNED_FOOD_SCRAP_VALUE := 70
 # 여기서 실제 관문으로 만든다.
 const MILESTONE_UNLOCKS := {
 	"craft_rifle": {
+		# 작업대 AK-47 레시피는 AKM으로 바뀌었다 — 소총 청사진은 AKM 제작의
+		# 필드 드랍 경로(봉인 보급함)로 남는다. 확정 경로는 을지로 2단계의 AKM 청사진.
 		"title": "소총 제작 해금",
-		"body": "청사진을 읽었다. 작업대에서 캣라시니코프를 직접 만들 수 있다.",
+		"body": "소총 청사진을 읽었다. 작업대에서 AKM 개조형을 만들 수 있다.",
 		"requires_progression": "rifle_blueprint",
+	},
+	"craft_akm": {
+		"title": "AKM 개조 해금",
+		"body": "을지로의 주조 도면을 읽었다. 작업대에서 AKM 개조형을 만들 수 있다 — AK의 강화를 60% 이어받는다.",
+		"requires_progression": "akm_blueprint",
+	},
+	"craft_pump": {
+		"title": "펌프 산탄총 해금",
+		"body": "남대문 봉쇄 명부 뒷장의 도면이다. 작업대에서 펌프 산탄총을 만들 수 있다 — 참치 헌터의 강화를 60% 이어받는다.",
+		"requires_progression": "pump_blueprint",
 	},
 	"craft_shotgun": {
 		"title": "산탄총 제작 해금",
@@ -2477,6 +2492,94 @@ func add_weapon(weapon_id: String, amount: int = 1) -> void:
 		var magazine_size := int(definition.get("magazine_size", 0))
 		if not ammo_id.is_empty() and magazine_size > 0:
 			set_ammo_count(ammo_id, get_ammo_count(ammo_id) + magazine_size * 2)
+		# 작업대 제작·장인 뽑기·필드 픽업·정산 귀속 — 무기가 들어오는 길은 전부
+		# 여기를 지나므로 "처음 보유" 훅은 이 한 곳이면 된다.
+		_on_weapon_first_owned(weapon_id)
+
+
+# ── 무기 사다리 · 강화 이관 ──────────────────────────────────────
+# 같은 가족(소총 ak47→akm→k2, 산탄 double_barrel→pump_shotgun)의 상위 무기를
+# 처음 손에 넣는 순간, 아래 단계의 강화를 60% 이어받는다(내림). 고철 비용 없음,
+# 하위 무기의 강화는 그대로 — 갈아타기가 손실이 아니라 승계여야 사다리가 선다.
+# 상위 무기 1정당 평생 1회(weapon_enhancement_transfers_done, 세이브 저장) —
+# 사망으로 가방을 잃고 다시 주워도 다시 이관되지 않는다. 플레이어 상태를
+# 적 스탯·드랍률에 되먹이지 않으므로 러버밴딩과 무관하다.
+var weapon_enhancement_transfers_done: Array = []
+var last_weapon_enhancement_transfer: Dictionary = {}
+
+
+func _on_weapon_first_owned(weapon_id: String) -> void:
+	transfer_weapon_enhancement_on_first_own(weapon_id)
+
+
+func transfer_weapon_enhancement_on_first_own(to_id: String) -> Dictionary:
+	# 사다리에서 to_id 아래 단계(보유 여부 무관, 강화 레벨이 가장 높은 것)를 찾아
+	# transfer_weapon_enhancement를 1회 호출한다. 이관이 없으면 빈 딕셔너리.
+	if weapon_enhancement_transfers_done.has(to_id):
+		return {}
+	var lower_ids: Array[String] = WEAPON_SYSTEM.get_lower_ladder_weapons(to_id)
+	if lower_ids.is_empty():
+		return {}
+	var from_id := ""
+	var from_level := 0
+	for candidate_id in lower_ids:
+		var level := get_weapon_enhancement_level(candidate_id)
+		if level > from_level:
+			from_level = level
+			from_id = candidate_id
+	# 이관할 강화가 없어도 "1회"는 소진한다 — 상위를 먼저 줍고 하위를 키워서
+	# 나중에 다시 받는 역순 플레이를 막는다.
+	weapon_enhancement_transfers_done.append(to_id)
+	if from_id.is_empty() or from_level <= 0:
+		return {}
+	return transfer_weapon_enhancement(from_id, to_id)
+
+
+func transfer_weapon_enhancement(from_id: String, to_id: String) -> Dictionary:
+	# to 레벨 = max(기존 to 레벨, floor(from 레벨 × 0.6)). from 레벨은 유지.
+	# 같은 가족이 아니거나 상위 방향이 아니면 아무것도 안 한다.
+	var family_id := WEAPON_SYSTEM.get_weapon_family(from_id)
+	if family_id.is_empty() or family_id != WEAPON_SYSTEM.get_weapon_family(to_id):
+		return {}
+	var ladder: Array = WEAPON_SYSTEM.WEAPON_FAMILY_LADDER[family_id]
+	if ladder.find(from_id) >= ladder.find(to_id):
+		return {}
+	var from_level := get_weapon_enhancement_level(from_id)
+	var transferred_level := int(floor(float(from_level) * WEAPON_SYSTEM.ENHANCEMENT_TRANSFER_RATIO))
+	var previous_level := get_weapon_enhancement_level(to_id)
+	var next_level := clampi(maxi(previous_level, transferred_level), 0, MAX_WEAPON_ENHANCEMENT)
+	if next_level <= previous_level:
+		return {}
+	weapon_enhancement_levels[to_id] = next_level
+	if to_id == equipped_weapon_id:
+		weapon_level = next_level + 1
+	var result := {
+		"from_id": from_id,
+		"to_id": to_id,
+		"from_level": from_level,
+		"previous_level": previous_level,
+		"level": next_level,
+		"notice": "%s +%d의 강화를 이어받았다 → %s +%d" % [
+			_weapon_short_name(from_id), from_level, _weapon_short_name(to_id), next_level,
+		],
+	}
+	last_weapon_enhancement_transfer = result
+	return result
+
+
+func take_weapon_enhancement_transfer_notice() -> String:
+	# 방금 일어난 이관의 토스트 문구를 한 번만 돌려준다(픽업·작업대·뽑기 공용).
+	if last_weapon_enhancement_transfer.is_empty():
+		return ""
+	var notice := str(last_weapon_enhancement_transfer.get("notice", ""))
+	last_weapon_enhancement_transfer = {}
+	return notice
+
+
+func _weapon_short_name(weapon_id: String) -> String:
+	# 'AK-47 "캣라시니코프"' → 'AK-47'. 토스트 한 줄에 별명까지 넣으면 넘친다.
+	var display_name := str(WEAPON_SYSTEM.get_weapon(weapon_id).get("display_name", weapon_id))
+	return display_name.split("\"")[0].strip_edges()
 
 
 # ── 장비 레벨 ──────────────────────────────────────────────────
@@ -3640,6 +3743,10 @@ func get_weapon_enhancement_cost(weapon_id: String) -> int:
 		"mp5": weapon_factor = 1.2
 		"ak47": weapon_factor = 1.55
 		"double_barrel": weapon_factor = 1.4
+		# 사다리 상위 기종 — 기본 피해가 높은 만큼 같은 +N에 더 비싸다.
+		"akm": weapon_factor = 1.7
+		"pump_shotgun": weapon_factor = 1.5
+		"k2": weapon_factor = 2.0
 	# ×1.11 → ×1.28. 쉘터 수입이 지수(생산기 Lv당 ×1.9, 주민 수)로 크는데 강화
 	# 비용은 완만해 티어 3쯤엔 한 시간 수입으로 +40을 찍었다 — 싱크가 아니라
 	# 파워 폭주 경로였다. 이제 +10 10.6K, +20 126K, +30 1.5M, +40 17.7M:
@@ -3736,6 +3843,10 @@ func roll_artisan_weapon() -> Dictionary:
 		pool.append("ak47")
 	if shelter_tier >= 3:
 		pool.append("double_barrel")
+		# 사다리 2단 — Tier 3부터 뽑기에도 들어간다(확정 천장은 맨 뒤 = AKM).
+		# K2는 용산 통제 키 전용이라 뽑기에 없다.
+		pool.append("pump_shotgun")
+		pool.append("akm")
 	var guaranteed := artisan_pity >= ARTISAN_PITY_LIMIT
 	var result_id := pool[pool.size() - 1] if guaranteed else pool[randi() % pool.size()]
 	if guaranteed:
@@ -4326,6 +4437,7 @@ func save_persistent_state() -> bool:
 		"equipped_head_armor_id": equipped_head_armor_id,
 		"equipped_footwear_id": equipped_footwear_id,
 		"weapon_enhancement_levels": weapon_enhancement_levels,
+		"weapon_enhancement_transfers_done": weapon_enhancement_transfers_done,
 		"mod_enhancement_levels": mod_enhancement_levels,
 		"equipped_weapon_id": equipped_weapon_id,
 		"weapon_durability": weapon_durability,
@@ -4495,7 +4607,8 @@ func load_persistent_state() -> bool:
 		data.get("progression_item_inventory", progression_item_inventory) as Dictionary
 	).duplicate(true)
 	for progression_item_id in [
-		"rifle_blueprint", "shotgun_blueprint", "sealed_zone_keycard",
+		"rifle_blueprint", "shotgun_blueprint", "akm_blueprint", "pump_blueprint",
+		"sealed_zone_keycard",
 		"namdaemun_depot_plans", "euljiro_grid_schematic", "yongsan_control_key",
 	]:
 		if not progression_item_inventory.has(progression_item_id):
@@ -4514,6 +4627,9 @@ func load_persistent_state() -> bool:
 	equipped_head_armor_id = str(data.get("equipped_head_armor_id", equipped_head_armor_id))
 	equipped_footwear_id = str(data.get("equipped_footwear_id", equipped_footwear_id))
 	weapon_enhancement_levels = (data.get("weapon_enhancement_levels", weapon_enhancement_levels) as Dictionary).duplicate(true)
+	# 구세이브엔 키가 없다 → 빈 배열(= 아직 아무 이관도 안 함). 상위 무기를 이미
+	# 들고 있던 세이브는 다음 "처음 보유" 순간이 없으니 자연히 이관 대상이 아니다.
+	weapon_enhancement_transfers_done = (data.get("weapon_enhancement_transfers_done", []) as Array).duplicate()
 	mod_enhancement_levels = (data.get("mod_enhancement_levels", mod_enhancement_levels) as Dictionary).duplicate(true)
 	equipped_weapon_id = str(data.get("equipped_weapon_id", equipped_weapon_id))
 	weapon_durability = float(data.get("weapon_durability", weapon_durability))
@@ -4715,6 +4831,8 @@ func reset_run() -> void:
 	progression_item_inventory = {
 		"rifle_blueprint": 0,
 		"shotgun_blueprint": 0,
+		"akm_blueprint": 0,
+		"pump_blueprint": 0,
 		"sealed_zone_keycard": 0,
 		"namdaemun_depot_plans": 0,
 		"euljiro_grid_schematic": 0,
@@ -4799,6 +4917,8 @@ func reset_run() -> void:
 	merchant_stock.clear()
 	merchant_missed_visit = false
 	weapon_enhancement_levels = {"ak47": 0}
+	weapon_enhancement_transfers_done = []
+	last_weapon_enhancement_transfer = {}
 	mod_enhancement_levels.clear()
 	artisan_pity = 0
 	selected_raid_zone = "jongno_outskirts"

@@ -145,7 +145,13 @@ func _run() -> void:
 	(game_state.get("main_mission_progress") as Dictionary)["euljiro_depths"] = 2  # 3단계 미완 → 키 없음
 	var granted: Array[String] = SHELTER_REQUISITION.ensure_story_key_items()
 	print("  ⑤ GRANTED=%s" % str(granted))
-	_check(granted.size() == 1 and granted[0] == "namdaemun_depot_plans", "⑤ only completed chain key is backfilled")
+	# 무기 사다리 청사진(남대문 2단계 → pump_blueprint, 을지로 2단계 → akm_blueprint)도
+	# 같은 경로로 보정된다 — 끝낸 단계의 보상만 들어오고, 을지로 3단계 키는 여전히 없다.
+	_check(
+		granted.has("namdaemun_depot_plans") and granted.has("pump_blueprint") and granted.has("akm_blueprint")
+		and granted.size() == 3,
+		"⑤ only completed chain rewards are backfilled (got %s)" % str(granted)
+	)
 	_check(int(game_state.call("get_progression_item_count", "namdaemun_depot_plans")) == 1, "⑤ backfilled key count 1")
 	_check(int(game_state.call("get_progression_item_count", "euljiro_grid_schematic")) == 0, "⑤ incomplete chain not granted")
 	_check((SHELTER_REQUISITION.ensure_story_key_items() as Array).is_empty(), "⑤ idempotent")

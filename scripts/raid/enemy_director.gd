@@ -389,6 +389,15 @@ func _spawn_enemy(
 				enemy_weapon_id = "ak47"
 			else:
 				enemy_weapon_id = "double_barrel"
+			# 사다리 2단 무장 — 존3+(threat ≥ 0.5)부터 소총/산탄 칸의 일부를 상위
+			# 기종으로 바꾼다(0.5→10%, 1.0→30%). 존 threat만 본다 — 러버밴딩 없음.
+			# 들고 있던 총은 _enemy_carried_weapon_allowed 경로로 드랍된다(의도).
+			# K2는 적 풀에 없다(용산 키 전용 제작).
+			if threat >= 0.5 and spawn_random.randf() < lerpf(0.1, 0.3, (threat - 0.5) / 0.5):
+				if enemy_weapon_id == "ak47":
+					enemy_weapon_id = "akm"
+				elif enemy_weapon_id == "double_barrel":
+					enemy_weapon_id = "pump_shotgun"
 		enemy_ranged_spawn_serial += 1
 	var enemy := CharacterBody3D.new()
 	enemy.name = "%s_%s_Enemy%d" % [kind.capitalize(), enemy_weapon_id, enemy_spawn_serial]
@@ -445,6 +454,12 @@ func spawn_initial_elites(world: ProceduralCityMap) -> void:
 			elite_weapon_id = "double_barrel"
 		elif weapon_roll >= 0.45:
 			elite_weapon_id = "ak47"
+		# 존3+ 엘리트는 절반이 사다리 2단 무장 — 확정 드랍이 사다리를 올려 준다.
+		if zone_threat >= 0.5 and spawn_random.randf() < 0.5:
+			if elite_weapon_id == "ak47":
+				elite_weapon_id = "akm"
+			elif elite_weapon_id == "double_barrel":
+				elite_weapon_id = "pump_shotgun"
 		var elite := _spawn_enemy(
 			"pistol",
 			anchor,

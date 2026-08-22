@@ -139,7 +139,7 @@ static func shot_sound_for_weapon(weapon_id: String) -> String:
 		"m1911", "mp5":
 			# 권총탄(.45 / 9mm) — 짧고 높고 탁한 소리. MP5는 피치만 살짝 올린다.
 			return "pistol_shot"
-		"double_barrel", "rocket_launcher":
+		"double_barrel", "pump_shotgun", "rocket_launcher":
 			# 산탄 — 넓게 퍼지는 저음 + 긴 꼬리. 로켓 발사는 같은 소리를 낮춰 쓴다.
 			return "shotgun_shot"
 		_:

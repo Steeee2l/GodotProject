@@ -14,9 +14,10 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var weapon_system: Script = load("res://scripts/weapon_system.gd")
-	assert(weapon_system.WEAPONS.size() == 4)
+	# 무기 사다리: akm·k2·pump_shotgun 3종과 전용 탄창 3개가 늘었다(4 → 7).
+	assert(weapon_system.WEAPONS.size() == 7)
 	assert(weapon_system.MODS.size() == 11)
-	assert(weapon_system.MAGAZINES.size() == 4)
+	assert(weapon_system.MAGAZINES.size() == 7)
 	assert(weapon_system.AMMO_TYPES.size() == 8)
 	var no_mods: Array[String] = []
 	var test_mods: Array[String] = ["laser_pointer", "muffled_sock", "quick_mag"]

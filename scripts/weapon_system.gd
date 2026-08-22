@@ -113,13 +113,114 @@ const WEAPONS := {
 		"reload_time": 2.8,
 		"sound_radius": 58.0,
 	},
+	# ── 무기 사다리(2·3단) ─────────────────────────────────────────
+	# 시작 무기 AK가 최강 소총이라 "강화해서 쓰다가 다음 총으로 갈아타는" 흐름이
+	# 없었다. 같은 구경(7.62x39 / 12g)을 공유하는 상위 기종을 두고, 강화는
+	# WEAPON_FAMILY_LADDER를 따라 60% 이관된다(GameState.transfer_weapon_enhancement).
+	# 새 구경은 만들지 않는다 — 탄약 수급선이 갈라지면 갈아타는 비용이 벽이 된다.
+	"akm": {
+		# 2단(을지로·용산). AK보다 묵직하고 조금 더 안정된 개조 소총.
+		"display_name": "AKM \"개조형\"",
+		"category": "소총",
+		"ammo_type": "762x39",
+		"magazine_id": "akm_40rnd",
+		"default_ammo_id": "762_fmj",
+		"magazine_size": 40,
+		"damage": 38,
+		"pellet_count": 1,
+		"fire_interval": 0.115,
+		"automatic": true,
+		"base_spread_deg": 2.1,
+		"max_spread_deg": 13.0,
+		"spread_per_shot_deg": 1.15,
+		"spread_recovery_deg": 5.6,
+		"moving_spread_multiplier": 1.7,
+		"injured_spread_multiplier": 1.4,
+		"loaf_spread_multiplier": 0.45,
+		"recoil_kick": 0.62,
+		"loaf_recoil_multiplier": 0.28,
+		"player_knockback": 0.17,
+		"penetration_count": 1,
+		"durability_loss": 0.06,
+		"reload_time": 2.3,
+		"sound_radius": 54.0,
+	},
+	"k2": {
+		# 3단(남산). 용산 통제 키가 있어야 작업대에서 만든다 — 적 풀·상자에 없다.
+		"display_name": "K2 \"전투소총\"",
+		"category": "소총",
+		"ammo_type": "762x39",
+		"magazine_id": "k2_30rnd",
+		"default_ammo_id": "762_fmj",
+		"magazine_size": 30,
+		"damage": 48,
+		"pellet_count": 1,
+		"fire_interval": 0.11,
+		"automatic": true,
+		"base_spread_deg": 1.7,
+		"max_spread_deg": 12.0,
+		"spread_per_shot_deg": 1.05,
+		"spread_recovery_deg": 6.0,
+		"moving_spread_multiplier": 1.6,
+		"injured_spread_multiplier": 1.35,
+		"loaf_spread_multiplier": 0.45,
+		"recoil_kick": 0.5,
+		"loaf_recoil_multiplier": 0.28,
+		"player_knockback": 0.15,
+		"penetration_count": 2,
+		"durability_loss": 0.055,
+		"reload_time": 2.0,
+		"sound_radius": 54.0,
+	},
+	"pump_shotgun": {
+		# 2단 산탄총. 펠릿당 피해는 더블배럴보다 낮지만(~0.85) 6발 튜브 탄창으로
+		# "두 발 쏘고 무방비"가 사라진다. 장전은 탄 하나씩이지만 단순화해 전체 2.6초.
+		"display_name": "펌프 산탄총 \"하울러\"",
+		"category": "산탄총",
+		"ammo_type": "12g",
+		"magazine_id": "pump_6rnd",
+		"default_ammo_id": "12g_buckshot",
+		"magazine_size": 6,
+		"damage": 15,
+		"pellet_count": 8,
+		"fire_interval": 0.55,
+		"automatic": false,
+		"base_spread_deg": 6.5,
+		"max_spread_deg": 17.0,
+		"spread_per_shot_deg": 4.0,
+		"spread_recovery_deg": 4.2,
+		"moving_spread_multiplier": 1.5,
+		"injured_spread_multiplier": 1.45,
+		"loaf_spread_multiplier": 0.7,
+		"recoil_kick": 1.2,
+		"loaf_recoil_multiplier": 0.55,
+		"player_knockback": 0.7,
+		"penetration_count": 0,
+		"durability_loss": 0.1,
+		"reload_time": 2.6,
+		"sound_radius": 58.0,
+	},
 }
+
+# ── 무기 가족 사다리 ──────────────────────────────────────────
+# 같은 가족 안에서 "하위 → 상위" 순서. 상위 무기를 처음 손에 넣는 순간
+# 바로 아래 단계(보유 중이면 그 중 가장 높은 레벨)의 강화를 60% 이관한다.
+# 하위 무기의 강화는 그대로 남는다 — 갈아타기가 손실이 아니라 승계여야 한다.
+const WEAPON_FAMILY_LADDER := {
+	"rifle": ["ak47", "akm", "k2"],
+	"shotgun": ["double_barrel", "pump_shotgun"],
+}
+const ENHANCEMENT_TRANSFER_RATIO := 0.6
 
 const MAGAZINES := {
 	"m1911_7rnd": {"caliber": "45_acp", "capacity": 7, "weapons": ["m1911"]},
 	"mp5_30rnd": {"caliber": "9mm", "capacity": 30, "weapons": ["mp5"]},
 	"ak_30rnd": {"caliber": "762x39", "capacity": 30, "weapons": ["ak47"]},
 	"double_barrel_chamber": {"caliber": "12g", "capacity": 2, "weapons": ["double_barrel"]},
+	# 사다리 상위 기종 — 구경은 기존 탄과 공유하고 탄창만 전용이다.
+	"akm_40rnd": {"caliber": "762x39", "capacity": 40, "weapons": ["akm"]},
+	"k2_30rnd": {"caliber": "762x39", "capacity": 30, "weapons": ["k2"]},
+	"pump_6rnd": {"caliber": "12g", "capacity": 6, "weapons": ["pump_shotgun"]},
 }
 
 const AMMO_TYPES := {
@@ -187,7 +288,8 @@ const MODS := {
 	"ak_precision_receiver": {
 		"display_name": "AK 정밀 단발 리시버",
 		"slot": "special",
-		"compatible_weapons": ["ak47"],
+		# AKM도 같은 리시버 규격 — 사다리를 오르면서 특수 파츠를 잃지 않게 한다.
+		"compatible_weapons": ["ak47", "akm"],
 		"multipliers": {"damage": 1.15, "base_spread_deg": 0.42, "recoil_kick": 0.72},
 		"overrides": {"automatic": false, "fire_interval": 0.28, "special_mechanic": "precision_semi_auto"},
 	},
@@ -312,3 +414,25 @@ static func is_ammo_compatible(magazine_id: String, ammo_id: String) -> bool:
 
 static func validate_ammo_loadout(weapon_id: String, magazine_id: String, ammo_id: String) -> bool:
 	return is_magazine_compatible(weapon_id, magazine_id) and is_ammo_compatible(magazine_id, ammo_id)
+
+
+static func get_weapon_family(weapon_id: String) -> String:
+	for family_id in WEAPON_FAMILY_LADDER:
+		if (WEAPON_FAMILY_LADDER[family_id] as Array).has(weapon_id):
+			return str(family_id)
+	return ""
+
+
+static func get_lower_ladder_weapons(weapon_id: String) -> Array[String]:
+	# 같은 가족에서 이 무기보다 아래 단계의 id들(낮은 순). 가족이 없거나
+	# 맨 아래면 빈 배열.
+	var result: Array[String] = []
+	var family_id := get_weapon_family(weapon_id)
+	if family_id.is_empty():
+		return result
+	var ladder: Array = WEAPON_FAMILY_LADDER[family_id]
+	var index := ladder.find(weapon_id)
+	for lower_index in index:
+		result.append(str(ladder[lower_index]))
+	return result
+

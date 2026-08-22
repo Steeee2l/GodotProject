@@ -789,8 +789,10 @@ const CHAINS := {
 				"canned_food": 19,
 				"churu": 2,
 				"components": {"magazine_spring": 2},
+				# 무기 사다리 — 명부 뒷장에 끼워 둔 펌프 산탄총 도면. 첫 회수에만.
+				"progression_items": {"pump_blueprint": 1},
 				"xp": 640,
-				"summary": "봉쇄 명부 해독 · 통조림 +19 · 츄르 +2 · 탄창 스프링 +2 · XP +640",
+				"summary": "봉쇄 명부 해독 · 통조림 +19 · 츄르 +2 · 탄창 스프링 +2 · XP +640\n펌프 산탄총 청사진 획득 · 작업대에서 펌프 산탄총 제작 가능",
 			},
 			"repeat_reward": {
 				"canned_food": 7,
@@ -1086,8 +1088,10 @@ const CHAINS := {
 				"canned_food": 27,
 				"churu": 3,
 				"components": {"magazine_spring": 3},
+				# 무기 사다리 — 주조 도면 = AKM 개조 청사진. 첫 회수에만.
+				"progression_items": {"akm_blueprint": 1},
 				"xp": 1080,
-				"summary": "주조 도면 해독 · 통조림 +27 · 츄르 +3 · 탄창 스프링 +3 · XP +1080",
+				"summary": "주조 도면 해독 · 통조림 +27 · 츄르 +3 · 탄창 스프링 +3 · XP +1080\nAKM 개조 청사진 획득 · 작업대에서 AKM 제작 가능",
 			},
 			"repeat_reward": {
 				"canned_food": 10,

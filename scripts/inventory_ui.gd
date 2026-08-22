@@ -2451,6 +2451,10 @@ func _progression_item_name(item_id: String) -> String:
 			return "소총 제작 청사진"
 		"shotgun_blueprint":
 			return "산탄총 제작 청사진"
+		"akm_blueprint":
+			return "AKM 개조 청사진"
+		"pump_blueprint":
+			return "펌프 산탄총 청사진"
 		"sealed_zone_keycard":
 			return "봉인구역 키카드"
 		"namdaemun_depot_plans":
@@ -2465,9 +2469,13 @@ func _progression_item_name(item_id: String) -> String:
 func _progression_item_description(item_id: String) -> String:
 	match item_id:
 		"rifle_blueprint":
-			return "AK 계열 소총 제작법을 해금하는 희귀 청사진입니다."
+			return "AK 계열 소총(AKM 개조형) 제작법을 해금하는 희귀 청사진입니다."
 		"shotgun_blueprint":
 			return "고화력 산탄총 제작법을 해금하는 희귀 청사진입니다."
+		"akm_blueprint":
+			return "작업대에서 AKM 개조형을 만들 수 있습니다. 첫 제작 시 AK-47 강화의 60%를 이어받습니다. 가방 칸을 차지하지 않습니다."
+		"pump_blueprint":
+			return "작업대에서 펌프 산탄총을 만들 수 있습니다. 첫 제작 시 참치 헌터 강화의 60%를 이어받습니다. 가방 칸을 차지하지 않습니다."
 		"sealed_zone_keycard":
 			return "Stage 4 봉인구역 진입에 필요한 보안 키카드입니다."
 		"namdaemun_depot_plans":
