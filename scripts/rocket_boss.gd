@@ -46,6 +46,10 @@ var mines_deployed_total := 0
 var mine_target_snapshot := Vector3.ZERO
 var poise_damage_accumulated := 0.0
 var enrage_triggered := false
+# 보스 체력바 피드백 — 피격 순간 채움이 흰색으로 번쩍이고, 포이즈 게이지가 아래 얇게 쌓인다.
+var hit_flash_timer := 0.0
+var poise_bar_background: Sprite3D
+var poise_bar_fill: Sprite3D
 
 
 func configure_rocket_boss(target_body: CharacterBody3D, initial_threat: float) -> void:
@@ -68,11 +72,13 @@ func configure_rocket_boss(target_body: CharacterBody3D, initial_threat: float) 
 				"get_raid_zone", str(game_state.get("selected_raid_zone"))
 			) as Dictionary
 			zone_tier = clampi(int(zone.get("stage_tier", 1)), 1, 5)
-	var tier_multiplier := 1.0 + float(zone_tier - 1) * 0.45
-	# 기준: 중반 화력(AK+2, DPS ~240)이 회피 시간 포함 25~40초를 싸우는 양.
-	# 결투 시뮬 실측으로 산정 — 808이었을 땐 4초 만에 끝나 패턴이 놀았다.
+	var tier_multiplier := 1.0 + float(zone_tier - 1) * 0.30
+	# 기준: 유저 신고 "아무리 때려도 안 줄어든다". 예전 (2400+위협×1400)×(1+0.45×(티어-1))은
+	# 종로 2,610 / 남산 ~7,900 — AK+0 30dmg·실명중 50%면 첫 보스에만 3탄창 넘게 들었다.
+	# 지금은 종로 ~1,235(AK+0 약 41발·1.4탄창), 남산 ~4,400. 포이즈(16%)·격노(40%)는 그대로라
+	# "줄어든다"는 체감만 바뀌고 패턴 리듬은 유지된다. 808이었을 땐 4초 만에 끝나 패턴이 놀았다.
 	var boss_health := roundi(
-		(2400.0 + clampf(initial_threat, 0.0, 1.0) * 1400.0) * tier_multiplier
+		(1100.0 + clampf(initial_threat, 0.0, 1.0) * 900.0) * tier_multiplier
 	)
 	health = boss_health
 	max_health = boss_health
@@ -103,6 +109,13 @@ func _ready() -> void:
 	for health_node in [health_bar_background, health_bar_damage_trail, health_bar_fill]:
 		if health_node != null:
 			health_node.position.y = 2.78
+			# 보스 바는 일반 적보다 1.5배 크게 — 멀리서도 "줄어드는 것"이 보여야 한다.
+			health_node.pixel_size = 0.0108
+	if health_bar_damage_trail != null:
+		# 감소분 잔상은 흰색, 0.4초 머문 뒤 따라 줄어든다(일반 적은 주황·0.28초).
+		health_bar_damage_trail.texture = _get_health_bar_texture("trail_white")
+	damage_trail_delay_seconds = 0.4
+	_setup_poise_bar()
 	if reload_indicator != null:
 		reload_indicator.position.y = 3.12
 	if threat_marker != null:
@@ -117,6 +130,7 @@ func _physics_process(delta: float) -> void:
 	mine_pattern_cooldown = maxf(0.0, mine_pattern_cooldown - delta)
 	_update_alert_marker(delta)
 	_update_enemy_health_bar(delta)
+	_update_boss_bars(delta)
 	if dying:
 		velocity = velocity.move_toward(Vector3.ZERO, 7.0 * delta)
 		move_and_slide()
@@ -235,7 +249,8 @@ func _absorbs_hit_stagger(amount: int) -> bool:
 	# 넘는 순간에만 길게 그로기 — 퍼붓기의 보상이 '무력화'가 아니라
 	# '보상 창'이 되도록. 그로기 중 진행하던 패턴은 취소된다.
 	poise_damage_accumulated += float(amount)
-	var threshold := maxf(60.0, float(max_health) * POISE_BREAK_RATIO)
+	hit_flash_timer = 0.1
+	var threshold := _poise_threshold()
 	if poise_damage_accumulated < threshold:
 		_check_enrage()
 		return true
@@ -252,6 +267,52 @@ func _absorbs_hit_stagger(amount: int) -> bool:
 	_spawn_hit_burst(-facing_world_direction, Color("#ffd23e"), 16, 0.5)
 	_check_enrage()
 	return true
+
+
+func _poise_threshold() -> float:
+	return maxf(60.0, float(max_health) * POISE_BREAK_RATIO)
+
+
+func _setup_poise_bar() -> void:
+	# 체력바 바로 아래, 얇은 노란 게이지. 그로기 문턱까지 누적 피해가 쌓이는 게 보인다.
+	poise_bar_background = _create_health_bar_sprite("background", 0.0108, 112)
+	poise_bar_background.name = "PoiseBarBackground"
+	poise_bar_background.position.y = 2.62
+	poise_bar_background.scale = Vector3(1.0, 0.42, 1.0)
+	add_child(poise_bar_background)
+	poise_bar_fill = _create_health_bar_sprite("poise", 0.0108, 114)
+	poise_bar_fill.name = "PoiseBarFill"
+	poise_bar_fill.position.y = 2.62
+	poise_bar_fill.scale = Vector3(1.0, 0.42, 1.0)
+	poise_bar_fill.centered = false
+	poise_bar_fill.offset = Vector2(-45, -4)
+	poise_bar_fill.region_enabled = true
+	add_child(poise_bar_fill)
+	_set_health_bar_ratio(poise_bar_fill, 0.0)
+
+
+func get_poise_ratio() -> float:
+	return clampf(poise_damage_accumulated / _poise_threshold(), 0.0, 1.0)
+
+
+func _update_boss_bars(delta: float) -> void:
+	# 피격 플래시: 채움 바가 한순간 희게 번쩍 — "맞았다"가 바에서도 읽히게.
+	if hit_flash_timer > 0.0:
+		hit_flash_timer = maxf(0.0, hit_flash_timer - delta)
+		if health_bar_fill != null:
+			health_bar_fill.modulate = Color(2.4, 2.4, 2.4, player_visibility_factor)
+	if poise_bar_fill == null or poise_bar_background == null:
+		return
+	var should_show := not dying and player_visibility_factor > 0.01
+	var ratio := get_poise_ratio()
+	_set_health_bar_ratio(poise_bar_fill, ratio)
+	poise_bar_fill.modulate = Color(1.0, 1.0, 1.0, player_visibility_factor)
+	poise_bar_background.modulate = Color(1.0, 1.0, 1.0, player_visibility_factor)
+	poise_bar_background.visible = should_show
+	poise_bar_fill.visible = should_show and ratio > 0.001
+	if combat_state == "stagger":
+		# 그로기 중엔 게이지가 비어 있되 배경을 노랗게 — "보상 창" 표시.
+		poise_bar_background.modulate = Color(1.6, 1.4, 0.6, player_visibility_factor)
 
 
 func _boss_enraged() -> bool:

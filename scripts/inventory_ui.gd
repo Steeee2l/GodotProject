@@ -1322,7 +1322,8 @@ func _hide_weapon_detail() -> void:
 func _refresh_weapon_detail() -> void:
 	if weapon_title == null:
 		return
-	var stats := WEAPON_SYSTEM.build_stats(
+	# 훈련(장탄·장전)까지 반영된 실제 스탯 — 필드가 쓰는 단일 지점과 같은 값을 보여 준다.
+	var stats: Dictionary = game_state.build_player_weapon_stats(
 		game_state.equipped_weapon_id,
 		game_state.equipped_weapon_mods,
 		game_state.get_weapon_enhancement_level(game_state.equipped_weapon_id),

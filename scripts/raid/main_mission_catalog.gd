@@ -51,6 +51,10 @@ extends RefCounted
 const STAGES_PER_ZONE := 3
 
 # 대사창 초상화 — 기존 캐릭터 스프라이트의 정면 대기 프레임을 그대로 쓴다.
+# 시네마틱 모드 메타: 스텝 배열 첫머리의 {"mode": "bark"}는 "대사+카메라 눈길뿐인 장면"을
+# 하단 바크(조작 유지)로 흘리라는 강제다(FieldCinematic.classify_mode). 배우·이미지 컷·
+# 선택지가 있는 장면은 자동으로 event(세상 정지)로 간다. 바크 모드에서 focus는 건너뛰고
+# flash/shake는 HUD·카메라 흔들림으로만 남는다 — 유저 신고 "대사 때마다 못 움직인다".
 const PORTRAIT_NABI_PATH := "res://assets/characters/cat_8way/down_idle_0.png"
 const PORTRAIT_WORKER_PATH := "res://assets/characters/worker_cat/down_idle-frame-0.png"
 const PORTRAIT_JUHONG_PATH := "res://assets/characters/juhong/down_idle-frame-0.png"
@@ -74,6 +78,7 @@ const CHAINS := {
 			"type": "relay",
 			"cinematics": {
 				"intro": [
+					{"mode": "bark"},
 					{"type": "wait", "duration": 0.4},
 					{"type": "focus", "at": "site", "hold": 1.1},
 					{"type": "flash", "color": "#62c9ca", "pulses": 2, "duration": 0.9},
@@ -259,6 +264,7 @@ const CHAINS := {
 			"type": "relay",
 			"cinematics": {
 				"intro": [
+					{"mode": "bark"},
 					{"type": "wait", "duration": 0.35},
 					{"type": "focus", "at": "site", "hold": 1.0},
 					{
@@ -275,6 +281,7 @@ const CHAINS := {
 					{"type": "focus_player", "hold": 0.3},
 				],
 				"point_1": [
+					{"mode": "bark"},
 					{"type": "focus", "at": "site", "hold": 0.8},
 					{"type": "flash", "color": "#6fb7d8", "pulses": 2, "duration": 0.8},
 					{
@@ -409,6 +416,7 @@ const CHAINS := {
 			"type": "keyed",
 			"cinematics": {
 				"intro": [
+					{"mode": "bark"},
 					{"type": "wait", "duration": 0.35},
 					{"type": "focus", "at": "site", "hold": 1.0},
 					{"type": "flash", "color": "#e2c15f", "pulses": 3, "duration": 1.0},
@@ -549,6 +557,7 @@ const CHAINS := {
 			"type": "relay",
 			"cinematics": {
 				"intro": [
+					{"mode": "bark"},
 					{"type": "wait", "duration": 0.35},
 					{"type": "focus", "at": "site", "hold": 1.0},
 					{
@@ -714,6 +723,7 @@ const CHAINS := {
 			"type": "defense",
 			"cinematics": {
 				"intro": [
+					{"mode": "bark"},
 					{"type": "wait", "duration": 0.35},
 					{"type": "focus", "at": "site", "hold": 1.0},
 					{"type": "flash", "color": "#e7a847", "pulses": 3, "duration": 1.0},
@@ -806,6 +816,7 @@ const CHAINS := {
 			"type": "keyed",
 			"cinematics": {
 				"intro": [
+					{"mode": "bark"},
 					{"type": "wait", "duration": 0.35},
 					{"type": "focus", "at": "site", "hold": 1.0},
 					{

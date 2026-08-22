@@ -33,9 +33,22 @@ extends RefCounted
 #    "on_choice": Callable}
 #   {"type": "callback", "call": Callable}
 #
+# ── 두 가지 모드(classify_mode가 단일 판정 지점) ──────────────────
+#   bark  — 스텝이 lines/notice/callback/wait(+monologue)뿐이면: 레터박스도
+#           조작 잠금도 무적도 없다. 대사는 화면 하단 바크(FieldMonologue 패널)로
+#           자동 진행되고, 플레이어는 그동안 제 할 일을 한다. is_cinematic_active()
+#           는 false — main.gd의 잠금 9곳이 열린다. 건너뛰기(작은 버튼)는 바크 전체 취소.
+#   event — 배우·이미지 컷·선택지·카메라 포커스·플래시·셰이크가 하나라도 있으면:
+#           트리 일시정지(적·투사체·타이머 전부 정지) + 레터박스 + 대화 UI.
+#           연출 레이어는 PROCESS_MODE_ALWAYS, 트윈은 레이어 소유라 멈추지 않는다.
+#   스텝 배열 첫머리에 {"mode": "event"|"bark"} 메타를 두면 판정을 강제한다.
+#   유저 신고: "미션 대사 때마다 캐릭터를 못 움직여 불편하다 — 바크처럼 흘리거나
+#   세상을 멈추거나" 에 대한 답이다.
+#
 # 규칙:
-#   * 연출 중 플레이어는 무적이다(main.take_damage가 is_cinematic_active를 본다).
+#   * event 모드 중 플레이어는 무적이다(main.take_damage가 is_cinematic_active를 본다).
 #     전리품 교체 모달에서 겪은 "연출 보는 동안 맞아 죽는" 사고를 되풀이하지 않는다.
+#     어차피 트리가 멈춰 있으니 맞을 일도 없지만, 이중 안전장치로 남긴다.
 #   * 모든 연출은 건너뛸 수 있다. 단, 선택지 앞에서는 멈춘다 — 결정을 대신
 #     해 주지 않는다.
 
@@ -45,6 +58,14 @@ const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 
 const BAR_HEIGHT := 62.0
 const BAR_TIME := 0.4
+const MODE_BARK := "bark"
+const MODE_EVENT := "event"
+# 이 중 하나라도 있으면 event 모드 — 세상을 멈춰야 읽히는 연출들.
+const EVENT_STEP_TYPES := [
+	"focus", "focus_player", "flash", "shake",
+	"spawn_actor", "actor_walk", "actor_exit", "actor_fall",
+	"image_cut", "choice",
+]
 
 var host: Node
 var layer: CanvasLayer
@@ -64,6 +85,9 @@ var image_cut_root: Control
 var choice_root: Control
 
 var running := false
+var mode := MODE_EVENT
+# 시네마틱이 직접 건 일시정지인가 — 입력 중계 노드의 자가 복구는 이걸 건드리지 않는다.
+var _paused_by_cinematic := false
 var _sequence: Array = []
 var _step_index := 0
 var _finished_callback := Callable()
@@ -78,23 +102,67 @@ func attach(owner_node: Node) -> void:
 
 
 func is_active() -> bool:
+	# "조작을 잠가야 하는 연출이 도는가" — event 모드만 true. 바크는 플레이어의
+	# 시간을 빼앗지 않으므로 main.gd의 잠금·무적 게이트에 걸리지 않는다.
+	return running and mode == MODE_EVENT
+
+
+func is_running() -> bool:
 	return running
 
 
+func is_bark_active() -> bool:
+	# HUD가 하단 슬롯 겹침을 피할 때 쓰는 상태. 조작과는 무관하다.
+	return running and mode == MODE_BARK
+
+
+func get_mode() -> String:
+	return mode
+
+
+static func classify_mode(steps: Array) -> String:
+	# 모드 판정의 단일 지점. {"mode": ...} 메타가 있으면 그게 이긴다.
+	for step_value in steps:
+		if not (step_value is Dictionary):
+			continue
+		var step := step_value as Dictionary
+		if step.has("mode"):
+			return MODE_EVENT if str(step["mode"]) == MODE_EVENT else MODE_BARK
+	for step_value in steps:
+		if not (step_value is Dictionary):
+			continue
+		if str((step_value as Dictionary).get("type", "")) in EVENT_STEP_TYPES:
+			return MODE_EVENT
+	return MODE_BARK
+
+
 func play(sequence: Array, on_finished := Callable()) -> void:
-	if running or sequence.is_empty() or not is_instance_valid(host):
-		# 이미 연출 중이면 새 연출은 버린다 — 겹치면 조작 잠금이 꼬인다.
+	if sequence.is_empty() or not is_instance_valid(host):
+		if on_finished.is_valid():
+			on_finished.call()
+		return
+	if running and mode == MODE_BARK:
+		# 바크가 흐르는 중에 새 연출이 오면 바크를 접고 새 것을 튼다 — 바크는
+		# 배경음이지 줄 서서 기다릴 본편이 아니다.
+		skip()
+	if running:
+		# 이미 event 연출 중이면 새 연출은 버린다 — 겹치면 조작 잠금이 꼬인다.
 		if on_finished.is_valid():
 			on_finished.call()
 		return
 	running = true
+	mode = classify_mode(sequence)
 	_sequence = sequence.duplicate()
 	_step_index = 0
 	_fast_forward = false
 	_finished_callback = on_finished
 	_actors.clear()
 	_build_layer()
-	var tween := host.create_tween()
+	if mode == MODE_BARK:
+		_advance()
+		return
+	_pause_world()
+	var tween := _make_tween()
 	tween.tween_property(bar_top, "offset_bottom", BAR_HEIGHT, BAR_TIME).set_trans(
 		Tween.TRANS_QUAD
 	).set_ease(Tween.EASE_OUT)
@@ -102,6 +170,35 @@ func play(sequence: Array, on_finished := Callable()) -> void:
 		Tween.TRANS_QUAD
 	).set_ease(Tween.EASE_OUT)
 	_wait(BAR_TIME)
+
+
+func _pause_world() -> void:
+	# event 모드: 적·투사체·타이머 전부 멈춘다. 이미 멈춰 있던(ESC 메뉴 등)
+	# 일시정지는 우리 것이 아니므로 건드리지 않는다.
+	var tree := host.get_tree()
+	if tree == null or tree.paused:
+		return
+	tree.paused = true
+	_paused_by_cinematic = true
+
+
+func _resume_world() -> void:
+	if not _paused_by_cinematic:
+		return
+	_paused_by_cinematic = false
+	var tree := host.get_tree() if is_instance_valid(host) else null
+	if tree != null:
+		tree.paused = false
+
+
+func _make_tween() -> Tween:
+	# 연출 트윈은 레이어(PROCESS_MODE_ALWAYS)에 묶는다 — 트리가 멈춰도 배우가
+	# 걷고 레터박스가 닫힌다. 레이어가 없을 때만 호스트 트윈에 process 모드를 건다.
+	if is_instance_valid(layer) and layer.is_inside_tree():
+		return layer.create_tween()
+	var tween := host.create_tween()
+	tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	return tween
 
 
 func skip() -> void:
@@ -116,6 +213,12 @@ func skip() -> void:
 	if is_instance_valid(_step_tween):
 		_step_tween.kill()
 	_cancel_pending_advance()
+	if mode == MODE_BARK and is_instance_valid(host) and host.get("monologue") != null:
+		# 바크 전체 취소. 흐르던 lines 스텝의 on_done(_advance)이 여기서 불려
+		# 남은 스텝을 빨리 감기로 소화할 수 있다 — 그 뒤엔 running이 꺼져 있다.
+		host.monologue.cancel_bark()
+		if not running:
+			return
 	_advance()
 
 
@@ -129,6 +232,7 @@ func _advance() -> void:
 	if not is_instance_valid(host) or not host.is_inside_tree():
 		running = false
 		_cancel_pending_advance()
+		_resume_world()
 		return
 	while _step_index < _sequence.size():
 		var step := _sequence[_step_index] as Dictionary
@@ -174,9 +278,15 @@ func _run_step(step: Dictionary) -> bool:
 			_wait(float(step.get("duration", 1.2)))
 			return true
 		"focus":
+			if mode == MODE_BARK:
+				# 바크 모드는 카메라를 빌리지 않는다 — main의 추적이 살아 있어 트윈과
+				# 싸운다. 포커스는 조용히 건너뛴다({"mode": "bark"} 강제 시의 안전 장치).
+				return false
 			_focus_camera(step.get("position", Vector3.ZERO), float(step.get("hold", 1.0)))
 			return true
 		"focus_player":
+			if mode == MODE_BARK:
+				return false
 			var player := host.get("player") as Node3D
 			if is_instance_valid(player):
 				_focus_camera(player.global_position, float(step.get("hold", 0.4)))
@@ -187,8 +297,7 @@ func _run_step(step: Dictionary) -> bool:
 			_wait(float(step.get("duration", 1.0)))
 			return true
 		"shake":
-			host.set("camera_shake_time", float(step.get("duration", 0.45)))
-			host.set("camera_shake_strength", float(step.get("strength", 0.32)))
+			_play_shake(float(step.get("strength", 0.32)), float(step.get("duration", 0.45)))
 			_wait(float(step.get("duration", 0.45)))
 			return true
 		"spawn_actor":
@@ -201,6 +310,12 @@ func _run_step(step: Dictionary) -> bool:
 		"actor_fall":
 			return _actor_fall(step)
 		"lines":
+			if mode == MODE_BARK:
+				# 바크: 하단 패널로 자동 진행. 마지막 줄이 끝나면 다음 스텝.
+				host.monologue.play_bark(
+					step.get("lines", []), str(step.get("speaker", "나비")), _advance
+				)
+				return true
 			_open_dialogue(step)
 			return true
 		"image_cut":
@@ -242,18 +357,23 @@ func _finish() -> void:
 		return
 	running = false
 	_cancel_pending_advance()
-	# 조작 잠금은 레터박스가 걷히기 전에 먼저 푼다 — 답답함은 연출이 아니다.
+	# 조작 잠금·일시정지는 레터박스가 걷히기 전에 먼저 푼다 — 답답함은 연출이 아니다.
+	_resume_world()
 	var closing_layer := layer
 	layer = null
 	if is_instance_valid(closing_layer):
 		var closing_top := closing_layer.get_node_or_null("CineBarTop") as ColorRect
 		var closing_bottom := closing_layer.get_node_or_null("CineBarBottom") as ColorRect
-		var tween := host.create_tween()
-		if closing_top != null:
-			tween.tween_property(closing_top, "offset_bottom", 0.0, BAR_TIME)
-		if closing_bottom != null:
-			tween.parallel().tween_property(closing_bottom, "offset_top", 0.0, BAR_TIME)
-		tween.tween_callback(closing_layer.queue_free)
+		if closing_top == null and closing_bottom == null:
+			# 바크 모드 — 레터박스가 없으니 바로 치운다.
+			closing_layer.queue_free()
+		else:
+			var tween := closing_layer.create_tween()
+			if closing_top != null:
+				tween.tween_property(closing_top, "offset_bottom", 0.0, BAR_TIME)
+			if closing_bottom != null:
+				tween.parallel().tween_property(closing_bottom, "offset_top", 0.0, BAR_TIME)
+			tween.tween_callback(closing_layer.queue_free)
 	# 남은 배우는 어둠에 녹여 치운다. 연출이 끝난 자리에 이름표 달린 NPC가
 	# 그대로 서 있으면 그건 연출이 아니라 잔해다.
 	for actor_value in _actors.values():
@@ -261,6 +381,7 @@ func _finish() -> void:
 		if not is_instance_valid(actor):
 			continue
 		var fade := host.create_tween()
+		fade.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
 		var actor_sprite := actor.get_node_or_null("CharacterSprite") as GeometryInstance3D
 		if actor_sprite != null:
 			fade.tween_property(actor_sprite, "modulate:a", 0.0, 0.6)
@@ -298,6 +419,25 @@ func _build_layer() -> void:
 	relay.name = "CineInputRelay"
 	relay.cinematic = self
 	layer.add_child(relay)
+	if mode == MODE_BARK:
+		# 바크 모드: 레터박스도 입력 가로채기도 없다. 작은 건너뛰기 버튼 하나만.
+		skip_button = _make_button("건너뛰기", "close")
+		skip_button.name = "CineSkipButton"
+		skip_button.add_theme_font_size_override("font_size", 13)
+		skip_button.icon = UI_ICONS.get_icon("close", 16, Color("#cbd9cf"))
+		skip_button.modulate.a = 0.8
+		# 바크 패널(FieldMonologue: 중앙 하단, 반폭 ≤330, 위 -160) 오른쪽 위 모서리에
+		# 붙인다 — 우상단에 두면 살아 있는 HUD의 구역·탈출 거리 표시를 가린다.
+		var viewport_width: float = host.get_viewport().get_visible_rect().size.x
+		var half_width := minf(330.0, (viewport_width - 24.0) * 0.5)
+		skip_button.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		skip_button.offset_left = half_width - 104.0
+		skip_button.offset_right = half_width
+		skip_button.offset_top = -198.0
+		skip_button.offset_bottom = -164.0
+		skip_button.pressed.connect(skip)
+		layer.add_child(skip_button)
+		return
 	bar_top = ColorRect.new()
 	bar_top.name = "CineBarTop"
 	bar_top.color = Color.BLACK
@@ -355,7 +495,7 @@ func _focus_camera(target: Vector3, hold: float) -> void:
 		_wait(hold)
 		return
 	var destination := Vector3(target.x, rig.position.y, target.z)
-	_step_tween = host.create_tween()
+	_step_tween = _make_tween()
 	_step_tween.tween_property(rig, "position", destination, 0.75).set_trans(
 		Tween.TRANS_SINE
 	).set_ease(Tween.EASE_IN_OUT)
@@ -372,11 +512,47 @@ func _play_flash(color: Color, pulses: int) -> void:
 	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(flash)
 	layer.move_child(flash, 0)
-	var tween := host.create_tween()
+	var tween := _make_tween()
 	for _pulse in maxi(1, pulses):
 		tween.tween_property(flash, "color:a", 0.2, 0.12)
 		tween.tween_property(flash, "color:a", 0.0, 0.22)
 	tween.tween_callback(flash.queue_free)
+
+
+func _play_shake(strength: float, duration: float) -> void:
+	if mode == MODE_BARK:
+		# 세상이 돌고 있으면 main의 셰이크 경로를 그대로 쓴다.
+		host.set("camera_shake_time", duration)
+		host.set("camera_shake_strength", strength)
+		return
+	# main의 카메라 셰이크는 _physics_process가 맡는데 event 모드는 트리가
+	# 멈춰 있다. 그래서 연출이 직접 리그를 흔든다 — 레이어 트윈이라 멈추지 않는다.
+	var rig := host.get("camera_rig") as Node3D
+	if not is_instance_valid(rig):
+		return
+	# 오토로드는 식별자 대신 런타임 조회 — preload 기반 테스트에서 오토로드 등록 전
+	# 컴파일 캐스케이드가 나는 함정(rocket_boss.gd의 GameState 조회와 같은 이유).
+	var scale := 1.0
+	var accessibility := host.get_tree().root.get_node_or_null("AccessibilitySettings")
+	if accessibility != null:
+		scale = clampf(float(accessibility.get("camera_shake_scale")), 0.0, 1.0)
+	if scale <= 0.0 or duration <= 0.0:
+		return
+	var origin := rig.position
+	var rng := RandomNumberGenerator.new()
+	var tween := _make_tween()
+	tween.tween_method(func(progress: float) -> void:
+		if not is_instance_valid(rig):
+			return
+		var amplitude := strength * scale * (1.0 - progress)
+		rig.position = origin + Vector3(
+			rng.randf_range(-amplitude, amplitude), 0.0, rng.randf_range(-amplitude, amplitude)
+		)
+	, 0.0, 1.0, duration)
+	tween.tween_callback(func() -> void:
+		if is_instance_valid(rig):
+			rig.position = origin
+	)
 
 
 # ── 배우 ───────────────────────────────────────────────────────
@@ -400,6 +576,8 @@ func _spawn_actor(step: Dictionary) -> void:
 		float(step.get("pixel_size", 0.0105))
 	)
 	actor.position = step.get("position", Vector3.ZERO)
+	# event 모드는 트리를 멈추므로 배우만은 항상 처리 — 멈춘 세상에서 걷는다.
+	actor.process_mode = Node.PROCESS_MODE_ALWAYS
 	host.add_child(actor)
 	# 연출용 배우는 길을 막지 않는다 — 필드에서는 정지 충돌체가 플레이어를 가둔다.
 	var body := actor.get_node_or_null("CharacterBody") as StaticBody3D
@@ -417,7 +595,7 @@ func _actor_walk(step: Dictionary, exiting: bool) -> bool:
 	destination.y = actor.global_position.y
 	var walk_duration := maxf(0.2, float(step.get("duration", 1.4)))
 	actor.call("begin_scripted_walk")
-	_step_tween = host.create_tween()
+	_step_tween = _make_tween()
 	_step_tween.tween_property(
 		actor, "global_position", destination, walk_duration
 	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
@@ -445,9 +623,8 @@ func _actor_fall(step: Dictionary) -> bool:
 	if not is_instance_valid(actor):
 		return false
 	var sprite := actor.get_node_or_null("CharacterSprite") as Node3D
-	host.set("camera_shake_time", 0.28)
-	host.set("camera_shake_strength", 0.26)
-	_step_tween = host.create_tween()
+	_play_shake(0.26, 0.28)
+	_step_tween = _make_tween()
 	if sprite != null:
 		_step_tween.tween_property(sprite, "rotation:z", deg_to_rad(-78.0), 0.42).set_trans(
 			Tween.TRANS_QUAD
@@ -666,7 +843,7 @@ func _open_image_cut(step: Dictionary) -> void:
 	layer.add_child(typewriter)
 	typewriter.attach(cut_body)
 	typewriter.start("\n".join(lines))
-	var tween := host.create_tween()
+	var tween := _make_tween()
 	tween.tween_property(picture, "modulate:a", 1.0, 0.55).set_trans(Tween.TRANS_SINE)
 
 
@@ -806,11 +983,25 @@ class CinematicInputRelay extends Node:
 	func _ready() -> void:
 		process_mode = Node.PROCESS_MODE_ALWAYS
 
+	func _exit_tree() -> void:
+		# 연출 도중 판이 치워지면(사망·탈출·씬 교체) 시네마틱이 건 일시정지를
+		# 반드시 돌려놓는다 — 다음 씬이 멈춘 채 태어나면 안 된다.
+		# 단, 정상 종료로 치워지는 옛 레이어(_finish가 layer를 null로 비운 뒤
+		# queue_free)는 제외 — 바크 직후 시작한 event 연출의 일시정지를 풀어 버린다.
+		if cinematic == null or cinematic.get("layer") != get_parent():
+			return
+		if bool(cinematic.get("_paused_by_cinematic")):
+			cinematic.call("_resume_world")
+
 	func _process(_delta: float) -> void:
 		# 시네마틱 도중 트리가 일시정지로 남으면(포커스 자동 일시정지가
 		# 안 풀리는 등) 대화·트윈·버튼이 전부 죽어 '벽돌'이 된다. 연출 중
-		# 정당한 일시정지는 ESC 메뉴뿐이므로, 그 외에는 즉시 되살린다.
+		# 정당한 일시정지는 ESC 메뉴와 시네마틱 자신(event 모드)뿐이므로,
+		# 그 외에는 즉시 되살린다. 바크 모드는 조작이 살아 있어 전리품 교체 모달 등
+		# 정당한 일시정지가 얼마든지 올 수 있다 — 복구 대상이 아니다(is_active = event만).
 		if cinematic == null or not bool(cinematic.call("is_active")):
+			return
+		if bool(cinematic.get("_paused_by_cinematic")):
 			return
 		var tree := get_tree()
 		if tree == null or not tree.paused:
@@ -823,6 +1014,7 @@ class CinematicInputRelay extends Node:
 		tree.paused = false
 
 	func _unhandled_input(event: InputEvent) -> void:
+		# 바크 모드는 입력을 가로채지 않는다 — 클릭은 사격이고 탭은 이동이다.
 		if cinematic == null or not bool(cinematic.call("is_active")):
 			return
 		var advance := false

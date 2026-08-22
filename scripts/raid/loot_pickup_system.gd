@@ -358,9 +358,14 @@ func _collect_nearby_ammo() -> void:
 				host.nearby_ammo_pickup.get_meta("progression_item_id", "rifle_blueprint")
 			)
 			GameState.add_progression_item(progression_item_id, amount)
-			toast_text = "%s 획득" % str(
-				host.nearby_ammo_pickup.get_meta("display_name", "진행도 아이템")
+			# 진행도 품목은 칸 0 — 가방이 꽉 차도 먹힌다는 걸 토스트에서 바로 말해 준다.
+			var mission_tag := (
+				"임무 품목 · " if bool(host.nearby_ammo_pickup.get_meta("mission_item", false)) else ""
 			)
+			toast_text = "%s 획득 · %s가방 칸 사용 안 함" % [
+				str(host.nearby_ammo_pickup.get_meta("display_name", "진행도 아이템")),
+				mission_tag,
+			]
 			toast_seconds = 3.2
 		"weapon":
 			var weapon_id := str(host.nearby_ammo_pickup.get_meta("weapon_id", "ak47"))

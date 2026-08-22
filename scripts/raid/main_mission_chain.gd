@@ -19,6 +19,7 @@ extends RefCounted
 const MAIN_MISSION_CATALOG := preload("res://scripts/raid/main_mission_catalog.gd")
 const FIELD_CINEMATIC := preload("res://scripts/raid/field_cinematic.gd")
 const SHELTER_REQUISITION := preload("res://scripts/shelter/requisition.gd")
+const HUD_STYLE := preload("res://scripts/hud/hud_style.gd")
 const ALARM_WAVE_COUNT := 3
 const ALARM_WAVE_INTERVAL := 9.0
 const DEFENSE_HOLD_RADIUS := 9.0
@@ -77,7 +78,13 @@ func attach(owner_node: Node) -> void:
 
 
 func is_cinematic_active() -> bool:
+	# event 모드(조작 잠금·일시정지)만 true. 바크 모드는 조작을 막지 않는다.
 	return cinematic.is_active()
+
+
+func is_bark_active() -> bool:
+	# 바크 대사가 하단 슬롯에 흐르는 중 — HUD 겹침 회피용 상태.
+	return cinematic.is_bark_active()
 
 
 # ── 출정 시작 ──────────────────────────────────────────────────
@@ -533,12 +540,16 @@ func attempt_take_recovery(point_node: Node3D) -> void:
 		"title": str(recovery.get("title", "회수물")),
 		"description": str(recovery.get("description", "")),
 	}
-	if not GameState.can_add_raid_item("special_cargo", str(cargo.id), 1):
-		host._show_bag_full_notice()
-		return
+	# 메인 미션 회수물은 가방과 무관하게 먹힌다(칸 0·만재 검사 없음·교체 모달 없음).
+	# 유일한 거절 사유는 "이미 하나 들고 있다"뿐이다.
 	if not GameState.try_take_story_cargo(cargo):
-		host._show_bag_full_notice()
+		host._show_field_notice("이미 회수물을 들고 있다 — 먼저 탈출해서 정산하라")
 		return
+	host.hud.push_toast(
+		"%s 확보 · 임무 품목 · 가방 칸 사용 안 함" % str(cargo.get("title", "회수물")),
+		HUD_STYLE.GOLD,
+		2.8
+	)
 	var index := int(point_node.get_meta("main_mission_point", -1))
 	point_node.set_meta("completed", true)
 	host.field_interactions.erase(point_node)

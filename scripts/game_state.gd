@@ -41,6 +41,11 @@ var training_levels: Dictionary = {
 	"agility": 0,
 	"recovery": 0,
 	"fieldcraft": 0,
+	# 탄약 운용 훈련 — 옛 세이브에 키가 없으면 load_persistent_state가 0으로 채운다.
+	"magazine_drill": 0,
+	"quick_hands": 0,
+	"ammo_carry": 0,
+	"sortie_supply": 0,
 }
 var magazine_ammo: int = 30
 var reserve_ammo: int = 90
@@ -620,7 +625,30 @@ const TRAINING_NODE_DEFS := {
 		"title": "현장 체력", "description": "랭크마다 피로 획득 -7%", "icon": "fitness",
 		"max_rank": 3, "base_cost": 2000, "cost_step": 1300, "requires": {"recovery": 2, "agility": 2},
 	},
+	# ── 탄약 운용 훈련(유저 신고: "총기 업그레이드가 아니라 훈련으로 탄창 개수·기본
+	# 장착 개수를 늘릴 수 있어야지, 탄약 모자라고 장전이 잦아서 힘들다") ──
+	# 장탄·장전 배율은 build_player_weapon_stats(단일 지점)에서 곱한다. 적은 영향 없음.
+	"magazine_drill": {
+		"title": "탄창 숙련", "description": "랭크마다 장탄수 +8% (반올림, 최소 +1발)", "icon": "ammo",
+		"max_rank": 4, "base_cost": 900, "cost_step": 600, "requires": {},
+	},
+	"quick_hands": {
+		"title": "신속 장전", "description": "랭크마다 장전 시간 -8%", "icon": "reload",
+		"max_rank": 4, "base_cost": 1200, "cost_step": 800, "requires": {"magazine_drill": 1},
+	},
+	"ammo_carry": {
+		"title": "탄약 휴대", "description": "랭크마다 탄약 한 칸에 들어가는 발수 +25%", "icon": "backpack",
+		"max_rank": 4, "base_cost": 1500, "cost_step": 1000, "requires": {"vitality": 1},
+	},
+	"sortie_supply": {
+		"title": "출정 보급", "description": "랭크마다 출정 시작 시 장착 구경 1탄창 지급", "icon": "raid",
+		"max_rank": 3, "base_cost": 2500, "cost_step": 2000, "requires": {"ammo_carry": 1},
+	},
 }
+# 탄약 한 칸에 들어가는 발수(훈련 0랭크). 예전엔 "탄약 한 종류 = 무조건 1칸"이라
+# 발수가 칸에 영향을 주지 않았다 — 탄약 휴대 훈련이 의미를 가지려면 상한이 있어야
+# 한다. 240은 AK 8탄창: 평범한 출정에선 1칸 그대로고, 쟁여 둔 600발만 3칸이 된다.
+const AMMO_ROUNDS_PER_SLOT := 240
 const RAID_ZONES := {
 	"jongno_outskirts": {
 		"name": "종로 외곽",
@@ -1331,6 +1359,12 @@ func settle_shelter_return_inventory() -> Dictionary:
 	var valuable_result := sell_all_valuables()
 	report["valuable_count"] = int(valuable_result.get("count", 0))
 	report["valuable_scrap"] = int(valuable_result.get("scrap", 0))
+	# 2.5) 잉여 장비 → 부품. 창고 입고 전에 한다 — 잉여가 창고 칸을 먹은 뒤
+	#    분해하면 그 칸만큼 다른 물건이 넘쳤다고 거짓 보고하게 된다. 나온 부품은
+	#    가방에 들어가 바로 아래 3)에서 다른 부품과 함께 창고로 간다.
+	var salvage := salvage_surplus_equipment()
+	report["salvaged_items"] = int(salvage.get("items", 0))
+	report["salvaged_components"] = int(salvage.get("components", 0))
 	# 3) 나머지 소지품은 창고로. 장착 중인 것은 get_backpack_storage_count가
 	#    이미 제외하므로 몸에 걸친 무기·방어구는 건드리지 않는다.
 	var settlement_targets: Array = [
@@ -1355,6 +1389,144 @@ func settle_shelter_return_inventory() -> Dictionary:
 			report["overflow"] = int(report["overflow"]) + (carried - moved)
 	save_persistent_state()
 	return report
+
+
+# ── 잉여 장비 분해 ─────────────────────────────────────────────
+# 장비 드랍 재설계(일반 적 방어구 12%·든 총 10%)와 짝이 되는 출구. 슬롯은
+# 몸·머리·발 3개뿐인데 잉여 방어구는 상인 판매 불가·분해 불가라 창고에 쌓이거나
+# 버려졌다. 귀환 정산에서 "장착 1 + 슬롯별 최고 예비 1"만 남기고 부품으로 바꾼다.
+# 규칙:
+#   · 가방+창고의 방어구를 슬롯별로 모아, 장착 중인 것은 건드리지 않고 예비 중
+#     가장 좋은 것(get_equipment_score, 동점이면 상위 가족·높은 레벨) 1개만 남긴다
+#     → 장착 가능한 상위 장비는 절대 분해되지 않는다(예비 최고 1개가 곧 그것).
+#   · 무기는 사다리(WEAPON_FAMILY_LADDER) 기종의 중복만 — 같은 id가 장착분 포함
+#     2정 이상이면 1정 남기고 분해. 장착 중인 총은 get_backpack_storage_count가
+#     이미 빼므로 절대 분해되지 않는다. 사다리 밖 기종(M1911·MP5)은 상인 판매
+#     가치가 있으니 건드리지 않는다.
+#   · 부품 수: 방어구 가족 T1 1 / T2 2 / T3 3, 무기는 사다리 단계 1/2/3.
+#     종류는 패킹→스프링→렌즈 순환 — 한 종류만 쌓이지 않게.
+#   · 부품은 가방(mod_component_inventory)에 넣는다 — 이어지는 창고 정산이
+#     다른 부품과 함께 deposit_storage_item("component")로 입고한다.
+#   · 러버밴딩 없음·설정 토글 없음. 플레이어가 직접 고를 필요 없는 잡일을 없앤다.
+const SALVAGE_COMPONENT_CYCLE := ["rubber_gasket", "magazine_spring", "scope_lens"]
+
+
+func salvage_surplus_equipment() -> Dictionary:
+	var report := {"items": 0, "components": 0, "armor_items": 0, "weapon_items": 0, "details": []}
+	var cycle_index := 0
+	# 1) 방어구 — 슬롯별로 모아 최고 예비 1개만 남긴다.
+	var owned_armor: Dictionary = {}
+	for equipment_id_value in equipment_inventory.keys():
+		var equipment_id := str(equipment_id_value)
+		var count := get_equipment_count(equipment_id)
+		if count > 0:
+			owned_armor[equipment_id] = int(owned_armor.get(equipment_id, 0)) + count
+	for entry in storage_inventory:
+		if str(entry.get("type", "")) != "equipment":
+			continue
+		var equipment_id := str(entry.get("id", ""))
+		owned_armor[equipment_id] = int(owned_armor.get(equipment_id, 0)) + maxi(0, int(entry.get("count", 0)))
+	var ids_by_slot: Dictionary = {"body": [], "head": [], "feet": []}
+	for equipment_id_value in owned_armor.keys():
+		var equipment_id := str(equipment_id_value)
+		var definition := get_equipment_definition(equipment_id)
+		if definition.is_empty():
+			continue
+		var slot := str(definition.get("slot", "body"))
+		if not ids_by_slot.has(slot):
+			ids_by_slot[slot] = []
+		(ids_by_slot[slot] as Array).append(equipment_id)
+	for slot_value in ids_by_slot.keys():
+		var ids := ids_by_slot[slot_value] as Array
+		if ids.is_empty():
+			continue
+		var best_id := ""
+		var best_score := -1.0
+		var best_rank := -1
+		for equipment_id_value in ids:
+			var equipment_id := str(equipment_id_value)
+			var score := get_equipment_score(equipment_id)
+			var rank := _salvage_armor_family_index(equipment_id) * 10 + get_equipment_level(equipment_id)
+			if score > best_score or (is_equal_approx(score, best_score) and rank > best_rank):
+				best_id = equipment_id
+				best_score = score
+				best_rank = rank
+		for equipment_id_value in ids:
+			var equipment_id := str(equipment_id_value)
+			var keep := 1 if equipment_id == best_id else 0
+			var surplus := int(owned_armor.get(equipment_id, 0)) - keep
+			if surplus <= 0:
+				continue
+			var removed := _take_owned_item_units("equipment", equipment_id, surplus)
+			if removed <= 0:
+				continue
+			var yield_per_unit := _salvage_armor_family_index(equipment_id) + 1
+			var produced := 0
+			for _unit in removed:
+				for _part in yield_per_unit:
+					add_mod_component(SALVAGE_COMPONENT_CYCLE[cycle_index % SALVAGE_COMPONENT_CYCLE.size()], 1)
+					cycle_index += 1
+					produced += 1
+			report["items"] = int(report["items"]) + removed
+			report["armor_items"] = int(report["armor_items"]) + removed
+			report["components"] = int(report["components"]) + produced
+			(report["details"] as Array).append({"type": "equipment", "id": equipment_id, "count": removed, "components": produced})
+	# 2) 무기 — 사다리 기종의 중복만. 장착분 포함 2정 이상이면 1정 남긴다.
+	for family_id in WEAPON_SYSTEM.WEAPON_FAMILY_LADDER.keys():
+		var ladder: Array = WEAPON_SYSTEM.WEAPON_FAMILY_LADDER[family_id]
+		for ladder_index in ladder.size():
+			var weapon_id := str(ladder[ladder_index])
+			var total := int(weapon_inventory.get(weapon_id, 0)) + get_stored_storage_count("weapon", weapon_id)
+			if total <= 1:
+				continue
+			var removed := _take_owned_item_units("weapon", weapon_id, total - 1)
+			if removed <= 0:
+				continue
+			var produced := 0
+			for _unit in removed:
+				for _part in ladder_index + 1:
+					add_mod_component(SALVAGE_COMPONENT_CYCLE[cycle_index % SALVAGE_COMPONENT_CYCLE.size()], 1)
+					cycle_index += 1
+					produced += 1
+			report["items"] = int(report["items"]) + removed
+			report["weapon_items"] = int(report["weapon_items"]) + removed
+			report["components"] = int(report["components"]) + produced
+			(report["details"] as Array).append({"type": "weapon", "id": weapon_id, "count": removed, "components": produced})
+	return report
+
+
+func _salvage_armor_family_index(equipment_id: String) -> int:
+	# ARMOR_FAMILIES 인덱스(0=생존자 T1 · 1=진압 T2 · 2=군납 T3). 모르는 id는 T1 취급.
+	var base_id := str(split_equipment_id(equipment_id)[0])
+	for index in LOOT_ECONOMY.ARMOR_FAMILIES.size():
+		if (LOOT_ECONOMY.ARMOR_FAMILIES[index] as Array).has(base_id):
+			return index
+	return 0
+
+
+func _take_owned_item_units(item_type: String, item_id: String, amount: int) -> int:
+	# 가방(장착분 제외) → 창고 순으로 amount만큼 덜어낸다. 실제로 덜어낸 수를 돌려준다.
+	var remaining := maxi(0, amount)
+	var removed := 0
+	var from_bag := mini(remaining, get_backpack_storage_count(item_type, item_id))
+	if from_bag > 0 and _remove_backpack_storage_item(item_type, item_id, from_bag):
+		removed += from_bag
+		remaining -= from_bag
+	for slot_index in range(storage_inventory.size() - 1, -1, -1):
+		if remaining <= 0:
+			break
+		var entry := storage_inventory[slot_index]
+		if str(entry.get("type", "")) != item_type or str(entry.get("id", "")) != item_id:
+			continue
+		var take := mini(remaining, maxi(0, int(entry.get("count", 0))))
+		if take <= 0:
+			continue
+		entry["count"] = int(entry.get("count", 0)) - take
+		remaining -= take
+		removed += take
+		if int(entry.get("count", 0)) <= 0:
+			storage_inventory.remove_at(slot_index)
+	return removed
 
 
 func consume_return_settlement() -> Dictionary:
@@ -1962,6 +2134,11 @@ func get_raid_item_stack_limit(item_type: String) -> int:
 	return maxi(1, int(RAID_STACK_LIMITS.get(item_type, 1)))
 
 
+func get_ammo_rounds_per_slot() -> int:
+	# 탄약 휴대 훈련: 랭크마다 칸당 발수 +25% (240 → 300/360/420/480).
+	return maxi(1, roundi(float(AMMO_ROUNDS_PER_SLOT) * (1.0 + 0.25 * float(get_training_rank("ammo_carry")))))
+
+
 func get_raid_item_slot_cost(item_type: String, _item_id: String, amount: int) -> int:
 	if amount <= 0:
 		return 0
@@ -1969,10 +2146,17 @@ func get_raid_item_slot_cost(item_type: String, _item_id: String, amount: int) -
 	# 문제(유저 신고) — 보유는 유지하되 가방 칸은 차지하지 않는다.
 	if item_type == "progression":
 		return 0
+	# 메인 미션 회수물(특별 화물)은 가방과 무관하게 먹힌다(유저 신고: "메인 미션
+	# 아이템 루팅은 가방과 상관없이 먹을 수 있어야지"). 칸 0, 만재 검사 우회.
+	if item_type == "special_cargo":
+		return 0
 	# 제작 재료는 부피가 있다 — 한 개가 한 칸. 재료를 쓸어 담으면 가방이
 	# 실제로 차야 '무엇을 두고 갈까'라는 이 게임의 심장이 재료에도 뛴다.
 	if item_type in ["weapon", "equipment", "component"]:
 		return amount
+	# 탄약은 칸당 발수 상한(탄약 휴대 훈련으로 늘어난다)을 넘는 만큼 칸을 더 먹는다.
+	if item_type == "ammo":
+		return ceili(float(amount) / float(get_ammo_rounds_per_slot()))
 	return 1
 
 
@@ -2036,8 +2220,7 @@ func get_raid_bag_used_slots() -> int:
 			str(equipment_id),
 			get_equipment_count(str(equipment_id))
 		)
-	if not raid_special_cargo.is_empty():
-		used += 1
+	# 특별 화물(메인 미션 회수물)은 칸을 먹지 않는다 — get_raid_item_slot_cost가 0.
 	return used
 
 
@@ -2048,7 +2231,7 @@ func get_raid_item_added_slot_delta(
 ) -> int:
 	var current := _get_raid_bag_count(item_type, item_id)
 	if item_type == "special_cargo":
-		return 0 if current > 0 else 1
+		return 0
 	return (
 		get_raid_item_slot_cost(item_type, item_id, current + maxi(0, amount))
 		- get_raid_item_slot_cost(item_type, item_id, current)
@@ -2057,8 +2240,10 @@ func get_raid_item_added_slot_delta(
 
 func get_raid_items_added_slot_delta(items: Array[Dictionary]) -> int:
 	var added_slots: int = 0
-	var planned_stack_keys: Dictionary = {}
-	var cargo_planned: bool = not raid_special_cargo.is_empty()
+	# 더미 단위로 합산해 칸을 센다 — 탄약은 칸당 발수 상한이 있어 같은 더미에
+	# 여러 번 얹히면 합계로 넘침 여부를 봐야 한다.
+	var planned_amounts: Dictionary = {}
+	var planned_types: Dictionary = {}
 	for item in items:
 		var item_type: String = str(item.get("type", ""))
 		var item_id: String = str(item.get("id", ""))
@@ -2072,14 +2257,19 @@ func get_raid_items_added_slot_delta(items: Array[Dictionary]) -> int:
 			added_slots += amount
 			continue
 		if item_type == "special_cargo":
-			if not cargo_planned:
-				added_slots += 1
-				cargo_planned = true
+			# 메인 미션 회수물은 칸 0 — 가방과 무관하게 먹힌다.
 			continue
 		var stack_key: String = "%s:%s" % [item_type, item_id]
-		if _get_raid_bag_count(item_type, item_id) <= 0 and not planned_stack_keys.has(stack_key):
-			added_slots += 1
-			planned_stack_keys[stack_key] = true
+		planned_amounts[stack_key] = int(planned_amounts.get(stack_key, 0)) + amount
+		planned_types[stack_key] = [item_type, item_id]
+	for stack_key in planned_amounts.keys():
+		var item_type: String = str((planned_types[stack_key] as Array)[0])
+		var item_id: String = str((planned_types[stack_key] as Array)[1])
+		var current: int = _get_raid_bag_count(item_type, item_id)
+		added_slots += (
+			get_raid_item_slot_cost(item_type, item_id, current + int(planned_amounts[stack_key]))
+			- get_raid_item_slot_cost(item_type, item_id, current)
+		)
 	return added_slots
 
 
@@ -2090,8 +2280,9 @@ func can_add_raid_items(items: Array[Dictionary]) -> bool:
 func can_add_raid_item(item_type: String, item_id: String, amount: int = 1) -> bool:
 	if amount <= 0:
 		return false
-	if item_type == "special_cargo" and not raid_special_cargo.is_empty():
-		return false
+	if item_type == "special_cargo":
+		# 미션 화물은 만재 검사를 타지 않는다 — 이미 하나 들고 있을 때만 거절.
+		return raid_special_cargo.is_empty()
 	var delta := get_raid_item_added_slot_delta(item_type, item_id, amount)
 	return delta <= 0 or get_raid_bag_used_slots() + delta <= get_raid_bag_capacity()
 
@@ -2211,11 +2402,8 @@ func get_raid_bag_entries() -> Array[Dictionary]:
 func try_take_story_cargo(cargo: Dictionary) -> bool:
 	if not raid_special_cargo.is_empty():
 		return false
-	var next_cargo := cargo.duplicate(true)
-	var required := 1
-	if get_raid_bag_used_slots() + required > get_raid_bag_capacity():
-		return false
-	raid_special_cargo = next_cargo
+	# 가방 만재 검사 없음 — 메인 미션 회수물은 가방과 무관하게 먹힌다(칸 0).
+	raid_special_cargo = cargo.duplicate(true)
 	return true
 
 
@@ -3993,6 +4181,48 @@ func get_training_definition(node_id: String) -> Dictionary:
 	return (TRAINING_NODE_DEFS.get(node_id, {}) as Dictionary).duplicate(true)
 
 
+# ── 탄약 운용 훈련 효과 ─────────────────────────────────────────
+
+
+func get_magazine_capacity_bonus(base_capacity: int) -> int:
+	# 탄창 숙련: 랭크마다 +8%(반올림), 단 랭크당 최소 +1발. 작은 탄창(권총 7발)도
+	# 랭크마다 한 발은 는다. 상한 +50%(2발짜리 더블배럴이 6발이 되지 않게).
+	# 예: AK 30발 → 4랭크 30×1.32=39.6 → 40발.
+	var rank := get_training_rank("magazine_drill")
+	if rank <= 0 or base_capacity <= 0:
+		return 0
+	var bonus := maxi(rank, roundi(float(base_capacity) * 0.08 * float(rank)))
+	return mini(bonus, maxi(1, roundi(float(base_capacity) * 0.5)))
+
+
+func get_reload_time_multiplier() -> float:
+	# 신속 장전: 랭크마다 장전 시간 -8% (4랭크 ×0.68 — AK 2.15s → 1.46s).
+	return maxf(0.3, 1.0 - 0.08 * float(get_training_rank("quick_hands")))
+
+
+func get_sortie_supply_magazines() -> int:
+	# 출정 보급: 랭크 = 판 시작 시 지급 탄창 수.
+	return maxi(0, get_training_rank("sortie_supply"))
+
+
+func build_player_weapon_stats(
+	weapon_id: String,
+	mod_ids: Array[String],
+	enhancement_level: int = 0,
+	mod_enhancement_levels: Dictionary = {}
+) -> Dictionary:
+	# 플레이어 무기 스탯을 조립하는 단일 지점 — 필드 main·건물 내부·인벤토리 상세가
+	# 전부 여기를 거친다. WeaponSystem.build_stats(무기·부착물·강화) 위에 훈련
+	# (장탄·장전)을 곱한다. 적(enemy.gd)은 WeaponSystem을 직접 써서 영향이 없다.
+	var stats := WEAPON_SYSTEM.build_stats(weapon_id, mod_ids, enhancement_level, mod_enhancement_levels)
+	var base_magazine := int(stats.get("magazine_size", 0))
+	stats["base_magazine_size"] = base_magazine
+	stats["magazine_size"] = base_magazine + get_magazine_capacity_bonus(base_magazine)
+	stats["base_reload_time"] = float(stats.get("reload_time", 2.15))
+	stats["reload_time"] = float(stats.get("reload_time", 2.15)) * get_reload_time_multiplier()
+	return stats
+
+
 func get_training_rank(node_id: String) -> int:
 	return int(training_levels.get(node_id, 0))
 
@@ -4801,6 +5031,11 @@ func reset_run() -> void:
 		"agility": 0,
 		"recovery": 0,
 		"fieldcraft": 0,
+		# 탄약 운용 훈련(훈련 정의 TRAINING_NODE_DEFS와 키를 맞춘다 — 세이브 왕복 비교가 어긋나지 않게)
+		"magazine_drill": 0,
+		"quick_hands": 0,
+		"ammo_carry": 0,
+		"sortie_supply": 0,
 	}
 	raid_serial = 0
 	reset_raid_supply_counters()

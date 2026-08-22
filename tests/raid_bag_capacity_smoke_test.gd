@@ -34,8 +34,17 @@ func _run() -> void:
     assert(int(state.get_bag_upgrade_cost()) > first_cost)
     state.bag_capacity_level = 0
     state.scrap = 0
+    # 탄약은 칸당 발수 상한(기본 240, '탄약 휴대' 훈련으로 +25%/랭크)이 생겼다 —
+    # 600발이면 3칸, 240발 이하면 예전처럼 1칸. 훈련이 의미를 가지려면 상한이 필요했다.
+    state.training_levels["ammo_carry"] = 0
     state.set_ammo_count("762_fmj", 600)
-    assert(int(state.get_raid_bag_used_slots()) == 1, "One ammo type must stay in one bag slot.")
+    assert(int(state.get_raid_bag_used_slots()) == 3, "600 rounds = 3 slots at 240 rounds per slot.")
+    state.training_levels["ammo_carry"] = 2
+    assert(int(state.get_ammo_rounds_per_slot()) == 360, "ammo_carry rank 2 must give 240 x 1.5 rounds per slot.")
+    assert(int(state.get_raid_bag_used_slots()) == 2, "600 rounds at 360 per slot = 2 slots.")
+    state.training_levels["ammo_carry"] = 0
+    state.set_ammo_count("762_fmj", 240)
+    assert(int(state.get_raid_bag_used_slots()) == 1, "Up to 240 rounds of one ammo type stay in one bag slot.")
     state.canned_food = 250
     assert(int(state.get_raid_bag_used_slots()) == 2, "Canned food must stay in one bag slot.")
     state.add_weapon("mp5", 3)
@@ -56,10 +65,12 @@ func _run() -> void:
     state.mod_component_inventory.clear()
     state.add_weapon("mp5", 11)
     state.set_ammo_count("9mm_fmj", 0)
-    state.set_ammo_count("762_fmj", 600)
+    # 칸당 240발 상한 아래(200발)라 1칸 — 12칸 만재 시나리오는 그대로 성립한다.
+    state.set_ammo_count("762_fmj", 200)
     assert(int(state.get_raid_bag_used_slots()) == 12)
     assert(not state.can_add_raid_item("weapon", "m1911", 1), "A full bag must reject another weapon.")
     assert(state.can_add_raid_item("ammo", "762_fmj", 30), "An existing ammo stack must accept more rounds.")
+    assert(not state.can_add_raid_item("ammo", "762_fmj", 60), "Rounds past the per-slot cap need a free slot.")
     assert(not state.can_add_raid_item("ammo", "9mm_fmj", 1), "A new ammo type needs a free slot.")
 
     assert(int(state.remove_raid_bag_item("weapon", "mp5", 1)) == 1)
@@ -90,9 +101,17 @@ func _run() -> void:
         "id": "seoul_line3_relief_core",
         "title": "Seoul Line 3 Relief Core",
     }
+    # 메인 미션 회수물은 가방과 무관하다(유저 신고) — 칸 0, 만재여도 먹힌다.
+    state.add_weapon("mp5", 12)
+    state.set_ammo_count("9mm_fmj", 0)
+    assert(int(state.get_raid_bag_used_slots()) == 12, "bag is full before taking story cargo")
+    assert(state.can_add_raid_item("special_cargo", str(cargo.id), 1), "Story cargo ignores a full bag.")
     assert(state.try_take_story_cargo(cargo))
-    assert(int(state.get_raid_bag_used_slots()) == 1)
+    assert(int(state.get_raid_bag_used_slots()) == 12, "Story cargo must not use a bag slot.")
     assert(not state.can_add_raid_item("special_cargo", "another_cargo", 1))
+    state.weapon_inventory.clear()
+    state.ammo_inventory.clear()
+    assert(int(state.get_raid_bag_used_slots()) == 0)
     assert(int(state.remove_raid_bag_item("special_cargo", "seoul_line3_relief_core", 1)) == 1)
     assert(int(state.get_raid_bag_used_slots()) == 0)
 

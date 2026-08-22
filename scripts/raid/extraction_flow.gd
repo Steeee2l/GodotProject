@@ -381,6 +381,8 @@ func _show_extraction_result(rescued_count: int) -> void:
 	# 귀속 규칙 예고에 귀중품 환전을 빠뜨리면, 쉘터에서 귀중품이 사라진 걸
 	# 보고 "털렸다"고 읽는다.
 	lines.append("통조림·구급약·탄약은 가방에 남고, 재료와 여분 장비는 창고로, 귀중품은 고철로 바뀝니다.")
+	# 잉여 장비 분해(GameState.salvage_surplus_equipment)도 같은 이유로 미리 말한다.
+	lines.append("잉여 장비는 부품으로 분해됩니다(장착 1 + 슬롯별 최고 예비 1은 남깁니다).")
 	# "탭하면 쉘터로 복귀"는 요약 라벨에서 뺐다 — 레벨업 선택 UI보다 위에 있어
 	# 순서가 거꾸로였다. 안내와 버튼은 선택 UI 아래(hud.extraction_return_row)로.
 	host.hud.extraction_result_summary.text = "\n".join(lines)

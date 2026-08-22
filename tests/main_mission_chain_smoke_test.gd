@@ -60,6 +60,11 @@ func _run() -> void:
 			main_scene.call("take_damage", 40)
 			assert(int(main_scene.get("player_health")) == health_before)
 			print("  CINEMATIC_INVULNERABLE ok (health %d)" % health_before)
+		elif bool(main_scene.call("is_bark_active")):
+			# 바크 모드 연출(인트로 등 대사뿐인 장면): 조작 잠금도 무적도 없다 — 대사는
+			# 하단 자막으로 흐르고 나비는 제 할 일을 한다(유저 신고 반영).
+			assert(not bool(main_scene.get("monologue").get("queue") == null))
+			print("  CINEMATIC_BARK ok (controls unlocked)")
 
 		_walk_stage(main_scene, chain)
 		assert(str(chain.get("state")) == "carried")

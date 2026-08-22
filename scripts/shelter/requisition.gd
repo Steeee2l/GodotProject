@@ -16,8 +16,31 @@ extends RefCounted
 # 모든 진입점은 static — 호출부는 preload 후 바로 부른다. 상태를 갖지 않는다.
 
 const MAIN_MISSION_CATALOG := preload("res://scripts/raid/main_mission_catalog.gd")
+const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
+const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 
 const MAX_SHELTER_TIER := 5
+
+# ── 존별 장비 목표 ────────────────────────────────────────────
+# "이 존에 무엇을 갖추고 가야 하나"를 한 줄로. 세트는 그 존 가족(ARMOR_FAMILIES)
+# 3종의 보유/장착 n/3, 무기는 무기 사다리 설계의 존별 권장 강화(종로 AK+5 /
+# 남대문 AK+10 / 을지로 AKM+15 / 용산 AKM+20 / 남산 K2+25 — "그 존 사수를 3발에")
+# 대비 장착 무기. 러버밴딩 없음: 목표는 존 티어에서만 나오고 플레이어 상태는
+# 충족 여부 표시에만 쓴다. 데이터 복제 금지 — 가족·사다리는 원본 상수를 읽는다.
+const ZONE_WEAPON_GOALS := {
+	1: ["ak47", 5],
+	2: ["ak47", 10],
+	3: ["akm", 15],
+	4: ["akm", 20],
+	5: ["k2", 25],
+}
+const WEAPON_SHORT_NAMES := {
+	"ak47": "AK", "akm": "AKM", "k2": "K2",
+	"double_barrel": "더블배럴", "pump_shotgun": "펌프",
+	"m1911": "M1911", "mp5": "MP5",
+}
+const GEAR_GOAL_OK_COLOR := Color("#72d6a0")
+const GEAR_GOAL_MISSING_COLOR := Color("#e36f55")
 
 # 요구 품목 표시명. 키 아이템의 이름은 ITEM_CATALOG(loot_economy)와 같아야 한다.
 const REQUIREMENT_LABELS := {
@@ -327,3 +350,156 @@ static func get_goal_zone_ids() -> Array[String]:
 			if not source_zone.is_empty() and not zone_ids.has(source_zone):
 				zone_ids.append(source_zone)
 	return zone_ids
+
+
+# ── 존별 장비 목표 ────────────────────────────────────────────
+
+
+static func get_zone_gear_goal(zone_id: String) -> Dictionary:
+	# 그 존 가족 세트 3종 보유/장착(n/3) + 권장 무기 강화 대비 장착 무기.
+	#   {zone_id, stage, set_label "T1", set_ids, pieces[{id, owned, equipped}],
+	#    set_owned, set_equipped, set_ok, weapon_id, weapon_level,
+	#    equipped_weapon_id, equipped_level, weapon_rung_ok, weapon_ok, all_ok, text}
+	if zone_id.is_empty() or not GameState.RAID_ZONES.has(zone_id):
+		return {}
+	var zone: Dictionary = GameState.get_raid_zone(zone_id)
+	var stage := clampi(int(zone.get("stage_tier", zone.get("required_tier", 1))), 1, 5)
+	var family_index: int = LOOT_ECONOMY.armor_family_index_for_stage(stage)
+	var set_ids: Array = LOOT_ECONOMY.ARMOR_FAMILIES[family_index]
+	var pieces: Array[Dictionary] = []
+	var owned_count := 0
+	var equipped_count := 0
+	for base_id_value in set_ids:
+		var base_id := str(base_id_value)
+		var equipped := _is_armor_base_equipped(base_id)
+		var owned := equipped or _owned_armor_base_count(base_id) > 0
+		pieces.append({"id": base_id, "owned": owned, "equipped": equipped})
+		if owned:
+			owned_count += 1
+		if equipped:
+			equipped_count += 1
+	var weapon_goal: Array = ZONE_WEAPON_GOALS.get(stage, ZONE_WEAPON_GOALS[1])
+	var goal_weapon_id := str(weapon_goal[0])
+	var goal_level := int(weapon_goal[1])
+	var equipped_weapon_id := str(GameState.equipped_weapon_id) if bool(GameState.has_ak) else ""
+	var equipped_level := 0
+	if not equipped_weapon_id.is_empty():
+		equipped_level = GameState.get_weapon_enhancement_level(equipped_weapon_id)
+	# 사다리 단(rung)은 가족을 가리지 않고 비교한다 — 을지로 권장이 AKM(2단)이면
+	# 펌프 산탄총(2단)도 같은 단으로 친다. 사다리 밖 기종(M1911·MP5)은 -1.
+	var weapon_rung_ok := (
+		not equipped_weapon_id.is_empty()
+		and _ladder_rank(equipped_weapon_id) >= _ladder_rank(goal_weapon_id)
+	)
+	var weapon_ok := weapon_rung_ok and equipped_level >= goal_level
+	var goal := {
+		"zone_id": zone_id,
+		"stage": stage,
+		"family_index": family_index,
+		"set_label": "T%d" % (family_index + 1),
+		"set_ids": set_ids.duplicate(),
+		"pieces": pieces,
+		"set_owned": owned_count,
+		"set_equipped": equipped_count,
+		"set_ok": owned_count >= set_ids.size(),
+		"weapon_id": goal_weapon_id,
+		"weapon_level": goal_level,
+		"equipped_weapon_id": equipped_weapon_id,
+		"equipped_level": equipped_level,
+		"weapon_rung_ok": weapon_rung_ok,
+		"weapon_ok": weapon_ok,
+	}
+	goal["all_ok"] = bool(goal["set_ok"]) and weapon_ok
+	goal["text"] = format_zone_gear_goal_line(goal)
+	return goal
+
+
+static func format_zone_gear_goal_line(goal: Dictionary) -> String:
+	# `권장: T1 세트 2/3 · AK +3/5` — 단이 모자라면 `AKM +15 권장 · 현재 AK +12`.
+	if goal.is_empty():
+		return ""
+	var set_part := "%s 세트 %d/%d" % [
+		str(goal.get("set_label", "T1")),
+		int(goal.get("set_owned", 0)),
+		(goal.get("set_ids", []) as Array).size(),
+	]
+	var weapon_part := ""
+	var goal_name := str(WEAPON_SHORT_NAMES.get(str(goal.get("weapon_id", "")), str(goal.get("weapon_id", ""))))
+	var equipped_id := str(goal.get("equipped_weapon_id", ""))
+	if bool(goal.get("weapon_rung_ok", false)):
+		weapon_part = "%s +%d/%d" % [
+			str(WEAPON_SHORT_NAMES.get(equipped_id, equipped_id)),
+			int(goal.get("equipped_level", 0)),
+			int(goal.get("weapon_level", 0)),
+		]
+	else:
+		var current := "무기 없음"
+		if not equipped_id.is_empty():
+			current = "%s +%d" % [str(WEAPON_SHORT_NAMES.get(equipped_id, equipped_id)), int(goal.get("equipped_level", 0))]
+		weapon_part = "%s +%d 권장 · 현재 %s" % [goal_name, int(goal.get("weapon_level", 0)), current]
+	return "권장: %s · %s" % [set_part, weapon_part]
+
+
+static func attach_zone_gear_goal_line(anchor: Label, zone_id: String, font: Font) -> Label:
+	# 브리핑 존 카드의 장비 목표 줄. 호출부(shelter_interior)는 한 줄만 부른다 —
+	# 라벨은 anchor(다음 목표 줄) 바로 뒤에 형제로 만들어 두고 이후엔 갱신만 한다.
+	# 충족 초록 / 미충족 빨강.
+	if not is_instance_valid(anchor):
+		return null
+	var parent := anchor.get_parent()
+	if parent == null:
+		return null
+	var line := parent.get_node_or_null("RaidZoneGearGoalLine") as Label
+	if line == null:
+		line = Label.new()
+		line.name = "RaidZoneGearGoalLine"
+		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		if font != null:
+			line.add_theme_font_override("font", font)
+		line.add_theme_font_size_override("font_size", 13)
+		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		parent.add_child(line)
+		parent.move_child(line, anchor.get_index() + 1)
+	var goal := get_zone_gear_goal(zone_id)
+	var text := str(goal.get("text", ""))
+	line.text = text
+	line.add_theme_color_override(
+		"font_color", GEAR_GOAL_OK_COLOR if bool(goal.get("all_ok", false)) else GEAR_GOAL_MISSING_COLOR
+	)
+	line.visible = not text.is_empty()
+	return line
+
+
+static func _ladder_rank(weapon_id: String) -> int:
+	for family_id in WEAPON_SYSTEM.WEAPON_FAMILY_LADDER.keys():
+		var ladder: Array = WEAPON_SYSTEM.WEAPON_FAMILY_LADDER[family_id]
+		var index := ladder.find(weapon_id)
+		if index >= 0:
+			return index
+	return -1
+
+
+static func _is_armor_base_equipped(base_id: String) -> bool:
+	for equipped_id in [
+		GameState.equipped_body_armor_id,
+		GameState.equipped_head_armor_id,
+		GameState.equipped_footwear_id,
+	]:
+		if not str(equipped_id).is_empty() and str(GameState.split_equipment_id(str(equipped_id))[0]) == base_id:
+			return true
+	return false
+
+
+static func _owned_armor_base_count(base_id: String) -> int:
+	# 가방 + 창고. 레벨(@n)은 무시하고 기종만 본다.
+	var total := 0
+	for equipment_id_value in GameState.equipment_inventory.keys():
+		var equipment_id := str(equipment_id_value)
+		if str(GameState.split_equipment_id(equipment_id)[0]) == base_id:
+			total += maxi(0, GameState.get_equipment_count(equipment_id))
+	for entry in GameState.storage_inventory:
+		if str(entry.get("type", "")) != "equipment":
+			continue
+		if str(GameState.split_equipment_id(str(entry.get("id", "")))[0]) == base_id:
+			total += maxi(0, int(entry.get("count", 0)))
+	return total

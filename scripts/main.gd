@@ -548,6 +548,10 @@ func _ready() -> void:
 	_setup_weather_effects()
 	_spawn_ammo_pickups()
 	hud.build(self)
+	# 출정 보급 훈련 — 판 시작(오프닝·건물 내부 복귀 제외)에 장착 구경 탄창을 예비탄에 넣는다.
+	# 모듈 attach와 HUD(토스트) 빌드 뒤에 불러야 한다.
+	if GameState.opening_completed and not bool(BuildingRunState.pending_field_return):
+		weapon_combat.grant_sortie_supply()
 	if not get_viewport().size_changed.is_connected(_apply_hud_layout):
 		get_viewport().size_changed.connect(_apply_hud_layout)
 	if not AccessibilitySettings.settings_changed.is_connected(_apply_hud_layout):
@@ -1572,7 +1576,8 @@ func _create_melee_arc_texture() -> ImageTexture:
 
 
 func _refresh_weapon_stats() -> void:
-	weapon_stats = WEAPON_SYSTEM.build_stats(
+	# 훈련(장탄·장전)까지 곱한 플레이어 무기 스탯은 GameState의 단일 지점에서 온다.
+	weapon_stats = GameState.build_player_weapon_stats(
 		equipped_weapon_id,
 		equipped_weapon_mods,
 		GameState.get_weapon_enhancement_level(equipped_weapon_id),
@@ -7261,8 +7266,13 @@ func _settle_jackpot_cargo() -> Dictionary:
 
 
 func is_cinematic_active() -> bool:
-	# 연출 중에는 조작·전투 입력이 전부 잠기고 플레이어는 무적이다.
+	# event 연출 중에는 조작·전투 입력이 전부 잠기고 플레이어는 무적이다.
+	# 바크 연출(하단 자막으로 흘러가는 대사)은 여기서 false — 조작을 막지 않는다.
 	return main_mission.is_cinematic_active()
+
+
+func is_bark_active() -> bool:
+	return main_mission.is_bark_active()
 
 
 func _update_faction_conflicts(delta: float) -> void:

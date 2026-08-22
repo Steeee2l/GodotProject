@@ -3949,6 +3949,8 @@ func _update_raid_zone_goal_line(zone_id: String) -> void:
 	# 브리핑 한 줄: 모자란 것 + 출처만. 이 구역이 그 품목의 출처면 덧붙인다.
 	if not is_instance_valid(raid_zone_detail_goal):
 		return
+	# 존별 장비 목표(그 존 세트 n/3 · 권장 무기 강화) — 충족 초록/미충족 빨강. 라벨 생성·갱신은 모듈이 맡는다.
+	SHELTER_REQUISITION.attach_zone_gear_goal_line(raid_zone_detail_goal, zone_id, FONT)
 	var goal: Dictionary = SHELTER_REQUISITION.get_next_goal()
 	if goal.is_empty():
 		raid_zone_detail_goal.visible = false
@@ -4782,6 +4784,8 @@ func _build_return_settlement_card_lines(settlement: Dictionary) -> Array[String
 	var stored := int(settlement.get("stored", 0))
 	if stored > 0:
 		lines.append("재료·장비 %d점  →  창고" % stored)
+	if int(settlement.get("salvaged_items", 0)) > 0:
+		lines.append("잉여 장비 %d점  →  부품 %d개 분해" % [int(settlement.get("salvaged_items", 0)), int(settlement.get("salvaged_components", 0))])
 	var valuable_count := int(settlement.get("valuable_count", 0))
 	if valuable_count > 0:
 		lines.append("귀중품 %d점  →  고철 +%s" % [

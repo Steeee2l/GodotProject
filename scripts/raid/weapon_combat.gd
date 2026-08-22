@@ -200,6 +200,29 @@ func _update_firing(delta: float) -> void:
 		_fire_ak47()
 
 
+func grant_sortie_supply() -> void:
+	# 출정 보급 훈련: 랭크당 장착 무기 1탄창(훈련 보정 장탄 기준)을 예비탄에 더한다.
+	# 판 시작에서 한 번만 — 호출 지점(main 판 시작)이 오프닝·건물 내부 복귀를 거른다.
+	var magazines := int(GameState.get_sortie_supply_magazines())
+	if magazines <= 0:
+		return
+	var ammo_id := str(GameState.equipped_ammo_id)
+	if ammo_id.is_empty():
+		return
+	var magazine_size := int(host.weapon_stats.get("magazine_size", 30))
+	if magazine_size <= 0:
+		return
+	var granted := magazine_size * magazines
+	GameState.set_ammo_count(ammo_id, GameState.get_ammo_count(ammo_id) + granted)
+	host.reserve_ammo = GameState.get_ammo_count(ammo_id)
+	GameState.reserve_ammo = host.reserve_ammo
+	var caliber := str(WEAPON_SYSTEM.get_ammo(ammo_id).get("display_name", ammo_id)).split(" ")[0]
+	host.hud.push_toast(
+		"출정 보급 · %s %d발 ×%d" % [caliber, magazine_size, magazines], HudStyle.GOLD, 3.0
+	)
+	host._update_equipment_ui()
+
+
 func _reload_ak47() -> void:
 	var magazine_size := int(host.weapon_stats.get("magazine_size", 30))
 	if host.weapon_reloading or host.loafing:

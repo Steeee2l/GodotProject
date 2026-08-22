@@ -119,12 +119,19 @@ func _run() -> void:
 	main_scene.call("_spawn_enemy_loot", enemies[0])
 	enemies[0].set_meta("raid_boss", false)
 	var boss_pickups := (main_scene.get("loot_system").ammo_pickups as Array).slice(boss_pickup_count_before)
-	# 츄르 + 부품 + 확정 호환탄 번들 = 3.
-	assert(boss_pickups.size() == 3)
+	# 츄르 + 부품 + 확정 호환탄 번들 + 확정 상위 가족 방어구 = 4.
+	# (2026-08 장비 드랍 재설계: 보스는 한 단계 위 가족 방어구 1개를 확정으로 남긴다.)
+	assert(boss_pickups.size() == 4)
 	var boss_drop_types := boss_pickups.map(func(pickup: Node3D) -> String: return str(pickup.get_meta("loot_type")))
 	assert(boss_drop_types.has("churu"))
 	assert(boss_drop_types.has("mod_component"))
 	assert(boss_drop_types.has("ammo"), "보스는 장착 구경 탄약을 확정으로 남겨야 한다")
+	assert(boss_drop_types.has("armor"), "보스는 상위 가족 방어구 1개를 확정으로 남겨야 한다")
+	for pickup in boss_pickups:
+		if str(pickup.get_meta("loot_type")) == "armor":
+			# 1스테이지 보스 → 존 가족(T1)+1 = 진압 계열(T2).
+			var boss_armor_id := str(pickup.get_meta("equipment_id", "")).split("@")[0]
+			assert(["riot_vest", "tactical_helmet", "tactical_boots"].has(boss_armor_id), "보스 방어구는 한 단계 위 가족이어야 한다 (got %s)" % boss_armor_id)
 	assert(int(game_state.get("scrap")) == field_scrap_before, "Field pickups and enemy drops must never grant shelter scrap.")
 
 	print("LOOT_DROP_OK start_weapon=ak47 food=%d mp5=%d random=%s" % [

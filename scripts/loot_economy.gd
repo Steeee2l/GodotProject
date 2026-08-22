@@ -918,28 +918,28 @@ static func roll_enemy_drop(
 	unarmed_recovery: bool = false
 ) -> Dictionary:
 	var stage := clampi(stage_tier, 1, 5)
-	var weapon_drop_chance := (
-		0.58
-		if unarmed_recovery
-		else get_enemy_weapon_drop_chance(stage)
-	)
+	# ── 장비 드랍 재설계(2026-08) ─────────────────────────────────
+	# 예전: 무기 15~27% → 방어구 26~42% → 거기에 enemy_director의 "매 킬 장비
+	# 보장 fallback"까지 얹혀 25킬 판에 방어구 ~20개가 떨어졌다(실측 21.7).
+	# 슬롯은 몸·머리·발 3개뿐이라 거의 전부 잉여였고, 잉여 방어구는 상인 판매
+	# 불가·분해 불가라 창고에 쌓이거나 버려졌다. 드랍은 "많이"가 아니라 "세트를
+	# 맞출 만큼"이어야 한다 — 일반 적은 입고 있던 방어구 12% / 들고 있던 총 10%,
+	# 나머지는 기존 탄약·식량·부품 분포(호환탄 회수 60%는 별도 판정, 불변).
+	# 러버밴딩 없음: 확률은 존 티어만 참조하고 플레이어 상태는 보지 않는다.
+	# 한 번의 굴림으로 가른다 — 방어구 12%가 무기 판정 뒤에 깎이지 않게.
+	var equipment_roll := random.randf()
+	var is_melee := enemy_kind == "melee" or enemy_weapon_id == "baseball_bat"
+	# 맨손 회복: 무기를 다 잃었을 때만 재무장 루프를 위해 무기 비중을 58%로 크게 연다.
+	var weapon_drop_chance := 0.58 if unarmed_recovery else ENEMY_CARRIED_WEAPON_DROP_CHANCE
+	if equipment_roll < ENEMY_ARMOR_DROP_CHANCE:
+		# 입고 있던 방어구 — 그 존 가족, 슬롯 균등. 근접 적도 몸에 두른 것을 떨군다.
+		return _materialize_item(_roll_enemy_armor_id(stage, random), stage, random)
 	# 근접 적은 무기 드랍에서 제외한다 — 야구방망이는 WeaponSystem.WEAPONS와
 	# ITEM_CATALOG 어디에도 정의가 없어(플레이어 근접 무기 체계 자체가 없다)
-	# 드랍시켜 봐야 장착·판매가 안 되는 유령 아이템이 된다. 대신 근접 적은
-	# 아래 방어구 판정과 처치 보장 fallback에서 확정으로 방어구를 내놓는다.
-	if (
-		enemy_kind != "melee"
-		and enemy_weapon_id != "baseball_bat"
-		and random.randf() < weapon_drop_chance
-	):
+	# 드랍시켜 봐야 장착·판매가 안 되는 유령 아이템이 된다.
+	if not is_melee and equipment_roll < ENEMY_ARMOR_DROP_CHANCE + weapon_drop_chance:
 		if _enemy_carried_weapon_allowed(enemy_weapon_id):
 			return _materialize_item(enemy_weapon_id, stage, random)
-	# 방어구는 파밍의 심장이다. 힘들게 죽인 적은 확실히 뭔가를 내놓아야, 한 판
-	# 안에서 장비를 갈아타며 강해지는(도망자→청소부) 파워 커브가 산다.
-	# 초반 26% → 후반 42%. 근접적도 몸에 두른 방어구를 떨군다.
-	var armor_drop_chance := 0.26 + float(stage - 1) * 0.04
-	if random.randf() < armor_drop_chance:
-		return _materialize_item(_roll_enemy_armor_id(stage, random), stage, random)
 	var ordinary_drop_chance := 0.62 + float(stage - 1) * 0.03
 	if random.randf() > ordinary_drop_chance:
 		return {}
@@ -976,16 +976,32 @@ static func roll_enemy_drop(
 			stage,
 			random
 		)
-	var armor_pool: Array = armor_pool_for_stage(stage)
-	var family_index := armor_family_index_for_stage(stage)
-	# 계열 경계에서 한 단계 아래 계열도 소량 섞인다 — 팔거나 임시로 쓸 필러.
-	if family_index > 0 and random.randf() < 0.25:
-		armor_pool = ARMOR_FAMILIES[family_index - 1]
-	return _materialize_item(
-		armor_pool[random.randi_range(0, armor_pool.size() - 1)],
-		stage,
-		random
-	)
+	# 꼬리 8%는 예전엔 방어구 필러였다. 방어구는 위 12% 단일 판정에 전부 모았으니
+	# 여기서 또 새어 나오면 "12%"가 거짓말이 된다 — 부품으로 돌린다.
+	return _materialize_item(_roll_basic_component_id(stage, random), stage, random)
+
+
+# 일반 적 장비 드랍률 — 존 티어와 무관한 상수(플레이어 상태 참조 금지).
+# 목표 밴드: 25킬 일반 판 방어구 3~4개(엘리트·상자 포함), 같은 존 2회차 안에
+# 그 존 세트 3종을 모을 확률 ≥70%. 어긋나면 이 값과 상자 가중치만 만진다(적 체력 X).
+const ENEMY_ARMOR_DROP_CHANCE := 0.12
+const ENEMY_CARRIED_WEAPON_DROP_CHANCE := 0.10
+# 엘리트 추가 방어구(한 단계 위 가족) 확률. 보스는 확정.
+const ELITE_TIER_UP_ARMOR_CHANCE := 0.30
+
+
+static func _roll_tier_up_armor_id(stage: int, random: RandomNumberGenerator) -> String:
+	# 한 단계 위 가족(존 가족+1, 상한 T3=군납) 슬롯 균등 — 엘리트·보스가 "다음
+	# 존의 장비"를 미리 보여 주는 창. 최상위 존(가족 T3)에선 같은 가족이 나온다.
+	var family_index := mini(armor_family_index_for_stage(stage) + 1, ARMOR_FAMILIES.size() - 1)
+	var pool: Array = ARMOR_FAMILIES[family_index]
+	return str(pool[random.randi_range(0, pool.size() - 1)])
+
+
+static func roll_boss_armor_drop(stage_tier: int, random: RandomNumberGenerator) -> Dictionary:
+	# 보스 확정 장비 1개 — 한 단계 위 가족 확정. 굴림이 아니라 확정.
+	var stage := clampi(stage_tier, 1, 5)
+	return _materialize_item(_roll_tier_up_armor_id(stage, random), stage, random)
 
 
 static func _roll_enemy_armor_id(stage: int, random: RandomNumberGenerator) -> String:
@@ -1004,17 +1020,13 @@ static func roll_guaranteed_equipment_drop(
 	enemy_weapon_id: String,
 	random: RandomNumberGenerator
 ) -> Dictionary:
-	# 처치 보장 드랍 — roll_enemy_drop이 무기도 방어구도 내놓지 않았을 때
-	# enemy_director가 얹는 fallback. "힘들게 죽였는데 장비가 하나도 없다"를
-	# 없앤다(모든 킬 = 무기 or 방어구 최소 1개).
-	# 무기 비중 55% → 22%로 되돌린다. 55%는 "무기가 안 나온다"는 신고에 대한
-	# 보정이었는데, 그 신고의 진짜 원인은 비중이 아니라 rarity_cap이 적의 총을
-	# M1911로 고정하던 것이었다(실측: 25킬 무기 픽업 7.2정 전부 M1911).
-	# 원인을 고친 지금 55%를 유지하면 무기 캡을 매 판 강제로 때려서 드랍이
-	# 굴림이 아니라 상수가 된다 — 캡은 천장이어야지 분포가 되면 안 된다.
-	# roll_enemy_drop의 기존 분포·시그니처는 건드리지 않으려고 별도 함수로 둔다.
-	# 근접 적(baseball_bat)은 여기서도 방어구 확정 — 야구방망이는 WeaponSystem
-	# WEAPONS에도 ITEM_CATALOG에도 정의가 없어 주워도 장착할 수 없다.
+	# "장비 확정 1개" 굴림 — 무기 22% / 방어구 78%.
+	# 2026-08 장비 드랍 재설계로 enemy_director의 "매 킬 보장 fallback"에서는
+	# 뺐다(모든 킬 = 장비 1개가 25킬 판에 방어구 ~20개를 만든 진범). 일반 적은
+	# roll_enemy_drop의 12%/10% 판정만 탄다. 이 함수는 "확정으로 장비 하나"가
+	# 필요한 곳(테스트·이벤트 보상)을 위한 유틸로 남긴다 — 분포는 그대로다.
+	# 근접 적(baseball_bat)은 방어구 확정 — 야구방망이는 WeaponSystem WEAPONS에도
+	# ITEM_CATALOG에도 정의가 없어 주워도 장착할 수 없다.
 	var stage := clampi(stage_tier, 1, 5)
 	if (
 		enemy_kind != "melee"
@@ -1056,15 +1068,6 @@ static func roll_weapon_companion_ammo(
 	return _materialize_item(ammo_item_id, clampi(stage_tier, 1, 5), random, false)
 
 
-static func get_enemy_weapon_drop_chance(stage_tier: int) -> float:
-	# 총 든 적을 죽이면 그 총이 나올 수 있어야 한다(타르코프의 손맛). 5%는
-	# 사실상 안 나오는 확률이라 판 내 재무장 파워커브가 죽어 있었다.
-	# 10%도 여전히 "죽여도 무기가 안 나온다"는 체감이었다(유저 신고) — 1.5배로
-	# 올린다. 초반 15% → 후반 27%. 무기가 떨어지면 동반 탄약까지 따라오므로
-	# 탄약 수급선(제작 폐지분)을 메우는 두 번째 축이기도 하다.
-	return 0.15 + float(clampi(stage_tier, 1, 5) - 1) * 0.03
-
-
 static func get_definition_value(definition: Dictionary) -> int:
 	var data := definition.get("data", {}) as Dictionary
 	return maxi(
@@ -1073,17 +1076,6 @@ static func get_definition_value(definition: Dictionary) -> int:
 			"total_value",
 			int(data.get("base_value", 0)) * maxi(1, int(data.get("amount", 1)))
 		))
-	)
-
-
-static func is_enemy_weapon_cap_reached(game_state: Node, stage_tier: int) -> bool:
-	# 적 무기 드랍이 '수' 상한에 닿았는가. 여기에 걸린 총만 탄약으로 대체한다 —
-	# 가치 상한에 걸린 경우까지 탄약으로 바꾸면 판 후반의 처치 보장이 통째로
-	# 탄약이 돼서 "무기가 안 나온다"가 그대로 재발한다(실측으로 확인).
-	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 5)] as Dictionary
-	return (
-		int(game_state.get("raid_enemy_weapon_drops_generated"))
-		>= int(profile.get("enemy_weapon_spawn_cap", 4))
 	)
 
 
@@ -1535,11 +1527,13 @@ static func roll_elite_drop(
 	enemy_weapon_id: String,
 	random: RandomNumberGenerator
 ) -> Array[Dictionary]:
-	# 반환 순서: [무기, 동반 탄약(2배), 고가치품]. 비는 항목은 건너뛴다.
+	# 반환 순서: [무기, 동반 탄약(2배), 고가치품, (30%) 상위 가족 방어구]. 비는 항목은 건너뛴다.
 	# ① 들고 있던 무기 — 희귀도 게이트 면제(_enemy_carried_weapon_allowed 경로:
-	#    적의 무장을 그대로 따르므로 러버밴딩이 아니다).
+	#    적의 무장을 그대로 따르므로 러버밴딩이 아니다). 이것이 "확정 장비 1개".
 	# ② 그 구경 탄약 — roll_weapon_companion_ammo의 정상 스택을 2배로.
 	# ③ 귀중품 70% / 개조 부품 30% 확정 1개.
+	# ④ 30%로 한 단계 위 가족 방어구(존 가족+1, 상한 T3) — 일반 적 12%만으로는
+	#    세트가 더디니 엘리트가 세트의 지름길이자 다음 존 미리보기가 된다.
 	var stage := clampi(stage_tier, 1, 5)
 	var results: Array[Dictionary] = []
 	if _enemy_carried_weapon_allowed(enemy_weapon_id):
@@ -1559,7 +1553,151 @@ static func roll_elite_drop(
 	var prize := _roll_elite_prize(stage, random)
 	if not prize.is_empty():
 		results.append(prize)
+	if random.randf() < ELITE_TIER_UP_ARMOR_CHANCE:
+		var tier_up_armor := _materialize_item(_roll_tier_up_armor_id(stage, random), stage, random)
+		if not tier_up_armor.is_empty():
+			results.append(tier_up_armor)
 	return results
+
+
+# ── 장비 공급 시뮬레이션 ────────────────────────────────────────
+# 존 티어 하나를 골라 "25킬 일반 판"을 여러 번 굴려 장비 픽업 수·세트 완성
+# 확률을 잰다. enemy_director의 드랍 경로(일반 적 roll_enemy_drop · 엘리트
+# roll_elite_drop · 옷 상자·봉인 보급함)를 수식 없이 그대로 굴린다 — 확률
+# 상수를 만진 뒤 목표 밴드(판당 방어구 3~4 · 2판 세트 완성 ≥70%)를 이걸로 확인한다.
+# 적 무장 구성은 존 threat가 정하므로 여기선 대표 혼합만 쓴다(수치가 아니라 추세용).
+const SIMULATION_ENEMY_WEAPON_MIX := {
+	1: [["m1911", 0.5], ["mp5", 0.3], ["ak47", 0.1], ["double_barrel", 0.1]],
+	2: [["m1911", 0.35], ["mp5", 0.35], ["ak47", 0.2], ["double_barrel", 0.1]],
+	3: [["m1911", 0.2], ["mp5", 0.35], ["ak47", 0.25], ["double_barrel", 0.1], ["akm", 0.05], ["pump_shotgun", 0.05]],
+	4: [["mp5", 0.3], ["ak47", 0.3], ["akm", 0.2], ["double_barrel", 0.1], ["pump_shotgun", 0.1]],
+	5: [["mp5", 0.25], ["ak47", 0.3], ["akm", 0.25], ["double_barrel", 0.05], ["pump_shotgun", 0.15]],
+}
+
+
+static func simulate_enemy_equipment_supply(
+	stage_tier: int,
+	kill_count: int = 25,
+	run_count: int = 200,
+	seed_value: int = 4242,
+	include_boss: bool = false
+) -> Dictionary:
+	var stage := clampi(stage_tier, 1, 5)
+	var random := RandomNumberGenerator.new()
+	random.seed = seed_value
+	var profile := STAGE_PROFILES[stage] as Dictionary
+	var weapon_cap := int(profile.get("enemy_weapon_spawn_cap", 8))
+	var counts := profile.get("container_counts", {}) as Dictionary
+	var clothing_count := int(counts.get("clothing_cache", 0))
+	var secure_count := int(counts.get("secure_cache", 0))
+	var family_index := armor_family_index_for_stage(stage)
+	var set_ids: Array = ARMOR_FAMILIES[family_index]
+	var total_armor := 0
+	var total_armor_enemy := 0
+	var total_weapons := 0
+	var total_elite_armor := 0
+	var total_tier_up := 0
+	var total_boss_tier_up := 0
+	var set_done_one := 0
+	var set_done_two := 0
+	var owned_previous: Dictionary = {}
+	var runs := maxi(2, run_count)
+	for run_index in runs:
+		var owned: Dictionary = {}
+		var run_weapons := 0
+		var run_armor := 0
+		for _kill in maxi(1, kill_count):
+			var melee := random.randf() < 0.25
+			var weapon_id := "baseball_bat" if melee else _weighted_pick(
+				SIMULATION_ENEMY_WEAPON_MIX[stage] as Array, random
+			)
+			var drop := roll_enemy_drop(stage, "melee" if melee else "pistol", weapon_id, random)
+			match str(drop.get("type", "")):
+				"weapon":
+					if run_weapons < weapon_cap:
+						run_weapons += 1
+				"armor":
+					run_armor += 1
+					total_armor_enemy += 1
+					owned[_simulation_base_id(drop)] = true
+		# 엘리트: 존 티어 1~2 = 1명, 3+ = 2명(enemy_director.get_initial_elite_count).
+		for _elite in (1 if stage <= 2 else 2):
+			var elite_weapon := "mp5"
+			var weapon_roll := random.randf()
+			if weapon_roll >= 0.8:
+				elite_weapon = "double_barrel"
+			elif weapon_roll >= 0.45:
+				elite_weapon = "ak47"
+			if stage >= 3 and random.randf() < 0.5:
+				elite_weapon = "akm" if elite_weapon == "ak47" else (
+					"pump_shotgun" if elite_weapon == "double_barrel" else elite_weapon
+				)
+			for entry in roll_elite_drop(stage, elite_weapon, random):
+				match str(entry.get("type", "")):
+					"weapon":
+						run_weapons += 1
+					"armor":
+						run_armor += 1
+						total_elite_armor += 1
+						owned[_simulation_base_id(entry)] = true
+						if _simulation_family_of(_simulation_base_id(entry)) > family_index:
+							total_tier_up += 1
+		if include_boss:
+			var boss_armor := roll_boss_armor_drop(stage, random)
+			run_armor += 1
+			owned[_simulation_base_id(boss_armor)] = true
+			if _simulation_family_of(_simulation_base_id(boss_armor)) > family_index:
+				total_boss_tier_up += 1
+		for _container in clothing_count:
+			for entry in roll_container("clothing_cache", stage, "street_mixed", random):
+				if str(entry.get("type", "")) == "armor":
+					run_armor += 1
+					owned[_simulation_base_id(entry)] = true
+		for _container in secure_count:
+			for entry in roll_container("secure_cache", stage, "street_mixed", random):
+				if str(entry.get("type", "")) == "armor":
+					run_armor += 1
+					owned[_simulation_base_id(entry)] = true
+		total_armor += run_armor
+		total_weapons += run_weapons
+		if _simulation_set_complete(owned, set_ids):
+			set_done_one += 1
+		if run_index % 2 == 1:
+			var merged := owned.duplicate()
+			for key in owned_previous.keys():
+				merged[key] = true
+			if _simulation_set_complete(merged, set_ids):
+				set_done_two += 1
+		owned_previous = owned
+	var divisor := float(runs)
+	return {
+		"armor_per_run": float(total_armor) / divisor,
+		"armor_from_enemies_per_run": float(total_armor_enemy) / divisor,
+		"weapons_per_run": float(total_weapons) / divisor,
+		"set_complete_1run": float(set_done_one) / divisor,
+		"set_complete_2runs": float(set_done_two) / float(runs / 2),
+		"elite_armor_per_run": float(total_elite_armor) / divisor,
+		"elite_tier_up_share": float(total_tier_up) / float(maxi(1, total_elite_armor)),
+		"boss_tier_up_share": (float(total_boss_tier_up) / divisor) if include_boss else 0.0,
+	}
+
+
+static func _simulation_base_id(definition: Dictionary) -> String:
+	return str((definition.get("data", {}) as Dictionary).get("equipment_id", "")).split("@")[0]
+
+
+static func _simulation_family_of(base_id: String) -> int:
+	for index in ARMOR_FAMILIES.size():
+		if (ARMOR_FAMILIES[index] as Array).has(base_id):
+			return index
+	return -1
+
+
+static func _simulation_set_complete(owned: Dictionary, set_ids: Array) -> bool:
+	for id in set_ids:
+		if not owned.has(str(id)):
+			return false
+	return true
 
 
 static func _roll_elite_prize(stage: int, random: RandomNumberGenerator) -> Dictionary:

@@ -648,7 +648,8 @@ func _setup_weapon() -> void:
 		for mod_id in stored_mods:
 			mods.append(str(mod_id))
 	var enhancement_level := int(GameState.get("weapon_level")) if GameState.get("weapon_level") != null else 0
-	weapon_stats = WEAPON_SYSTEM.build_stats(weapon_id, mods, enhancement_level)
+	# 필드 main과 같은 단일 지점 — 훈련(장탄·장전)이 건물 안에서도 똑같이 먹힌다.
+	weapon_stats = GameState.call("build_player_weapon_stats", weapon_id, mods, enhancement_level)
 
 
 func _setup_weapon_visual() -> void:

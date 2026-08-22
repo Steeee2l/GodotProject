@@ -130,11 +130,10 @@ func _run() -> void:
 			assert(ammo_amount >= 2 and ammo_amount <= 12)
 	assert(melee_weapon_count == 0)
 	var ranged_weapon_rate := float(ranged_weapon_count) / float(ranged_sample_count)
-	# stage 4 표본: 0.15 + 3x0.03 = 0.24 기대.
-	# "적을 죽여도 무기가 안 나온다"는 유저 신고로 드랍률을 1.5배 올렸다
-	# (0.10+0.02/스테이지 → 0.15+0.03/스테이지). 무기 드랍은 동반 탄약까지
-	# 끌고 오므로 탄약 제작 폐지분을 메우는 축이기도 하다.
-	assert(ranged_weapon_rate >= 0.21 and ranged_weapon_rate <= 0.27)
+	# 2026-08 장비 드랍 재설계: 든 총 10% 고정(존 티어 무관, ENEMY_CARRIED_WEAPON_DROP_CHANCE).
+	# 예전 0.15+0.03/스테이지(stage 4 = 0.24)는 "매 킬 장비 보장 fallback"과 함께
+	# 25킬 판에 장비 ~25개를 만들었다. 무기는 귀환 정산에서 사다리 중복만 분해된다.
+	assert(ranged_weapon_rate >= 0.08 and ranged_weapon_rate <= 0.12, "든 총 드랍률 10%% 부근 (실측 %.3f)" % ranged_weapon_rate)
 	var recovery_weapon_count := 0
 	var recovery_sample_count := 2000
 	for _sample in recovery_sample_count:
@@ -230,27 +229,58 @@ func _run() -> void:
 	print("ENEMY_DROP_RATES any=%.3f common=%.3f armor=%.3f" % [
 		any_enemy_drop_rate, common_enemy_drop_rate, armor_enemy_drop_rate,
 	])
-	# 스마트 탄약 도입으로 적 드랍에서 식량 비중이 소폭 내려가고(탄약이 그만큼
-	# 차지) 방어구 판정은 그대로다. 창은 표본 요동(±1%p)까지 감안해 잡는다.
-	# 무기 드랍률 상향(0.10→0.15)만큼 무기가 앞단에서 더 빠져나가므로 방어구·
-	# 식량 비중은 각각 1%p 남짓 내려간다 — 기존 창 안에 그대로 들어온다.
-	assert(any_enemy_drop_rate >= 0.71 and any_enemy_drop_rate <= 0.79)
-	# 무기 드랍이 앞단에서 5%p 더 빠져나가면서 실측이 0.24 → 0.21로 내려왔다.
-	# 하한을 0.19로 열어 표본 요동에 바닥이 닿지 않게 한다.
-	assert(common_enemy_drop_rate >= 0.19 and common_enemy_drop_rate <= 0.30)
-	assert(armor_enemy_drop_rate >= 0.20 and armor_enemy_drop_rate <= 0.28)
+	# 2026-08 장비 드랍 재설계: 일반 적 = 입고 있던 방어구 12% / 든 총 10% / 그 외
+	# 기존 탄약·식량·부품 분포(ordinary 62%). 기대값(stage 1): any = 0.22 + 0.78×0.62
+	# = 0.70, common(식량+부품) = 0.78×0.62×0.66 = 0.32, 방어구 = 0.12.
+	# 예전 창(any 0.71~0.79 · armor 0.20~0.28)은 "매 킬 장비 보장"과 함께 25킬 판에
+	# 방어구 ~20개를 만들던 수치다. 표본 요동(±1.5%p)을 감안해 창을 잡는다.
+	assert(any_enemy_drop_rate >= 0.67 and any_enemy_drop_rate <= 0.74, "any 0.70 부근 (실측 %.3f)" % any_enemy_drop_rate)
+	assert(common_enemy_drop_rate >= 0.28 and common_enemy_drop_rate <= 0.36, "common 0.32 부근 (실측 %.3f)" % common_enemy_drop_rate)
+	assert(armor_enemy_drop_rate >= 0.10 and armor_enemy_drop_rate <= 0.14, "입고 있던 방어구 12%% 부근 (실측 %.3f)" % armor_enemy_drop_rate)
+	# 근접 적은 방어구 12%만 — 무기 0(위 melee_weapon_count), 방어구는 같은 12%.
+	var melee_armor_count := 0
+	for _sample in 5000:
+		if str(LOOT_ECONOMY.roll_enemy_drop(1, "melee", "baseball_bat", random).get("type", "")) == "armor":
+			melee_armor_count += 1
+	var melee_armor_rate := float(melee_armor_count) / 5000.0
+	assert(melee_armor_rate >= 0.10 and melee_armor_rate <= 0.14, "근접 적 방어구 12%% 부근 (실측 %.3f)" % melee_armor_rate)
 
-	# 처치 보장 드랍(2026-08 유저 요구: 모든 킬 = 무기 or 방어구 최소 1개).
-	# roll_enemy_drop의 기존 분포는 그대로 두고(위 어서션 유지), 무기·방어구가
-	# 안 나온 킬에 enemy_director가 이 fallback을 별도 픽업으로 얹는다.
-	# fallback 자체는 항상 장비를 내놓아야 하고, 무기 비율은 22% 부근이어야 한다.
-	# 55% → 22%로 되돌렸다. 55%는 "적을 죽여도 무기가 안 나온다"는 신고에 대한
-	# 보정이었는데, 실측해 보니 진짜 원인은 비중이 아니라 weapon_rarity_cap이
-	# 적이 들고 있던 총(MP5·AK·산탄총)을 전부 걸러 M1911만 남기던 것이었다
-	# (1스테이지 25킬 실측: 무기 픽업 7.2정 전부 M1911). 원인을 고친 뒤에도
-	# 55%를 유지하면 적 무기 캡을 매 판 강제로 때려서 드랍이 굴림이 아니라
-	# 상수가 된다. 비중을 내려도 판당 무기 픽업 수는 7.0정으로 종전과 같고,
-	# 대신 구경이 골고루 섞인다(M1911 34% · MP5 40% · AK 14% · 더블배럴 11%).
+	# 장비 공급 밴드 — 존1·3·5 × 25킬 × 200판(엘리트 1~2·옷 상자·봉인 보급함 포함).
+	# 목표: 판당 일반 적 방어구 3~4개 부근, 같은 존 2회차 안에 그 존 세트 3종 ≥70%.
+	# 재설계 전 실측: 판당 방어구 21.7/22.6/23.9(존1/3/5) — 슬롯 3개에 20벌.
+	for supply_stage in [1, 3, 5]:
+		var supply: Dictionary = LOOT_ECONOMY.simulate_enemy_equipment_supply(supply_stage, 25, 200, 4242 + supply_stage, true)
+		print("EQUIPMENT_SUPPLY_STAGE_%d %s" % [supply_stage, supply])
+		var enemy_armor := float(supply.get("armor_from_enemies_per_run", 0.0)) + float(supply.get("elite_armor_per_run", 0.0))
+		assert(enemy_armor >= 2.5 and enemy_armor <= 4.5, "존%d 판당 적 방어구 3~4 부근 (실측 %.2f)" % [supply_stage, enemy_armor])
+		assert(float(supply.get("armor_per_run", 0.0)) <= 12.0, "존%d 상자 포함 방어구 과잉 아님 (실측 %.2f)" % [supply_stage, float(supply.get("armor_per_run", 0.0))])
+		assert(float(supply.get("set_complete_2runs", 0.0)) >= 0.70, "존%d 2판 세트 완성 ≥70%% (실측 %.3f)" % [supply_stage, float(supply.get("set_complete_2runs", 0.0))])
+		assert(float(supply.get("weapons_per_run", 0.0)) >= 2.0 and float(supply.get("weapons_per_run", 0.0)) <= 5.0, "존%d 판당 무기 2~5 (실측 %.2f)" % [supply_stage, float(supply.get("weapons_per_run", 0.0))])
+		if supply_stage < 5:
+			# 엘리트·보스의 추가 방어구는 한 단계 위 가족(존 가족+1). 최상위 존(T3)은 같은 가족.
+			assert(is_equal_approx(float(supply.get("elite_tier_up_share", 0.0)), 1.0), "존%d 엘리트 방어구는 상위 가족" % supply_stage)
+			assert(is_equal_approx(float(supply.get("boss_tier_up_share", 0.0)), 1.0), "존%d 보스 방어구는 상위 가족" % supply_stage)
+	# 엘리트 추가 방어구 확률 30% · 보스 확정 상위 가족.
+	var elite_armor_count := 0
+	for _sample in 2000:
+		for entry in LOOT_ECONOMY.roll_elite_drop(1, "mp5", random):
+			if str((entry as Dictionary).get("type", "")) == "armor":
+				elite_armor_count += 1
+				var elite_armor_id := str(((entry as Dictionary).get("data", {}) as Dictionary).get("equipment_id", "")).split("@")[0]
+				assert(["riot_vest", "tactical_helmet", "tactical_boots"].has(elite_armor_id), "존1 엘리트 방어구는 T2 (got %s)" % elite_armor_id)
+	var elite_armor_rate := float(elite_armor_count) / 2000.0
+	assert(elite_armor_rate >= 0.26 and elite_armor_rate <= 0.34, "엘리트 상위 방어구 30%% 부근 (실측 %.3f)" % elite_armor_rate)
+	for boss_stage in [1, 3, 5]:
+		var boss_armor: Dictionary = LOOT_ECONOMY.roll_boss_armor_drop(boss_stage, random)
+		assert(str(boss_armor.get("type", "")) == "armor", "보스 확정 방어구")
+		var boss_family := mini(LOOT_ECONOMY.armor_family_index_for_stage(boss_stage) + 1, 2)
+		var boss_armor_id := str((boss_armor.get("data", {}) as Dictionary).get("equipment_id", "")).split("@")[0]
+		assert((LOOT_ECONOMY.ARMOR_FAMILIES[boss_family] as Array).has(boss_armor_id), "존%d 보스 방어구는 상위 가족(상한 T3) (got %s)" % [boss_stage, boss_armor_id])
+
+	# roll_guaranteed_equipment_drop — "확정 장비 1개" 굴림(무기 22%/방어구 78%).
+	# 2026-08 장비 드랍 재설계로 enemy_director의 매 킬 fallback에서는 뺐다(모든 킬 =
+	# 장비 1개가 25킬 판에 방어구 ~20개를 만든 진범). 함수는 유틸로 남았으니 분포만
+	# 그대로 지킨다 — 아래 어서션은 "fallback이 매 킬 얹힌다"를 뜻하지 않는다.
 	var guaranteed_weapon_count := 0
 	var guaranteed_sample_count := 2000
 	for _sample in guaranteed_sample_count:

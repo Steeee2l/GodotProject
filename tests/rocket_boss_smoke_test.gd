@@ -88,7 +88,10 @@ func _run() -> void:
 	# 넘는 순간에만 그로기가 온다 — 연사 스턴락 봉인 검증.
 	boss.set("boss_action", "combat")
 	var health_before := int(boss.get("health"))
-	assert(health_before >= 2400, "보스 체력은 티어 스케일 하한(2400) 이상이어야 한다")
+	# 체력식 하향(유저 신고 "아무리 때려도 안 줄어든다"): (1100+위협×900)×(1+0.30×(티어-1)).
+	# 위협 0.8·티어 1이면 1,820 — 하한은 1,100(위협 0)이다. 예전 하한 2,400은 옛 식의 값.
+	assert(health_before >= 1100, "보스 체력은 티어 스케일 하한(1100) 이상이어야 한다")
+	assert(health_before <= 2000, "보스 체력 하향이 되돌아가면 안 된다(위협 0.8·티어 1 = 1,820)")
 	boss.call("take_hit", 40, Vector3.RIGHT)
 	assert(str(boss.get("combat_state")) != "stagger", "낱발 피격이 보스를 경직시키면 안 된다")
 	assert(int(boss.get("health")) == health_before - 40)

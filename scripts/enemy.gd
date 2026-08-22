@@ -208,6 +208,8 @@ var search_turn_sign := 1.0
 var health_ratio := 1.0
 var damage_trail_ratio := 1.0
 var damage_trail_delay := 0.0
+# 피격 뒤 잔상이 따라 줄기 시작하기까지의 지연. 보스는 0.4로 늘려 "깎였다"를 더 보여 준다.
+var damage_trail_delay_seconds := 0.28
 var grenade_cooldown := 0.0
 var grenade_target_position := Vector3.ZERO
 var steering_direction_cache := Vector3.ZERO
@@ -1362,6 +1364,12 @@ func _get_health_bar_texture(kind: String) -> Texture2D:
 				color = Color(0.54, 0.59, 0.6, 0.92) if not inside_inner else Color(0.035, 0.045, 0.05, 0.92)
 			elif kind == "damage":
 				color = Color(1.0, 0.31 + float(y) / float(height) * 0.12, 0.09, 0.96)
+			elif kind == "trail_white":
+				# 보스 체력바의 감소분 잔상 — 흰색이라 "방금 깎인 양"이 한눈에 읽힌다.
+				color = Color(0.96, 0.96, 0.93, 0.96)
+			elif kind == "poise":
+				# 보스 강인도(그로기까지 누적) 게이지 — 노랑. "때리면 뭔가 쌓인다".
+				color = Color(1.0, 0.84 - float(y) / float(height) * 0.1, 0.25, 0.98)
 			else:
 				color = Color(0.19, 0.82 - float(y) / float(height) * 0.13, 0.38, 0.98)
 			image.set_pixel(x, y, color)
@@ -1425,7 +1433,7 @@ func _update_health_bar_visibility() -> void:
 func _register_health_damage() -> void:
 	health_ratio = clampf(float(health) / float(maxi(1, max_health)), 0.0, 1.0)
 	damage_trail_ratio = maxf(damage_trail_ratio, health_ratio)
-	damage_trail_delay = 0.28
+	damage_trail_delay = damage_trail_delay_seconds
 	_set_health_bar_ratio(health_bar_fill, health_ratio)
 	_set_health_bar_ratio(health_bar_damage_trail, damage_trail_ratio)
 

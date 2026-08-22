@@ -219,6 +219,11 @@ func _rebuild_ui() -> void:
 	_add_training_card(tree, "endurance")
 	_add_training_card(tree, "agility")
 	_add_training_card(tree, "fieldcraft")
+	# 탄약 운용 훈련 4종 — 정의는 GameState.TRAINING_NODE_DEFS가 쥔다.
+	_add_training_card(tree, "magazine_drill")
+	_add_training_card(tree, "quick_hands")
+	_add_training_card(tree, "ammo_carry")
+	_add_training_card(tree, "sortie_supply")
 	status_label = _label("", 13, Color("#9db0a6"))
 	status_label.name = "TrainingStatus"
 	status_label.custom_minimum_size.y = 18
@@ -333,7 +338,7 @@ func _add_training_card(parent: GridContainer, node_id: String) -> void:
 	title_row.add_child(rank_label)
 
 	var description := _label(
-		str(definition.get("description", "")),
+		_training_description_text(node_id, definition),
 		12 if compact_layout else 13,
 		Color("#9eaaa4") if requirements_met else Color("#65706b")
 	)
@@ -370,6 +375,35 @@ func _add_training_card(parent: GridContainer, node_id: String) -> void:
 		action_icon.texture = UI_ICONS.get_icon("scrap", 24, Color("#d4d9d6"))
 		action_label.text = "x%s 필요" % GameState.format_compact_number(cost)
 	_set_mouse_passthrough(card_body)
+
+
+func _training_description_text(node_id: String, definition: Dictionary) -> String:
+	# 탄약 운용 훈련은 "지금 장착 무기 기준으로 얼마나 달라지는가"를 숫자로 붙인다.
+	var text := str(definition.get("description", ""))
+	var weapon_id := str(GameState.equipped_weapon_id)
+	var no_mods: Array[String] = []
+	var stats: Dictionary = GameState.build_player_weapon_stats(
+		weapon_id, no_mods, GameState.get_weapon_enhancement_level(weapon_id)
+	)
+	var rank := GameState.get_training_rank(node_id)
+	match node_id:
+		"magazine_drill":
+			var base := int(stats.get("base_magazine_size", 0))
+			var now := int(stats.get("magazine_size", base))
+			if base > 0:
+				text += " · 현재 장탄 %d → %d" % [base, now]
+		"quick_hands":
+			var base := float(stats.get("base_reload_time", 0.0))
+			var now := float(stats.get("reload_time", base))
+			if base > 0.0:
+				text += " · 현재 장전 %.2fs → %.2fs" % [base, now]
+		"ammo_carry":
+			text += " · 현재 칸당 %d발" % GameState.get_ammo_rounds_per_slot()
+		"sortie_supply":
+			var magazine := int(stats.get("magazine_size", 0))
+			if magazine > 0:
+				text += " · 현재 %d탄창(%d발)" % [rank, rank * magazine]
+	return text
 
 
 func _training_requirement_text(definition: Dictionary) -> String:

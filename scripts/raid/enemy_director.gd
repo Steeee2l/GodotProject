@@ -586,6 +586,20 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 				drop_position + Vector3(-1.0, 0.0, 0.6),
 				boss_ammo_data
 			)
+		# 보스 확정 장비 1개 — 한 단계 위 가족 방어구(존 가족+1, 상한 T3) 확정.
+		# 일반 적 12%만으로는 세트가 더디니 보스가 "다음 존 장비"의 확실한 창이 된다.
+		# 확정은 확정이다: 캡에 막혀도 집계만 하고 지급한다(엘리트와 같은 원칙).
+		var boss_armor: Dictionary = LOOT_ECONOMY.roll_boss_armor_drop(stage_tier, spawn_random)
+		if not boss_armor.is_empty():
+			if not LOOT_ECONOMY.try_register_loot(GameState, boss_armor, "enemy", stage_tier):
+				LOOT_ECONOMY.try_register_loot(GameState, boss_armor, "enemy", stage_tier, true)
+			var boss_armor_data := (boss_armor.get("data", {}) as Dictionary).duplicate(true)
+			boss_armor_data["loot_source"] = "enemy_boss"
+			host._create_loot_pickup(
+				"armor",
+				drop_position + Vector3(0.9, 0.0, -0.8),
+				boss_armor_data
+			)
 		return boss_drop
 	if bool(enemy.get_meta("elite", false)):
 		# 엘리트는 굴림이 아니라 확정 — 위험을 알고 골라 싸운 대가.
@@ -633,45 +647,10 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 				enemy_weapon_id, stage_tier, drop_position
 			)
 	var dropped_weapon := main_type == "weapon"
-	# 처치 보장 — 무기도 방어구도 안 나온 킬은 fallback 장비(무기 40%/방어구
-	# 60%)를 확정으로 얹는다. "죽였는데 장비가 하나도 없다"를 없앤다(유저 요구).
-	# 기존 굴림(식량·부품·탄약)은 그대로 두고 별도 픽업으로 스폰한다.
-	if main_type not in ["weapon", "armor"]:
-		var guaranteed: Dictionary = LOOT_ECONOMY.roll_guaranteed_equipment_drop(
-			stage_tier, enemy_kind, enemy_weapon_id, spawn_random
-		)
-		if not guaranteed.is_empty():
-			if not LOOT_ECONOMY.try_register_loot(GameState, guaranteed, "enemy", stage_tier):
-				if (
-					str(guaranteed.get("type", "")) == "weapon"
-					and LOOT_ECONOMY.is_enemy_weapon_cap_reached(GameState, stage_tier)
-				):
-					# 판에 굴러다니는 총이 무한정 늘어나는 것만 막는다. '수' 상한에
-					# 걸린 총은 그 구경 탄약으로 바꿔 지급한다 — 예전엔 여기서
-					# 그냥 ignore_caps로 줘서 무기 캡 자체가 무의미했다.
-					var substitute: Dictionary = LOOT_ECONOMY.roll_weapon_companion_ammo(
-						enemy_weapon_id, stage_tier, spawn_random
-					)
-					guaranteed = (
-						substitute
-						if not substitute.is_empty()
-						else LOOT_ECONOMY.roll_guaranteed_equipment_drop(
-							stage_tier, "melee", "baseball_bat", spawn_random
-						)
-					)
-				# 보장은 보장이다 — 가치 캡에 막혀도 집계만 하고 지급한다.
-				LOOT_ECONOMY.try_register_loot(GameState, guaranteed, "enemy", stage_tier, true)
-			var guaranteed_type := str(guaranteed.get("type", "armor"))
-			var guaranteed_data := (guaranteed.get("data", {}) as Dictionary).duplicate(true)
-			guaranteed_data["loot_source"] = "enemy"
-			var guaranteed_pickup: Node3D = host._create_loot_pickup(
-				guaranteed_type,
-				drop_position + Vector3(0.9, 0.0, -0.5),
-				guaranteed_data
-			)
-			dropped_weapon = dropped_weapon or guaranteed_type == "weapon"
-			if main_pickup == null:
-				main_pickup = guaranteed_pickup
+	# "매 킬 장비 보장 fallback"은 2026-08 장비 드랍 재설계로 폐지했다 — 모든
+	# 킬 = 무기 or 방어구 1개는 25킬 판에 방어구 ~20개(슬롯은 3개)를 만든 진범.
+	# 일반 적은 roll_enemy_drop의 방어구 12% / 든 총 10%만 탄다. 잉여는 귀환
+	# 정산에서 부품으로 분해된다(GameState.salvage_surplus_equipment).
 	# 총이 떨어졌으면 그 구경 탄약을 정상 스택으로 100% 동반 — 주운 총을 그
 	# 자리에서 장전해 써 볼 수 있어야 한다(유저 요구).
 	if dropped_weapon:
@@ -697,8 +676,9 @@ func _spawn_elite_loot(
 	drop_position: Vector3
 ) -> Node3D:
 	# 엘리트 확정 드랍 3종 — ① 들고 있던 무기(희귀도 게이트 면제 경로)
-	# ② 동반 탄약 2배 스택 ③ 고가치품(귀중품/부품) 1개.
-	# 확정은 확정이다: 캡에 막혀도 집계만 하고 지급한다(처치 보장과 같은 원칙).
+	# ② 동반 탄약 2배 스택 ③ 고가치품(귀중품/부품) 1개 — 여기에 ④ 30%로
+	# 한 단계 위 가족 방어구(loot_economy.roll_elite_drop, 존 가족+1·상한 T3).
+	# 확정은 확정이다: 캡에 막혀도 집계만 하고 지급한다.
 	var drops: Array[Dictionary] = LOOT_ECONOMY.roll_elite_drop(
 		stage_tier, elite_weapon_id, spawn_random
 	)
@@ -707,6 +687,7 @@ func _spawn_elite_loot(
 		Vector3.ZERO,
 		Vector3(-0.9, 0.0, 0.6),
 		Vector3(0.9, 0.0, -0.5),
+		Vector3(0.5, 0.0, 1.0),
 	]
 	for drop_index in drops.size():
 		var definition: Dictionary = drops[drop_index]
