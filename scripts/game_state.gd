@@ -1670,11 +1670,17 @@ func select_raid_zone(zone_id: String) -> bool:
 # 늘 있는 상점이면 그건 상인이 아니라 자판기다 — 왔을 때 사 두는 판단이 생긴다.
 func roll_merchant_visit(chance: float = 0.65) -> bool:
 	merchant_missed_visit = false
-	if merchant_status == "inside" or merchant_status == "waiting":
-		return true
-	if shelter_return_serial <= 0 or merchant_last_roll_serial == shelter_return_serial:
+	# 같은 귀환 안에서는 다시 굴리지 않는다 — 이미 와 있으면(대기/입장) 그대로.
+	if merchant_last_roll_serial == shelter_return_serial:
+		return merchant_status == "inside" or merchant_status == "waiting"
+	if shelter_return_serial <= 0:
 		return false
 	merchant_last_roll_serial = shelter_return_serial
+	# 새 귀환 = 지난 방문은 끝났다. 예전엔 한 번 들어온 상인이 영영 'inside'로
+	# 남아 매대가 다시 짜이지 않았다 — 탄약을 한 번 사 가면 그 뒤로는 빈 매대만
+	# 보여서 "상인이 물건을 안 판다"(유저 신고). 상인은 판 사이에 떠났다가
+	# 확률로 다시 온다. 그래야 '이번 방문에 사야 할 이유'와 '안 오는 날'이 산다.
+	merchant_status = "away"
 	if shelter_return_serial == 1:
 		merchant_status = "waiting"
 		roll_merchant_stock()
