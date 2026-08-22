@@ -17,51 +17,89 @@ const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/maga
 # 출정이 심부름이 되고, 도시를 뒤질 이유가 사라졌다(유저 요구).
 # 통조림은 재료가 아니다 — 플레이어 소모품(먹기·투척)으로 바뀌며 레시피에서 빠졌고,
 # 그 몫은 고철(통조림 1 ≈ 70, 100 단위 반올림)로 접어 넣었다.
+# ── 2026-08 경제 코어: 장비는 여기서만 생긴다 ──
+# 무기 7종·방어구 9종 전부 레시피. 해금은 설계도 조각 3/3(gear_id 기준, GameState.
+# is_blueprint_unlocked), 보유 중이면 "제작됨 · 영구 보유"로 재제작 불가(1개 영구).
+# 비용은 존별 수입(T1 ~7K/h · T2 ~43K/h · T3 ~260K/h · T4 ~1.1M/h · T5 ~5M/h)에 맞춰
+# "그 존 도달 후 1~3시간" 선: 고철 + 일반 부품, 존3부터 정밀 기어, 존4부터 군용 합금.
+# 캣닢은 장비 레시피에서 뺐다(개조품에만) — 고철·부품이 어마어마하게 드는 인크리멘탈.
 const RECIPES := {
 	"armor": [
 		{
-			"id": "craft_scav_vest",
+			"id": "craft_scav_vest", "gear_id": "scav_vest",
 			"name": "누더기 방탄 조끼",
 			"desc": "철판을 덧대 꿰맨 생존자 계열 경량 조끼. 첫 방어구로 충분합니다.",
-			"cost": {"scrap": 4300, "rubber_gasket": 1},
+			"cost": {"scrap": 4300, "rubber_gasket": 2},
 			"result": {"equipment": "scav_vest", "amount": 1},
 			"required_tier": 1,
 		},
 		{
-			"id": "craft_patched_sneakers",
+			"id": "craft_patched_sneakers", "gear_id": "patched_sneakers",
 			"name": "기워 붙인 운동화",
 			"desc": "밑창을 갈아 끼운 생존자 계열 신발. 발소리와 냄새를 줄입니다.",
-			"cost": {"scrap": 3200, "rubber_gasket": 1},
+			"cost": {"scrap": 5200, "rubber_gasket": 1, "magazine_spring": 1},
 			"result": {"equipment": "patched_sneakers", "amount": 1},
 			"required_tier": 1,
 		},
 		{
-			"id": "craft_riot_vest",
+			"id": "craft_patched_helmet", "gear_id": "patched_helmet",
+			"name": "기워 붙인 헬멧",
+			"desc": "금 간 안전모를 철판으로 보강한 머리 보호구. 생존자 세트의 마지막 조각.",
+			"cost": {"scrap": 6400, "magazine_spring": 1, "rubber_gasket": 1, "scope_lens": 1},
+			"result": {"equipment": "patched_helmet", "amount": 1},
+			"required_tier": 1,
+		},
+		{
+			"id": "craft_riot_vest", "gear_id": "riot_vest",
 			"name": "진압대 방탄 조끼",
-			"desc": "진압 계열 중량 조끼. 튼튼한 대신 실루엣이 커집니다.",
-			"cost": {"scrap": 14600, "catnip": 800, "rubber_gasket": 2},
+			"desc": "진압 계열 중량 조끼. 튼튼한 대신 실루엣이 커집니다. 첫 제작 시 누더기 조끼 강화의 60%를 이어받습니다.",
+			"cost": {"scrap": 60000, "rubber_gasket": 3, "magazine_spring": 2},
 			"result": {"equipment": "riot_vest", "amount": 1},
 			"required_tier": 2,
 			"required_workbench": 2,
 		},
 		{
-			"id": "craft_tactical_helmet",
-			"name": "전술 방탄 헬멧",
-			"desc": "진압 계열 헬멧. 내피를 새로 짜 넣어야 해 작업대 숙련이 필요합니다.",
-			"cost": {"scrap": 22700, "magazine_spring": 1, "rubber_gasket": 1},
-			"result": {"equipment": "tactical_helmet", "amount": 1},
+			"id": "craft_tactical_boots", "gear_id": "tactical_boots",
+			"name": "경량 전술화",
+			"desc": "발목을 잡아주면서도 유연한 밑창의 진압 계열 전술화. 첫 제작 시 운동화 강화의 60%를 이어받습니다.",
+			"cost": {"scrap": 48000, "rubber_gasket": 2, "magazine_spring": 2, "scope_lens": 1},
+			"result": {"equipment": "tactical_boots", "amount": 1},
 			"required_tier": 2,
+			"required_workbench": 2,
+		},
+		{
+			"id": "craft_tactical_helmet", "gear_id": "tactical_helmet",
+			"name": "전술 방탄 헬멧",
+			"desc": "진압 계열 헬멧. 내피를 새로 짜 넣어야 해 작업대 숙련과 정밀 기어가 필요합니다.",
+			"cost": {"scrap": 300000, "magazine_spring": 3, "rubber_gasket": 2, "scope_lens": 2, "precision_gear": 1},
+			"result": {"equipment": "tactical_helmet", "amount": 1},
+			"required_tier": 3,
 			"required_workbench": 3,
 		},
 		{
-			"id": "craft_military_vest",
+			"id": "craft_military_vest", "gear_id": "military_vest",
 			"name": "군납 방탄복",
-			"desc": "봉쇄선 규격을 흉내 낸 최상급 방탄복. 쉘터가 다 커야 손을 댈 수 있습니다.",
-			"cost": {
-				"scrap": 71500, "catnip": 5000, "scope_lens": 1,
-				"rubber_gasket": 3,
-			},
+			"desc": "봉쇄선 규격을 흉내 낸 최상급 방탄복. 군용 합금이 들어가야 판이 버팁니다.",
+			"cost": {"scrap": 1600000, "rubber_gasket": 5, "magazine_spring": 4, "scope_lens": 3, "precision_gear": 2, "military_alloy": 1},
 			"result": {"equipment": "military_vest", "amount": 1},
+			"required_tier": 4,
+			"required_workbench": 4,
+		},
+		{
+			"id": "craft_military_helmet", "gear_id": "military_helmet",
+			"name": "군납 전투 헬멧",
+			"desc": "레일과 내피가 온전한 전투 헬멧. 군납 세트의 머리.",
+			"cost": {"scrap": 1300000, "scope_lens": 4, "magazine_spring": 3, "rubber_gasket": 3, "precision_gear": 2, "military_alloy": 1},
+			"result": {"equipment": "military_helmet", "amount": 1},
+			"required_tier": 4,
+			"required_workbench": 4,
+		},
+		{
+			"id": "craft_assault_boots", "gear_id": "assault_boots",
+			"name": "강습 부츠",
+			"desc": "봉쇄선 강습조가 신던 부츠. 기동성이 탁월하지만 무거워 냄새 흔적이 짙습니다.",
+			"cost": {"scrap": 1100000, "rubber_gasket": 4, "magazine_spring": 4, "scope_lens": 2, "precision_gear": 1, "military_alloy": 1},
+			"result": {"equipment": "assault_boots", "amount": 1},
 			"required_tier": 4,
 			"required_workbench": 4,
 		},
@@ -113,64 +151,66 @@ const RECIPES := {
 	],
 	"weapons": [
 		{
-			"id": "m1911",
+			"id": "m1911", "gear_id": "m1911",
 			"name": "M1911 솜방망이",
 			"desc": "초반 거지런과 최후의 보루용 권총.",
-			"cost": {"scrap": 8400, "rubber_gasket": 1},
+			"cost": {"scrap": 9000, "rubber_gasket": 1, "magazine_spring": 2},
 			"result": {"weapon": "m1911", "amount": 1},
 			"required_tier": 1,
 		},
 		{
-			"id": "mp5",
+			"id": "mp5", "gear_id": "mp5",
 			"name": "MP5 하악이",
 			"desc": "기동전과 좀비 소탕에 강한 기관단총.",
-			"cost": {"scrap": 20700, "catnip": 1500, "magazine_spring": 2, "rubber_gasket": 1},
+			"cost": {"scrap": 16000, "magazine_spring": 3, "scope_lens": 1, "rubber_gasket": 1},
 			"result": {"weapon": "mp5", "amount": 1},
 			"required_tier": 1,
 		},
-		# ── 무기 사다리 ──
-		# AK-47 레시피는 뺐다 — 시작 무기라 만들 이유가 없었다. 그 자리에 AKM(2단).
-		# 청사진은 메인 미션 2단계 보상이 확정 경로, 기존 소총 청사진(봉인 보급함
-		# 드랍)도 대체 해금으로 인정한다(required_blueprint_alternatives).
-		# 상위 기종을 처음 만들면 아래 단계 강화의 60%가 자동 이관된다.
 		{
-			"id": "akm",
-			"name": "AKM 개조형",
-			"desc": "AK를 손본 개조 소총. 40발 탄창, 더 묵직하고 덜 튄다. 첫 제작 시 AK-47 강화의 60%를 이어받습니다.",
-			"cost": {"scrap": 60000, "catnip": 4200, "scope_lens": 1, "magazine_spring": 2},
-			"result": {"weapon": "akm", "amount": 1},
-			"required_tier": 3,
-			"required_blueprint": "akm_blueprint",
-			"required_blueprint_alternatives": ["rifle_blueprint"],
+			# 시작 무기 — 보유 시작이라 평소엔 "제작됨 · 영구 보유". 구세이브의 맨손 복구용.
+			"id": "ak47", "gear_id": "ak47",
+			"name": "AK-47 캣라시니코프",
+			"desc": "시작 소총. 잃을 일은 없지만, 혹시 맨손이라면 여기서 다시 만든다.",
+			"cost": {"scrap": 14000, "magazine_spring": 2, "rubber_gasket": 2},
+			"result": {"weapon": "ak47", "amount": 1},
+			"required_tier": 1,
 		},
 		{
-			"id": "double_barrel",
+			"id": "double_barrel", "gear_id": "double_barrel",
 			"name": "더블배럴 참치 헌터",
 			"desc": "장전 중 무방비가 되지만 초근접 저지력이 강한 산탄총.",
-			"cost": {"scrap": 46000, "catnip": 3400, "rubber_gasket": 3, "magazine_spring": 2},
+			"cost": {"scrap": 70000, "rubber_gasket": 3, "magazine_spring": 3},
 			"result": {"weapon": "double_barrel", "amount": 1},
-			"required_tier": 3,
-			"required_blueprint": "shotgun_blueprint",
+			"required_tier": 2,
 		},
+		# ── 무기 사다리 ──
+		# 상위 기종을 처음 만들면 아래 단계 강화의 60%가 자동 이관된다.
 		{
-			"id": "pump_shotgun",
+			"id": "pump_shotgun", "gear_id": "pump_shotgun",
 			"name": "펌프 산탄총 하울러",
 			"desc": "6발 튜브 탄창 산탄총. 두 발 쏘고 숨을 일이 없다. 첫 제작 시 참치 헌터 강화의 60%를 이어받습니다.",
-			"cost": {"scrap": 50000, "catnip": 3600, "rubber_gasket": 3, "magazine_spring": 2},
+			"cost": {"scrap": 90000, "rubber_gasket": 4, "magazine_spring": 3, "scope_lens": 1},
 			"result": {"weapon": "pump_shotgun", "amount": 1},
-			"required_tier": 3,
-			"required_blueprint": "pump_blueprint",
+			"required_tier": 2,
+			"required_workbench": 2,
 		},
 		{
-			# 3단 — 청사진이 아니라 용산 통제 키(메인 미션 3단계 키, Tier 5 확장 키와
-			# 같은 물건)를 본다. 적 풀·상자·뽑기 어디에도 없는 작업대 전용 무기.
-			"id": "k2",
+			"id": "akm", "gear_id": "akm",
+			"name": "AKM 개조형",
+			"desc": "AK를 손본 개조 소총. 40발 탄창, 더 묵직하고 덜 튄다. 첫 제작 시 AK-47 강화의 60%를 이어받습니다.",
+			"cost": {"scrap": 480000, "scope_lens": 3, "magazine_spring": 4, "rubber_gasket": 2, "precision_gear": 2},
+			"result": {"weapon": "akm", "amount": 1},
+			"required_tier": 3,
+			"required_workbench": 3,
+		},
+		{
+			"id": "k2", "gear_id": "k2",
 			"name": "K2 전투소총",
 			"desc": "용산 봉쇄선의 군용 전투소총. 관통 2, 안정된 반동. 첫 제작 시 AKM(또는 AK) 강화의 60%를 이어받습니다.",
-			"cost": {"scrap": 250000, "catnip": 9000, "scope_lens": 3, "rubber_gasket": 3, "magazine_spring": 3},
+			"cost": {"scrap": 8000000, "scope_lens": 6, "magazine_spring": 6, "rubber_gasket": 4, "precision_gear": 4, "military_alloy": 3},
 			"result": {"weapon": "k2", "amount": 1},
-			"required_tier": 4,
-			"required_blueprint": "yongsan_control_key",
+			"required_tier": 5,
+			"required_workbench": 4,
 		},
 	],
 	"supplies": [
@@ -196,20 +236,14 @@ const RECIPES := {
 			"result": {"workbench_upgrade": true},
 		},
 	],
-	"artisan": [
-		{
-			"id": "artisan_roll",
-			"name": "장인 고양이의 야간 제작",
-			"desc": "고철을 맡겨 현재 쉘터 Tier에서 제작 가능한 무기 하나를 받습니다. 10회 안에는 최고 등급이 확정됩니다.",
-			"cost": {},
-			"result": {"artisan": true},
-		},
-	],
+	# 장인 탭: 옛 "장인 뽑기"는 폐지. 장인 = 돌파 서비스 — 행은 _recipes_for_category가
+	# 장착 무기·장착 방어구에 대해 동적으로 만든다(2단계 UI가 재구성할 자리).
+	"artisan": [],
 	"enhance": [
 		{
 			"id": "enhance_equipped",
 			"name": "장착 무기 영구 강화",
-			"desc": "장착 중인 무기에 고철을 투자해 +99까지 피해와 안정성을 영구 강화합니다.",
+			"desc": "장착 중인 무기에 고철을 투자해 +99까지 피해와 안정성을 영구 강화합니다. +10·+20·…에서는 장인 탭의 돌파가 필요합니다.",
 			"cost": {},
 			"result": {"enhance": true},
 		},
@@ -221,7 +255,7 @@ const CATEGORY_NAMES := {
 	"weapons": "무기",
 	"mods": "개조품",
 	"supplies": "보급",
-	"artisan": "장인 제작",
+	"artisan": "장인 · 돌파",
 	"enhance": "+99 강화",
 }
 const CATEGORY_ICONS := {
@@ -449,7 +483,7 @@ func _build_resource_strip() -> Control:
 	strip.add_theme_constant_override("v_separation", 6)
 	var compact := get_viewport().get_visible_rect().size.x < 1040.0
 	# 통조림은 제작 재료가 아니므로 자원 띠에서 뺐다(플레이어 소모품).
-	for key in ["scrap", "catnip", "scope_lens", "rubber_gasket", "magazine_spring"]:
+	for key in ["scrap", "catnip", "scope_lens", "rubber_gasket", "magazine_spring", "precision_gear", "military_alloy"]:
 		var resource_key := str(key)
 		# 좁은 화면에서 이름까지 넣으면 정작 수치가 잘려 "아이콘 x"만 남는다.
 		# 컴팩트에선 아이콘이 이름을 대신하고 수치만 남긴다.
@@ -648,11 +682,26 @@ func _refresh_detail_panel() -> void:
 	var required_tier := int(recipe.get("required_tier", 1))
 	if GameState.shelter_tier < required_tier:
 		cost_box.add_child(_label("쉘터 Tier %d에서 해금" % required_tier, 16, Color("#e68576")))
-	if bool((recipe.get("result", {}) as Dictionary).get("artisan", false)):
-		cost_box.add_child(_label("확정 천장 %d / %d" % [GameState.artisan_pity, GameState.ARTISAN_PITY_LIMIT], 16, Color("#d9c579")))
 	if bool((recipe.get("result", {}) as Dictionary).get("enhance", false)):
 		var level := GameState.get_weapon_enhancement_level(GameState.equipped_weapon_id)
 		cost_box.add_child(_label("%s  +%d → +%d" % [GameState.equipped_weapon_id.to_upper(), level, mini(99, level + 1)], 16, Color("#d9c579")))
+	if (recipe.get("result", {}) as Dictionary).has("enhance_armor"):
+		var armor_id := str((recipe.get("result", {}) as Dictionary)["enhance_armor"])
+		var armor_level := int(GameState.get_armor_enhancement_level(armor_id))
+		cost_box.add_child(_label("%s  +%d → +%d · 효과 ×%.2f" % [
+			_equipment_display_name(armor_id), armor_level, mini(99, armor_level + 1),
+			float(GameState.get_armor_enhancement_multiplier(armor_id)),
+		], 16, Color("#d9c579")))
+	if (recipe.get("result", {}) as Dictionary).has("breakthrough"):
+		var target := (recipe.get("result", {}) as Dictionary)["breakthrough"] as Dictionary
+		cost_box.add_child(_label("돌파 단계 +%d · 완료한 돌파 +%d" % [
+			int(GameState.get_gear_enhancement_level(str(target.get("kind", "")), str(target.get("id", "")))),
+			int(GameState.get_breakthrough_level_done(str(target.get("kind", "")), str(target.get("id", "")))),
+		], 16, Color("#d9c579")))
+	if _is_gear_recipe_owned(recipe):
+		cost_box.add_child(_label("제작됨 · 영구 보유 — 잃지 않으며 다시 만들 수 없습니다", 15, Color("#8fe0a6")))
+	elif not str(recipe.get("gear_id", "")).is_empty():
+		cost_box.add_child(_label(str(GameState.get_blueprint_progress_text(str(recipe.get("gear_id", "")))), 15, Color("#d9c579")))
 
 	detail_box.add_child(_section("결과물"))
 	detail_box.add_child(_build_result_preview(recipe))
@@ -718,8 +767,30 @@ func _selected_recipe() -> Dictionary:
 
 func _recipes_for_category(category: String) -> Array:
 	var recipes: Array = (RECIPES.get(category, []) as Array).duplicate(true)
+	if category == "artisan":
+		# 돌파 행 — 장착 무기 + 장착 방어구 3슬롯. 데이터만(2단계 UI가 재구성).
+		if bool(GameState.has_ak) and not str(GameState.equipped_weapon_id).is_empty():
+			recipes.append(_breakthrough_recipe("weapon", str(GameState.equipped_weapon_id)))
+		for slot in ["body", "head", "feet"]:
+			var equipped_id := str(GameState.get_equipped_equipment(slot))
+			if not equipped_id.is_empty():
+				recipes.append(_breakthrough_recipe("armor", str(GameState.armor_enhancement_key(equipped_id))))
+		return recipes
 	if category != "enhance":
 		return recipes
+	# 장착 방어구 강화 행(방어구 +99 신설) — 무기 강화와 같은 규칙.
+	for slot in ["body", "head", "feet"]:
+		var equipped_id := str(GameState.get_equipped_equipment(slot))
+		if equipped_id.is_empty():
+			continue
+		var base_id := str(GameState.armor_enhancement_key(equipped_id))
+		recipes.append({
+			"id": "enhance_armor_%s" % base_id,
+			"name": "%s 영구 강화" % _equipment_display_name(base_id),
+			"desc": "장착 중인 방어구를 +99까지 영구 강화합니다. 피해 감소(신발은 이동·스태미나)가 수렴 곡선으로 오릅니다. +10·+20·…에서는 장인 탭의 돌파가 필요합니다.",
+			"cost": {},
+			"result": {"enhance_armor": base_id},
+		})
 	for mod_id in GameState.equipped_weapon_mods:
 		var definition := WeaponSystem.get_mod(mod_id)
 		if definition.is_empty():
@@ -734,12 +805,27 @@ func _recipes_for_category(category: String) -> Array:
 	return recipes
 
 
+func _breakthrough_recipe(kind: String, item_id: String) -> Dictionary:
+	var level := int(GameState.get_gear_enhancement_level(kind, item_id))
+	var display_name := _resource_name(item_id) if kind == "weapon" else _equipment_display_name(item_id)
+	return {
+		"id": "breakthrough_%s_%s" % [kind, item_id],
+		"name": "%s 돌파 (+%d)" % [display_name, level],
+		"desc": "장인의 인장과 희귀 부품으로 +10·+20·…·+90의 벽을 넘습니다. 돌파 전엔 그 단계에서 강화가 멈춥니다.",
+		"cost": {},
+		"result": {"breakthrough": {"kind": kind, "id": item_id}},
+	}
+
+
 func _can_craft(recipe: Dictionary) -> bool:
 	if GameState.shelter_tier < int(recipe.get("required_tier", 1)):
 		return false
 	if GameState.shelter_workbench_level < int(recipe.get("required_workbench", 1)):
 		return false
 	if not _has_required_blueprint(recipe):
+		return false
+	# 장비는 1개 영구 — 보유 중이면 재제작 불가.
+	if _is_gear_recipe_owned(recipe):
 		return false
 	for key in _effective_cost(recipe).keys():
 		if _owned_resource(str(key)) < int(_effective_cost(recipe)[key]):
@@ -750,11 +836,30 @@ func _can_craft(recipe: Dictionary) -> bool:
 	if bool(result.get("workbench_upgrade", false)):
 		return GameState.shelter_workbench_level < 5
 	if bool(result.get("enhance", false)):
-		return GameState.get_weapon_enhancement_level(GameState.equipped_weapon_id) < GameState.MAX_WEAPON_ENHANCEMENT
+		var weapon_id := str(GameState.equipped_weapon_id)
+		return (
+			GameState.get_weapon_enhancement_level(weapon_id) < GameState.MAX_WEAPON_ENHANCEMENT
+			and not bool(GameState.is_breakthrough_required("weapon", weapon_id))
+		)
+	if result.has("enhance_armor"):
+		var base_id := str(result["enhance_armor"])
+		return (
+			GameState.is_armor_base_owned(base_id)
+			and GameState.get_armor_enhancement_level(base_id) < GameState.MAX_ARMOR_ENHANCEMENT
+			and not bool(GameState.is_breakthrough_required("armor", base_id))
+		)
+	if result.has("breakthrough"):
+		var target := result["breakthrough"] as Dictionary
+		return str(GameState.get_breakthrough_block_reason(str(target.get("kind", "")), str(target.get("id", "")))).is_empty()
 	if result.has("enhance_mod"):
 		var mod_id := str(result["enhance_mod"])
 		return GameState.equipped_weapon_mods.has(mod_id) and GameState.get_mod_enhancement_level(mod_id) < GameState.MAX_WEAPON_ENHANCEMENT
 	return true
+
+
+func _is_gear_recipe_owned(recipe: Dictionary) -> bool:
+	var gear_id := str(recipe.get("gear_id", ""))
+	return not gear_id.is_empty() and bool(GameState.is_gear_owned(gear_id))
 
 
 func _craft(recipe: Dictionary) -> void:
@@ -782,15 +887,35 @@ func _craft(recipe: Dictionary) -> void:
 			_set_craft_feedback(_workbench_upgrade_failure_reason())
 		_refresh_after_change()
 		return
-	if bool(result.get("artisan", false)):
-		var artisan_result := GameState.roll_artisan_weapon()
-		if not artisan_result.is_empty():
-			selected_recipe_id = "artisan_roll"
-			var artisan_transfer := GameState.take_weapon_enhancement_transfer_notice()
-			_set_craft_feedback(
-				"장인의 손길 — 결과를 확인하세요" if artisan_transfer.is_empty()
-				else "장인의 손길 — %s" % artisan_transfer
-			)
+	if result.has("breakthrough"):
+		var target := result["breakthrough"] as Dictionary
+		var kind := str(target.get("kind", ""))
+		var target_id := str(target.get("id", ""))
+		if bool(GameState.try_breakthrough(kind, target_id)):
+			_set_craft_feedback("돌파 완료 · +%d의 벽을 넘었다 — 다음 강화가 열립니다" % int(GameState.get_gear_enhancement_level(kind, target_id)))
+		else:
+			_set_craft_feedback("돌파 불가 · %s" % str(GameState.get_breakthrough_block_reason(kind, target_id)))
+		_refresh_after_change()
+		return
+	if result.has("enhance_armor"):
+		var base_id := str(result["enhance_armor"])
+		var armor_parts: Dictionary = GameState.get_armor_enhancement_part_cost(base_id)
+		var armor_parts_short := false
+		for part_key in armor_parts:
+			if _owned_resource(str(part_key)) < int(armor_parts[part_key]):
+				armor_parts_short = true
+		if armor_parts_short:
+			_set_craft_feedback(_armor_enhance_failure_reason(base_id))
+		elif bool(GameState.try_enhance_armor(base_id)):
+			for part_key in armor_parts:
+				_consume_resource(str(part_key), int(armor_parts[part_key]))
+			GameState.save_persistent_state()
+			_set_craft_feedback("강화 완료 · %s +%d" % [
+				_equipment_display_name(base_id),
+				int(GameState.get_armor_enhancement_level(base_id)),
+			])
+		else:
+			_set_craft_feedback(_armor_enhance_failure_reason(base_id))
 		_refresh_after_change()
 		return
 	if bool(result.get("enhance", false)):
@@ -838,7 +963,7 @@ func _craft(recipe: Dictionary) -> void:
 	elif result.has("weapon"):
 		GameState.add_weapon(str(result["weapon"]), int(result.get("amount", 1)))
 	elif result.has("equipment"):
-		# 제작품은 항상 기본 레벨(접미사 없음 = Lv.1)이다. 레벨 굴림은 필드 드랍의 몫.
+		# 제작품은 항상 기본 레벨(접미사 없음 = Lv.1)이다. 성장은 +99 강화가 맡는다.
 		GameState.add_equipment(str(result["equipment"]), int(result.get("amount", 1)))
 	elif result.has("canned_food"):
 		GameState.canned_food += int(result["canned_food"])
@@ -846,6 +971,8 @@ func _craft(recipe: Dictionary) -> void:
 		GameState.weapon_durability = minf(100.0, GameState.weapon_durability + float(result["repair"]))
 	GameState.save_persistent_state()
 	var transfer_notice := GameState.take_weapon_enhancement_transfer_notice()
+	if transfer_notice.is_empty():
+		transfer_notice = GameState.take_armor_enhancement_transfer_notice()
 	if transfer_notice.is_empty():
 		_set_craft_feedback("제작 완료 · %s" % str(recipe.get("name", "")))
 	else:
@@ -886,10 +1013,29 @@ func _weapon_enhance_failure_reason() -> String:
 		return "강화 불가 · 장착한 무기가 없습니다."
 	if GameState.get_weapon_enhancement_level(weapon_id) >= GameState.MAX_WEAPON_ENHANCEMENT:
 		return "강화 불가 · 이미 최고 강화 단계입니다."
+	if bool(GameState.is_breakthrough_required("weapon", weapon_id)):
+		return "강화 불가 · +%d 돌파 필요(장인 탭 · 장인의 인장)" % GameState.get_weapon_enhancement_level(weapon_id)
 	var cost := GameState.get_weapon_enhancement_cost(weapon_id)
 	if GameState.scrap < cost:
 		return "강화 불가 · %s" % _shortage_text("scrap", cost)
 	var part_cost: Dictionary = GameState.get_weapon_enhancement_part_cost(weapon_id)
+	for part_key in part_cost:
+		if _owned_resource(str(part_key)) < int(part_cost[part_key]):
+			return "강화 불가 · %s (필드에서 구해 오는 부품)" % _shortage_text(str(part_key), int(part_cost[part_key]))
+	return "강화에 실패했습니다."
+
+
+func _armor_enhance_failure_reason(base_id: String) -> String:
+	if not bool(GameState.is_armor_base_owned(base_id)):
+		return "강화 불가 · 보유하지 않은 방어구입니다."
+	if GameState.get_armor_enhancement_level(base_id) >= GameState.MAX_ARMOR_ENHANCEMENT:
+		return "강화 불가 · 이미 최고 강화 단계입니다."
+	if bool(GameState.is_breakthrough_required("armor", base_id)):
+		return "강화 불가 · +%d 돌파 필요(장인 탭 · 장인의 인장)" % GameState.get_armor_enhancement_level(base_id)
+	var cost := int(GameState.get_armor_enhancement_cost(base_id))
+	if GameState.scrap < cost:
+		return "강화 불가 · %s" % _shortage_text("scrap", cost)
+	var part_cost: Dictionary = GameState.get_armor_enhancement_part_cost(base_id)
 	for part_key in part_cost:
 		if _owned_resource(str(part_key)) < int(part_cost[part_key]):
 			return "강화 불가 · %s (필드에서 구해 오는 부품)" % _shortage_text(str(part_key), int(part_cost[part_key]))
@@ -925,31 +1071,26 @@ func _largest_shortage_text(recipe: Dictionary) -> String:
 	]
 
 
-func _blueprint_hint_text(blueprint_id: String) -> String:
-	# 어느 청사진이 어디서 나오는지까지 말해 준다. 청사진은 봉인 보급함
-	# 전용 드랍이라, 이걸 모르면 영원히 잠긴 줄로 읽힌다.
-	var blueprint_name := str(
-		(LOOT_ECONOMY.ITEM_CATALOG.get(blueprint_id, {}) as Dictionary).get("display_name", blueprint_id)
-	)
-	# 메인 미션 보상 청사진·키는 그 단계를 가리킨다(카탈로그가 유일한 진실).
-	var mission_source: Dictionary = SHELTER_REQUISITION.get_key_item_source(blueprint_id)
-	if not mission_source.is_empty():
-		var zone_name := str(GameState.get_raid_zone(str(mission_source.get("zone_id", ""))).get("name", ""))
-		return "%s · %s 메인 미션 %d단계 보상" % [
-			blueprint_name, zone_name, int(mission_source.get("stage_index", 0)) + 1,
-		]
-	var source := "봉인 보급함"
-	for container_id in LOOT_ECONOMY.CONTAINER_DEFINITIONS.keys():
-		var table := LOOT_ECONOMY.CONTAINER_DEFINITIONS[container_id] as Dictionary
-		var found := false
-		for entry in (table.get("entries", []) as Array):
-			if str((entry as Array)[0]) == blueprint_id:
-				found = true
-				break
-		if found:
-			source = str(table.get("display_name", source))
+func _blueprint_hint_text(recipe_id: String) -> String:
+	# 설계도 조각이 어디서 나오는지까지 말해 준다 — 조각은 그 존 가족의 엘리트·보스·
+	# 봉인 상자·일반 적(소량)에서 나온다. 모르면 영원히 잠긴 줄로 읽힌다.
+	var zone_name := ""
+	for stage_value in LOOT_ECONOMY.BLUEPRINT_SHARD_ZONE_TABLE.keys():
+		if (LOOT_ECONOMY.BLUEPRINT_SHARD_ZONE_TABLE[stage_value] as Array).has(recipe_id):
+			for zone_id in GameState.RAID_ZONES.keys():
+				if int((GameState.RAID_ZONES[zone_id] as Dictionary).get("stage_tier", 0)) == int(stage_value):
+					zone_name = str((GameState.RAID_ZONES[zone_id] as Dictionary).get("name", ""))
+					break
 			break
-	return "%s · %s에서 나옵니다" % [blueprint_name, source]
+	# 메인 미션 보상에 조각이 들어 있으면 그 단계도 가리킨다(카탈로그가 유일한 진실).
+	var mission_source: Dictionary = SHELTER_REQUISITION.get_key_item_source(
+		LOOT_ECONOMY.blueprint_shard_item_id(recipe_id)
+	)
+	var source := "%s 엘리트·보스·봉인 상자" % zone_name if not zone_name.is_empty() else "엘리트·보스·봉인 상자"
+	if not mission_source.is_empty():
+		var mission_zone := str(GameState.get_raid_zone(str(mission_source.get("zone_id", ""))).get("name", ""))
+		source += " · %s 메인 미션 %d단계" % [mission_zone, int(mission_source.get("stage_index", 0)) + 1]
+	return "%s · %s에서 나옵니다" % [str(GameState.get_blueprint_progress_text(recipe_id)), source]
 
 
 func get_craftable_count() -> int:
@@ -966,8 +1107,16 @@ func _effective_cost(recipe: Dictionary) -> Dictionary:
 	var result := recipe.get("result", {}) as Dictionary
 	if bool(result.get("workbench_upgrade", false)):
 		return GameState.get_workbench_upgrade_cost()
-	if bool(result.get("artisan", false)):
-		return GameState.get_artisan_roll_cost()
+	if result.has("breakthrough"):
+		var target := result["breakthrough"] as Dictionary
+		return (GameState.get_breakthrough_cost(str(target.get("kind", "")), str(target.get("id", ""))) as Dictionary).duplicate(true)
+	if result.has("enhance_armor"):
+		var base_id := str(result["enhance_armor"])
+		var armor_cost := {"scrap": int(GameState.get_armor_enhancement_cost(base_id))}
+		var armor_parts: Dictionary = GameState.get_armor_enhancement_part_cost(base_id)
+		for part_key in armor_parts:
+			armor_cost[part_key] = int(armor_parts[part_key])
+		return armor_cost
 	if bool(result.get("enhance", false)):
 		# 고단계 강화는 필드 부품도 든다 — 비용 줄·가능 판정·부족 사유가 전부
 		# 이 딕셔너리를 보므로 여기서 합쳐 주면 UI가 따로 알 필요가 없다.
@@ -1014,8 +1163,10 @@ func _bag_resource(key: String) -> int:
 	match key:
 		"scrap":
 			return GameState.scrap
-		"rubber_gasket", "scope_lens", "magazine_spring":
+		"rubber_gasket", "scope_lens", "magazine_spring", "precision_gear", "military_alloy":
 			return GameState.get_mod_component_count(key)
+		"artisan_seal":
+			return maxi(0, int(GameState.progression_item_inventory.get(key, 0)))
 		"catnip":
 			return GameState.catnip
 	return 0
@@ -1023,8 +1174,10 @@ func _bag_resource(key: String) -> int:
 
 func _stored_resource(key: String) -> int:
 	match key:
-		"rubber_gasket", "scope_lens", "magazine_spring":
+		"rubber_gasket", "scope_lens", "magazine_spring", "precision_gear", "military_alloy":
 			return GameState.get_stored_storage_count("component", key)
+		"artisan_seal":
+			return GameState.get_stored_storage_count("progression", key)
 	return 0
 
 
@@ -1034,42 +1187,33 @@ func _consume_resource(key: String, amount: int) -> void:
 	match key:
 		"scrap":
 			GameState.scrap = maxi(0, GameState.scrap - remaining)
-		"rubber_gasket", "scope_lens", "magazine_spring":
-			var from_bag := mini(remaining, GameState.get_mod_component_count(key))
-			if from_bag > 0:
-				GameState.mod_component_inventory[key] = maxi(
-					0, GameState.get_mod_component_count(key) - from_bag
-				)
-				remaining -= from_bag
-			if remaining > 0:
-				GameState.remove_stored_storage_item("component", key, remaining)
+		"rubber_gasket", "scope_lens", "magazine_spring", "precision_gear", "military_alloy":
+			GameState.consume_owned_component(key, remaining)
+		"artisan_seal":
+			GameState.consume_progression_item(key, remaining)
 		"catnip":
 			GameState.catnip = maxi(0, GameState.catnip - remaining)
 
 
 func _is_recipe_locked(recipe: Dictionary) -> bool:
-	# 잠금(티어·작업대·청사진)과 단순 재료 부족은 다른 상태다. 전자는 회색으로
+	# 잠금(티어·작업대·설계도 조각)과 단순 재료 부족은 다른 상태다. 전자는 회색으로
 	# "아직 네 차례가 아니다", 후자는 주황으로 "조금만 더 모으면 된다"를 말한다.
+	# 보유 중인 장비(제작됨·영구 보유)도 회색 — 다시 만들 수 없다.
 	if GameState.shelter_tier < int(recipe.get("required_tier", 1)):
 		return true
 	if GameState.shelter_workbench_level < int(recipe.get("required_workbench", 1)):
+		return true
+	if _is_gear_recipe_owned(recipe):
 		return true
 	return not _has_required_blueprint(recipe)
 
 
 func _has_required_blueprint(recipe: Dictionary) -> bool:
-	# required_blueprint(주 경로) 또는 required_blueprint_alternatives(대체 경로)
-	# 중 하나라도 보유하면 해금. 키 아이템(용산 통제 키)도 같은 칸에 둔다 —
-	# get_progression_item_count가 가방+창고를 함께 본다.
-	var required_blueprint := str(recipe.get("required_blueprint", ""))
-	if required_blueprint.is_empty():
+	# 장비 레시피(gear_id)는 설계도 조각 3/3이 해금 조건. 그 외(개조품·보급)는 항상 열림.
+	var gear_id := str(recipe.get("gear_id", ""))
+	if gear_id.is_empty():
 		return true
-	if GameState.get_progression_item_count(required_blueprint) > 0:
-		return true
-	for alternative in (recipe.get("required_blueprint_alternatives", []) as Array):
-		if GameState.get_progression_item_count(str(alternative)) > 0:
-			return true
-	return false
+	return bool(GameState.is_blueprint_unlocked(gear_id))
 
 
 func _recipe_state_color(recipe: Dictionary) -> Color:
@@ -1081,12 +1225,12 @@ func _recipe_state_color(recipe: Dictionary) -> Color:
 
 
 func _recipe_list_subtitle(recipe: Dictionary) -> String:
-	var required_blueprint := str(recipe.get("required_blueprint", ""))
+	var gear_id := str(recipe.get("gear_id", ""))
+	if _is_gear_recipe_owned(recipe):
+		return "제작됨 · 영구 보유"
 	if not _has_required_blueprint(recipe):
-		# 어느 청사진인지, 어디서 나오는지까지 말한다.
-		if SHELTER_REQUISITION.is_key_item(required_blueprint):
-			return "키 필요 · %s" % _blueprint_hint_text(required_blueprint)
-		return "청사진 필요 · %s" % _blueprint_hint_text(required_blueprint)
+		# 조각 n/3과 어디서 나오는지까지 말한다.
+		return "설계도 조각 필요 · %s" % _blueprint_hint_text(gear_id)
 	var required_tier := int(recipe.get("required_tier", 1))
 	if GameState.shelter_tier < required_tier:
 		return "쉘터 Tier %d 필요" % required_tier
@@ -1098,12 +1242,31 @@ func _recipe_list_subtitle(recipe: Dictionary) -> String:
 		if GameState.workbench_repair_active:
 			return "수리 진행 중"
 		return "수리 가능" if GameState.weapon_durability < 100.0 else "수리 불필요"
-	# 강화 계열은 재료가 아니라 단계 상한에 걸리는 경우가 따로 있다.
+	# 강화 계열은 재료가 아니라 단계 상한·돌파에 걸리는 경우가 따로 있다.
 	if bool(result.get("enhance", false)):
 		if str(GameState.equipped_weapon_id).is_empty():
 			return "장착한 무기 없음"
 		if GameState.get_weapon_enhancement_level(GameState.equipped_weapon_id) >= GameState.MAX_WEAPON_ENHANCEMENT:
 			return "최고 강화 단계"
+		if bool(GameState.is_breakthrough_required("weapon", str(GameState.equipped_weapon_id))):
+			return "돌파 필요 · 장인 탭"
+	if result.has("enhance_armor"):
+		var base_id := str(result["enhance_armor"])
+		if GameState.get_armor_enhancement_level(base_id) >= GameState.MAX_ARMOR_ENHANCEMENT:
+			return "최고 강화 단계"
+		if bool(GameState.is_breakthrough_required("armor", base_id)):
+			return "돌파 필요 · 장인 탭"
+	if result.has("breakthrough"):
+		var target := result["breakthrough"] as Dictionary
+		var kind := str(target.get("kind", ""))
+		var target_id := str(target.get("id", ""))
+		if not bool(GameState.is_breakthrough_required(kind, target_id)):
+			return "돌파 단계 아님 · 현재 +%d (다음 돌파 +%d)" % [
+				int(GameState.get_gear_enhancement_level(kind, target_id)),
+				(int(GameState.get_gear_enhancement_level(kind, target_id)) / GameState.BREAKTHROUGH_STEP + 1) * GameState.BREAKTHROUGH_STEP,
+			]
+		var block := str(GameState.get_breakthrough_block_reason(kind, target_id))
+		return "돌파 가능" if block.is_empty() else block
 	if result.has("enhance_mod"):
 		var subtitle_mod_id := str(result["enhance_mod"])
 		if not GameState.equipped_weapon_mods.has(subtitle_mod_id):
@@ -1154,8 +1317,12 @@ func _result_text(recipe: Dictionary) -> String:
 			if GameState.shelter_workbench_level >= 5
 			else "작업대 Lv.%d" % (GameState.shelter_workbench_level + 1)
 		)
-	if result.has("artisan"):
-		return "현재 Tier 무기 1정"
+	if result.has("breakthrough"):
+		var target := result["breakthrough"] as Dictionary
+		return "+%d 돌파 → 다음 강화 해금" % int(GameState.get_gear_enhancement_level(str(target.get("kind", "")), str(target.get("id", ""))))
+	if result.has("enhance_armor"):
+		var base_id := str(result["enhance_armor"])
+		return "%s +%d" % [_equipment_display_name(base_id), GameState.get_armor_enhancement_level(base_id) + 1]
 	if result.has("enhance"):
 		return "%s +1" % GameState.equipped_weapon_id.to_upper()
 	if result.has("enhance_mod"):
@@ -1188,8 +1355,11 @@ func _recipe_icon(recipe: Dictionary) -> Texture2D:
 		return UI_ICONS.get_icon("time", 72, Color("#82c7ba"))
 	if bool(result.get("workbench_upgrade", false)):
 		return UI_ICONS.get_icon("upgrade", 72, Color("#e2c06b"))
-	if result.has("artisan"):
+	if result.has("breakthrough"):
 		return UI_ICONS.get_icon("craft", 72, Color("#e2c06b"))
+	if result.has("enhance_armor"):
+		var armor_texture := _equipment_texture(str(result["enhance_armor"]))
+		return armor_texture if armor_texture != null else UI_ICONS.get_icon("armor", 72, Color("#a8c6bb"))
 	if result.has("enhance"):
 		return UI_ICONS.get_icon("upgrade", 72, Color("#e2c06b"))
 	if result.has("enhance_mod"):
@@ -1220,6 +1390,9 @@ func _resource_icon(key: String) -> Texture2D:
 		"scope_lens": return SCOPE_LENS_TEXTURE
 		"rubber_gasket": return RUBBER_GASKET_TEXTURE
 		"magazine_spring": return MAGAZINE_SPRING_TEXTURE
+		"precision_gear": return UI_ICONS.get_icon("upgrade", 48, Color("#e8d27a"))
+		"military_alloy": return UI_ICONS.get_icon("secure", 48, Color("#9fc3e0"))
+		"artisan_seal": return UI_ICONS.get_icon("craft", 48, Color("#e2c06b"))
 		"762_fmj", "9mm_fmj", "12g_buckshot": return AMMO_TEXTURE
 		"scrap": return UI_ICONS.get_icon("scrap", 48, Color("#b9c4c2"))
 		"canned_food": return UI_ICONS.get_icon("food", 48, Color("#e6b65c"))
@@ -1234,6 +1407,8 @@ func _resource_accent(key: String) -> Color:
 		"scope_lens": return Color("#73c5db")
 		"rubber_gasket": return Color("#c59b72")
 		"magazine_spring": return Color("#d0b16b")
+		"precision_gear": return Color("#e8d27a")
+		"military_alloy": return Color("#9fc3e0")
 	return Color("#9ab4aa")
 
 
@@ -1426,6 +1601,12 @@ func _resource_name(key: String) -> String:
 			return "고무 패킹"
 		"magazine_spring":
 			return "탄창 스프링"
+		"precision_gear":
+			return "정밀 기어"
+		"military_alloy":
+			return "군용 합금"
+		"artisan_seal":
+			return "장인의 인장"
 		"762_fmj":
 			return "7.62mm 보통탄"
 		"9mm_fmj":

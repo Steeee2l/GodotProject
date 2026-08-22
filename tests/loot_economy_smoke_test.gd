@@ -1,5 +1,12 @@
 extends SceneTree
 
+# 전리품 경제 스모크 테스트 — 2026-08 경제 코어(장비 제작 전용·영구 귀속) 기준.
+#   · 무기·방어구는 어떤 드랍 경로(적·엘리트·보스·상자·낱개)에서도 0
+#   · 빈 드랍이 늘지 않는다(일반 적 any ≈ 0.66, 부품·탄약·식량으로 메움)
+#   · 새 품목: 설계도 조각(일반 6%·엘리트 확정·보스 2·봉인 상자 40%), 정밀 기어(엘리트 50%·
+#     봉인 보급함), 군용 합금(보스 1~2·존4+ 봉인 보급함), 장인의 인장(보스 확정·엘리트 5%)
+#   · 스마트 탄약·호환탄 회수 규칙은 종전 그대로
+
 const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
 
 
@@ -14,6 +21,11 @@ func _run() -> void:
 	assert(_container_count(stage_four_profile) == 59)
 	assert(int(stage_one_profile.get("weapon_rarity_cap", 0)) == 1)
 	assert(int(stage_four_profile.get("weapon_rarity_cap", 0)) == 4)
+	# 장비 캡은 0(무효) — 장비는 필드에 스폰되지 않는다.
+	for stage_tier in range(1, 6):
+		var profile := LOOT_ECONOMY.get_stage_profile(stage_tier)
+		assert(int(profile.get("weapon_spawn_cap", 1)) == 0 and int(profile.get("enemy_weapon_spawn_cap", 1)) == 0)
+		assert(is_equal_approx(float(profile.get("blueprint_shard_case_chance", 0.0)), 0.4))
 	# 쉘터 연료 싱크가 사라져(통조림 = 플레이어 소모품) 확정 통조림 픽업을 약 60%로
 	# 줄였다: 21/27 → 12/16.
 	assert(LOOT_ECONOMY.get_guaranteed_canned_food_pickup_count(1) == 12)
@@ -23,26 +35,30 @@ func _run() -> void:
 	var stage_four_supply := LOOT_ECONOMY.simulate_stage_supply(4, 600, 2207)
 	print("LOOT_SUPPLY_STAGE_1 ", stage_one_supply)
 	print("LOOT_SUPPLY_STAGE_4 ", stage_four_supply)
-	assert(float(stage_one_supply.get("average_weapons", 99.0)) < 0.45)
+	# 필드 컨테이너 무기 0 — 존1도 존4도.
+	assert(is_zero_approx(float(stage_one_supply.get("average_weapons", 1.0))))
+	assert(is_zero_approx(float(stage_four_supply.get("average_weapons", 1.0))))
 	assert(float(stage_one_supply.get("average_ammo", 0.0)) >= 40.0)
-	assert(float(stage_one_supply.get("average_ammo", 999.0)) <= 65.0)
-	# 확정 픽업 축소(21→12) 뒤 실측 평균 28.1(컨테이너 드랍 포함) — 기대값을 24로 내려
-	# 난수 여유를 둔다. 연료 싱크가 없으니 "많이"가 아니라 "먹고 던질 만큼"이 목표다.
-	assert(float(stage_one_supply.get("average_canned_food", 0.0)) >= 24.0)
+	assert(float(stage_one_supply.get("average_ammo", 999.0)) <= 70.0)
+	# 확정 픽업 12 + 컨테이너 통조림(옷 더미는 방어구 대신 소지품이 들어와 식량 비중이
+	# 조금 줄었다) — 22 이상이면 "먹고 던질 만큼"이다.
+	assert(float(stage_one_supply.get("average_canned_food", 0.0)) >= 22.0)
 	assert(float(stage_one_supply.get("average_components", 0.0)) >= 10.0)
 	assert(float(stage_one_supply.get("average_common_supply", 0.0)) >= 20.0)
 	assert(float(stage_one_supply.get("common_supply_success_rate", 0.0)) >= 0.95)
-	assert(
-		float(stage_four_supply.get("average_weapons", 0.0))
-		> float(stage_one_supply.get("average_weapons", 0.0)) * 4.0
-	)
+	# 잠긴 장비 상자(존1 1개) 40% → 판당 조각 0.4 부근. 존4(장비 상자 5 + 봉인 5)는 더 많다.
+	assert(float(stage_one_supply.get("average_blueprint_shards", 0.0)) >= 0.25, "존1 컨테이너 조각 ≥0.25 (실측 %.2f)" % float(stage_one_supply.get("average_blueprint_shards", 0.0)))
+	assert(float(stage_four_supply.get("average_blueprint_shards", 0.0)) > float(stage_one_supply.get("average_blueprint_shards", 0.0)) * 3.0)
+	assert(float(stage_four_supply.get("average_rare_components", 0.0)) > 0.0, "존4 봉인 보급함에서 희귀 부품")
 	assert(is_zero_approx(float(stage_one_supply.get("average_high_tier_ammo", 1.0))))
 	assert(float(stage_four_supply.get("average_high_tier_ammo", 0.0)) > 0.0)
 
 	var random := RandomNumberGenerator.new()
 	random.seed = 778899
 	var secure_high_tier_ammo_found := false
-	var secure_progression_item_found := false
+	var secure_shard_found := false
+	var secure_precision_found := false
+	var secure_alloy_low_stage := false
 	for stage_tier in range(1, 5):
 		var profile := LOOT_ECONOMY.get_stage_profile(stage_tier)
 		for _sample in 500:
@@ -69,85 +85,66 @@ func _run() -> void:
 				random
 			):
 				var data := definition.get("data", {}) as Dictionary
+				assert(str(definition.get("type", "")) not in ["weapon", "armor"], "봉인 보급함에 장비 없음")
 				if str(definition.get("type", "")) == "ammo":
 					assert(stage_tier >= 3)
 					if int(data.get("ammo_tier", 1)) >= 3:
 						secure_high_tier_ammo_found = true
 				elif str(definition.get("type", "")) == "progression_item":
 					assert(stage_tier >= 3)
-					secure_progression_item_found = true
+					if str(data.get("item_id", "")).begins_with("blueprint_shard_"):
+						secure_shard_found = true
+				elif str(definition.get("type", "")) == "mod_component":
+					var component_id := str(data.get("component_id", ""))
+					if component_id == "precision_gear":
+						secure_precision_found = true
+					if component_id == "military_alloy" and stage_tier < 4:
+						secure_alloy_low_stage = true
 			for definition in LOOT_ECONOMY.roll_container(
 				"weapon_case",
 				stage_tier,
 				"street_mixed",
 				random
 			):
-				if str(definition.get("type", "")) != "weapon":
-					continue
-				var data := definition.get("data", {}) as Dictionary
-				assert(
-					int(data.get("rarity_tier", 1))
-					<= int(profile.get("weapon_rarity_cap", 1))
-				)
+				assert(str(definition.get("type", "")) not in ["weapon", "armor"], "잠긴 장비 상자에 장비 없음")
+			for definition in LOOT_ECONOMY.roll_container("clothing_cache", stage_tier, "street_mixed", random):
+				assert(str(definition.get("type", "")) != "armor", "옷 더미에 방어구 없음")
 	assert(secure_high_tier_ammo_found)
-	assert(secure_progression_item_found)
+	assert(secure_shard_found, "봉인 보급함 설계도 조각")
+	assert(secure_precision_found, "봉인 보급함 정밀 기어")
+	assert(not secure_alloy_low_stage, "군용 합금은 존4부터")
 
-	var loose_weapon_count := 0
+	var loose_gear_count := 0
 	for sample_index in 600:
 		var loose := LOOT_ECONOMY.roll_loose_loot(
 			1,
 			"street_mixed",
 			random
 		)
-		if str(loose.get("type", "")) == "weapon":
-			loose_weapon_count += 1
+		if str(loose.get("type", "")) in ["weapon", "armor"]:
+			loose_gear_count += 1
 		assert(sample_index >= 0)
-	assert(loose_weapon_count == 0)
+	assert(loose_gear_count == 0)
 
-	var melee_weapon_count := 0
-	var ranged_weapon_count := 0
+	# 적 처치 드랍 — 장비 0(근접·사수·맨손 회복 플래그 무관), 탄약 스택 2~12.
+	var gear_drop_count := 0
 	var ranged_sample_count := 5000
 	for _sample in ranged_sample_count:
-		var melee_drop := LOOT_ECONOMY.roll_enemy_drop(
-			4,
-			"melee",
-			"baseball_bat",
-			random
-		)
-		if str(melee_drop.get("type", "")) == "weapon":
-			melee_weapon_count += 1
-		var ranged_drop := LOOT_ECONOMY.roll_enemy_drop(
-			4,
-			"ranged",
-			"ak47",
-			random
-		)
-		if str(ranged_drop.get("type", "")) == "weapon":
-			ranged_weapon_count += 1
+		var melee_drop := LOOT_ECONOMY.roll_enemy_drop(4, "melee", "baseball_bat", random)
+		if str(melee_drop.get("type", "")) in ["weapon", "armor"]:
+			gear_drop_count += 1
+		var ranged_drop := LOOT_ECONOMY.roll_enemy_drop(4, "ranged", "ak47", random)
+		if str(ranged_drop.get("type", "")) in ["weapon", "armor"]:
+			gear_drop_count += 1
 		if str(ranged_drop.get("type", "")) == "ammo":
 			var ammo_amount := int((ranged_drop.get("data", {}) as Dictionary).get("amount", 0))
 			# 스마트 탄약: 장착 구경 매칭 드랍은 정상 스택(최대 12발)까지 나온다.
 			assert(ammo_amount >= 2 and ammo_amount <= 12)
-	assert(melee_weapon_count == 0)
-	var ranged_weapon_rate := float(ranged_weapon_count) / float(ranged_sample_count)
-	# 2026-08 장비 드랍 재설계: 든 총 10% 고정(존 티어 무관, ENEMY_CARRIED_WEAPON_DROP_CHANCE).
-	# 예전 0.15+0.03/스테이지(stage 4 = 0.24)는 "매 킬 장비 보장 fallback"과 함께
-	# 25킬 판에 장비 ~25개를 만들었다. 무기는 귀환 정산에서 사다리 중복만 분해된다.
-	assert(ranged_weapon_rate >= 0.08 and ranged_weapon_rate <= 0.12, "든 총 드랍률 10%% 부근 (실측 %.3f)" % ranged_weapon_rate)
-	var recovery_weapon_count := 0
-	var recovery_sample_count := 2000
-	for _sample in recovery_sample_count:
-		var recovery_drop := LOOT_ECONOMY.roll_enemy_drop(
-			1,
-			"ranged",
-			"m1911",
-			random,
-			true
-		)
-		if str(recovery_drop.get("type", "")) == "weapon":
-			recovery_weapon_count += 1
-	var recovery_weapon_rate := float(recovery_weapon_count) / float(recovery_sample_count)
-	assert(recovery_weapon_rate >= 0.54 and recovery_weapon_rate <= 0.62)
+		# 옛 "맨손 회복 무기 58%" — 장비가 영구 귀속이라 플래그가 켜져도 무기는 없다.
+		var recovery_drop := LOOT_ECONOMY.roll_enemy_drop(1, "ranged", "m1911", random, true)
+		if str(recovery_drop.get("type", "")) in ["weapon", "armor"]:
+			gear_drop_count += 1
+	assert(gear_drop_count == 0, "적 처치 드랍 장비 0 (실측 %d)" % gear_drop_count)
 
 	# 스마트 탄약: 장착 무기(762)가 있으면 권총 적을 죽여도 탄약 드랍의
 	# 다수가 내 구경으로 나온다 — 판 내 재무장 파워커브의 핵심.
@@ -166,11 +163,7 @@ func _run() -> void:
 	var matched_rate := float(matched_ammo_count) / float(ammo_drop_count)
 	assert(matched_rate >= 0.55, "장착 구경 매칭 탄약이 다수여야 한다 (실측 %.2f)" % matched_rate)
 
-	# 호환탄 회수량 상향: (4~7)+스테이지 → 6~(10+min(스테이지,3)).
-	# 제작대의 탄약 레시피가 폐지돼 필드 회수가 사실상 유일한 보급선이 됐다.
-	# 킬당 회수가 탄창 하나에도 못 미쳐 "쏠수록 가난해진다"는 신고를 받았다.
-	# 상한이 3스테이지에서 멈추는 건 후반 수급선(고티어 탄·무기 동반 탄약)이
-	# 이미 두꺼워서다 — 실측 킬당 4.2~5.9발(목표 4~6발).
+	# 호환탄 회수량: 6~(10+min(스테이지,3)) — 종전 규칙 그대로.
 	for recovery_stage in range(1, 6):
 		var recovery_total := 0
 		var recovery_cap := 10 + mini(recovery_stage, 3)
@@ -180,12 +173,10 @@ func _run() -> void:
 			assert(recovery_amount >= 6 and recovery_amount <= recovery_cap)
 			recovery_total += recovery_amount
 		var recovery_average := float(recovery_total) / 2000.0
-		# 기대 평균 = (6 + 상한) / 2.
 		var expected_average := (6.0 + float(recovery_cap)) * 0.5
 		assert(absf(recovery_average - expected_average) <= 0.4)
 
-	# 스마트 탄약 치환률: 일반 상자 55% → 75%. 상자에서 나온 탄의 절반이 못 쓰는
-	# 구경이면 "주웠는데 못 쏜다"만 반복돼 가방 압박만 커진다(유저 신고).
+	# 스마트 탄약 치환률: 일반 상자 75%.
 	var case_ammo_count := 0
 	var case_matched_count := 0
 	for _sample in 4000:
@@ -202,161 +193,117 @@ func _run() -> void:
 		"일반 상자 탄약도 장착 구경 위주여야 한다 (실측 %.2f)" % case_matched_rate
 	)
 
+	# 일반 적 드랍 분포(존1 사수): 조각 6% + ordinary 64% × (탄약 26/통조림 30/구급약 8/부품 36).
+	# 기대값: any = 0.06 + 0.94×0.64 ≈ 0.66, common(식량+부품) ≈ 0.94×0.64×0.66 ≈ 0.40,
+	# 조각 ≈ 0.06, 장비 0. 빈 드랍은 옛 장비 22%가 빠졌어도 늘지 않았다(any ≈ 0.70 → 0.66).
 	var common_enemy_drop_count := 0
 	var any_enemy_drop_count := 0
-	var armor_enemy_drop_count := 0
-	var common_enemy_sample_count := 5000
+	var shard_enemy_drop_count := 0
+	var common_enemy_sample_count := 6000
 	for _sample in common_enemy_sample_count:
-		var common_drop := LOOT_ECONOMY.roll_enemy_drop(
-			1,
-			"ranged",
-			"m1911",
-			random
-		)
+		var common_drop := LOOT_ECONOMY.roll_enemy_drop(1, "ranged", "m1911", random)
 		if common_drop.is_empty():
 			continue
 		any_enemy_drop_count += 1
-		if str(common_drop.get("type", "")) in ["canned_food", "mod_component"]:
+		var drop_type := str(common_drop.get("type", ""))
+		assert(drop_type not in ["weapon", "armor"])
+		if drop_type in ["canned_food", "mod_component"]:
 			common_enemy_drop_count += 1
-		if str(common_drop.get("type", "")) == "armor":
-			armor_enemy_drop_count += 1
+		if drop_type == "progression_item" and str((common_drop.get("data", {}) as Dictionary).get("item_id", "")).begins_with("blueprint_shard_"):
+			shard_enemy_drop_count += 1
 	var any_enemy_drop_rate := float(any_enemy_drop_count) / float(common_enemy_sample_count)
 	var common_enemy_drop_rate := float(common_enemy_drop_count) / float(common_enemy_sample_count)
-	var armor_enemy_drop_rate := float(armor_enemy_drop_count) / float(common_enemy_sample_count)
-	# 방어구 드랍을 파밍 루프의 심장으로 끌어올렸다. 처치할 때마다 갈아 끼울
-	# 기회가 규칙적으로 돌아오도록 전용 판정을 둔 결과, 전체 드랍률과 방어구
-	# 비중이 함께 올라간다.
-	print("ENEMY_DROP_RATES any=%.3f common=%.3f armor=%.3f" % [
-		any_enemy_drop_rate, common_enemy_drop_rate, armor_enemy_drop_rate,
+	var shard_enemy_drop_rate := float(shard_enemy_drop_count) / float(common_enemy_sample_count)
+	print("ENEMY_DROP_RATES any=%.3f common=%.3f shard=%.3f" % [
+		any_enemy_drop_rate, common_enemy_drop_rate, shard_enemy_drop_rate,
 	])
-	# 2026-08 장비 드랍 재설계: 일반 적 = 입고 있던 방어구 12% / 든 총 10% / 그 외
-	# 기존 탄약·식량·부품 분포(ordinary 62%). 기대값(stage 1): any = 0.22 + 0.78×0.62
-	# = 0.70, common(식량+부품) = 0.78×0.62×0.66 = 0.32, 방어구 = 0.12.
-	# 예전 창(any 0.71~0.79 · armor 0.20~0.28)은 "매 킬 장비 보장"과 함께 25킬 판에
-	# 방어구 ~20개를 만들던 수치다. 표본 요동(±1.5%p)을 감안해 창을 잡는다.
-	assert(any_enemy_drop_rate >= 0.67 and any_enemy_drop_rate <= 0.74, "any 0.70 부근 (실측 %.3f)" % any_enemy_drop_rate)
-	assert(common_enemy_drop_rate >= 0.28 and common_enemy_drop_rate <= 0.36, "common 0.32 부근 (실측 %.3f)" % common_enemy_drop_rate)
-	assert(armor_enemy_drop_rate >= 0.10 and armor_enemy_drop_rate <= 0.14, "입고 있던 방어구 12%% 부근 (실측 %.3f)" % armor_enemy_drop_rate)
-	# 근접 적은 방어구 12%만 — 무기 0(위 melee_weapon_count), 방어구는 같은 12%.
-	var melee_armor_count := 0
-	for _sample in 5000:
-		if str(LOOT_ECONOMY.roll_enemy_drop(1, "melee", "baseball_bat", random).get("type", "")) == "armor":
-			melee_armor_count += 1
-	var melee_armor_rate := float(melee_armor_count) / 5000.0
-	assert(melee_armor_rate >= 0.10 and melee_armor_rate <= 0.14, "근접 적 방어구 12%% 부근 (실측 %.3f)" % melee_armor_rate)
+	assert(any_enemy_drop_rate >= 0.62 and any_enemy_drop_rate <= 0.70, "any 0.66 부근 (실측 %.3f)" % any_enemy_drop_rate)
+	assert(common_enemy_drop_rate >= 0.35 and common_enemy_drop_rate <= 0.45, "common 0.40 부근 (실측 %.3f)" % common_enemy_drop_rate)
+	assert(shard_enemy_drop_rate >= 0.04 and shard_enemy_drop_rate <= 0.08, "설계도 조각 6%% 부근 (실측 %.3f)" % shard_enemy_drop_rate)
+	# 존1 조각은 그 존 가족(T1 방어구·M1911·MP5 — AK는 시작 보유라 제외)이어야 한다.
+	var zone1_shards := {}
+	for _sample in 3000:
+		var drop := LOOT_ECONOMY.roll_enemy_drop(1, "ranged", "mp5", random)
+		if str(drop.get("type", "")) != "progression_item":
+			continue
+		var recipe_id := str((drop.get("data", {}) as Dictionary).get("recipe_id", ""))
+		zone1_shards[recipe_id] = true
+	for recipe_id in zone1_shards.keys():
+		assert((LOOT_ECONOMY.BLUEPRINT_SHARD_ZONE_TABLE[1] as Array).has(str(recipe_id)), "존1 조각은 존1 풀 (got %s)" % str(recipe_id))
+	assert(not zone1_shards.has("ak47"), "시작 보유 AK 조각은 안 나온다(완성 제외)")
+	assert(zone1_shards.size() >= 4, "존1 풀의 여러 레시피가 고르게 나온다 (got %s)" % str(zone1_shards.keys()))
 
-	# 장비 공급 밴드 — 존1·3·5 × 25킬 × 200판(엘리트 1~2·옷 상자·봉인 보급함 포함).
-	# 목표: 판당 일반 적 방어구 3~4개 부근, 같은 존 2회차 안에 그 존 세트 3종 ≥70%.
-	# 재설계 전 실측: 판당 방어구 21.7/22.6/23.9(존1/3/5) — 슬롯 3개에 20벌.
-	for supply_stage in [1, 3, 5]:
-		var supply: Dictionary = LOOT_ECONOMY.simulate_enemy_equipment_supply(supply_stage, 25, 200, 4242 + supply_stage, true)
-		print("EQUIPMENT_SUPPLY_STAGE_%d %s" % [supply_stage, supply])
-		var enemy_armor := float(supply.get("armor_from_enemies_per_run", 0.0)) + float(supply.get("elite_armor_per_run", 0.0))
-		assert(enemy_armor >= 2.5 and enemy_armor <= 4.5, "존%d 판당 적 방어구 3~4 부근 (실측 %.2f)" % [supply_stage, enemy_armor])
-		assert(float(supply.get("armor_per_run", 0.0)) <= 12.0, "존%d 상자 포함 방어구 과잉 아님 (실측 %.2f)" % [supply_stage, float(supply.get("armor_per_run", 0.0))])
-		assert(float(supply.get("set_complete_2runs", 0.0)) >= 0.70, "존%d 2판 세트 완성 ≥70%% (실측 %.3f)" % [supply_stage, float(supply.get("set_complete_2runs", 0.0))])
-		assert(float(supply.get("weapons_per_run", 0.0)) >= 2.0 and float(supply.get("weapons_per_run", 0.0)) <= 5.0, "존%d 판당 무기 2~5 (실측 %.2f)" % [supply_stage, float(supply.get("weapons_per_run", 0.0))])
-		if supply_stage < 5:
-			# 엘리트·보스의 추가 방어구는 한 단계 위 가족(존 가족+1). 최상위 존(T3)은 같은 가족.
-			assert(is_equal_approx(float(supply.get("elite_tier_up_share", 0.0)), 1.0), "존%d 엘리트 방어구는 상위 가족" % supply_stage)
-			assert(is_equal_approx(float(supply.get("boss_tier_up_share", 0.0)), 1.0), "존%d 보스 방어구는 상위 가족" % supply_stage)
-	# 엘리트 추가 방어구 확률 30% · 보스 확정 상위 가족.
-	var elite_armor_count := 0
-	for _sample in 2000:
+	# 엘리트 확정: [조각, 탄약 2배, 고가치품, (50%) 정밀 기어, (5%) 인장]. 장비 0.
+	var elite_gear_count := 0
+	var elite_shard_count := 0
+	var elite_precision_count := 0
+	var elite_seal_count := 0
+	var elite_samples := 2000
+	for _sample in elite_samples:
+		var shard_seen := false
 		for entry in LOOT_ECONOMY.roll_elite_drop(1, "mp5", random):
-			if str((entry as Dictionary).get("type", "")) == "armor":
-				elite_armor_count += 1
-				var elite_armor_id := str(((entry as Dictionary).get("data", {}) as Dictionary).get("equipment_id", "")).split("@")[0]
-				assert(["riot_vest", "tactical_helmet", "tactical_boots"].has(elite_armor_id), "존1 엘리트 방어구는 T2 (got %s)" % elite_armor_id)
-	var elite_armor_rate := float(elite_armor_count) / 2000.0
-	assert(elite_armor_rate >= 0.26 and elite_armor_rate <= 0.34, "엘리트 상위 방어구 30%% 부근 (실측 %.3f)" % elite_armor_rate)
+			var tally: Dictionary = LOOT_ECONOMY._classify_gear_drop(entry as Dictionary)
+			elite_gear_count += int(tally.get("weapon", 0)) + int(tally.get("armor", 0))
+			elite_precision_count += int(tally.get("precision", 0))
+			elite_seal_count += int(tally.get("seal", 0))
+			if int(tally.get("shard", 0)) > 0:
+				shard_seen = true
+		if shard_seen:
+			elite_shard_count += 1
+	assert(elite_gear_count == 0, "엘리트 장비 0")
+	assert(elite_shard_count == elite_samples, "엘리트 조각 확정 (실측 %d/%d)" % [elite_shard_count, elite_samples])
+	var elite_precision_rate := float(elite_precision_count) / float(elite_samples)
+	assert(elite_precision_rate >= 0.44 and elite_precision_rate <= 0.56, "엘리트 정밀 기어 50%% 부근 (실측 %.3f)" % elite_precision_rate)
+	var elite_seal_rate := float(elite_seal_count) / float(elite_samples)
+	assert(elite_seal_rate >= 0.03 and elite_seal_rate <= 0.075, "엘리트 인장 5%% 부근 (실측 %.3f)" % elite_seal_rate)
+	# 보스 확정: 조각 2 + 군용 합금 1~2 + 인장 1.
 	for boss_stage in [1, 3, 5]:
-		var boss_armor: Dictionary = LOOT_ECONOMY.roll_boss_armor_drop(boss_stage, random)
-		assert(str(boss_armor.get("type", "")) == "armor", "보스 확정 방어구")
-		var boss_family := mini(LOOT_ECONOMY.armor_family_index_for_stage(boss_stage) + 1, 2)
-		var boss_armor_id := str((boss_armor.get("data", {}) as Dictionary).get("equipment_id", "")).split("@")[0]
-		assert((LOOT_ECONOMY.ARMOR_FAMILIES[boss_family] as Array).has(boss_armor_id), "존%d 보스 방어구는 상위 가족(상한 T3) (got %s)" % [boss_stage, boss_armor_id])
+		var boss_drops: Array = LOOT_ECONOMY.roll_boss_drops(boss_stage, random)
+		var boss_totals := {"weapon": 0, "armor": 0, "shard": 0, "precision": 0, "alloy": 0, "seal": 0}
+		for entry in boss_drops:
+			LOOT_ECONOMY._merge_gear_tally(boss_totals, LOOT_ECONOMY._classify_gear_drop(entry as Dictionary))
+		assert(int(boss_totals["weapon"]) + int(boss_totals["armor"]) == 0, "존%d 보스 장비 0" % boss_stage)
+		assert(int(boss_totals["shard"]) == 2, "존%d 보스 조각 2 (got %d)" % [boss_stage, int(boss_totals["shard"])])
+		assert(int(boss_totals["alloy"]) >= 1 and int(boss_totals["alloy"]) <= 2, "존%d 보스 군용 합금 1~2" % boss_stage)
+		assert(int(boss_totals["seal"]) == 1, "존%d 보스 인장 1" % boss_stage)
 
-	# roll_guaranteed_equipment_drop — "확정 장비 1개" 굴림(무기 22%/방어구 78%).
-	# 2026-08 장비 드랍 재설계로 enemy_director의 매 킬 fallback에서는 뺐다(모든 킬 =
-	# 장비 1개가 25킬 판에 방어구 ~20개를 만든 진범). 함수는 유틸로 남았으니 분포만
-	# 그대로 지킨다 — 아래 어서션은 "fallback이 매 킬 얹힌다"를 뜻하지 않는다.
-	var guaranteed_weapon_count := 0
-	var guaranteed_sample_count := 2000
-	for _sample in guaranteed_sample_count:
-		var guaranteed := LOOT_ECONOMY.roll_guaranteed_equipment_drop(
-			4, "ranged", "ak47", random
-		)
-		assert(str(guaranteed.get("type", "")) in ["weapon", "armor"])
-		if str(guaranteed.get("type", "")) == "weapon":
-			guaranteed_weapon_count += 1
-	var guaranteed_weapon_rate := (
-		float(guaranteed_weapon_count) / float(guaranteed_sample_count)
-	)
-	assert(guaranteed_weapon_rate >= 0.17 and guaranteed_weapon_rate <= 0.27)
-	# 적이 들고 있던 총은 존 등급과 무관하게 떨어져야 한다 — 1스테이지
-	# (weapon_rarity_cap 1, minimum_stage 게이트)에서도 MP5·AK·산탄총이
-	# fallback으로 나와야 한다. 예전엔 여기서 전부 방어구로 치환됐다.
-	for high_tier_weapon_id in ["mp5", "ak47", "double_barrel"]:
-		var carried_weapon_seen := false
-		for _sample in 400:
-			var carried := LOOT_ECONOMY.roll_guaranteed_equipment_drop(
-				1, "ranged", high_tier_weapon_id, random
-			)
-			if str(carried.get("type", "")) == "weapon":
-				assert(str((carried.get("data", {}) as Dictionary).get("weapon_id", "")) == high_tier_weapon_id)
-				carried_weapon_seen = true
-				break
-		assert(carried_weapon_seen, "1스테이지에서도 적이 든 %s는 떨어져야 한다" % high_tier_weapon_id)
-	# 그 총의 동반 탄약도 ammo_tier_cap을 타지 않아야 한다 — 1스테이지
-	# (cap 1)에서 AK가 떨어지면 7.62(tier 2)가 막혀 "탄 없는 총"만 남았다.
-	var low_stage_companion := LOOT_ECONOMY.roll_weapon_companion_ammo("ak47", 1, random)
-	assert(str(low_stage_companion.get("type", "")) == "ammo")
-	assert(str((low_stage_companion.get("data", {}) as Dictionary).get("ammo_id", "")).begins_with("762"))
-	# 근접(배트) 적은 무기 fallback이 성립하지 않으니 방어구 확정이어야 한다.
-	for _sample in 200:
-		var melee_guaranteed := LOOT_ECONOMY.roll_guaranteed_equipment_drop(
-			1, "melee", "baseball_bat", random
-		)
-		assert(str(melee_guaranteed.get("type", "")) == "armor")
-	# 총 드랍 동반 탄약(2026-08 유저 요구): 떨어진 총 구경의 탄이 정상 스택으로 나온다.
-	var companion := LOOT_ECONOMY.roll_weapon_companion_ammo("ak47", 2, random)
-	assert(str(companion.get("type", "")) == "ammo")
-	assert(str((companion.get("data", {}) as Dictionary).get("ammo_id", "")).begins_with("762"))
-	assert(int((companion.get("data", {}) as Dictionary).get("amount", 0)) >= 2)
+	# 판 단위 공급 밴드 — 존1·3·5 × 25킬 × 200판(엘리트·보스·봉인 상자 포함). 장비 0,
+	# 조각은 판당 2개 이상(존1 T1 세트 9 + 권총·기관단총 6 = 15조각이 5~6판 안에), 인장 ≥1(보스).
+	for supply_stage in [1, 3, 5]:
+		var supply: Dictionary = LOOT_ECONOMY.simulate_gear_supply(supply_stage, 25, 200, 4242 + supply_stage, true)
+		print("GEAR_SUPPLY_STAGE_%d %s" % [supply_stage, supply])
+		assert(is_zero_approx(float(supply.get("weapons_per_run", 1.0))), "존%d 판당 무기 0" % supply_stage)
+		assert(is_zero_approx(float(supply.get("armor_per_run", 1.0))), "존%d 판당 방어구 0" % supply_stage)
+		assert(float(supply.get("shards_per_run", 0.0)) >= 2.0, "존%d 판당 조각 ≥2 (실측 %.2f)" % [supply_stage, float(supply.get("shards_per_run", 0.0))])
+		assert(float(supply.get("artisan_seals_per_run", 0.0)) >= 1.0, "존%d 보스 인장 확정" % supply_stage)
+		assert(float(supply.get("precision_gear_per_run", 0.0)) > 0.3, "존%d 정밀 기어 공급" % supply_stage)
+		assert(float(supply.get("empty_kill_rate", 1.0)) <= 0.40, "존%d 빈 킬 ≤40%% (실측 %.2f)" % [supply_stage, float(supply.get("empty_kill_rate", 1.0))])
 
+	# try_register_loot은 장비 정의를 출처 불문 거절한다(캡이 아니라 규칙).
 	var game_state := root.get_node("GameState")
 	game_state.call("reset_raid_supply_counters")
-	var weapon_definition := LOOT_ECONOMY.roll_container(
-		"weapon_case",
-		1,
-		"street_mixed",
-		_seeded_random(7)
-	)
-	var registered_weapon_count := 0
-	for definition in weapon_definition:
-		if (
-			str(definition.get("type", "")) == "weapon"
-			and LOOT_ECONOMY.try_register_loot(game_state, definition, "field", 1)
-		):
-			registered_weapon_count += 1
-	# 필드 컨테이너 무기 캡(weapon_spawn_cap, 1스테이지 4)은 적 드랍 캡과
-	# 분리됐다 — 예전엔 카운터를 공유해서 무기 상자 몇 개만 열어도 그 판의
-	# 적 무기 드랍이 통째로 막혔다.
-	assert(registered_weapon_count <= 4)
+	var weapon_definition: Dictionary = LOOT_ECONOMY._materialize_item("mp5", 1, random)
+	var armor_definition: Dictionary = LOOT_ECONOMY._materialize_item("scav_vest", 1, random)
+	assert(not LOOT_ECONOMY.try_register_loot(game_state, weapon_definition, "field", 1))
+	assert(not LOOT_ECONOMY.try_register_loot(game_state, weapon_definition, "enemy", 1, true))
+	assert(not LOOT_ECONOMY.try_register_loot(game_state, armor_definition, "enemy", 1, true))
+	assert(int(game_state.get("raid_weapon_drops_generated")) == 0)
 	assert(int(game_state.get("raid_enemy_weapon_drops_generated")) == 0)
+	var shard_definition: Dictionary = LOOT_ECONOMY.materialize_blueprint_shard(1, random)
+	assert(str(shard_definition.get("type", "")) == "progression_item")
+	assert(LOOT_ECONOMY.try_register_loot(game_state, shard_definition, "enemy", 1), "조각은 정상 등록")
 
 	print(
-		"LOOT_ECONOMY_OK stage1 weapons=%.2f ammo=%.1f common=%.1f value=%.0f stage4 weapons=%.2f enemy_weapon_rate=%.3f common_enemy_rate=%.3f recovery_rate=%.3f"
+		"LOOT_ECONOMY_OK stage1 weapons=%.2f ammo=%.1f common=%.1f value=%.0f shards=%.2f any=%.3f common_rate=%.3f shard_rate=%.3f"
 		% [
 			float(stage_one_supply.get("average_weapons", 0.0)),
 			float(stage_one_supply.get("average_ammo", 0.0)),
 			float(stage_one_supply.get("average_common_supply", 0.0)),
 			float(stage_one_supply.get("average_value", 0.0)),
-			float(stage_four_supply.get("average_weapons", 0.0)),
-			ranged_weapon_rate,
+			float(stage_one_supply.get("average_blueprint_shards", 0.0)),
+			any_enemy_drop_rate,
 			common_enemy_drop_rate,
-			recovery_weapon_rate,
+			shard_enemy_drop_rate,
 		]
 	)
 	quit(0)
@@ -367,9 +314,3 @@ func _container_count(profile: Dictionary) -> int:
 	for value in (profile.get("container_counts", {}) as Dictionary).values():
 		count += int(value)
 	return count
-
-
-func _seeded_random(seed_value: int) -> RandomNumberGenerator:
-	var random := RandomNumberGenerator.new()
-	random.seed = seed_value
-	return random

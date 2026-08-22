@@ -2443,10 +2443,17 @@ func _component_description(component_id: String) -> String:
 			return "배율 조준경과 정밀 모듈의 제작 재료로 쓰는 광학 부품입니다."
 		"magazine_spring":
 			return "고속 탄창과 전술 부품의 제작 재료로 쓰는 기계 부품입니다."
+		"precision_gear":
+			return "+31 이후 강화와 돌파에 드는 희귀 부품입니다. 엘리트·봉인 보급함에서 나옵니다."
+		"military_alloy":
+			return "+61 이후 강화와 +50 이상 돌파에 드는 희귀 부품입니다. 보스·봉쇄선 금고에서 나옵니다."
 	return "총기 부착물 제작에 쓰는 핵심 제작 재료입니다."
 
 
 func _progression_item_name(item_id: String) -> String:
+	# 설계도 조각(blueprint_shard_*)·장인의 인장은 카탈로그 이름을 그대로 쓴다.
+	if item_id.begins_with("blueprint_shard_") or item_id == "artisan_seal":
+		return str((LOOT_ECONOMY.ITEM_CATALOG.get(item_id, {}) as Dictionary).get("display_name", item_id))
 	match item_id:
 		"rifle_blueprint":
 			return "소총 제작 청사진"
@@ -2468,6 +2475,11 @@ func _progression_item_name(item_id: String) -> String:
 
 
 func _progression_item_description(item_id: String) -> String:
+	if item_id.begins_with("blueprint_shard_"):
+		var recipe_id := item_id.trim_prefix("blueprint_shard_")
+		return "작업대 제작 해금 조각 — 3조각이 모이면 만들 수 있습니다(%s). 가방 칸을 차지하지 않습니다." % str(game_state.get_blueprint_progress_text(recipe_id))
+	if item_id == "artisan_seal":
+		return "장인의 인장 — +10·+20·… 강화 돌파 1회에 1개. 보스·메인 미션 3단계에서 나옵니다. 가방 칸을 차지하지 않습니다."
 	match item_id:
 		"rifle_blueprint":
 			return "AK 계열 소총(AKM 개조형) 제작법을 해금하는 희귀 청사진입니다."

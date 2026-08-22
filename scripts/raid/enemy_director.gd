@@ -391,7 +391,7 @@ func _spawn_enemy(
 				enemy_weapon_id = "double_barrel"
 			# 사다리 2단 무장 — 존3+(threat ≥ 0.5)부터 소총/산탄 칸의 일부를 상위
 			# 기종으로 바꾼다(0.5→10%, 1.0→30%). 존 threat만 본다 — 러버밴딩 없음.
-			# 들고 있던 총은 _enemy_carried_weapon_allowed 경로로 드랍된다(의도).
+			# 들고 있던 총은 떨어지지 않는다(장비는 작업대 제작 전용·영구 귀속) — 대신 엘리트 확정 드랍(설계도 조각·탄약·희귀 부품).
 			# K2는 적 풀에 없다(용산 키 전용 제작).
 			if threat >= 0.5 and spawn_random.randf() < lerpf(0.1, 0.3, (threat - 0.5) / 0.5):
 				if enemy_weapon_id == "ak47":
@@ -556,6 +556,7 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 			"scope_lens": "스코프 렌즈",
 			"magazine_spring": "탄창 스프링",
 		}
+		var gear_stage := LOOT_ECONOMY.get_gear_stage_for_zone(host.raid_zone_data)
 		var component_id: String = component_ids[spawn_random.randi_range(0, component_ids.size() - 1)]
 		var guaranteed_churu := 1
 		var boss_drop: Node3D = host._create_loot_pickup(
@@ -586,19 +587,23 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 				drop_position + Vector3(-1.0, 0.0, 0.6),
 				boss_ammo_data
 			)
-		# 보스 확정 장비 1개 — 한 단계 위 가족 방어구(존 가족+1, 상한 T3) 확정.
-		# 일반 적 12%만으로는 세트가 더디니 보스가 "다음 존 장비"의 확실한 창이 된다.
-		# 확정은 확정이다: 캡에 막혀도 집계만 하고 지급한다(엘리트와 같은 원칙).
-		var boss_armor: Dictionary = LOOT_ECONOMY.roll_boss_armor_drop(stage_tier, spawn_random)
-		if not boss_armor.is_empty():
-			if not LOOT_ECONOMY.try_register_loot(GameState, boss_armor, "enemy", stage_tier):
-				LOOT_ECONOMY.try_register_loot(GameState, boss_armor, "enemy", stage_tier, true)
-			var boss_armor_data := (boss_armor.get("data", {}) as Dictionary).duplicate(true)
-			boss_armor_data["loot_source"] = "enemy_boss"
+		# 보스 확정 3종(2026-08 경제 코어) — 설계도 조각 2 + 군용 합금 1~2 + 장인의 인장 1.
+		# 장비(방어구)는 더 이상 떨어지지 않는다(작업대 제작 전용). 확정은 확정이다:
+		# 캡에 막혀도 집계만 하고 지급한다(엘리트와 같은 원칙).
+		var boss_offsets := [Vector3(0.9, 0.0, -0.8), Vector3(-1.2, 0.0, -0.4), Vector3(0.3, 0.0, 1.2)]
+		var boss_drops: Array[Dictionary] = LOOT_ECONOMY.roll_boss_drops(gear_stage, spawn_random)
+		for boss_index in boss_drops.size():
+			var boss_definition: Dictionary = boss_drops[boss_index]
+			if boss_definition.is_empty():
+				continue
+			if not LOOT_ECONOMY.try_register_loot(GameState, boss_definition, "enemy", stage_tier):
+				LOOT_ECONOMY.try_register_loot(GameState, boss_definition, "enemy", stage_tier, true)
+			var boss_data := (boss_definition.get("data", {}) as Dictionary).duplicate(true)
+			boss_data["loot_source"] = "enemy_boss"
 			host._create_loot_pickup(
-				"armor",
-				drop_position + Vector3(0.9, 0.0, -0.8),
-				boss_armor_data
+				str(boss_definition.get("type", "mod_component")),
+				drop_position + (boss_offsets[boss_index % boss_offsets.size()] as Vector3),
+				boss_data
 			)
 		return boss_drop
 	if bool(enemy.get_meta("elite", false)):
@@ -624,49 +629,24 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 				ammo_data
 			)
 	var enemy_kind := str(enemy.get("enemy_kind"))
+	# 일반 적 드랍 — 부품·탄약·통조림·구급약·설계도 조각(6%). 장비(무기·방어구)는
+	# 2026-08 경제 코어로 필드에서 완전히 빠졌다(작업대 제작 전용·영구 귀속). 적은
+	# 여전히 총을 들고 쏘지만 떨어뜨리지 않는다. 옛 "무기 캡 대체 탄약"도 따라서 폐지.
+	# 조각 풀은 존 단계 1~5(get_gear_stage_for_zone) — 남산의 K2 조각이 존4에 묶이지 않게.
 	var definition: Dictionary = LOOT_ECONOMY.roll_enemy_drop(
-		stage_tier,
+		LOOT_ECONOMY.get_gear_stage_for_zone(host.raid_zone_data),
 		enemy_kind,
 		enemy_weapon_id,
 		spawn_random,
 		not host.has_ak
 	)
 	var main_pickup: Node3D = null
-	var main_type := ""
 	if not definition.is_empty():
 		if LOOT_ECONOMY.try_register_loot(GameState, definition, "enemy", stage_tier):
-			main_type = str(definition.get("type", "canned_food"))
+			var main_type := str(definition.get("type", "canned_food"))
 			var data := (definition.get("data", {}) as Dictionary).duplicate(true)
 			data["loot_source"] = "enemy"
 			main_pickup = host._create_loot_pickup(main_type, drop_position, data)
-		elif str(definition.get("type", "")) == "weapon":
-			# 무기 캡·가치 캡에 막힌 총은 조용히 사라지지 않는다 — 그 구경
-			# 탄약으로 바꿔 지급한다. 판에 굴러다니는 총이 무한정 늘어나는 건
-			# 막되, "죽였는데 아무것도 안 떨어졌다"는 체감은 남기지 않는다.
-			main_pickup = _spawn_capped_weapon_ammo_substitute(
-				enemy_weapon_id, stage_tier, drop_position
-			)
-	var dropped_weapon := main_type == "weapon"
-	# "매 킬 장비 보장 fallback"은 2026-08 장비 드랍 재설계로 폐지했다 — 모든
-	# 킬 = 무기 or 방어구 1개는 25킬 판에 방어구 ~20개(슬롯은 3개)를 만든 진범.
-	# 일반 적은 roll_enemy_drop의 방어구 12% / 든 총 10%만 탄다. 잉여는 귀환
-	# 정산에서 부품으로 분해된다(GameState.salvage_surplus_equipment).
-	# 총이 떨어졌으면 그 구경 탄약을 정상 스택으로 100% 동반 — 주운 총을 그
-	# 자리에서 장전해 써 볼 수 있어야 한다(유저 요구).
-	if dropped_weapon:
-		var companion_ammo: Dictionary = LOOT_ECONOMY.roll_weapon_companion_ammo(
-			enemy_weapon_id, stage_tier, spawn_random
-		)
-		if not companion_ammo.is_empty():
-			if not LOOT_ECONOMY.try_register_loot(GameState, companion_ammo, "enemy", stage_tier):
-				LOOT_ECONOMY.try_register_loot(GameState, companion_ammo, "enemy", stage_tier, true)
-			var companion_data := (companion_ammo.get("data", {}) as Dictionary).duplicate(true)
-			companion_data["loot_source"] = "enemy"
-			host._create_loot_pickup(
-				str(companion_ammo.get("type", "ammo")),
-				drop_position + Vector3(0.4, 0.0, 0.9),
-				companion_data
-			)
 	return main_pickup
 
 
@@ -675,12 +655,11 @@ func _spawn_elite_loot(
 	stage_tier: int,
 	drop_position: Vector3
 ) -> Node3D:
-	# 엘리트 확정 드랍 3종 — ① 들고 있던 무기(희귀도 게이트 면제 경로)
-	# ② 동반 탄약 2배 스택 ③ 고가치품(귀중품/부품) 1개 — 여기에 ④ 30%로
-	# 한 단계 위 가족 방어구(loot_economy.roll_elite_drop, 존 가족+1·상한 T3).
-	# 확정은 확정이다: 캡에 막혀도 집계만 하고 지급한다.
+	# 엘리트 확정 드랍 — ① 그 존 가족 설계도 조각 1 ② 탄약 2배 스택 ③ 고가치품
+	# (귀중품/부품) 1개 + ④ 50% 정밀 기어 ⑤ 5% 장인의 인장(loot_economy.roll_elite_drop).
+	# 장비는 없다 — 제작 전용. 확정은 확정이다: 캡에 막혀도 집계만 하고 지급한다.
 	var drops: Array[Dictionary] = LOOT_ECONOMY.roll_elite_drop(
-		stage_tier, elite_weapon_id, spawn_random
+		LOOT_ECONOMY.get_gear_stage_for_zone(host.raid_zone_data), elite_weapon_id, spawn_random
 	)
 	var main_pickup: Node3D = null
 	var drop_offsets := [
@@ -688,6 +667,7 @@ func _spawn_elite_loot(
 		Vector3(-0.9, 0.0, 0.6),
 		Vector3(0.9, 0.0, -0.5),
 		Vector3(0.5, 0.0, 1.0),
+		Vector3(-0.5, 0.0, -1.0),
 	]
 	for drop_index in drops.size():
 		var definition: Dictionary = drops[drop_index]
@@ -705,28 +685,6 @@ func _spawn_elite_loot(
 		if main_pickup == null:
 			main_pickup = pickup
 	return main_pickup
-
-
-func _spawn_capped_weapon_ammo_substitute(
-	enemy_weapon_id: String,
-	stage_tier: int,
-	drop_position: Vector3
-) -> Node3D:
-	# 캡에 막힌 무기 드랍의 대체 지급 — 총 대신 그 총의 탄약.
-	var substitute: Dictionary = LOOT_ECONOMY.roll_weapon_companion_ammo(
-		enemy_weapon_id, stage_tier, spawn_random
-	)
-	if substitute.is_empty():
-		return null
-	if not LOOT_ECONOMY.try_register_loot(GameState, substitute, "enemy", stage_tier):
-		return null
-	var substitute_data := (substitute.get("data", {}) as Dictionary).duplicate(true)
-	substitute_data["loot_source"] = "enemy"
-	return host._create_loot_pickup(
-		str(substitute.get("type", "ammo")),
-		drop_position,
-		substitute_data
-	)
 
 
 func _on_enemy_reinforcement_called(caller: CharacterBody3D) -> void:

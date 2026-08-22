@@ -4208,8 +4208,8 @@ func _open_raid_zone_select() -> void:
 	# 죽는 유저는 거기까지 가 보지도 못하고 규칙을 사후에 배웠다.
 	var death_penalty_notice := Label.new()
 	death_penalty_notice.name = "RaidDeathPenaltyNotice"
-	# 사망 페널티 완화(장착 무기 유지) 반영 — 이 고지가 거짓이 되면 안 된다.
-	death_penalty_notice.text = "죽으면 가방과 방어구를 현장에 남긴다 · 장착 무기·부착물과 창고 보관분·고철은 안전"
+	# 영구 귀속(2026-08) 반영 — 이 고지가 거짓이 되면 안 된다.
+	death_penalty_notice.text = "죽으면 가방의 재료·탄약·귀중품만 현장에 남긴다 · 장비(무기·방어구·부착물)·창고·고철은 전부 안전"
 	death_penalty_notice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	death_penalty_notice.add_theme_font_override("font", FONT)
 	death_penalty_notice.add_theme_font_size_override("font_size", 13)
@@ -4795,7 +4795,8 @@ func _build_return_settlement_card_lines(settlement: Dictionary) -> Array[String
 		lines.append("통조림 %d개  ·  가방에 보관" % food)
 	var stored := int(settlement.get("stored", 0))
 	if stored > 0:
-		lines.append("재료·장비 %d점  →  창고" % stored)
+		# 장비는 더 이상 창고로 안 간다(영구 귀속·0칸) — 창고행은 재료·부착물·조각뿐.
+		lines.append("재료·조각 %d점  →  창고" % stored)
 	if int(settlement.get("salvaged_items", 0)) > 0:
 		lines.append("잉여 장비 %d점  →  부품 %d개 분해" % [int(settlement.get("salvaged_items", 0)), int(settlement.get("salvaged_components", 0))])
 	var valuable_count := int(settlement.get("valuable_count", 0))

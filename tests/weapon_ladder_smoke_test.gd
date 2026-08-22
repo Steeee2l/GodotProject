@@ -6,10 +6,9 @@ extends SceneTree
 #   ① 신규 3종(akm·k2·pump_shotgun) build_stats 정상, 기존 구경(7.62x39 / 12g) 탄약 호환
 #   ② 강화 이관: AK-47 +10 보유 상태에서 AKM 첫 획득 → AKM +6, 재획득 시 재이관 없음,
 #      K2 첫 획득 시 AKM(가장 높은 하위) 기준 이관, from 레벨 유지, 세이브 왕복 유지
-#   ③ 작업대 레시피 게이트: 청사진(akm/pump) · 용산 통제 키(k2) · 대체 청사진(rifle_blueprint → AKM)
-#   ④ 메인 미션 2단계 보상에 청사진이 있고, 이미 끝낸 구세이브는 ensure_story_key_items로 보정
-#   ⑤ 드랍 경로: 존3 적이 든 akm/pump_shotgun은 처치 드랍으로 나온다(_enemy_carried_weapon_allowed),
-#      k2는 weapon_case 굴림에 절대 안 나온다
+#   ③ 작업대 레시피 게이트(2026-08 경제 코어): 설계도 조각 3/3(akm/pump/k2 전부) · 보유 시 재제작 불가
+#   ④ 메인 미션 2단계 보상에 설계도 조각(2)이 있고, 이미 끝낸 구세이브는 ensure_story_key_items로 보정
+#   ⑤ 드랍 경로: 장비는 어떤 경로(적 처치·엘리트·상자)에서도 안 나온다 — 제작 전용
 #   ⑥ 처치 발수 표(존별 사수 체력 102/125/149/176/202, 엘리트 ×2.6) — 밸런스 가드 출력 + 목표 검증
 #
 # 실행: godot --headless --path . --script res://tests/weapon_ladder_smoke_test.gd
@@ -163,31 +162,37 @@ func _check_workbench_gates(game_state: Node) -> void:
 	var by_id := {}
 	for recipe in weapons:
 		by_id[str((recipe as Dictionary).get("id", ""))] = recipe
-	_check(not by_id.has("ak47"), "③ AK-47 레시피 제거")
+	# 2026-08: 무기 7종 전부 레시피(AK-47은 시작 보유라 "제작됨 · 영구 보유"로 잠겨 보인다).
+	_check(by_id.has("ak47"), "③ AK-47 레시피 존재(보유 시 재제작 불가)")
 	for recipe_id in ["akm", "pump_shotgun", "k2", "double_barrel"]:
 		_check(by_id.has(recipe_id), "③ %s 레시피 존재" % recipe_id)
 	game_state.set("shelter_tier", 5)
+	game_state.set("shelter_workbench_level", 5)
 	game_state.set("scrap", 10000000)
-	# 청사진 없음 → 잠금
-	_check(bool(workbench.call("_is_recipe_locked", by_id["akm"])), "③ AKM: 청사진 없으면 잠금")
-	_check(bool(workbench.call("_is_recipe_locked", by_id["pump_shotgun"])), "③ 펌프: 청사진 없으면 잠금")
-	_check(bool(workbench.call("_is_recipe_locked", by_id["k2"])), "③ K2: 키 없으면 잠금")
+	# 설계도 조각 없음 → 잠금(2026-08: 통짜 청사진·용산 키 게이트는 조각 3/3으로 통일)
+	_check(bool(workbench.call("_is_recipe_locked", by_id["akm"])), "③ AKM: 조각 없으면 잠금")
+	_check(bool(workbench.call("_is_recipe_locked", by_id["pump_shotgun"])), "③ 펌프: 조각 없으면 잠금")
+	_check(bool(workbench.call("_is_recipe_locked", by_id["k2"])), "③ K2: 조각 없으면 잠금")
 	var subtitle := str(workbench.call("_recipe_list_subtitle", by_id["akm"]))
-	_check(subtitle.contains("을지로") and subtitle.contains("2단계"), "③ AKM 잠금 부제가 을지로 2단계를 가리킨다: %s" % subtitle)
+	_check(subtitle.contains("설계도 조각") and subtitle.contains("0/3") and subtitle.contains("을지로"), "③ AKM 잠금 부제가 조각 0/3과 을지로를 가리킨다: %s" % subtitle)
 	var k2_subtitle := str(workbench.call("_recipe_list_subtitle", by_id["k2"]))
-	_check(k2_subtitle.begins_with("키 필요") and k2_subtitle.contains("용산"), "③ K2 잠금 부제: %s" % k2_subtitle)
-	# 청사진 지급 → 해금
-	game_state.call("add_progression_item", "akm_blueprint", 1)
-	_check(not bool(workbench.call("_is_recipe_locked", by_id["akm"])), "③ AKM: 청사진 있으면 해금")
-	game_state.call("add_progression_item", "pump_blueprint", 1)
-	_check(not bool(workbench.call("_is_recipe_locked", by_id["pump_shotgun"])), "③ 펌프: 청사진 있으면 해금")
-	game_state.call("add_progression_item", "yongsan_control_key", 1)
-	_check(not bool(workbench.call("_is_recipe_locked", by_id["k2"])), "③ K2: 용산 통제 키로 해금")
-	# 대체 경로 — 소총 청사진만 있어도 AKM 해금
+	_check(k2_subtitle.contains("설계도 조각") and k2_subtitle.contains("남산"), "③ K2 잠금 부제: %s" % k2_subtitle)
+	# 조각 2/3 → 여전히 잠금, 3/3 → 해금
+	game_state.call("add_blueprint_shards", "akm", 2)
+	_check(bool(workbench.call("_is_recipe_locked", by_id["akm"])), "③ AKM: 조각 2/3은 잠금")
+	game_state.call("add_blueprint_shards", "akm", 1)
+	_check(not bool(workbench.call("_is_recipe_locked", by_id["akm"])), "③ AKM: 조각 3/3이면 해금")
+	game_state.call("add_blueprint_shards", "pump_shotgun", 3)
+	_check(not bool(workbench.call("_is_recipe_locked", by_id["pump_shotgun"])), "③ 펌프: 조각 3/3이면 해금")
+	game_state.call("add_blueprint_shards", "k2", 3)
+	_check(not bool(workbench.call("_is_recipe_locked", by_id["k2"])), "③ K2: 조각 3/3이면 해금")
+	# 레거시 통짜 청사진은 제작을 열지 않는다 — 로드 시 조각으로 환산될 뿐.
 	game_state.call("reset_run")
 	game_state.set("shelter_tier", 5)
+	game_state.set("shelter_workbench_level", 5)
 	game_state.call("add_progression_item", "rifle_blueprint", 1)
-	_check(not bool(workbench.call("_is_recipe_locked", by_id["akm"])), "③ AKM: 소총 청사진(대체)으로도 해금")
+	_check(bool(workbench.call("_is_recipe_locked", by_id["akm"])), "③ 통짜 청사진만으로는 AKM 미해금(조각 3/3 필요)")
+	game_state.call("add_blueprint_shards", "akm", 3)
 	# 결과 미리보기 줄에 이관 안내
 	var levels: Dictionary = game_state.get("weapon_enhancement_levels")
 	levels["ak47"] = 10
@@ -196,16 +201,20 @@ func _check_workbench_gates(game_state: Node) -> void:
 	# 실제 제작 → 이관 + 완료 문구
 	game_state.set("scrap", 10000000)
 	game_state.set("catnip", 1000000)
-	game_state.call("add_progression_item", "akm_blueprint", 1)
 	game_state.call("add_mod_component", "scope_lens", 10)
 	game_state.call("add_mod_component", "magazine_spring", 10)
 	game_state.call("add_mod_component", "rubber_gasket", 10)
+	game_state.call("add_mod_component", "precision_gear", 10)
+	game_state.call("add_mod_component", "military_alloy", 10)
 	_check(bool(workbench.call("_can_craft", by_id["akm"])), "③ AKM 제작 가능 상태")
 	workbench.call("_craft", by_id["akm"])
 	_check(int(game_state.call("get_weapon_count", "akm")) == 1, "③ AKM 제작됨")
 	_check(int(game_state.call("get_weapon_enhancement_level", "akm")) == 6, "③ 제작 경로 이관 +6")
 	var feedback := str(workbench.get("craft_feedback_text"))
 	_check(feedback.contains("이어받았다"), "③ 제작 완료 문구에 이관: %s" % feedback)
+	# 보유 중이면 재제작 불가 — "제작됨 · 영구 보유"
+	_check(not bool(workbench.call("_can_craft", by_id["akm"])), "③ 보유 중인 AKM은 재제작 불가")
+	_check(str(workbench.call("_recipe_list_subtitle", by_id["akm"])) == "제작됨 · 영구 보유", "③ 보유 부제")
 	# 강화 비용 가중치
 	game_state.call("reset_run")
 	var ak_cost := int(game_state.call("get_weapon_enhancement_cost", "ak47"))
@@ -213,19 +222,15 @@ func _check_workbench_gates(game_state: Node) -> void:
 	var k2_cost := int(game_state.call("get_weapon_enhancement_cost", "k2"))
 	var pump_cost := int(game_state.call("get_weapon_enhancement_cost", "pump_shotgun"))
 	_check(akm_cost > ak_cost and k2_cost > akm_cost and pump_cost > ak_cost * 0.9, "③ 강화 비용 가중 akm %d > ak %d, k2 %d, pump %d" % [akm_cost, ak_cost, k2_cost, pump_cost])
-	# 장인 뽑기 풀(Tier 3+)에 akm/pump가 들어온다 — 확정 천장 = 맨 뒤(AKM).
+	# 장인 뽑기는 폐지(2026-08) — 장인 = 돌파 서비스. 작업대 artisan 탭은 돌파 행만 만든다.
+	_check(not game_state.has_method("roll_artisan_weapon"), "③ 장인 뽑기 함수 제거")
 	game_state.call("reset_run")
-	game_state.set("shelter_tier", 3)
-	game_state.set("scrap", 100000000)
-	game_state.set("artisan_pity", int(game_state.get("ARTISAN_PITY_LIMIT")))
-	var guaranteed: Dictionary = game_state.call("roll_artisan_weapon")
-	_check(str(guaranteed.get("weapon_id", "")) == "akm", "③ Tier 3 뽑기 확정 = AKM: %s" % str(guaranteed.get("weapon_id", "")))
-	var seen := {}
-	for _roll in 400:
-		game_state.set("scrap", 100000000)
-		var rolled: Dictionary = game_state.call("roll_artisan_weapon")
-		seen[str(rolled.get("weapon_id", ""))] = true
-	_check(seen.has("pump_shotgun") and seen.has("akm") and not seen.has("k2"), "③ 뽑기 풀에 펌프·AKM 있음, K2 없음: %s" % str(seen.keys()))
+	var artisan_rows: Array = workbench.call("_recipes_for_category", "artisan")
+	var has_breakthrough_row := false
+	for row in artisan_rows:
+		if ((row as Dictionary).get("result", {}) as Dictionary).has("breakthrough"):
+			has_breakthrough_row = true
+	_check(has_breakthrough_row, "③ 장인 탭 = 장착 무기 돌파 행")
 	workbench.free()
 	game_state.call("reset_run")
 
@@ -236,8 +241,9 @@ func _check_mission_blueprints(game_state: Node) -> void:
 	var namdaemun_stage2 := MAIN_MISSION_CATALOG.get_stage("namdaemun_market", 1)
 	var euljiro_items := (euljiro_stage2.get("reward", {}) as Dictionary).get("progression_items", {}) as Dictionary
 	var namdaemun_items := (namdaemun_stage2.get("reward", {}) as Dictionary).get("progression_items", {}) as Dictionary
-	_check(int(euljiro_items.get("akm_blueprint", 0)) == 1, "④ 을지로 2단계 보상 = akm_blueprint")
-	_check(int(namdaemun_items.get("pump_blueprint", 0)) == 1, "④ 남대문 2단계 보상 = pump_blueprint")
+	# 2026-08: 통짜 청사진 → 설계도 조각 2(나머지 1은 그 존 엘리트·봉인 상자).
+	_check(int(euljiro_items.get("blueprint_shard_akm", 0)) == 2, "④ 을지로 2단계 보상 = AKM 조각 2")
+	_check(int(namdaemun_items.get("blueprint_shard_pump_shotgun", 0)) == 2, "④ 남대문 2단계 보상 = 펌프 조각 2")
 	_check(str((euljiro_stage2.get("reward", {}) as Dictionary).get("summary", "")).contains("AKM 제작 가능"), "④ 을지로 요약에 AKM 제작 한 줄")
 	_check(str((namdaemun_stage2.get("reward", {}) as Dictionary).get("summary", "")).contains("펌프 산탄총 제작 가능"), "④ 남대문 요약에 펌프 한 줄")
 	# 재회수 보상엔 없다.
@@ -249,63 +255,52 @@ func _check_mission_blueprints(game_state: Node) -> void:
 	progress["namdaemun_market"] = 2
 	game_state.set("main_mission_progress", progress)
 	var granted: Array = game_state.call("ensure_story_key_items")
-	_check(granted.has("akm_blueprint") and granted.has("pump_blueprint"), "④ 구세이브 보정 지급: %s" % str(granted))
-	_check(int(game_state.call("get_progression_item_count", "akm_blueprint")) == 1, "④ akm_blueprint 1개")
-	_check(int(game_state.call("get_progression_item_count", "pump_blueprint")) == 1, "④ pump_blueprint 1개")
+	_check(granted.has("blueprint_shard_akm") and granted.has("blueprint_shard_pump_shotgun"), "④ 구세이브 보정 지급: %s" % str(granted))
+	_check(int(game_state.call("get_blueprint_shard_count", "akm")) == 2, "④ AKM 조각 2")
+	_check(int(game_state.call("get_blueprint_shard_count", "pump_shotgun")) == 2, "④ 펌프 조각 2")
 	var again: Array = game_state.call("ensure_story_key_items")
 	_check(again.is_empty(), "④ 멱등 — 두 번째는 아무것도 안 줌")
 	# 가방 칸 0
-	_check(int(game_state.call("get_raid_item_slot_cost", "progression", "akm_blueprint", 1)) == 0, "④ 청사진 가방 칸 0")
+	_check(int(game_state.call("get_raid_item_slot_cost", "progression", "blueprint_shard_akm", 1)) == 0, "④ 설계도 조각 가방 칸 0")
 	game_state.call("reset_run")
 
 
 # ── ⑤ 드랍 경로 ────────────────────────────────────────────────
 func _check_drop_paths() -> void:
+	# 2026-08 경제 코어: 장비는 적 처치·엘리트·상자 어디에서도 나오지 않는다(제작 전용).
+	# 적은 여전히 AKM·펌프를 들고 쏘지만 떨어뜨리지 않는다. 대신 엘리트는 설계도 조각과
+	# 탄약을 확정으로 남긴다.
 	var random := RandomNumberGenerator.new()
 	random.seed = 20260822
 	for weapon_id in ["akm", "pump_shotgun"]:
-		_check(bool(LOOT_ECONOMY._enemy_carried_weapon_allowed(weapon_id)), "⑤ %s 적 보유 드랍 허용" % weapon_id)
-		var seen := false
-		for _sample in 400:
-			var drop: Dictionary = LOOT_ECONOMY.roll_guaranteed_equipment_drop(3, "ranged", weapon_id, random)
-			if str(drop.get("type", "")) == "weapon":
-				_check(str((drop.get("data", {}) as Dictionary).get("weapon_id", "")) == weapon_id, "⑤ 보장 드랍은 든 무기 그대로")
-				seen = true
-				break
-		_check(seen, "⑤ 존3 %s 든 적의 처치 드랍에서 그 무기가 나온다" % weapon_id)
-		var enemy_seen := false
+		var weapon_seen := false
 		for _sample in 600:
 			var drop: Dictionary = LOOT_ECONOMY.roll_enemy_drop(3, "ranged", weapon_id, random)
-			if str(drop.get("type", "")) == "weapon":
-				enemy_seen = true
+			if str(drop.get("type", "")) in ["weapon", "armor"]:
+				weapon_seen = true
 				break
-		_check(enemy_seen, "⑤ roll_enemy_drop 경로에서도 %s" % weapon_id)
-		var ammo: Dictionary = LOOT_ECONOMY.roll_weapon_companion_ammo(weapon_id, 3, random)
-		_check(not ammo.is_empty(), "⑤ %s 동반 탄약 존재" % weapon_id)
-	# 엘리트 확정 드랍
+		_check(not weapon_seen, "⑤ 존3 %s 든 적의 처치 드랍에 장비 없음" % weapon_id)
 	var elite: Array = LOOT_ECONOMY.roll_elite_drop(3, "akm", random)
-	var elite_has_akm := false
+	var elite_has_gear := false
+	var elite_has_shard := false
+	var elite_has_ammo := false
 	for entry in elite:
-		if str((entry as Dictionary).get("type", "")) == "weapon" and str(((entry as Dictionary).get("data", {}) as Dictionary).get("weapon_id", "")) == "akm":
-			elite_has_akm = true
-	_check(elite_has_akm, "⑤ 엘리트 AKM 확정 드랍")
-	# K2는 상자 굴림에 안 나온다(1000회).
-	var k2_seen := false
-	var akm_case_seen := false
+		var entry_type := str((entry as Dictionary).get("type", ""))
+		if entry_type in ["weapon", "armor"]:
+			elite_has_gear = true
+		if entry_type == "progression_item" and str(((entry as Dictionary).get("data", {}) as Dictionary).get("item_id", "")).begins_with("blueprint_shard_"):
+			elite_has_shard = true
+		if entry_type == "ammo":
+			elite_has_ammo = true
+	_check(not elite_has_gear, "⑤ 엘리트도 장비 없음")
+	_check(elite_has_shard and elite_has_ammo, "⑤ 엘리트 확정: 설계도 조각 + 탄약")
+	# 상자 굴림 1000회 — K2·AKM 어떤 무기도 안 나온다(옛 _roll_weapon_id 제거).
+	var case_gear_seen := false
 	for _sample in 1000:
-		var weapon_id := str(LOOT_ECONOMY._roll_weapon_id(5, random))
-		if weapon_id == "k2":
-			k2_seen = true
-		if weapon_id == "akm":
-			akm_case_seen = true
-	_check(not k2_seen, "⑤ K2는 weapon_case에 없다")
-	_check(akm_case_seen, "⑤ AKM은 존5 weapon_case에 나올 수 있다")
-	# 존2 상자엔 akm 없음(minimum_stage 3 / rarity 3 > cap 2)
-	var akm_low := false
-	for _sample in 1000:
-		if str(LOOT_ECONOMY._roll_weapon_id(2, random)) == "akm":
-			akm_low = true
-	_check(not akm_low, "⑤ 존2 weapon_case엔 AKM 없음")
+		for entry in LOOT_ECONOMY.roll_container("weapon_case", 5, "street_mixed", random):
+			if str((entry as Dictionary).get("type", "")) in ["weapon", "armor"]:
+				case_gear_seen = true
+	_check(not case_gear_seen, "⑤ 잠긴 장비 상자에도 무기·방어구 없음")
 
 
 # ── ⑥ 처치 발수 표 ─────────────────────────────────────────────

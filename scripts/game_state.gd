@@ -72,17 +72,20 @@ var resident_cat_ids: Array[String] = []
 var assigned_worker_ids: Array[String] = []
 var assigned_catnip_worker_ids: Array[String] = []
 var resident_traits: Dictionary = {}
+# 부품: 일반 3종(필드 어디서나) + 희귀 2종(정밀 기어·군용 합금 — 엘리트·보스·봉인
+# 상자). 희귀 부품은 +31부터의 강화와 돌파에 든다. 전부 component 타입(1칸/개).
 var mod_component_inventory: Dictionary = {
 	"rubber_gasket": 0,
 	"scope_lens": 0,
 	"magazine_spring": 0,
+	"precision_gear": 0,
+	"military_alloy": 0,
 }
+# 진행 아이템(0칸 쉘터 자산). 설계도 조각은 "blueprint_shard_<레시피>" 키로 동적으로
+# 쌓인다(레시피당 3조각 = 제작 해금, 소모되지 않음). 레거시 통짜 청사진
+# (rifle/shotgun/akm/pump_blueprint)은 로드 시 조각 3개로 환산된다.
 var progression_item_inventory: Dictionary = {
-	"rifle_blueprint": 0,
-	"shotgun_blueprint": 0,
-	# 무기 사다리 청사진 — 메인 미션 2단계 보상(을지로 → AKM, 남대문 → 펌프).
-	"akm_blueprint": 0,
-	"pump_blueprint": 0,
+	"artisan_seal": 0,
 	"sealed_zone_keycard": 0,
 	# 쉘터 티어 3~5 확장 키(SHELTER_UPGRADE_COSTS.key_item). 메인 미션 보상 전용.
 	"namdaemun_depot_plans": 0,
@@ -206,8 +209,8 @@ var shelter_return_serial: int = 0
 # 살아서 돌아온 횟수. shelter_return_serial은 사망 귀환도 세므로(시체 부패·행상인
 # 주기 등이 쓴다), "살아 돌아온 자에게만" 열리는 서사는 이 값으로 판정한다.
 var survived_return_count: int = 0
-# 판 포기(추출 없이 강제 종료)는 장착 무기만 남는 대손실인데 지금까지 아무
-# 통보가 없었다. 로드 직후 켜 두고, 쉘터에 들어서는 순간 한 줄로 알린다(세이브 대상 아님).
+# 판 포기(추출 없이 강제 종료)는 가방 재료·탄약·귀중품을 전부 잃는 손실(장비는 영구
+# 귀속이라 남는다)인데 지금까지 아무 통보가 없었다. 로드 직후 켜 두고, 쉘터에 들어서는 순간 한 줄로 알린다(세이브 대상 아님).
 var pending_abandonment_notice: bool = false
 var merchant_last_roll_serial: int = -1
 var merchant_status: String = "away"
@@ -268,16 +271,7 @@ const MERCHANT_SUNDRY_GOODS := [
 		"buy_price": 1600, "sell_scrap": 0, "stock_min": 1, "stock_max": 2,
 		"icon": "", "description": "출정 중 체력을 회복하는 응급 처치 키트입니다.",
 	},
-	{
-		"id": "scav_vest", "type": "equipment", "title": "누더기 방탄 조끼", "amount": 1,
-		"buy_price": 5200, "sell_scrap": 0, "stock_min": 1, "stock_max": 1,
-		"icon": "", "description": "상인이 어디선가 주워 온 생존자 계열 조끼입니다.",
-	},
-	{
-		"id": "patched_helmet", "type": "equipment", "title": "기워 붙인 헬멧", "amount": 1,
-		"buy_price": 4200, "sell_scrap": 0, "stock_min": 1, "stock_max": 1,
-		"icon": "", "description": "금 간 안전모를 보강한 머리 보호구입니다.",
-	},
+	# 장비(방어구)는 매대에서 뺐다 — 장비는 작업대 제작 전용(2026-08 경제 코어).
 ]
 # 판매(매입) 목록은 매대와 별개다 — 상인이 오늘 뭘 파느냐와 내 물건을 사 주느냐는
 # 다른 문제다. 여기 있는 품목은 방문마다 항상 팔 수 있다.
@@ -327,7 +321,18 @@ const MERCHANT_SELL_GOODS := [
 ]
 var weapon_enhancement_levels: Dictionary = {"ak47": 0}
 var mod_enhancement_levels: Dictionary = {}
-var artisan_pity: int = 0
+# ── 방어구 강화(2026-08 신설) ──
+# 기본 id(레벨 접미사 없음) → 0~99. 효과는 get_armor_enhancement_multiplier —
+# damage_reduction × (1 + 0.6×(1−0.96^L)), 피스 합산 상한 0.70. 적용 지점은 피해
+# 계산 단일 함수(get_equipment_damage_multiplier)뿐이다. 비용 600×가족계수×1.26^L.
+var armor_enhancement_levels: Dictionary = {}
+# 방어구 이관(같은 슬롯 T1→T2→T3 60%, 상위 1종당 평생 1회) — 무기와 같은 규약.
+var armor_enhancement_transfers_done: Array = []
+var last_armor_enhancement_transfer: Dictionary = {}
+# ── 돌파 ──
+# "weapon:ak47" / "armor:scav_vest" → 돌파를 끝낸 최고 단계(10·20·…·90). L이 10의
+# 배수일 때 다음 강화로 가려면 try_breakthrough(장인의 인장 + 희귀 부품 + 고철×3).
+var gear_breakthroughs: Dictionary = {}
 var selected_raid_zone: String = "jongno_outskirts"
 var contract_chain_index: int = 0
 var contract_status: String = "available"
@@ -363,7 +368,31 @@ var persistence_path: String = SAVE_PATH
 
 const SAVE_PATH := "user://shelter_progress_v2.json"
 const MAX_WEAPON_ENHANCEMENT := 99
-const ARTISAN_PITY_LIMIT := 10
+const MAX_ARMOR_ENHANCEMENT := 99
+# ── 장비 제작 전용 · 영구 귀속(2026-08 경제 코어) ──
+# 무기 7종·방어구 9종 전부 작업대 레시피(설계도 조각 3/3 + 고철 + 부품). 보유 중이면
+# 재제작 불가(1개 영구). 장비는 가방 칸 0, 사망·판 포기에도 전부 남는다.
+const BLUEPRINT_SHARDS_REQUIRED := 3
+const GEAR_WEAPON_RECIPE_IDS: Array[String] = ["m1911", "mp5", "ak47", "double_barrel", "pump_shotgun", "akm", "k2"]
+const GEAR_ARMOR_RECIPE_IDS: Array[String] = [
+	"scav_vest", "patched_helmet", "patched_sneakers",
+	"riot_vest", "tactical_helmet", "tactical_boots",
+	"military_vest", "military_helmet", "assault_boots",
+]
+const BASIC_COMPONENT_IDS: Array[String] = ["rubber_gasket", "scope_lens", "magazine_spring"]
+const RARE_COMPONENT_IDS: Array[String] = ["precision_gear", "military_alloy"]
+const ARTISAN_SEAL_ID := "artisan_seal"
+# 방어구 가족 사다리(슬롯별 T1→T2→T3) — 이관 60%의 기준. 가족 계수는 강화 비용 배율.
+const ARMOR_FAMILY_LADDER := {
+	"body": ["scav_vest", "riot_vest", "military_vest"],
+	"head": ["patched_helmet", "tactical_helmet", "military_helmet"],
+	"feet": ["patched_sneakers", "tactical_boots", "assault_boots"],
+}
+const ARMOR_FAMILY_FACTORS := [1.0, 1.5, 2.2]
+const ARMOR_ENHANCEMENT_BASE_COST := 600.0
+const ARMOR_ENHANCEMENT_COST_GROWTH := 1.26
+# 돌파 단계 간격 — +10, +20, …, +90에서 한 번씩.
+const BREAKTHROUGH_STEP := 10
 const CONTRACT_AGENT_UNLOCK_RETURN := 1
 const SHELTER_FACILITY_NAMES := {
 	"bed": "개인 침대",
@@ -791,27 +820,27 @@ const CANNED_FOOD_SCRAP_VALUE := 70
 # 청사진과 키카드는 그동안 수집만 되고 아무 문도 열지 않았다.
 # 여기서 실제 관문으로 만든다.
 const MILESTONE_UNLOCKS := {
+	# 제작 해금 문턱은 "설계도 조각 3/3"이다(requires_blueprint = 레시피 id).
+	# 키(craft_rifle 등)는 옛 세이브의 unlocked_milestones와 호환되게 그대로 둔다.
 	"craft_rifle": {
-		# 작업대 AK-47 레시피는 AKM으로 바뀌었다 — 소총 청사진은 AKM 제작의
-		# 필드 드랍 경로(봉인 보급함)로 남는다. 확정 경로는 을지로 2단계의 AKM 청사진.
-		"title": "소총 제작 해금",
-		"body": "소총 청사진을 읽었다. 작업대에서 AKM 개조형을 만들 수 있다.",
-		"requires_progression": "rifle_blueprint",
+		"title": "기관단총 제작 해금",
+		"body": "MP5 설계도 조각을 전부 맞췄다. 작업대에서 MP5를 만들 수 있다.",
+		"requires_blueprint": "mp5",
 	},
 	"craft_akm": {
 		"title": "AKM 개조 해금",
-		"body": "을지로의 주조 도면을 읽었다. 작업대에서 AKM 개조형을 만들 수 있다 — AK의 강화를 60% 이어받는다.",
-		"requires_progression": "akm_blueprint",
+		"body": "AKM 설계도 조각을 전부 맞췄다. 작업대에서 AKM 개조형을 만들 수 있다 — AK의 강화를 60% 이어받는다.",
+		"requires_blueprint": "akm",
 	},
 	"craft_pump": {
 		"title": "펌프 산탄총 해금",
-		"body": "남대문 봉쇄 명부 뒷장의 도면이다. 작업대에서 펌프 산탄총을 만들 수 있다 — 참치 헌터의 강화를 60% 이어받는다.",
-		"requires_progression": "pump_blueprint",
+		"body": "펌프 산탄총 설계도 조각을 전부 맞췄다. 작업대에서 만들 수 있다 — 참치 헌터의 강화를 60% 이어받는다.",
+		"requires_blueprint": "pump_shotgun",
 	},
 	"craft_shotgun": {
 		"title": "산탄총 제작 해금",
-		"body": "청사진을 읽었다. 작업대에서 참치 헌터를 직접 만들 수 있다.",
-		"requires_progression": "shotgun_blueprint",
+		"body": "더블배럴 설계도 조각을 전부 맞췄다. 작업대에서 참치 헌터를 직접 만들 수 있다.",
+		"requires_blueprint": "double_barrel",
 	},
 	"sealed_access": {
 		"title": "봉인구역 개방",
@@ -1109,6 +1138,9 @@ func ensure_story_key_items() -> Array[String]:
 			var stage := MAIN_MISSION_CATALOG.get_stage(zone_id, stage_index)
 			var items := (stage.get("reward", {}) as Dictionary).get("progression_items", {}) as Dictionary
 			for item_id in items.keys():
+				# 장인의 인장은 돌파에 소모되는 재화라 "없음 = 잃음"이 아니다 — 보정 대상 제외.
+				if str(item_id) == ARTISAN_SEAL_ID:
+					continue
 				if get_progression_item_count(str(item_id)) > 0:
 					continue
 				add_progression_item(str(item_id), maxi(1, int(items[item_id])))
@@ -1209,23 +1241,22 @@ func clear_pending_corpse_recovery() -> void:
 
 
 func build_carried_raid_loot() -> Dictionary:
-	var carried_equipment := equipment_inventory.duplicate(true)
-	for equipped_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
-		if not equipped_id.is_empty():
-			carried_equipment[equipped_id] = int(carried_equipment.get(equipped_id, 0)) + 1
+	# 시체(회수 대상)에 가는 것 = 가방의 재료·탄약·소모품·귀중품뿐. 장비(무기·방어구·
+	# 부착물)와 진행 아이템(조각·인장·키 = 0칸 쉘터 자산)은 영구 귀속이라 시체에
+	# 들어가지 않는다(raid_loss_manager.build_death_corpse_loot와 같은 규칙).
 	return {
 		"ammo_inventory": ammo_inventory.duplicate(true),
 		"medkits": maxi(0, medkits),
 		"canned_food": get_backpack_storage_count("food", "canned_food"),
 		"churu": maxi(0, churu),
 		"mod_component_inventory": mod_component_inventory.duplicate(true),
-		"progression_item_inventory": progression_item_inventory.duplicate(true),
-		"weapon_mod_inventory": weapon_mod_inventory.duplicate(true),
-		"weapon_inventory": weapon_inventory.duplicate(true),
-		"equipment_inventory": carried_equipment,
-		"equipped_weapon_id": equipped_weapon_id,
-		"equipped_weapon_mods": equipped_weapon_mods.duplicate(),
-		"weapon_mod_loadouts": weapon_mod_loadouts.duplicate(true),
+		"progression_item_inventory": {},
+		"weapon_mod_inventory": {},
+		"weapon_inventory": {},
+		"equipment_inventory": {},
+		"equipped_weapon_id": "",
+		"equipped_weapon_mods": [],
+		"weapon_mod_loadouts": {},
 		"raid_special_cargo": raid_special_cargo.duplicate(true),
 	}
 
@@ -1242,18 +1273,16 @@ func store_carried_raid_loot_for_recovery(world_position: Vector3) -> Dictionary
 
 
 func clear_carried_raid_inventory_after_death() -> void:
-	# 장착 중이던 무기 1정과 그 총에 박힌 부착물은 죽어도(판 포기여도) 손에 남는다.
-	# 사망이 예외 없는 100% 전손이면 전투 위험이 항상 비합리적이라 "도망만 다니는"
-	# 플레이가 정답이 된다(테스터 신고). 가방·방어구·탄약은 종전대로 잃는다.
-	# 강화 수치(weapon_enhancement_levels)는 원래 사망에 지워지지 않으므로
-	# 무기가 남는 한 강화도 함께 남는다.
-	var kept_weapon_id := equipped_weapon_id if has_ak and not equipped_weapon_id.is_empty() else ""
-	var kept_weapon_mods := equipped_weapon_mods.duplicate()
-	for inventory in [ammo_inventory, mod_component_inventory, progression_item_inventory, weapon_mod_inventory, equipment_inventory]:
+	# ── 영구 귀속(2026-08 경제 코어) ──
+	# 사망·판 포기에 잃는 것은 가방의 재료(부품)·탄약·구급약·통조림·츄르·귀중품뿐이다.
+	# 무기·방어구(장착+보유)·부착물·강화·돌파·설계도 조각·인장·키는 전부 남는다 —
+	# 장비는 필드에서 절대 안 나오고 제작으로만 생기므로, 잃는 순간 "다시 주워서 복구"가
+	# 불가능하다. 전손이면 전투 위험이 항상 비합리적이라 "도망만 다니는" 플레이가 정답이
+	# 된다(테스터 신고). 잃는 건 이번 판에 주운 것뿐 — 그래야 다음 판이 두려움이 아니라
+	# 기대가 된다. 탄은 빈 상태(magazine/reserve 0)로 시작한다.
+	for inventory in [ammo_inventory, mod_component_inventory]:
 		for key in inventory.keys():
 			inventory[key] = 0
-	weapon_inventory.clear()
-	weapon_mod_loadouts.clear()
 	medkits = 0
 	# 통조림은 가방 소모품이라 구급약과 같이 시체와 함께 사라진다.
 	canned_food = 0
@@ -1262,25 +1291,8 @@ func clear_carried_raid_inventory_after_death() -> void:
 	clear_churu_buffs()
 	magazine_ammo = 0
 	reserve_ammo = 0
-	if kept_weapon_id.is_empty():
-		# 맨손 사망 — 종전과 동일한 전손 처리.
-		has_ak = false
-		equipped_weapon_id = ""
-		equipped_weapon_mods.clear()
-		equipped_magazine_id = ""
-		equipped_ammo_id = ""
-	else:
-		# 장착 무기 유지: 재고 1정 + 부착물 + 로드아웃을 되살린다.
-		# equipped_weapon_id·equipped_weapon_mods·equipped_magazine_id·
-		# equipped_ammo_id는 건드리지 않는다 — 총은 계속 손에 들려 있다.
-		# 탄만 빈 상태(magazine/reserve 0)로 시작한다.
-		weapon_inventory[kept_weapon_id] = 1
-		for mod_id in kept_weapon_mods:
-			weapon_mod_inventory[str(mod_id)] = int(weapon_mod_inventory.get(str(mod_id), 0)) + 1
-		weapon_mod_loadouts[kept_weapon_id] = kept_weapon_mods.duplicate()
-	equipped_body_armor_id = ""
-	equipped_head_armor_id = ""
-	equipped_footwear_id = ""
+	# 장착 상태·부착물·방어구는 손대지 않는다 — 총은 계속 손에 들려 있고 옷은 입은 채다.
+	# 장착 무기가 없는(해제 상태) 세이브도 재고는 그대로라 다시 들면 된다.
 	# secure_dog_items는 여기서 지우지 않는다 — 사망 정산이 끝난 뒤
 	# restore_secure_items_after_death가 돌려주고 스스로 비운다.
 	raid_special_cargo.clear()
@@ -1368,14 +1380,13 @@ func settle_shelter_return_inventory() -> Dictionary:
 	var salvage := salvage_surplus_equipment()
 	report["salvaged_items"] = int(salvage.get("items", 0))
 	report["salvaged_components"] = int(salvage.get("components", 0))
-	# 3) 나머지 소지품은 창고로. 장착 중인 것은 get_backpack_storage_count가
-	#    이미 제외하므로 몸에 걸친 무기·방어구는 건드리지 않는다.
+	# 3) 나머지 소지품은 창고로. 무기·방어구는 옮기지 않는다 — 영구 귀속 장비는 가방
+	#    칸을 안 먹고(0칸) 몸에 딸린 것이라, 창고 왕복은 장착 교체를 방해하는 마찰일
+	#    뿐이다(구세이브가 창고에 넣어 둔 장비는 그대로 꺼낼 수 있다).
 	var settlement_targets: Array = [
 		["component", mod_component_inventory],
 		["mod", weapon_mod_inventory],
 		["progression", progression_item_inventory],
-		["weapon", weapon_inventory],
-		["equipment", equipment_inventory],
 	]
 	for target in settlement_targets:
 		var item_type := str(target[0])
@@ -1394,30 +1405,23 @@ func settle_shelter_return_inventory() -> Dictionary:
 	return report
 
 
-# ── 잉여 장비 분해 ─────────────────────────────────────────────
-# 장비 드랍 재설계(일반 적 방어구 12%·든 총 10%)와 짝이 되는 출구. 슬롯은
-# 몸·머리·발 3개뿐인데 잉여 방어구는 상인 판매 불가·분해 불가라 창고에 쌓이거나
-# 버려졌다. 귀환 정산에서 "장착 1 + 슬롯별 최고 예비 1"만 남기고 부품으로 바꾼다.
-# 규칙:
-#   · 가방+창고의 방어구를 슬롯별로 모아, 장착 중인 것은 건드리지 않고 예비 중
-#     가장 좋은 것(get_equipment_score, 동점이면 상위 가족·높은 레벨) 1개만 남긴다
-#     → 장착 가능한 상위 장비는 절대 분해되지 않는다(예비 최고 1개가 곧 그것).
-#   · 무기는 사다리(WEAPON_FAMILY_LADDER) 기종의 중복만 — 같은 id가 장착분 포함
-#     2정 이상이면 1정 남기고 분해. 장착 중인 총은 get_backpack_storage_count가
-#     이미 빼므로 절대 분해되지 않는다. 사다리 밖 기종(M1911·MP5)은 상인 판매
-#     가치가 있으니 건드리지 않는다.
-#   · 부품 수: 방어구 가족 T1 1 / T2 2 / T3 3, 무기는 사다리 단계 1/2/3.
-#     종류는 패킹→스프링→렌즈 순환 — 한 종류만 쌓이지 않게.
-#   · 부품은 가방(mod_component_inventory)에 넣는다 — 이어지는 창고 정산이
-#     다른 부품과 함께 deposit_storage_item("component")로 입고한다.
-#   · 러버밴딩 없음·설정 토글 없음. 플레이어가 직접 고를 필요 없는 잡일을 없앤다.
+# ── 잉여 장비 분해(구세이브 정리 전용) ───────────────────────────
+# 장비는 제작 전용·1개 영구(보유 중이면 같은 레시피 재제작 불가)라 같은 id가 2개
+# 이상 생길 길이 없다. 이 함수는 옛 드랍 시절에 쌓인 중복만 정리한다:
+#   · 같은 id(레벨 접미사까지 같은 정확한 id)가 가방+창고+장착 합쳐 2개 이상이면
+#     1개만 남기고 부품으로(장착분은 절대 건드리지 않는다).
+#   · 다른 id(상위 가족·다른 레벨)는 전부 각자의 영구 장비 — 손대지 않는다.
+#   · 부품 수: 방어구 가족 T1 1 / T2 2 / T3 3, 무기는 사다리 단계 1/2/3(밖은 1).
+#     종류는 패킹→스프링→렌즈 순환.
+#   · 부품은 가방(mod_component_inventory)에 넣는다 — 이어지는 창고 정산이 입고한다.
+# 귀환 정산이 여전히 부르지만 보통은 0점으로 끝난다.
 const SALVAGE_COMPONENT_CYCLE := ["rubber_gasket", "magazine_spring", "scope_lens"]
 
 
 func salvage_surplus_equipment() -> Dictionary:
 	var report := {"items": 0, "components": 0, "armor_items": 0, "weapon_items": 0, "details": []}
 	var cycle_index := 0
-	# 1) 방어구 — 슬롯별로 모아 최고 예비 1개만 남긴다.
+	# 1) 방어구 — 정확히 같은 id의 중복만.
 	var owned_armor: Dictionary = {}
 	for equipment_id_value in equipment_inventory.keys():
 		var equipment_id := str(equipment_id_value)
@@ -1429,72 +1433,54 @@ func salvage_surplus_equipment() -> Dictionary:
 			continue
 		var equipment_id := str(entry.get("id", ""))
 		owned_armor[equipment_id] = int(owned_armor.get(equipment_id, 0)) + maxi(0, int(entry.get("count", 0)))
-	var ids_by_slot: Dictionary = {"body": [], "head": [], "feet": []}
 	for equipment_id_value in owned_armor.keys():
 		var equipment_id := str(equipment_id_value)
-		var definition := get_equipment_definition(equipment_id)
-		if definition.is_empty():
+		if get_equipment_definition(equipment_id).is_empty():
 			continue
-		var slot := str(definition.get("slot", "body"))
-		if not ids_by_slot.has(slot):
-			ids_by_slot[slot] = []
-		(ids_by_slot[slot] as Array).append(equipment_id)
-	for slot_value in ids_by_slot.keys():
-		var ids := ids_by_slot[slot_value] as Array
-		if ids.is_empty():
+		var equipped := equipment_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]
+		# 장착 중이면 예비는 전부 잉여, 아니면 예비 중 1개를 남긴다.
+		var keep := 0 if equipped else 1
+		var surplus := int(owned_armor.get(equipment_id, 0)) - keep
+		if surplus <= 0:
 			continue
-		var best_id := ""
-		var best_score := -1.0
-		var best_rank := -1
-		for equipment_id_value in ids:
-			var equipment_id := str(equipment_id_value)
-			var score := get_equipment_score(equipment_id)
-			var rank := _salvage_armor_family_index(equipment_id) * 10 + get_equipment_level(equipment_id)
-			if score > best_score or (is_equal_approx(score, best_score) and rank > best_rank):
-				best_id = equipment_id
-				best_score = score
-				best_rank = rank
-		for equipment_id_value in ids:
-			var equipment_id := str(equipment_id_value)
-			var keep := 1 if equipment_id == best_id else 0
-			var surplus := int(owned_armor.get(equipment_id, 0)) - keep
-			if surplus <= 0:
-				continue
-			var removed := _take_owned_item_units("equipment", equipment_id, surplus)
-			if removed <= 0:
-				continue
-			var yield_per_unit := _salvage_armor_family_index(equipment_id) + 1
-			var produced := 0
-			for _unit in removed:
-				for _part in yield_per_unit:
-					add_mod_component(SALVAGE_COMPONENT_CYCLE[cycle_index % SALVAGE_COMPONENT_CYCLE.size()], 1)
-					cycle_index += 1
-					produced += 1
-			report["items"] = int(report["items"]) + removed
-			report["armor_items"] = int(report["armor_items"]) + removed
-			report["components"] = int(report["components"]) + produced
-			(report["details"] as Array).append({"type": "equipment", "id": equipment_id, "count": removed, "components": produced})
-	# 2) 무기 — 사다리 기종의 중복만. 장착분 포함 2정 이상이면 1정 남긴다.
-	for family_id in WEAPON_SYSTEM.WEAPON_FAMILY_LADDER.keys():
-		var ladder: Array = WEAPON_SYSTEM.WEAPON_FAMILY_LADDER[family_id]
-		for ladder_index in ladder.size():
-			var weapon_id := str(ladder[ladder_index])
-			var total := int(weapon_inventory.get(weapon_id, 0)) + get_stored_storage_count("weapon", weapon_id)
-			if total <= 1:
-				continue
-			var removed := _take_owned_item_units("weapon", weapon_id, total - 1)
-			if removed <= 0:
-				continue
-			var produced := 0
-			for _unit in removed:
-				for _part in ladder_index + 1:
-					add_mod_component(SALVAGE_COMPONENT_CYCLE[cycle_index % SALVAGE_COMPONENT_CYCLE.size()], 1)
-					cycle_index += 1
-					produced += 1
-			report["items"] = int(report["items"]) + removed
-			report["weapon_items"] = int(report["weapon_items"]) + removed
-			report["components"] = int(report["components"]) + produced
-			(report["details"] as Array).append({"type": "weapon", "id": weapon_id, "count": removed, "components": produced})
+		var removed := _take_owned_item_units("equipment", equipment_id, surplus)
+		if removed <= 0:
+			continue
+		var yield_per_unit := _salvage_armor_family_index(equipment_id) + 1
+		var produced := 0
+		for _unit in removed:
+			for _part in yield_per_unit:
+				add_mod_component(SALVAGE_COMPONENT_CYCLE[cycle_index % SALVAGE_COMPONENT_CYCLE.size()], 1)
+				cycle_index += 1
+				produced += 1
+		report["items"] = int(report["items"]) + removed
+		report["armor_items"] = int(report["armor_items"]) + removed
+		report["components"] = int(report["components"]) + produced
+		(report["details"] as Array).append({"type": "equipment", "id": equipment_id, "count": removed, "components": produced})
+	# 2) 무기 — 같은 id가 장착분 포함 2정 이상이면 1정 남긴다(사다리 밖 기종도 포함:
+	#    무기는 전부 제작 전용 1정 영구라 중복은 정리 대상이다).
+	for weapon_id_value in WEAPON_SYSTEM.WEAPONS.keys():
+		var weapon_id := str(weapon_id_value)
+		var total := int(weapon_inventory.get(weapon_id, 0)) + get_stored_storage_count("weapon", weapon_id)
+		if total <= 1:
+			continue
+		var removed := _take_owned_item_units("weapon", weapon_id, total - 1)
+		if removed <= 0:
+			continue
+		var ladder_index := 0
+		var family_id := WEAPON_SYSTEM.get_weapon_family(weapon_id)
+		if not family_id.is_empty():
+			ladder_index = maxi(0, (WEAPON_SYSTEM.WEAPON_FAMILY_LADDER[family_id] as Array).find(weapon_id))
+		var produced := 0
+		for _unit in removed:
+			for _part in ladder_index + 1:
+				add_mod_component(SALVAGE_COMPONENT_CYCLE[cycle_index % SALVAGE_COMPONENT_CYCLE.size()], 1)
+				cycle_index += 1
+				produced += 1
+		report["items"] = int(report["items"]) + removed
+		report["weapon_items"] = int(report["weapon_items"]) + removed
+		report["components"] = int(report["components"]) + produced
+		(report["details"] as Array).append({"type": "weapon", "id": weapon_id, "count": removed, "components": produced})
 	return report
 
 
@@ -2154,9 +2140,13 @@ func get_raid_item_slot_cost(item_type: String, _item_id: String, amount: int) -
 	# 아이템 루팅은 가방과 상관없이 먹을 수 있어야지"). 칸 0, 만재 검사 우회.
 	if item_type == "special_cargo":
 		return 0
+	# 무기·방어구는 가방 칸을 먹지 않는다(2026-08 영구 귀속): 제작 전용 장비는 몸에
+	# 딸린 것이지 전리품이 아니다. 가방에 보이는 장비는 장착 교체용(0칸).
+	if item_type in ["weapon", "equipment"]:
+		return 0
 	# 제작 재료는 부피가 있다 — 한 개가 한 칸. 재료를 쓸어 담으면 가방이
 	# 실제로 차야 '무엇을 두고 갈까'라는 이 게임의 심장이 재료에도 뛴다.
-	if item_type in ["weapon", "equipment", "component"]:
+	if item_type == "component":
 		return amount
 	# 탄약은 칸당 발수 상한(탄약 휴대 훈련으로 늘어난다)을 넘는 만큼 칸을 더 먹는다.
 	if item_type == "ammo":
@@ -2254,11 +2244,12 @@ func get_raid_items_added_slot_delta(items: Array[Dictionary]) -> int:
 		var amount: int = maxi(0, int(item.get("amount", 0)))
 		if item_type.is_empty() or item_id.is_empty() or amount <= 0:
 			continue
-		# 개수만큼 칸을 먹는 부류(무기·장비·재료)는 한 상자에서 여러 개가 나와도
-		# 개수만큼 자리가 필요하다. component가 빠져 있어 상자 루팅이 칸을 덜 세고,
-		# 그 결과 "들어간다"고 판정한 뒤 실제로는 가방이 넘치던 어긋남을 막는다.
-		if item_type in ["weapon", "equipment", "component"]:
+		# 개수만큼 칸을 먹는 부류(재료)는 한 상자에서 여러 개가 나와도 개수만큼
+		# 자리가 필요하다. 무기·장비는 0칸(영구 귀속)이라 가방 판정에서 빠진다.
+		if item_type == "component":
 			added_slots += amount
+			continue
+		if item_type in ["weapon", "equipment"]:
 			continue
 		if item_type == "special_cargo":
 			# 메인 미션 회수물은 칸 0 — 가방과 무관하게 먹힌다.
@@ -2845,7 +2836,12 @@ func get_equipment_count(equipment_id: String) -> int:
 func add_equipment(equipment_id: String, amount: int = 1) -> bool:
 	if get_equipment_definition(equipment_id).is_empty() or amount <= 0:
 		return false
+	var base_id := str(split_equipment_id(equipment_id)[0])
+	var first_acquisition := not is_armor_base_owned(base_id)
 	equipment_inventory[equipment_id] = get_equipment_count(equipment_id) + amount
+	if first_acquisition:
+		# 작업대 제작·구세이브 회수 — 방어구가 처음 들어오는 길은 여기 한 곳이다.
+		transfer_armor_enhancement_on_first_own(base_id)
 	return true
 
 
@@ -2980,15 +2976,30 @@ func get_equipment_scent_multiplier() -> float:
 	return clampf(multiplier, 0.7, 1.4)
 
 
+# 방어구 강화 효과의 단일 적용 지점. 레벨 접미사(@n) 성장은 get_equipment_definition이,
+# +N 강화는 여기서 곱한다 — 피스 합산 감소 상한 0.70(= 배율 하한 0.30).
+const ARMOR_TOTAL_REDUCTION_CAP := 0.70
+
+
+func get_equipment_effective_damage_reduction(equipment_id: String) -> float:
+	# 한 피스의 실제 피해 감소 = 정의값 × 강화 배율. UI(장비 카드)와 피해 계산이 같은 값을 본다.
+	if equipment_id.is_empty():
+		return 0.0
+	var definition := get_equipment_definition(equipment_id)
+	if definition.is_empty():
+		return 0.0
+	return float(definition.get("damage_reduction", 0.0)) * get_armor_enhancement_multiplier(equipment_id)
+
+
 func get_equipment_damage_multiplier() -> float:
 	var reduction := 0.0
 	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
 		if equipment_id.is_empty():
 			continue
-		var definition := get_equipment_definition(equipment_id)
-		reduction += float(definition.get("damage_reduction", 0.0))
-	# 풀아머(조끼 30 + 헬멧 20)가 실제로 체감되도록 하한을 0.4까지 연다.
-	return clampf(1.0 - reduction, 0.4, 1.0)
+		reduction += get_equipment_effective_damage_reduction(equipment_id)
+	# 피스 합산 상한 0.70 — 풀아머 T3 +99(0.58×1.59≈0.92)도 여기서 멈춘다. 적은 종이가
+	# 되지 않고, 강화는 끝이 없되 힘은 끝이 있다.
+	return clampf(1.0 - minf(reduction, ARMOR_TOTAL_REDUCTION_CAP), 1.0 - ARMOR_TOTAL_REDUCTION_CAP, 1.0)
 
 
 func save_equipped_weapon_loadout() -> void:
@@ -3054,8 +3065,8 @@ func claim_workbench_starter_parts() -> bool:
 	if workbench_starter_parts_claimed:
 		return false
 	workbench_starter_parts_claimed = true
-	add_weapon("m1911", 1)
-	add_weapon("mp5", 1)
+	# 예전엔 M1911·MP5를 공짜로 쥐여 줬다 — 장비는 제작 전용(설계도 조각 3/3)이 된
+	# 이상 공짜 총은 규칙을 거짓으로 만든다. 첫 제작을 위한 부품만 남긴다.
 	add_mod_component("rubber_gasket", 2)
 	add_mod_component("scope_lens", 2)
 	add_mod_component("magazine_spring", 2)
@@ -3684,6 +3695,9 @@ func _milestone_condition_met(definition: Dictionary) -> bool:
 	var progression_id := str(definition.get("requires_progression", ""))
 	if not progression_id.is_empty() and get_progression_item_count(progression_id) <= 0:
 		return false
+	var blueprint_recipe := str(definition.get("requires_blueprint", ""))
+	if not blueprint_recipe.is_empty() and not is_blueprint_unlocked(blueprint_recipe):
+		return false
 	var required_residents := int(definition.get("requires_residents", 0))
 	if required_residents > 0 and rescued_workers < required_residents:
 		return false
@@ -3957,11 +3971,16 @@ const WEAPON_ENHANCEMENT_PART_CYCLE: Array[String] = ["magazine_spring", "rubber
 
 func get_weapon_enhancement_part_cost(weapon_id: String) -> Dictionary:
 	# 고단계 강화는 고철만으로 안 된다 — 필드 부품이 들어간다. +10까지는 고철만,
-	# +11~20 부품 1종, +21~30 2종, +31부터 3종(한 종류씩). 부품은 필드 전용이라
-	# 넘치는 고철에 '출정 이유'를 한 번 더 묶는다. 부품 종류는 단계마다 돌아가며
-	# 요구해 한 종류만 쌓아 두는 플레이를 막는다.
-	var next_level := get_weapon_enhancement_level(weapon_id) + 1
-	if next_level > MAX_WEAPON_ENHANCEMENT:
+	# +11~20 일반 부품 1종, +21~30 2종, +31부터 3종(한 종류씩) + 희귀 부품:
+	# +31~60 정밀 기어 1, +61~99 정밀 기어 1 + 군용 합금 1(= 희귀 2개/단계).
+	# 부품은 필드 전용이라 넘치는 고철에 '출정 이유'를 한 번 더 묶는다. 부품 종류는
+	# 단계마다 돌아가며 요구해 한 종류만 쌓아 두는 플레이를 막는다.
+	return _gear_enhancement_part_cost(get_weapon_enhancement_level(weapon_id) + 1, MAX_WEAPON_ENHANCEMENT)
+
+
+func _gear_enhancement_part_cost(next_level: int, max_level: int) -> Dictionary:
+	# 무기·방어구 공통 부품 규칙(다음 단계 기준).
+	if next_level > max_level:
 		return {}
 	var part_kinds := 0
 	if next_level > 30:
@@ -3974,6 +3993,11 @@ func get_weapon_enhancement_part_cost(weapon_id: String) -> Dictionary:
 	for offset in part_kinds:
 		var part_id := WEAPON_ENHANCEMENT_PART_CYCLE[(next_level + offset) % WEAPON_ENHANCEMENT_PART_CYCLE.size()]
 		cost[part_id] = int(cost.get(part_id, 0)) + 1
+	if next_level > 60:
+		cost["precision_gear"] = int(cost.get("precision_gear", 0)) + 1
+		cost["military_alloy"] = int(cost.get("military_alloy", 0)) + 1
+	elif next_level > 30:
+		cost["precision_gear"] = int(cost.get("precision_gear", 0)) + 1
 	return cost
 
 
@@ -3982,6 +4006,9 @@ func try_enhance_weapon(weapon_id: String) -> bool:
 		return false
 	var level := get_weapon_enhancement_level(weapon_id)
 	if level >= MAX_WEAPON_ENHANCEMENT:
+		return false
+	# 돌파 게이트 — +10·+20·… 에서는 장인의 인장으로 돌파해야 다음 강화가 열린다.
+	if is_breakthrough_required("weapon", weapon_id):
 		return false
 	var cost := get_weapon_enhancement_cost(weapon_id)
 	if scrap < cost:
@@ -3992,6 +4019,336 @@ func try_enhance_weapon(weapon_id: String) -> bool:
 		weapon_level = level + 2
 	save_persistent_state()
 	return true
+
+
+# ── 방어구 +99 강화 ─────────────────────────────────────────────
+# 무기와 같은 규칙(부품 단계·돌파)이되 비용 곡선은 600×가족계수(T1 1.0/T2 1.5/T3 2.2)
+# ×1.26^L — 무기(900×1.28^L)보다 완만하다. 세 슬롯을 같이 키워야 하므로.
+# 키는 기본 id(레벨 접미사 없음). 보유(가방·창고·장착 어디든) 중인 방어구만 강화된다.
+
+
+func armor_enhancement_key(equipment_id: String) -> String:
+	return str(split_equipment_id(equipment_id)[0])
+
+
+func get_armor_enhancement_level(equipment_id: String) -> int:
+	return clampi(int(armor_enhancement_levels.get(armor_enhancement_key(equipment_id), 0)), 0, MAX_ARMOR_ENHANCEMENT)
+
+
+func get_armor_family_index(equipment_id: String) -> int:
+	# ARMOR_FAMILY_LADDER 단(0=T1·1=T2·2=T3). 모르는 id는 T1.
+	var base_id := armor_enhancement_key(equipment_id)
+	for slot in ARMOR_FAMILY_LADDER.keys():
+		var ladder: Array = ARMOR_FAMILY_LADDER[slot]
+		var index := ladder.find(base_id)
+		if index >= 0:
+			return index
+	return 0
+
+
+func get_armor_enhancement_cost(equipment_id: String) -> int:
+	var level := get_armor_enhancement_level(equipment_id)
+	if level >= MAX_ARMOR_ENHANCEMENT:
+		return 0
+	var family_factor := float(ARMOR_FAMILY_FACTORS[clampi(get_armor_family_index(equipment_id), 0, ARMOR_FAMILY_FACTORS.size() - 1)])
+	return maxi(600, roundi(ARMOR_ENHANCEMENT_BASE_COST * family_factor * pow(ARMOR_ENHANCEMENT_COST_GROWTH, float(level))))
+
+
+func get_armor_enhancement_part_cost(equipment_id: String) -> Dictionary:
+	return _gear_enhancement_part_cost(get_armor_enhancement_level(equipment_id) + 1, MAX_ARMOR_ENHANCEMENT)
+
+
+func get_armor_enhancement_multiplier(equipment_id: String) -> float:
+	# 효과 배율 = 1 + 0.6×(1−0.96^L): +10 ×1.20 · +30 ×1.42 · +50 ×1.52 · +99 ×1.59(수렴 1.6).
+	var level := get_armor_enhancement_level(equipment_id)
+	if level <= 0:
+		return 1.0
+	return 1.0 + 0.6 * (1.0 - pow(0.96, float(level)))
+
+
+func is_armor_base_owned(base_id: String) -> bool:
+	# 장착·가방·창고 어디든, 레벨 접미사(@n)는 무시하고 기종으로 본다.
+	for equipped_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
+		if not str(equipped_id).is_empty() and armor_enhancement_key(str(equipped_id)) == base_id:
+			return true
+	for equipment_id_value in equipment_inventory.keys():
+		if get_equipment_count(str(equipment_id_value)) > 0 and armor_enhancement_key(str(equipment_id_value)) == base_id:
+			return true
+	for entry in storage_inventory:
+		if str(entry.get("type", "")) == "equipment" and int(entry.get("count", 0)) > 0 and armor_enhancement_key(str(entry.get("id", ""))) == base_id:
+			return true
+	return false
+
+
+func try_enhance_armor(equipment_id: String) -> bool:
+	# 부품은 작업대가 가방+창고 합산으로 보고 성공 시 태운다(무기 강화와 같은 규약).
+	var base_id := armor_enhancement_key(equipment_id)
+	if not is_armor_base_owned(base_id):
+		return false
+	var level := get_armor_enhancement_level(base_id)
+	if level >= MAX_ARMOR_ENHANCEMENT:
+		return false
+	if is_breakthrough_required("armor", base_id):
+		return false
+	var cost := get_armor_enhancement_cost(base_id)
+	if scrap < cost:
+		return false
+	scrap -= cost
+	armor_enhancement_levels[base_id] = level + 1
+	save_persistent_state()
+	return true
+
+
+func transfer_armor_enhancement_on_first_own(to_base_id: String) -> Dictionary:
+	# 같은 슬롯 사다리에서 아래 단계(강화가 가장 높은 것)의 60%를 내림 이관. 상위 1종당
+	# 평생 1회 — 무기 이관(transfer_weapon_enhancement_on_first_own)과 같은 규약.
+	if armor_enhancement_transfers_done.has(to_base_id):
+		return {}
+	var lower_ids: Array[String] = get_lower_armor_ladder_ids(to_base_id)
+	if lower_ids.is_empty():
+		return {}
+	armor_enhancement_transfers_done.append(to_base_id)
+	var from_id := ""
+	var from_level := 0
+	for candidate_id in lower_ids:
+		var level := get_armor_enhancement_level(candidate_id)
+		if level > from_level:
+			from_level = level
+			from_id = candidate_id
+	if from_id.is_empty() or from_level <= 0:
+		return {}
+	var transferred_level := int(floor(float(from_level) * WEAPON_SYSTEM.ENHANCEMENT_TRANSFER_RATIO))
+	var previous_level := get_armor_enhancement_level(to_base_id)
+	var next_level := clampi(maxi(previous_level, transferred_level), 0, MAX_ARMOR_ENHANCEMENT)
+	if next_level <= previous_level:
+		return {}
+	armor_enhancement_levels[to_base_id] = next_level
+	var result := {
+		"from_id": from_id,
+		"to_id": to_base_id,
+		"from_level": from_level,
+		"previous_level": previous_level,
+		"level": next_level,
+		"notice": "%s +%d의 강화를 이어받았다 → %s +%d" % [
+			str(get_equipment_definition(from_id).get("display_name", from_id)), from_level,
+			str(get_equipment_definition(to_base_id).get("display_name", to_base_id)), next_level,
+		],
+	}
+	last_armor_enhancement_transfer = result
+	return result
+
+
+func take_armor_enhancement_transfer_notice() -> String:
+	if last_armor_enhancement_transfer.is_empty():
+		return ""
+	var notice := str(last_armor_enhancement_transfer.get("notice", ""))
+	last_armor_enhancement_transfer = {}
+	return notice
+
+
+func get_lower_armor_ladder_ids(base_id: String) -> Array[String]:
+	var result: Array[String] = []
+	for slot in ARMOR_FAMILY_LADDER.keys():
+		var ladder: Array = ARMOR_FAMILY_LADDER[slot]
+		var index := ladder.find(base_id)
+		if index < 0:
+			continue
+		for lower_index in index:
+			result.append(str(ladder[lower_index]))
+		return result
+	return result
+
+
+# ── 돌파(장인) ──────────────────────────────────────────────────
+# L = 10·20·…·90에서 다음 단계로 가려면 장인의 인장 1 + 희귀 부품(정밀 기어 L/10,
+# +50부터 군용 합금 (L−40)/10) + 고철(그 단계 강화 비용 × 3). 옛 "장인 뽑기"
+# (roll_artisan_weapon)는 폐지 — 장인은 이제 돌파 서비스다. 작업대 '장인' 탭의 재구성은
+# 2단계 UI 몫이고, 여기는 데이터 함수만 둔다.
+
+
+func gear_breakthrough_key(kind: String, item_id: String) -> String:
+	return "%s:%s" % [kind, armor_enhancement_key(item_id) if kind == "armor" else item_id]
+
+
+func get_gear_enhancement_level(kind: String, item_id: String) -> int:
+	return get_armor_enhancement_level(item_id) if kind == "armor" else get_weapon_enhancement_level(item_id)
+
+
+func get_gear_enhancement_cost(kind: String, item_id: String) -> int:
+	return get_armor_enhancement_cost(item_id) if kind == "armor" else get_weapon_enhancement_cost(item_id)
+
+
+func get_gear_enhancement_part_cost(kind: String, item_id: String) -> Dictionary:
+	return get_armor_enhancement_part_cost(item_id) if kind == "armor" else get_weapon_enhancement_part_cost(item_id)
+
+
+func get_breakthrough_level_done(kind: String, item_id: String) -> int:
+	return maxi(0, int(gear_breakthroughs.get(gear_breakthrough_key(kind, item_id), 0)))
+
+
+func is_breakthrough_required(kind: String, item_id: String) -> bool:
+	# 현재 레벨이 10의 배수(10~90)이고 그 단계의 돌파를 아직 안 했으면 강화가 막힌다.
+	var level := get_gear_enhancement_level(kind, item_id)
+	if level <= 0 or level >= MAX_WEAPON_ENHANCEMENT or level % BREAKTHROUGH_STEP != 0:
+		return false
+	return get_breakthrough_level_done(kind, item_id) < level
+
+
+func get_breakthrough_cost(kind: String, item_id: String) -> Dictionary:
+	# 돌파가 필요 없는 상태면 빈 딕셔너리.
+	if not is_breakthrough_required(kind, item_id):
+		return {}
+	var level := get_gear_enhancement_level(kind, item_id)
+	var cost := {
+		"scrap": get_gear_enhancement_cost(kind, item_id) * 3,
+		ARTISAN_SEAL_ID: 1,
+		"precision_gear": maxi(1, level / BREAKTHROUGH_STEP),
+	}
+	if level >= 50:
+		cost["military_alloy"] = maxi(1, (level - 40) / BREAKTHROUGH_STEP)
+	return cost
+
+
+func get_owned_component_total(component_id: String) -> int:
+	# 가방 + 창고(작업대 규약과 동일).
+	return get_mod_component_count(component_id) + get_stored_storage_count("component", component_id)
+
+
+func consume_owned_component(component_id: String, amount: int) -> int:
+	# 가방 몫을 먼저 태우고 모자란 만큼 창고에서 덜어낸다. 실제로 태운 수를 돌려준다.
+	var remaining := maxi(0, amount)
+	var from_bag := mini(remaining, get_mod_component_count(component_id))
+	if from_bag > 0:
+		mod_component_inventory[component_id] = maxi(0, get_mod_component_count(component_id) - from_bag)
+		remaining -= from_bag
+	if remaining > 0:
+		remaining -= remove_stored_storage_item("component", component_id, remaining)
+	return maxi(0, amount) - remaining
+
+
+func consume_progression_item(item_id: String, amount: int) -> int:
+	# 진행 아이템(인장 등)을 가방 → 창고 순으로 소모한다. 실제로 뺀 수를 돌려준다.
+	var remaining := maxi(0, amount)
+	var from_bag := mini(remaining, maxi(0, int(progression_item_inventory.get(item_id, 0))))
+	if from_bag > 0:
+		progression_item_inventory[item_id] = int(progression_item_inventory.get(item_id, 0)) - from_bag
+		remaining -= from_bag
+	if remaining > 0:
+		remaining -= remove_stored_storage_item("progression", item_id, remaining)
+	return maxi(0, amount) - remaining
+
+
+func get_breakthrough_block_reason(kind: String, item_id: String) -> String:
+	# 빈 문자열 = 돌파 가능. 아니면 무엇이 모자란지 한 줄.
+	if not is_breakthrough_required(kind, item_id):
+		return "돌파가 필요한 단계가 아닙니다."
+	var cost := get_breakthrough_cost(kind, item_id)
+	if scrap < int(cost.get("scrap", 0)):
+		return "고철 %s 부족" % format_compact_number(int(cost.get("scrap", 0)) - scrap)
+	if get_progression_item_count(ARTISAN_SEAL_ID) < int(cost.get(ARTISAN_SEAL_ID, 1)):
+		return "장인의 인장 부족 — 보스 처치·메인 미션 3단계에서 나옵니다"
+	for component_id in RARE_COMPONENT_IDS:
+		var need := int(cost.get(component_id, 0))
+		if need > 0 and get_owned_component_total(component_id) < need:
+			var name := "정밀 기어" if component_id == "precision_gear" else "군용 합금"
+			return "%s %d개 부족 — 엘리트·보스·봉인 보급함에서 나옵니다" % [name, need - get_owned_component_total(component_id)]
+	return ""
+
+
+func try_breakthrough(kind: String, item_id: String) -> bool:
+	# 돌파 성공 시 인장·희귀 부품·고철을 태우고 그 단계를 기록한다. 강화 레벨은 그대로
+	# (다음 try_enhance_*가 열린다).
+	if not get_breakthrough_block_reason(kind, item_id).is_empty():
+		return false
+	if kind == "armor" and not is_armor_base_owned(armor_enhancement_key(item_id)):
+		return false
+	if kind == "weapon" and get_weapon_count(item_id) <= 0:
+		return false
+	var cost := get_breakthrough_cost(kind, item_id)
+	scrap -= int(cost.get("scrap", 0))
+	consume_progression_item(ARTISAN_SEAL_ID, int(cost.get(ARTISAN_SEAL_ID, 1)))
+	for component_id in RARE_COMPONENT_IDS:
+		var need := int(cost.get(component_id, 0))
+		if need > 0:
+			consume_owned_component(component_id, need)
+	gear_breakthroughs[gear_breakthrough_key(kind, item_id)] = get_gear_enhancement_level(kind, item_id)
+	save_persistent_state()
+	return true
+
+
+# ── 설계도 조각 · 제작 해금 ─────────────────────────────────────
+# 레시피 id = 무기 id / 방어구 기본 id. 조각은 progression 원장(가방+창고 합산)에
+# "blueprint_shard_<id>" 키로 쌓이고 소모되지 않는다. 3/3이면 제작이 열리고,
+# 장비를 보유 중이면 "제작됨 · 영구 보유"(재제작 불가).
+
+
+func blueprint_shard_item_id(recipe_id: String) -> String:
+	return LOOT_ECONOMY.blueprint_shard_item_id(recipe_id)
+
+
+func get_blueprint_shard_count(recipe_id: String) -> int:
+	return get_progression_item_count(blueprint_shard_item_id(recipe_id))
+
+
+func add_blueprint_shards(recipe_id: String, amount: int = 1) -> void:
+	add_progression_item(blueprint_shard_item_id(recipe_id), amount)
+
+
+func is_blueprint_unlocked(recipe_id: String) -> bool:
+	return get_blueprint_shard_count(recipe_id) >= BLUEPRINT_SHARDS_REQUIRED
+
+
+func get_gear_recipe_kind(recipe_id: String) -> String:
+	if GEAR_WEAPON_RECIPE_IDS.has(recipe_id):
+		return "weapon"
+	if GEAR_ARMOR_RECIPE_IDS.has(recipe_id):
+		return "armor"
+	return ""
+
+
+func is_gear_owned(recipe_id: String) -> bool:
+	# 무기: 재고(장착분 포함)+창고. 방어구: 장착·가방·창고(레벨 변종 포함).
+	match get_gear_recipe_kind(recipe_id):
+		"weapon":
+			return get_weapon_count(recipe_id) > 0 or get_stored_storage_count("weapon", recipe_id) > 0
+		"armor":
+			return is_armor_base_owned(recipe_id)
+	return false
+
+
+func is_blueprint_recipe_complete(recipe_id: String) -> bool:
+	# 드랍 풀의 "미완성 우선" 판정 — 3/3 모였거나 장비를 이미 갖고 있으면 완성.
+	return is_blueprint_unlocked(recipe_id) or is_gear_owned(recipe_id)
+
+
+func get_blueprint_progress_text(recipe_id: String) -> String:
+	return "설계도 조각 %d/%d" % [mini(get_blueprint_shard_count(recipe_id), BLUEPRINT_SHARDS_REQUIRED), BLUEPRINT_SHARDS_REQUIRED]
+
+
+func _migrate_legacy_blueprints() -> Array[String]:
+	# 구세이브: 통짜 청사진 보유 → 해당 레시피 조각 3개(이미 3 이상이면 그대로). 통짜는
+	# 가방·창고에서 지운다. 돌려주는 건 환산된 레시피 id 목록.
+	var converted: Array[String] = []
+	var mapping := {
+		"akm_blueprint": "akm",
+		"rifle_blueprint": "akm",
+		"pump_blueprint": "pump_shotgun",
+		"shotgun_blueprint": "double_barrel",
+	}
+	for legacy_id in mapping.keys():
+		var count := get_progression_item_count(str(legacy_id))
+		if count <= 0:
+			progression_item_inventory.erase(str(legacy_id))
+			continue
+		var recipe_id := str(mapping[legacy_id])
+		var shard_id := blueprint_shard_item_id(recipe_id)
+		var have := get_blueprint_shard_count(recipe_id)
+		if have < BLUEPRINT_SHARDS_REQUIRED:
+			progression_item_inventory[shard_id] = int(progression_item_inventory.get(shard_id, 0)) + (BLUEPRINT_SHARDS_REQUIRED - have)
+		progression_item_inventory.erase(str(legacy_id))
+		remove_stored_storage_item("progression", str(legacy_id), count)
+		converted.append(recipe_id)
+	return converted
 
 
 func get_mod_enhancement_level(mod_id: String) -> int:
@@ -4019,46 +4376,6 @@ func try_enhance_mod(mod_id: String) -> bool:
 	mod_enhancement_levels[mod_id] = level + 1
 	save_persistent_state()
 	return true
-
-
-func get_artisan_roll_cost() -> Dictionary:
-	# 고철만 받는다. 예전의 통조림 8+4t는 고철 환산(×70)으로 접어 넣었다 — 통조림은
-	# 플레이어 소모품이라 쉘터 비용 화폐가 아니다.
-	var tier_index := maxi(0, shelter_tier - 1)
-	return {
-		"scrap": roundi(12000.0 * pow(3.2, float(tier_index))) + (8 + tier_index * 4) * CANNED_FOOD_SCRAP_VALUE,
-	}
-
-
-func roll_artisan_weapon() -> Dictionary:
-	var cost := get_artisan_roll_cost()
-	if scrap < int(cost["scrap"]):
-		return {}
-	scrap -= int(cost["scrap"])
-	artisan_pity += 1
-	var pool: Array[String] = ["m1911", "mp5"]
-	if shelter_tier >= 2:
-		pool.append("ak47")
-	if shelter_tier >= 3:
-		pool.append("double_barrel")
-		# 사다리 2단 — Tier 3부터 뽑기에도 들어간다(확정 천장은 맨 뒤 = AKM).
-		# K2는 용산 통제 키 전용이라 뽑기에 없다.
-		pool.append("pump_shotgun")
-		pool.append("akm")
-	var guaranteed := artisan_pity >= ARTISAN_PITY_LIMIT
-	var result_id := pool[pool.size() - 1] if guaranteed else pool[randi() % pool.size()]
-	if guaranteed:
-		artisan_pity = 0
-	add_weapon(result_id, 1)
-	if not weapon_enhancement_levels.has(result_id):
-		weapon_enhancement_levels[result_id] = 0
-	var result := {
-		"weapon_id": result_id,
-		"guaranteed": guaranteed,
-		"pity": artisan_pity,
-	}
-	save_persistent_state()
-	return result
 
 
 func get_xp_required(level: int = player_level) -> int:
@@ -4143,7 +4460,11 @@ func get_move_speed_multiplier() -> float:
 	var equipment_bonus := 0.0
 	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
 		if not equipment_id.is_empty():
-			equipment_bonus += float(get_equipment_definition(equipment_id).get("move_speed_bonus", 0.0))
+			# 신발의 강화는 이동 보너스에 같은 배율을 곱한다(피해 감소가 없는 슬롯의 성장축).
+			equipment_bonus += (
+				float(get_equipment_definition(equipment_id).get("move_speed_bonus", 0.0))
+				* get_armor_enhancement_multiplier(equipment_id)
+			)
 	return progression_multiplier * (1.0 + equipment_bonus)
 
 
@@ -4151,7 +4472,9 @@ func get_stamina_cost_multiplier() -> float:
 	var multiplier := 1.0
 	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
 		if not equipment_id.is_empty():
-			multiplier *= float(get_equipment_definition(equipment_id).get("stamina_cost_multiplier", 1.0))
+			# 신발 강화는 스태미나 절감폭(1−배율)에 같은 강화 배율을 곱한다.
+			var saving := 1.0 - float(get_equipment_definition(equipment_id).get("stamina_cost_multiplier", 1.0))
+			multiplier *= maxf(0.4, 1.0 - saving * get_armor_enhancement_multiplier(equipment_id))
 	return clampf(multiplier, 0.5, 1.5)
 
 
@@ -4635,7 +4958,7 @@ func save_persistent_state() -> bool:
 	_normalize_iron_mission_state()
 	save_equipped_weapon_loadout()
 	var data := {
-		"version": 12,
+		"version": 13,
 		"map_seed": map_seed,
 		"raid_serial": raid_serial,
 		"player_health": player_health,
@@ -4679,6 +5002,9 @@ func save_persistent_state() -> bool:
 		"equipped_footwear_id": equipped_footwear_id,
 		"weapon_enhancement_levels": weapon_enhancement_levels,
 		"weapon_enhancement_transfers_done": weapon_enhancement_transfers_done,
+		"armor_enhancement_levels": armor_enhancement_levels,
+		"armor_enhancement_transfers_done": armor_enhancement_transfers_done,
+		"gear_breakthroughs": gear_breakthroughs,
 		"mod_enhancement_levels": mod_enhancement_levels,
 		"equipped_weapon_id": equipped_weapon_id,
 		"weapon_durability": weapon_durability,
@@ -4728,7 +5054,6 @@ func save_persistent_state() -> bool:
 		"merchant_decline_count": merchant_decline_count,
 		"merchant_stock": merchant_stock,
 		"merchant_missed_visit": merchant_missed_visit,
-		"artisan_pity": artisan_pity,
 		"selected_raid_zone": selected_raid_zone,
 		"contract_chain_index": contract_chain_index,
 		"contract_status": contract_status,
@@ -4845,12 +5170,14 @@ func load_persistent_state() -> bool:
 	assigned_catnip_worker_ids = _to_string_array(data.get("assigned_catnip_worker_ids", []))
 	resident_traits = (data.get("resident_traits", {}) as Dictionary).duplicate(true)
 	mod_component_inventory = (data.get("mod_component_inventory", mod_component_inventory) as Dictionary).duplicate(true)
+	for component_id in BASIC_COMPONENT_IDS + RARE_COMPONENT_IDS:
+		if not mod_component_inventory.has(component_id):
+			mod_component_inventory[component_id] = 0
 	progression_item_inventory = (
 		data.get("progression_item_inventory", progression_item_inventory) as Dictionary
 	).duplicate(true)
 	for progression_item_id in [
-		"rifle_blueprint", "shotgun_blueprint", "akm_blueprint", "pump_blueprint",
-		"sealed_zone_keycard",
+		ARTISAN_SEAL_ID, "sealed_zone_keycard",
 		"namdaemun_depot_plans", "euljiro_grid_schematic", "yongsan_control_key",
 	]:
 		if not progression_item_inventory.has(progression_item_id):
@@ -4872,6 +5199,10 @@ func load_persistent_state() -> bool:
 	# 구세이브엔 키가 없다 → 빈 배열(= 아직 아무 이관도 안 함). 상위 무기를 이미
 	# 들고 있던 세이브는 다음 "처음 보유" 순간이 없으니 자연히 이관 대상이 아니다.
 	weapon_enhancement_transfers_done = (data.get("weapon_enhancement_transfers_done", []) as Array).duplicate()
+	# v13(2026-08 경제 코어): 방어구 강화·이관·돌파 기록. 구세이브엔 없다 → 빈 값.
+	armor_enhancement_levels = (data.get("armor_enhancement_levels", {}) as Dictionary).duplicate(true)
+	armor_enhancement_transfers_done = (data.get("armor_enhancement_transfers_done", []) as Array).duplicate()
+	gear_breakthroughs = (data.get("gear_breakthroughs", {}) as Dictionary).duplicate(true)
 	mod_enhancement_levels = (data.get("mod_enhancement_levels", mod_enhancement_levels) as Dictionary).duplicate(true)
 	equipped_weapon_id = str(data.get("equipped_weapon_id", equipped_weapon_id))
 	weapon_durability = float(data.get("weapon_durability", weapon_durability))
@@ -4906,6 +5237,19 @@ func load_persistent_state() -> bool:
 	storage_level = clampi(int(data.get("storage_level", storage_level)), 1, 5)
 	storage_inventory = _to_dictionary_array(data.get("storage_inventory", []))
 	_normalize_storage_inventory()
+	# v13: 레거시 통짜 청사진(가방·창고) → 설계도 조각 3개 환산. 창고 로드 뒤여야 한다.
+	_migrate_legacy_blueprints()
+	# 안전망: 무기를 하나도 갖지 못한 세이브(옛 전손 규칙의 흔적)에 시작 AK를 되돌려
+	# 준다 — 장비는 제작 전용이라 맨손에서 스스로 재무장할 길이 없다.
+	if not has_any_weapon() and get_stored_storage_count("weapon", "ak47") <= 0:
+		var ladder_bottom_missing := true
+		for weapon_id_value in WEAPON_SYSTEM.WEAPONS.keys():
+			if get_stored_storage_count("weapon", str(weapon_id_value)) > 0:
+				ladder_bottom_missing = false
+		if ladder_bottom_missing:
+			weapon_inventory["ak47"] = 1
+			if not weapon_mod_loadouts.has("ak47"):
+				weapon_mod_loadouts["ak47"] = []
 	if not bool(data.get("storage_food_in_total", false)):
 		canned_food += get_stored_storage_count("food", "canned_food")
 	# 창고 통조림 슬롯은 폐지 — 구 세이브의 슬롯은 비우고 그 몫은 가방 보유량으로 남긴다.
@@ -4938,7 +5282,7 @@ func load_persistent_state() -> bool:
 	merchant_decline_count = int(data.get("merchant_decline_count", merchant_decline_count))
 	merchant_stock = _to_dictionary_array(data.get("merchant_stock", []))
 	merchant_missed_visit = bool(data.get("merchant_missed_visit", false))
-	artisan_pity = clampi(int(data.get("artisan_pity", artisan_pity)), 0, ARTISAN_PITY_LIMIT - 1)
+	# artisan_pity(장인 뽑기 천장)는 뽑기 폐지와 함께 읽지 않는다.
 	selected_raid_zone = str(data.get("selected_raid_zone", selected_raid_zone))
 	contract_chain_index = int(data.get("contract_chain_index", contract_chain_index))
 	contract_status = str(data.get("contract_status", contract_status))
@@ -5095,12 +5439,11 @@ func reset_run() -> void:
 		"rubber_gasket": 0,
 		"scope_lens": 0,
 		"magazine_spring": 0,
+		"precision_gear": 0,
+		"military_alloy": 0,
 	}
 	progression_item_inventory = {
-		"rifle_blueprint": 0,
-		"shotgun_blueprint": 0,
-		"akm_blueprint": 0,
-		"pump_blueprint": 0,
+		"artisan_seal": 0,
 		"sealed_zone_keycard": 0,
 		"namdaemun_depot_plans": 0,
 		"euljiro_grid_schematic": 0,
@@ -5187,8 +5530,11 @@ func reset_run() -> void:
 	weapon_enhancement_levels = {"ak47": 0}
 	weapon_enhancement_transfers_done = []
 	last_weapon_enhancement_transfer = {}
+	armor_enhancement_levels = {}
+	armor_enhancement_transfers_done = []
+	last_armor_enhancement_transfer = {}
+	gear_breakthroughs = {}
 	mod_enhancement_levels.clear()
-	artisan_pity = 0
 	selected_raid_zone = "jongno_outskirts"
 	contract_chain_index = 0
 	contract_status = "available"

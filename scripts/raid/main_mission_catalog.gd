@@ -799,8 +799,9 @@ const CHAINS := {
 				"canned_food": 19,
 				"churu": 2,
 				"components": {"magazine_spring": 2},
-				# 무기 사다리 — 명부 뒷장에 끼워 둔 펌프 산탄총 도면. 첫 회수에만.
-				"progression_items": {"pump_blueprint": 1},
+				# 무기 사다리 — 명부 뒷장에 끼워 둔 펌프 산탄총 도면(설계도 조각 2/3). 첫 회수에만.
+				# 통짜 청사진은 폐지 — 제작은 조각 3/3(나머지 1조각은 남대문 엘리트·봉인 상자).
+				"progression_items": {"blueprint_shard_pump_shotgun": 2},
 				"xp": 640,
 				"summary": "봉쇄 명부 해독 · 통조림 +19 · 츄르 +2 · 탄창 스프링 +2 · XP +640\n펌프 산탄총 청사진 획득 · 작업대에서 펌프 산탄총 제작 가능",
 			},
@@ -967,7 +968,8 @@ const CHAINS := {
 				"churu": 3,
 				"components": {"scope_lens": 2},
 				# 쉘터 Tier 3 확장 키 — 장부 마지막 장이 창고 설계도다. 첫 회수에만.
-				"progression_items": {"namdaemun_depot_plans": 1},
+				# + 장인의 인장 1(돌파 재료, 메인 미션 3단계 공통 보상).
+				"progression_items": {"namdaemun_depot_plans": 1, "artisan_seal": 1},
 				"xp": 820,
 				"summary": "조합 장부 해독 · 통조림 +22 · 츄르 +3 · 스코프 렌즈 +2 · XP +820\n새 세계 기록 · ‘조합 열쇠 장부’ 해금",
 			},
@@ -1099,8 +1101,8 @@ const CHAINS := {
 				"canned_food": 27,
 				"churu": 3,
 				"components": {"magazine_spring": 3},
-				# 무기 사다리 — 주조 도면 = AKM 개조 청사진. 첫 회수에만.
-				"progression_items": {"akm_blueprint": 1},
+				# 무기 사다리 — 주조 도면 = AKM 설계도 조각 2/3. 첫 회수에만(나머지는 을지로 엘리트·봉인 보급함).
+				"progression_items": {"blueprint_shard_akm": 2},
 				"xp": 1080,
 				"summary": "주조 도면 해독 · 통조림 +27 · 츄르 +3 · 탄창 스프링 +3 · XP +1080\nAKM 개조 청사진 획득 · 작업대에서 AKM 제작 가능",
 			},
@@ -1160,7 +1162,7 @@ const CHAINS := {
 				"churu": 4,
 				"components": {"scope_lens": 3},
 				# 쉘터 Tier 4 확장 키 — 관제실 로그에 딸려 온 배전 도면. 첫 회수에만.
-				"progression_items": {"euljiro_grid_schematic": 1},
+				"progression_items": {"euljiro_grid_schematic": 1, "artisan_seal": 1},
 				"xp": 1350,
 				"summary": "격리 로그 해독 · 통조림 +30 · 츄르 +4 · 스코프 렌즈 +3 · XP +1350\n새 세계 기록 · ‘외부 발신 격리 명령’ 해금",
 			},
@@ -1351,7 +1353,7 @@ const CHAINS := {
 				"churu": 6,
 				"components": {"scope_lens": 4},
 				# 쉘터 Tier 5 확장 키 — 사령부 금고의 통제 키. 첫 회수에만.
-				"progression_items": {"yongsan_control_key": 1},
+				"progression_items": {"yongsan_control_key": 1, "artisan_seal": 1},
 				"xp": 2400,
 				"summary": "보호소 배치도 해독 · 통조림 +42 · 츄르 +6 · 스코프 렌즈 +4 · XP +2400\n새 세계 기록 · ‘보호소 27 배치도’ 해금",
 			},

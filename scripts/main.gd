@@ -427,7 +427,7 @@ func _ready() -> void:
 			or extraction_transition_active
 			or loot_system.is_loot_swap_open()
 			or main_mission.is_cinematic_active()
-		), "종료 (판 포기 · 장착 무기만 남는다)")
+		), "종료 (판 포기 · 장비는 전부 남고 가방 재료만 잃는다)")
 	raid_zone_data = GameState.get_raid_zone()
 	# 판 시작을 세이브에 새긴다 — 추출 없이 강제 종료하면 로드 시 포기 처리.
 	# 오프닝(튜토리얼)은 제외: 새 유저의 첫 이탈에 벌을 주지 않는다.
@@ -6336,7 +6336,7 @@ func _update_field_interactions(delta: float) -> void:
 		GameState.save_persistent_state()
 		_show_field_notice(
 			"탈출로를 찾았다.\n"
-			+ "지금 나가면 가방에 든 것이 전부 내 것이 된다. 죽으면 장착 무기만 남기고 전부 놓고 간다.\n"
+			+ "지금 나가면 가방에 든 것이 전부 내 것이 된다. 죽으면 장비는 전부 남고 가방의 재료·탄약·귀중품만 놓고 간다.\n"
 			+ "더 버티면 전리품 배율이 오른다. 어느 쪽을 고를지는 네 몫이다."
 		)
 	if hud.field_interaction_button:

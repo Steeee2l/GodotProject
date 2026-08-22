@@ -23,7 +23,9 @@ func _run() -> void:
     )
     game_state.set("canned_food", 7)
     (game_state.get("mod_component_inventory") as Dictionary)["magazine_spring"] = 3
-    assert(bool((game_state.call("deposit_storage_item", "food", "canned_food", 5) as Dictionary).get("ok", false)))
+    # 통조림은 창고에 안 들어간다(플레이어 소모품) — 옛 "5개 보관" 어서션은 HEAD에서 이미
+    # 깨져 있었다(deposit_storage_item("food")가 거절). 7개 전부 가방 몫으로 시체에 간다.
+    assert(not bool((game_state.call("deposit_storage_item", "food", "canned_food", 5) as Dictionary).get("ok", false)))
     main_scene.set("run_kills", 3)
     main_scene.set("run_damage_dealt", 420)
     main_scene.call("_begin_player_death_sequence")
@@ -52,11 +54,13 @@ func _run() -> void:
     assert(game_over_panel.custom_minimum_size.y <= 500.0)
     var corpse := game_state.get("pending_corpse_recovery") as Dictionary
     var corpse_loot := corpse.get("loot", {}) as Dictionary
-    # 사망 페널티 완화(2026-08): 장착 중이던 무기 1정은 시체로 가지 않고 손에
-    # 남는다. 시작 AK는 장착 상태이므로 시체 전리품에 있으면 안 된다(이중 지급 방지).
+    # 영구 귀속(2026-08 경제 코어): 장비(무기·방어구·부착물)는 시체로 가지 않고 전부
+    # 손에 남는다. 시체에는 가방의 재료·탄약·소모품만 — AK·장비 키가 비어 있어야 한다.
     assert(int((corpse_loot.get("weapon_inventory", {}) as Dictionary).get("ak47", 0)) == 0)
+    assert((corpse_loot.get("weapon_inventory", {}) as Dictionary).is_empty())
+    assert((corpse_loot.get("equipment_inventory", {}) as Dictionary).is_empty())
     assert(str(corpse_loot.get("equipped_weapon_id", "x")).is_empty())
-    assert(int(corpse_loot.get("canned_food", 0)) == 2)
+    assert(int(corpse_loot.get("canned_food", 0)) == 7)
     # 시큐어 주머니가 죽음에서 1개를 지킨다(츄르>개조품>부품>구급약 우선순위).
     # 츄르·개조품이 없는 이 시나리오에서는 스프링 1개가 보존되고 2개만 시체에 남는다.
     assert(
@@ -67,14 +71,13 @@ func _run() -> void:
     # 예전 이 자리의 중복 _clear_carried_inventory_after_death 호출은 시큐어
     # 주머니가 복원해 준 스프링까지 다시 0으로 밀어 HEAD에서 이 테스트를
     # 깨뜨리고 있었다(실측: 라인 70 어서션 행 걸림) — 중복 호출을 제거한다.
-    # 사망 페널티 완화(2026-08): 장착 무기(AK)는 사망 후에도 손에 남는다.
+    # 영구 귀속(2026-08): 장착 무기(AK)는 물론 모든 장비가 사망 후에도 손에 남는다.
     # 탄약(가방 몫)은 종전대로 전부 잃는다.
     assert(bool(game_state.get("has_ak")))
     assert(int(game_state.call("get_weapon_count", "ak47")) == 1)
     assert(str(game_state.get("equipped_weapon_id")) == "ak47")
     assert(int(game_state.call("get_ammo_count", "762_fmj")) == 0)
-    assert(int(game_state.get("canned_food")) == 5)
-    assert(int(game_state.call("get_stored_storage_count", "food", "canned_food")) == 5)
+    assert(int(game_state.get("canned_food")) == 0)
     # 시큐어 주머니가 지킨 스프링 1개는 정산 후 인벤토리로 복원된다.
     assert(int(game_state.call("get_mod_component_count", "magazine_spring")) == 1)
     assert((game_state.get("secure_dog_items") as Array).is_empty())

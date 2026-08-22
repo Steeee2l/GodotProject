@@ -366,6 +366,16 @@ func _collect_nearby_ammo() -> void:
 				str(host.nearby_ammo_pickup.get_meta("display_name", "진행도 아이템")),
 				mission_tag,
 			]
+			# 설계도 조각은 "몇 조각 모였는지"가 곧 보상이다 — n/3을 붙이고 3/3이면 해금을 말한다.
+			if progression_item_id.begins_with(LOOT_ECONOMY.BLUEPRINT_SHARD_PREFIX):
+				var recipe_id := progression_item_id.trim_prefix(LOOT_ECONOMY.BLUEPRINT_SHARD_PREFIX)
+				toast_text = "%s +%d · %s" % [
+					str(host.nearby_ammo_pickup.get_meta("display_name", "설계도 조각")),
+					amount,
+					str(GameState.get_blueprint_progress_text(recipe_id)),
+				]
+				if GameState.is_blueprint_unlocked(recipe_id):
+					toast_text += " → 작업대 제작 해금"
 			toast_seconds = 3.2
 		"weapon":
 			var weapon_id := str(host.nearby_ammo_pickup.get_meta("weapon_id", "ak47"))
@@ -689,6 +699,9 @@ func _raid_item_display_name(item_type: String, item_id: String) -> String:
 		"canned_food": "통조림",
 		"medkit": "구급약",
 		"churu": "희귀 츄르",
+		"precision_gear": "정밀 기어",
+		"military_alloy": "군용 합금",
+		"artisan_seal": "장인의 인장",
 		"rifle_blueprint": "소총 제작 청사진",
 		"shotgun_blueprint": "산탄총 제작 청사진",
 		"akm_blueprint": "AKM 개조 청사진",
@@ -698,7 +711,11 @@ func _raid_item_display_name(item_type: String, item_id: String) -> String:
 		"euljiro_grid_schematic": "을지로 배전 도면",
 		"yongsan_control_key": "용산 통제 키",
 	}
-	return str(names.get(item_id, item_id))
+	if names.has(item_id):
+		return str(names[item_id])
+	# 설계도 조각·신규 진행 아이템은 카탈로그가 이름을 안다.
+	var catalog_name := str((LOOT_ECONOMY.ITEM_CATALOG.get(item_id, {}) as Dictionary).get("display_name", ""))
+	return catalog_name if not catalog_name.is_empty() else item_id
 
 
 func _raid_item_description(item_type: String, item_id: String) -> String:
@@ -753,6 +770,9 @@ func _get_mod_component_texture(component_id: String) -> Texture2D:
 	match component_id:
 		"scope_lens": return SCOPE_LENS_TEXTURE
 		"magazine_spring": return MAGAZINE_SPRING_TEXTURE
+		# 희귀 부품 2종 — 전용 텍스처는 2단계 UI 몫. 지금은 식별 가능한 아이콘으로.
+		"precision_gear": return UI_ICONS.get_icon("upgrade", 96, Color("#e8d27a"))
+		"military_alloy": return UI_ICONS.get_icon("secure", 96, Color("#9fc3e0"))
 		_: return RUBBER_GASKET_TEXTURE
 
 
@@ -760,6 +780,8 @@ func _get_mod_component_color(component_id: String) -> Color:
 	match component_id:
 		"scope_lens": return Color("#65c5d7")
 		"magazine_spring": return Color("#b4b9ae")
+		"precision_gear": return Color("#e8d27a")
+		"military_alloy": return Color("#9fc3e0")
 		_: return Color("#d1aa64")
 
 

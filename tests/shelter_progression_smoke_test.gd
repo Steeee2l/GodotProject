@@ -40,12 +40,19 @@ func _run() -> void:
 	if int(game_state.call("get_mod_enhancement_level", "scope_2x")) != 1:
 		_fail("attachment enhancement level did not persist in state")
 
-	for index in game_state.ARTISAN_PITY_LIMIT:
-		var result := game_state.call("roll_artisan_weapon") as Dictionary
-		if result.is_empty():
-			_fail("artisan weapon roll failed")
-	if int(game_state.get("artisan_pity")) != 0:
-		_fail("artisan pity did not reset on the guaranteed roll")
+	# 장인 뽑기(roll_artisan_weapon)는 2026-08 경제 코어로 폐지됐다 — 장인 = 돌파 서비스.
+	# 대신 돌파 게이트를 확인한다: +10에서 강화가 막히고 try_breakthrough로 열린다.
+	(game_state.get("weapon_enhancement_levels") as Dictionary)["ak47"] = 10
+	if bool(game_state.call("try_enhance_weapon", "ak47")):
+		_fail("+10 weapon must require a breakthrough before enhancing")
+	game_state.call("add_progression_item", "artisan_seal", 1)
+	game_state.call("add_mod_component", "precision_gear", 1)
+	if not bool(game_state.call("try_breakthrough", "weapon", "ak47")):
+		_fail("breakthrough with seal + gear + scrap must succeed")
+	if not bool(game_state.call("try_enhance_weapon", "ak47")):
+		_fail("enhancement must reopen after breakthrough")
+	if game_state.has_method("roll_artisan_weapon"):
+		_fail("artisan weapon roll must be removed")
 
 	if bool(game_state.call("is_raid_zone_unlocked", "namsan_core")):
 		_fail("tier 5 zone should be locked at tier 1")

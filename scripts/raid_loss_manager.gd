@@ -16,51 +16,28 @@ const INVENTORY_LOOT_KEYS := [
 
 
 static func build_death_corpse_loot() -> Dictionary:
-	var equipment_totals := _equipment_total_counts(
-		GameState.equipment_inventory,
-		GameState.equipped_body_armor_id,
-		GameState.equipped_head_armor_id,
-		GameState.equipped_footwear_id
-	)
-	# 장착 중이던 무기 1정 + 그 총에 박힌 부착물은 시체로 가지 않는다 — 사망해도
-	# 손에 남는다(clear_carried_raid_inventory_after_death와 같은 판정 규칙).
-	# 여기서 빼 두지 않으면 시체 회수 시 같은 무기가 이중 지급된다.
-	var corpse_weapons := GameState.weapon_inventory.duplicate(true)
-	var corpse_mods := GameState.weapon_mod_inventory.duplicate(true)
-	var corpse_loadouts := GameState.weapon_mod_loadouts.duplicate(true)
-	var kept_weapon_id: String = (
-		GameState.equipped_weapon_id
-		if GameState.has_ak and not GameState.equipped_weapon_id.is_empty()
-		else ""
-	)
-	if not kept_weapon_id.is_empty():
-		var kept_count := int(corpse_weapons.get(kept_weapon_id, 0))
-		if kept_count > 1:
-			corpse_weapons[kept_weapon_id] = kept_count - 1
-		else:
-			corpse_weapons.erase(kept_weapon_id)
-		for mod_id in GameState.equipped_weapon_mods:
-			var mod_count := int(corpse_mods.get(str(mod_id), 0))
-			if mod_count > 1:
-				corpse_mods[str(mod_id)] = mod_count - 1
-			else:
-				corpse_mods.erase(str(mod_id))
-		corpse_loadouts.erase(kept_weapon_id)
+	# ── 영구 귀속(2026-08 경제 코어) ──
+	# 시체로 가는 것은 가방의 재료(부품)·탄약·구급약·통조림·츄르뿐이다(귀중품은
+	# valuable_inventory에서 별도로 사라진다). 무기·방어구(장착+보유)·부착물·강화·
+	# 설계도 조각·인장·키는 전부 손에 남는다 — 장비는 필드에서 절대 안 나오고 제작으로만
+	# 생기므로, 시체에 실으면 "회수 실패 = 영구 손실"이 돼 규칙이 거짓이 된다.
+	# (GameState.clear_carried_raid_inventory_after_death와 같은 판정 규칙 — 여기서
+	#  빼 두지 않으면 시체 회수 시 같은 장비가 이중 지급된다.)
 	var loot := {
 		"ammo_inventory": GameState.ammo_inventory.duplicate(true),
 		"medkits": maxi(0, GameState.medkits),
 		"canned_food": GameState.get_backpack_storage_count("food", "canned_food"),
 		"churu": maxi(0, GameState.churu),
 		"mod_component_inventory": GameState.mod_component_inventory.duplicate(true),
-		"progression_item_inventory": GameState.progression_item_inventory.duplicate(true),
-		"weapon_mod_inventory": corpse_mods,
-		"weapon_inventory": corpse_weapons,
-		"equipment_inventory": equipment_totals,
-		# 장착 무기는 유지되므로 시체에는 "장착 중이던 무기" 정보가 없다.
+		"progression_item_inventory": {},
+		"weapon_mod_inventory": {},
+		"weapon_inventory": {},
+		"equipment_inventory": {},
+		# 장비는 유지되므로 시체에는 "장착 중이던 무기" 정보가 없다.
 		# (예전 세이브의 시체 기록에는 남아 있을 수 있고, 회수 코드는 그대로 처리한다.)
 		"equipped_weapon_id": "",
 		"equipped_weapon_mods": [],
-		"weapon_mod_loadouts": corpse_loadouts,
+		"weapon_mod_loadouts": {},
 		"raid_special_cargo": GameState.raid_special_cargo.duplicate(true),
 	}
 	# 부작용 없음 — 탈출 결정 화면에서 "지금 확보 가치"를 미리 보여줄 때도 쓰므로
@@ -192,6 +169,7 @@ static func restore_secure_items_after_death() -> void:
 static func format_loss_summary(loot: Dictionary) -> String:
 	if get_item_count(loot) <= 0:
 		return "분실한 휴대품 없음"
+	# 장비 줄은 구세이브의 시체 기록(영구 귀속 이전)에만 생긴다 — 새 시체엔 장비가 없다.
 	var gear_entries: Array[String] = []
 	for weapon_id_value in (loot.get("weapon_inventory", {}) as Dictionary).keys():
 		var weapon_amount := maxi(0, int((loot.get("weapon_inventory", {}) as Dictionary).get(weapon_id_value, 0)))
@@ -229,29 +207,15 @@ static func format_loss_summary(loot: Dictionary) -> String:
 	if not cargo.is_empty():
 		supply_entries.append("대형 화물 · %s" % cargo.get("title", "봉인된 지하철 화물"))
 
-	var lines: Array[String] = ["분실한 장비 및 소모품"]
+	var lines: Array[String] = ["분실한 휴대품"]
 	if not gear_entries.is_empty():
 		lines.append("장비 · %s" % "  /  ".join(gear_entries))
 	if not supply_entries.is_empty():
 		lines.append("휴대품 · %s" % "  /  ".join(supply_entries))
-	# 사망 페널티 완화 — 장착 무기·부착물은 시체 목록에 아예 안 들어온다.
-	lines.append("장착 중이던 무기와 부착물은 손에 남았습니다.")
+	# 영구 귀속 — 장비(무기·방어구·부착물)는 시체 목록에 아예 안 들어온다.
+	lines.append("장비(무기·방어구·부착물)는 전부 손에 남았습니다 — 잃은 건 가방의 재료·탄약·귀중품뿐입니다.")
 	lines.append("다음 탐사에서 사망 지점의 가방을 한 번 회수할 수 있습니다.")
 	return "\n".join(lines)
-
-
-static func _equipment_total_counts(
-	inventory: Dictionary,
-	body_id: String,
-	head_id: String,
-	footwear_id: String
-) -> Dictionary:
-	var totals := inventory.duplicate(true)
-	for equipped_id in [body_id, head_id, footwear_id]:
-		if equipped_id.is_empty():
-			continue
-		totals[equipped_id] = int(totals.get(equipped_id, 0)) + 1
-	return totals
 
 
 static func _dictionary_count(inventory: Dictionary) -> int:

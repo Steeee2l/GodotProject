@@ -145,13 +145,16 @@ func _run() -> void:
 	(game_state.get("main_mission_progress") as Dictionary)["euljiro_depths"] = 2  # 3단계 미완 → 키 없음
 	var granted: Array[String] = SHELTER_REQUISITION.ensure_story_key_items()
 	print("  ⑤ GRANTED=%s" % str(granted))
-	# 무기 사다리 청사진(남대문 2단계 → pump_blueprint, 을지로 2단계 → akm_blueprint)도
+	# 무기 사다리 설계도 조각(남대문 2단계 → 펌프 조각 2, 을지로 2단계 → AKM 조각 2)도
 	# 같은 경로로 보정된다 — 끝낸 단계의 보상만 들어오고, 을지로 3단계 키는 여전히 없다.
+	# (2026-08 경제 코어: 통짜 청사진은 폐지, 보상은 blueprint_shard_*. 장인의 인장은
+	#  소모 재화라 보정 대상이 아니다 — 남대문 3단계를 끝냈어도 granted에 없어야 한다.)
 	_check(
-		granted.has("namdaemun_depot_plans") and granted.has("pump_blueprint") and granted.has("akm_blueprint")
-		and granted.size() == 3,
+		granted.has("namdaemun_depot_plans") and granted.has("blueprint_shard_pump_shotgun") and granted.has("blueprint_shard_akm")
+		and not granted.has("artisan_seal") and granted.size() == 3,
 		"⑤ only completed chain rewards are backfilled (got %s)" % str(granted)
 	)
+	_check(int(game_state.call("get_blueprint_shard_count", "pump_shotgun")) == 2, "⑤ 펌프 조각 2 보정")
 	_check(int(game_state.call("get_progression_item_count", "namdaemun_depot_plans")) == 1, "⑤ backfilled key count 1")
 	_check(int(game_state.call("get_progression_item_count", "euljiro_grid_schematic")) == 0, "⑤ incomplete chain not granted")
 	_check((SHELTER_REQUISITION.ensure_story_key_items() as Array).is_empty(), "⑤ idempotent")
@@ -189,7 +192,7 @@ func _run() -> void:
 	print("  ⑧ JONGNO=%s" % str(gear.get("text", "")))
 	_check(str(gear.get("set_label", "")) == "T1" and int(gear.get("set_owned", -1)) == 0, "⑧ 종로 = T1 세트 0/3")
 	_check(str(gear.get("weapon_id", "")) == "ak47" and int(gear.get("weapon_level", 0)) == 5, "⑧ 종로 권장 AK+5")
-	_check(str(gear.get("text", "")) == "권장: T1 세트 0/3 · AK +3/5", "⑧ 문구 (got %s)" % str(gear.get("text", "")))
+	_check(str(gear.get("text", "")) == "권장: T1 세트 제작 0/3 · AK +3/5", "⑧ 문구 (got %s)" % str(gear.get("text", "")))
 	_check(not bool(gear.get("all_ok", true)), "⑧ 미충족")
 	# 세트: 장착 1 + 가방 1 + 창고 1 = 3/3 (레벨 @n은 기종으로 센다)
 	game_state.call("add_equipment", "scav_vest", 1)
@@ -201,20 +204,20 @@ func _run() -> void:
 	print("  ⑧ JONGNO_OK=%s" % str(gear.get("text", "")))
 	_check(int(gear.get("set_owned", -1)) == 3 and int(gear.get("set_equipped", -1)) == 1 and bool(gear.get("set_ok", false)), "⑧ 세트 3/3 (장착 1)")
 	_check(bool(gear.get("weapon_ok", false)) and bool(gear.get("all_ok", false)), "⑧ AK+5 충족 → all_ok")
-	_check(str(gear.get("text", "")) == "권장: T1 세트 3/3 · AK +5/5", "⑧ 충족 문구 (got %s)" % str(gear.get("text", "")))
+	_check(str(gear.get("text", "")) == "권장: T1 세트 제작 3/3 · AK +5/5", "⑧ 충족 문구 (got %s)" % str(gear.get("text", "")))
 	# 을지로(존3): T2 세트, 권장 AKM+15 — AK+5로는 단이 모자라다(문구에 권장·현재)
 	gear = SHELTER_REQUISITION.get_zone_gear_goal("euljiro_depths")
 	print("  ⑧ EULJIRO=%s" % str(gear.get("text", "")))
 	_check(str(gear.get("set_label", "")) == "T2" and int(gear.get("set_owned", -1)) == 0, "⑧ 을지로 = T2 세트 0/3")
 	_check(str(gear.get("weapon_id", "")) == "akm" and int(gear.get("weapon_level", 0)) == 15 and not bool(gear.get("weapon_rung_ok", true)), "⑧ 을지로 권장 AKM+15, AK는 단 부족")
-	_check(str(gear.get("text", "")) == "권장: T2 세트 0/3 · AKM +15 권장 · 현재 AK +5", "⑧ 단 부족 문구 (got %s)" % str(gear.get("text", "")))
+	_check(str(gear.get("text", "")) == "권장: T2 세트 제작 0/3 · AKM +15 권장 · 현재 AK +5", "⑧ 단 부족 문구 (got %s)" % str(gear.get("text", "")))
 	# 같은 단의 다른 가족(펌프 산탄총 2단)도 단으로는 충족
 	game_state.call("add_weapon", "pump_shotgun", 1)
 	game_state.set("equipped_weapon_id", "pump_shotgun")
 	(game_state.get("weapon_enhancement_levels") as Dictionary)["pump_shotgun"] = 15
 	gear = SHELTER_REQUISITION.get_zone_gear_goal("euljiro_depths")
 	_check(bool(gear.get("weapon_rung_ok", false)) and bool(gear.get("weapon_ok", false)), "⑧ 펌프 +15도 AKM+15 권장 충족")
-	_check(str(gear.get("text", "")) == "권장: T2 세트 0/3 · 펌프 +15/15", "⑧ 펌프 문구 (got %s)" % str(gear.get("text", "")))
+	_check(str(gear.get("text", "")) == "권장: T2 세트 제작 0/3 · 펌프 +15/15", "⑧ 펌프 문구 (got %s)" % str(gear.get("text", "")))
 	# 남산(존5) K2+25 / 용산 AKM+20 / 남대문 AK+10 — 러버밴딩 없음(플레이어 상태와 무관)
 	_check(str(SHELTER_REQUISITION.get_zone_gear_goal("namsan_core").get("weapon_id", "")) == "k2" and int(SHELTER_REQUISITION.get_zone_gear_goal("namsan_core").get("weapon_level", 0)) == 25, "⑧ 남산 K2+25")
 	_check(str(SHELTER_REQUISITION.get_zone_gear_goal("namsan_core").get("set_label", "")) == "T3", "⑧ 남산 T3 세트")
@@ -230,7 +233,7 @@ func _run() -> void:
 	box.add_child(tail)
 	var gear_line: Label = SHELTER_REQUISITION.attach_zone_gear_goal_line(anchor, "euljiro_depths", null)
 	_check(gear_line != null and gear_line.get_parent() == box and gear_line.get_index() == anchor.get_index() + 1, "⑧ 라벨은 anchor 바로 뒤")
-	_check(gear_line.visible and gear_line.text.begins_with("권장: T2 세트"), "⑧ 라벨 문구")
+	_check(gear_line.visible and gear_line.text.begins_with("권장: T2 세트 제작"), "⑧ 라벨 문구")
 	_check(gear_line.get_theme_color("font_color") == SHELTER_REQUISITION.GEAR_GOAL_MISSING_COLOR, "⑧ 미충족 빨강")
 	var again_line: Label = SHELTER_REQUISITION.attach_zone_gear_goal_line(anchor, "jongno_outskirts", null)
 	_check(again_line == gear_line and box.get_child_count() == 3, "⑧ 두 번째 호출은 재사용")

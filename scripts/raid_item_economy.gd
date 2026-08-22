@@ -41,7 +41,8 @@ static func get_total_value(
 
 
 static func is_protected(item_type: String, item_id: String) -> bool:
-	if item_type in ["progression", "special_cargo"]:
+	# 무기·방어구는 영구 귀속 장비(제작 전용·0칸)라 가방 교체 UI에서 버릴 대상이 아니다.
+	if item_type in ["progression", "special_cargo", "weapon", "equipment"]:
 		return true
 	return item_id.contains("blueprint") or item_id.contains("keycard")
 

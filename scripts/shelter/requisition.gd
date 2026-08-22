@@ -23,7 +23,8 @@ const MAX_SHELTER_TIER := 5
 
 # ── 존별 장비 목표 ────────────────────────────────────────────
 # "이 존에 무엇을 갖추고 가야 하나"를 한 줄로. 세트는 그 존 가족(ARMOR_FAMILIES)
-# 3종의 보유/장착 n/3, 무기는 무기 사다리 설계의 존별 권장 강화(종로 AK+5 /
+# 3종의 '제작' n/3(장비는 작업대 제작 전용·영구 귀속 — 보유 = 제작했다는 뜻),
+# 무기는 무기 사다리 설계의 존별 권장 강화(종로 AK+5 /
 # 남대문 AK+10 / 을지로 AKM+15 / 용산 AKM+20 / 남산 K2+25 — "그 존 사수를 3발에")
 # 대비 장착 무기. 러버밴딩 없음: 목표는 존 티어에서만 나오고 플레이어 상태는
 # 충족 여부 표시에만 쓴다. 데이터 복제 금지 — 가족·사다리는 원본 상수를 읽는다.
@@ -415,10 +416,11 @@ static func get_zone_gear_goal(zone_id: String) -> Dictionary:
 
 
 static func format_zone_gear_goal_line(goal: Dictionary) -> String:
-	# `권장: T1 세트 2/3 · AK +3/5` — 단이 모자라면 `AKM +15 권장 · 현재 AK +12`.
+	# `권장: T1 세트 제작 2/3 · AK +3/5` — 단이 모자라면 `AKM +15 권장 · 현재 AK +12`.
+	# "제작"을 명시한다 — 세트는 주워서가 아니라 작업대에서 만들어 채운다.
 	if goal.is_empty():
 		return ""
-	var set_part := "%s 세트 %d/%d" % [
+	var set_part := "%s 세트 제작 %d/%d" % [
 		str(goal.get("set_label", "T1")),
 		int(goal.get("set_owned", 0)),
 		(goal.get("set_ids", []) as Array).size(),

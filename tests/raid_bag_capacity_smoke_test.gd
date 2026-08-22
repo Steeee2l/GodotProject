@@ -50,30 +50,35 @@ func _run() -> void:
     state.add_weapon("mp5", 3)
     # 첫 획득 무기는 기본 탄약 2탄창이 따라온다 — 슬롯 산수만 보는 테스트라 비운다.
     state.set_ammo_count("9mm_fmj", 0)
-    assert(int(state.get_raid_bag_used_slots()) == 5, "Each unequipped weapon must use one slot.")
+    # 2026-08 경제 코어: 무기·방어구는 영구 귀속 장비라 가방 칸 0(장착 교체용으로만 보인다).
+    # 예전 "무기 1정 = 1칸 / 장비 1개 = 1칸" 어서션은 그 규칙과 함께 폐지됐다.
+    assert(int(state.get_raid_item_slot_cost("weapon", "mp5", 3)) == 0, "Weapons take no bag slots.")
+    assert(int(state.get_raid_bag_used_slots()) == 2, "Unequipped weapons must not use bag slots.")
     state.add_equipment("scav_vest", 2)
-    assert(int(state.get_raid_bag_used_slots()) == 7, "Each equipment item must use one slot.")
+    assert(int(state.get_raid_item_slot_cost("equipment", "scav_vest", 2)) == 0, "Equipment takes no bag slots.")
+    assert(int(state.get_raid_bag_used_slots()) == 2, "Equipment must not use bag slots.")
     state.add_mod_component("scope_lens", 3)
-    # 재료 1개 = 1칸으로 바뀐 뒤(가방 압박 개편)에도 "부품 한 종류 = 1칸"을
-    # 기대하는 옛 어서션이 남아 있었다. 이제 부품 3개면 3칸이다.
-    assert(int(state.get_raid_bag_used_slots()) == 10, "Each component unit must use one bag slot.")
+    # 재료 1개 = 1칸 — 부품 3개면 3칸이다.
+    assert(int(state.get_raid_bag_used_slots()) == 5, "Each component unit must use one bag slot.")
 
     state.weapon_inventory.clear()
     state.ammo_inventory.clear()
     state.equipment_inventory.clear()
     state.canned_food = 0
     state.mod_component_inventory.clear()
-    state.add_weapon("mp5", 11)
+    # 만재 12칸 — 무기는 0칸이라 부품 11개 + 탄약 1칸으로 채운다(옛 MP5 11정 시나리오 대체).
+    state.add_mod_component("rubber_gasket", 11)
     state.set_ammo_count("9mm_fmj", 0)
     # 칸당 240발 상한 아래(200발)라 1칸 — 12칸 만재 시나리오는 그대로 성립한다.
     state.set_ammo_count("762_fmj", 200)
     assert(int(state.get_raid_bag_used_slots()) == 12)
-    assert(not state.can_add_raid_item("weapon", "m1911", 1), "A full bag must reject another weapon.")
+    assert(state.can_add_raid_item("weapon", "m1911", 1), "Weapons (0 slots) always fit even in a full bag.")
+    assert(not state.can_add_raid_item("component", "scope_lens", 1), "A full bag must reject another component.")
     assert(state.can_add_raid_item("ammo", "762_fmj", 30), "An existing ammo stack must accept more rounds.")
     assert(not state.can_add_raid_item("ammo", "762_fmj", 60), "Rounds past the per-slot cap need a free slot.")
     assert(not state.can_add_raid_item("ammo", "9mm_fmj", 1), "A new ammo type needs a free slot.")
 
-    assert(int(state.remove_raid_bag_item("weapon", "mp5", 1)) == 1)
+    assert(int(state.remove_raid_bag_item("component", "rubber_gasket", 1)) == 1)
     assert(int(state.get_raid_bag_used_slots()) == 11)
     assert(state.can_add_raid_item("ammo", "9mm_fmj", 1), "Freeing one slot must allow a new stack.")
     # can_add_raid_items takes Array[Dictionary]; an untyped literal is rejected.
@@ -102,14 +107,14 @@ func _run() -> void:
         "title": "Seoul Line 3 Relief Core",
     }
     # 메인 미션 회수물은 가방과 무관하다(유저 신고) — 칸 0, 만재여도 먹힌다.
-    state.add_weapon("mp5", 12)
+    state.add_mod_component("rubber_gasket", 12)
     state.set_ammo_count("9mm_fmj", 0)
     assert(int(state.get_raid_bag_used_slots()) == 12, "bag is full before taking story cargo")
     assert(state.can_add_raid_item("special_cargo", str(cargo.id), 1), "Story cargo ignores a full bag.")
     assert(state.try_take_story_cargo(cargo))
     assert(int(state.get_raid_bag_used_slots()) == 12, "Story cargo must not use a bag slot.")
     assert(not state.can_add_raid_item("special_cargo", "another_cargo", 1))
-    state.weapon_inventory.clear()
+    state.mod_component_inventory.clear()
     state.ammo_inventory.clear()
     assert(int(state.get_raid_bag_used_slots()) == 0)
     assert(int(state.remove_raid_bag_item("special_cargo", "seoul_line3_relief_core", 1)) == 1)

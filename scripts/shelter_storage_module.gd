@@ -25,6 +25,9 @@ const ITEM_NAMES := {
 	"rubber_gasket": "고무 패킹",
 	"scope_lens": "스코프 렌즈",
 	"magazine_spring": "탄창 스프링",
+	"precision_gear": "정밀 기어",
+	"military_alloy": "군용 합금",
+	"artisan_seal": "장인의 인장",
 	"scope_2x": "폐점포 2x 스코프",
 	"muffled_sock": "소리 방지용 양말",
 	"sponge_pad": "스펀지 턱받이",
@@ -652,7 +655,11 @@ func _item_name(item_id: String) -> String:
 	var equipment_definition: Dictionary = GameState.get_equipment_definition(item_id)
 	if not equipment_definition.is_empty():
 		return str(equipment_definition.get("display_name", item_id))
-	return str(ITEM_NAMES.get(item_id, item_id.replace("_", " ").capitalize()))
+	if ITEM_NAMES.has(item_id):
+		return str(ITEM_NAMES[item_id])
+	# 설계도 조각 등 새 진행 아이템은 카탈로그 이름으로.
+	var catalog_name := str((GameState.LOOT_ECONOMY.ITEM_CATALOG.get(item_id, {}) as Dictionary).get("display_name", ""))
+	return catalog_name if not catalog_name.is_empty() else item_id.replace("_", " ").capitalize()
 
 
 func _item_texture(item_type: String, item_id: String, size: int) -> Texture2D:
