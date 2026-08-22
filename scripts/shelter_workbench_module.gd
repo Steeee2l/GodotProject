@@ -769,7 +769,19 @@ func _craft(recipe: Dictionary) -> void:
 	if bool(result.get("enhance", false)):
 		# 반환 bool을 버리고 무조건 "강화 완료"를 찍던 버그 — 고철이 모자라
 		# 아무 일도 안 일어난 판에서도 성공 문구가 나왔다.
-		if GameState.try_enhance_weapon(GameState.equipped_weapon_id):
+		# 부품은 GameState가 모른다(가방+창고 합산·가방 우선 소비는 작업대 규약).
+		# 부족하면 고철을 건드리기 전에 멈추고, 성공했을 때만 부품을 태운다.
+		var enhance_parts: Dictionary = GameState.get_weapon_enhancement_part_cost(GameState.equipped_weapon_id)
+		var parts_short := false
+		for part_key in enhance_parts:
+			if _owned_resource(str(part_key)) < int(enhance_parts[part_key]):
+				parts_short = true
+		if parts_short:
+			_set_craft_feedback(_weapon_enhance_failure_reason())
+		elif GameState.try_enhance_weapon(GameState.equipped_weapon_id):
+			for part_key in enhance_parts:
+				_consume_resource(str(part_key), int(enhance_parts[part_key]))
+			GameState.save_persistent_state()
 			_set_craft_feedback("강화 완료 · %s +%d" % [
 				GameState.equipped_weapon_id.to_upper(),
 				GameState.get_weapon_enhancement_level(GameState.equipped_weapon_id),
@@ -845,6 +857,10 @@ func _weapon_enhance_failure_reason() -> String:
 	var cost := GameState.get_weapon_enhancement_cost(weapon_id)
 	if GameState.scrap < cost:
 		return "강화 불가 · %s" % _shortage_text("scrap", cost)
+	var part_cost: Dictionary = GameState.get_weapon_enhancement_part_cost(weapon_id)
+	for part_key in part_cost:
+		if _owned_resource(str(part_key)) < int(part_cost[part_key]):
+			return "강화 불가 · %s (필드에서 구해 오는 부품)" % _shortage_text(str(part_key), int(part_cost[part_key]))
 	return "강화에 실패했습니다."
 
 
@@ -914,7 +930,13 @@ func _effective_cost(recipe: Dictionary) -> Dictionary:
 	if bool(result.get("artisan", false)):
 		return GameState.get_artisan_roll_cost()
 	if bool(result.get("enhance", false)):
-		return {"scrap": GameState.get_weapon_enhancement_cost(GameState.equipped_weapon_id)}
+		# 고단계 강화는 필드 부품도 든다 — 비용 줄·가능 판정·부족 사유가 전부
+		# 이 딕셔너리를 보므로 여기서 합쳐 주면 UI가 따로 알 필요가 없다.
+		var enhance_cost := {"scrap": GameState.get_weapon_enhancement_cost(GameState.equipped_weapon_id)}
+		var part_cost: Dictionary = GameState.get_weapon_enhancement_part_cost(GameState.equipped_weapon_id)
+		for part_key in part_cost:
+			enhance_cost[part_key] = int(part_cost[part_key])
+		return enhance_cost
 	if result.has("enhance_mod"):
 		return {"scrap": GameState.get_mod_enhancement_cost(str(result["enhance_mod"]))}
 	return (recipe.get("cost", {}) as Dictionary).duplicate(true)

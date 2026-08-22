@@ -1880,12 +1880,14 @@ func try_upgrade_bag_capacity() -> bool:
 
 
 func get_overclock_cost() -> int:
-	return roundi(900.0 * pow(1.55, scratcher_overclock_level) / 10.0) * 10
+	# ×1.55 → ×1.8. 오버클럭은 수입을 +8%/Lv 올리는 싱크라, 비용이 수입보다
+	# 확실히 빨리 커야 되먹임이 폭주하지 않는다(Lv10 321K, Lv15 6M).
+	return roundi(900.0 * pow(1.8, scratcher_overclock_level) / 10.0) * 10
 
 
 func get_overclock_catnip_cost() -> int:
 	# 오버클럭도 고철 단독이 아니다. 캣닢 없이는 꾹꾹이 라인이 한 칸도 못 큰다.
-	return roundi(60.0 * pow(1.6, scratcher_overclock_level) / 5.0) * 5
+	return roundi(60.0 * pow(1.7, scratcher_overclock_level) / 5.0) * 5
 
 
 func try_upgrade_scratcher_overclock() -> bool:
@@ -3638,7 +3640,36 @@ func get_weapon_enhancement_cost(weapon_id: String) -> int:
 		"mp5": weapon_factor = 1.2
 		"ak47": weapon_factor = 1.55
 		"double_barrel": weapon_factor = 1.4
-	return maxi(900, roundi(900.0 * weapon_factor * pow(1.11, float(level))))
+	# ×1.11 → ×1.28. 쉘터 수입이 지수(생산기 Lv당 ×1.9, 주민 수)로 크는데 강화
+	# 비용은 완만해 티어 3쯤엔 한 시간 수입으로 +40을 찍었다 — 싱크가 아니라
+	# 파워 폭주 경로였다. 이제 +10 10.6K, +20 126K, +30 1.5M, +40 17.7M:
+	# '항상 다음 버튼이 있지만 공짜는 아닌' 인크리멘탈 곡선.
+	return maxi(900, roundi(900.0 * weapon_factor * pow(1.28, float(level))))
+
+
+const WEAPON_ENHANCEMENT_PART_CYCLE: Array[String] = ["magazine_spring", "rubber_gasket", "scope_lens"]
+
+
+func get_weapon_enhancement_part_cost(weapon_id: String) -> Dictionary:
+	# 고단계 강화는 고철만으로 안 된다 — 필드 부품이 들어간다. +10까지는 고철만,
+	# +11~20 부품 1종, +21~30 2종, +31부터 3종(한 종류씩). 부품은 필드 전용이라
+	# 넘치는 고철에 '출정 이유'를 한 번 더 묶는다. 부품 종류는 단계마다 돌아가며
+	# 요구해 한 종류만 쌓아 두는 플레이를 막는다.
+	var next_level := get_weapon_enhancement_level(weapon_id) + 1
+	if next_level > MAX_WEAPON_ENHANCEMENT:
+		return {}
+	var part_kinds := 0
+	if next_level > 30:
+		part_kinds = 3
+	elif next_level > 20:
+		part_kinds = 2
+	elif next_level > 10:
+		part_kinds = 1
+	var cost := {}
+	for offset in part_kinds:
+		var part_id := WEAPON_ENHANCEMENT_PART_CYCLE[(next_level + offset) % WEAPON_ENHANCEMENT_PART_CYCLE.size()]
+		cost[part_id] = int(cost.get(part_id, 0)) + 1
+	return cost
 
 
 func try_enhance_weapon(weapon_id: String) -> bool:
@@ -3666,7 +3697,8 @@ func get_mod_enhancement_cost(mod_id: String) -> int:
 	var level := get_mod_enhancement_level(mod_id)
 	if level >= MAX_WEAPON_ENHANCEMENT:
 		return 0
-	return maxi(500, roundi(500.0 * pow(1.105, float(level))))
+	# ×1.105 → ×1.22 — 무기 강화와 같은 이유(수입 지수 vs 비용 완만).
+	return maxi(500, roundi(500.0 * pow(1.22, float(level))))
 
 
 func try_enhance_mod(mod_id: String) -> bool:

@@ -239,7 +239,9 @@ static func build_stats(
 			continue
 		occupied_slots[slot] = mod_id
 		var mod_level := clampi(int(mod_enhancement_levels.get(mod_id, 0)), 0, 99)
-		var mod_power := 1.0 + float(mod_level) * 0.012
+		# 선형(+1.2%/Lv, +99면 ×2.19) → 수렴(최대 +50%). 강화는 끝이 없어야 하지만
+		# 힘은 끝이 있어야 적이 종이가 되지 않는다.
+		var mod_power := 1.0 + 0.5 * (1.0 - pow(0.95, float(mod_level)))
 		var multipliers: Dictionary = mod_definition.get("multipliers", {})
 		for stat_name in multipliers:
 			var base_multiplier := float(multipliers[stat_name])
@@ -253,7 +255,13 @@ static func build_stats(
 			stats[stat_name] = overrides[stat_name]
 	var level := clampi(enhancement_level, 0, 99)
 	if level > 0:
-		stats["damage"] = float(stats.get("damage", 1.0)) * (1.0 + float(level) * 0.035)
+		# 피해 보너스: +10까지는 +3%/Lv(기존과 비슷), 그 뒤는 수렴 곡선 —
+		# +20 +58%, +30 +73%, +50 +87%, 극한 +90%. 예전 선형(+3.5%/Lv)은 +50이면
+		# ×2.75라 강화가 싱크가 아니라 전투를 지우는 경로였다.
+		var damage_bonus := 0.03 * float(level)
+		if level > 10:
+			damage_bonus = 0.30 + 0.60 * (1.0 - pow(0.94, float(level - 10)))
+		stats["damage"] = float(stats.get("damage", 1.0)) * (1.0 + damage_bonus)
 		stats["base_spread_deg"] = float(stats.get("base_spread_deg", 2.0)) * maxf(0.72, 1.0 - float(level) * 0.003)
 		stats["recoil"] = float(stats.get("recoil", 1.0)) * maxf(0.76, 1.0 - float(level) * 0.0025)
 		stats["durability_loss"] = float(stats.get("durability_loss", 1.0)) * maxf(0.55, 1.0 - float(level) * 0.0045)
