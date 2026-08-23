@@ -31,15 +31,16 @@ const GAMEPLAY_PHASES := [
 	"tutorial_extract",
 ]
 const DIALOGUE_LINES := [
-	# 화자는 고양이 '나비'. 하드보일드하게, 감상 대신 수수께끼를 문다.
-	# 앞 3줄 = 사라진 밤의 미스터리 제시, 카메라 리빌 후 4줄 = 신호와 출발.
-	"삼백 밤째. 사람의 도시는 대답이 없다.",
-	"도망친 게 아니다. 저녁상은 그대로였고, 문은 전부 안에서 잠겨 있었다.",
-	"무언가가 사람만을, 단 하룻밤에 지워 버렸다.",
-	"사흘 전부터 강 건너에서 빛이 깜빡인다. 세 번, 침묵, 다시 세 번.",
-	"기계는 저 혼자 신호를 만들지 않는다. 누군가 — 아직 보내고 있다.",
-	"가방엔 통조림 두 개, 탄창 하나. 다리 위엔 먼저 온 것들.",
-	"좋아. 발톱 세우고, 답을 가지러 가자.",
+	# 화자는 고양이 '나비'. 짧게, 한 줄에 한 가지만. 은유로 두 겹 싸지 않는다.
+	# 앞 3줄 = 그날 밤 무슨 일이 있었나, 카메라 리빌 후 4줄 = 신호와 출발.
+	# 마지막 줄이 이 게임 전체의 질문이다 — "왜 나만 남았나".
+	"삼백 밤 전, 이 도시에서 사람이 전부 사라졌다.",
+	"싸운 자국도, 도망친 자국도 없었다. 밥은 식탁에 그대로 있었다.",
+	"나는 그날 밤 창밖에 있었다. 그래서 남았다.",
+	"사흘 전, 강 건너에서 빛이 세 번 깜빡였다.",
+	"기계는 혼자 깜빡이지 않는다. 누가 살아 있다는 뜻이다.",
+	"통조림 두 개, 탄창 하나. 다리를 건넌다.",
+	"사람을 찾으면, 왜 나만 남았는지도 알게 되겠지.",
 ]
 
 const PLAYER_SPEED := 5.2
@@ -1571,8 +1572,8 @@ func _start_tutorial_move() -> void:
 	camera_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	camera_tween.tween_property(camera, "size", GAMEPLAY_CAMERA_SIZE, 0.6)
 	_show_objective(
-		"다시 걷기",
-		"왼쪽 스틱 — 발부터 깨운다." if touch_enabled else "W·A·S·D — 발부터 깨운다.",
+		"걷는다",
+		"왼쪽 스틱 — 다리부터 푼다." if touch_enabled else "W·A·S·D — 다리부터 푼다.",
 		"이동 0 / 3m"
 	)
 	_set_letterbox(false)
@@ -1703,11 +1704,11 @@ func _start_tutorial_dash() -> void:
 	phase = "tutorial_dash"
 	tutorial_transitioning = false
 	_show_objective(
-		"몸을 던져라",
+		"구른다",
 		(
-			"대시로 굴러라. 구르는 동안은 총알이 몸을 스치지 못한다."
+			"대시로 굴러라. 구르는 동안은 총알이 안 맞는다."
 			if touch_enabled
-			else "SPACE로 굴러라. 구르는 동안은 총알이 몸을 스치지 못한다."
+			else "SPACE로 굴러라. 구르는 동안은 총알이 안 맞는다."
 		),
 		"입력 대기"
 	)
@@ -1717,8 +1718,8 @@ func _start_tutorial_aim() -> void:
 	phase = "tutorial_aim"
 	tutorial_transitioning = false
 	_show_objective(
-		"어둠 너머를 보다",
-		"조준을 누른 채 — 시야가 열리고, 총구가 따라온다." if touch_enabled else "우클릭을 누른 채 — 시야가 열리고, 총구가 따라온다.",
+		"본다",
+		"조준을 누른 채 — 시야가 열리고 총구가 따라온다." if touch_enabled else "우클릭을 누른 채 — 시야가 열리고 총구가 따라온다.",
 		"조준 유지 0.5초"
 	)
 
@@ -1729,8 +1730,8 @@ func _start_tutorial_combat() -> void:
 	aim_hold_duration = 0.0
 	tutorial_enemies_activated = false
 	_show_objective(
-		"다리를 건너다",
-		"조준하고, 쏜다. 막힌 다리는 뚫는 것이다." if touch_enabled else "우클릭 조준, 좌클릭 사격. 막힌 다리는 뚫는 것이다.",
+		"다리를 건넌다",
+		"조준하고 쏜다. 막힌 길은 뚫는다." if touch_enabled else "우클릭 조준, 좌클릭 사격. 막힌 길은 뚫는다.",
 		"경계병 %d — 접근한다" % enemies_remaining
 	)
 
@@ -1792,7 +1793,7 @@ func _start_tutorial_extract() -> void:
 		if child.has_meta("tutorial_extraction_visual"):
 			child.visible = true
 	_show_objective(
-		"불빛이 있는 곳",
+		"불빛 쪽으로",
 		"신호가 오던 방향이다. 하수구로 내려간다.",
 		"하수구까지 %.0fm" % player.global_position.distance_to(sewer_exit.global_position)
 	)
@@ -1887,7 +1888,7 @@ func _try_enter_shelter() -> void:
 	restarting = true
 	player.velocity = Vector3.ZERO
 	objective_title.text = "쉘터 진입"
-	objective_detail.text = "쇠문 너머에서 발전기가 돌고 있다. 누군가 아직 불을 켜 두었다."
+	objective_detail.text = "쇠문 너머에서 발전기가 돌고 있다. 누가 아직 불을 켜 두었다."
 	objective_progress.text = ""
 	var tween := create_tween()
 	tween.tween_property(fade_rect, "color:a", 1.0, 0.9)

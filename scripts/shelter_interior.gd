@@ -118,11 +118,12 @@ const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const PIPE_EXIT_LABEL := "파이프를 타고 도시로 올라가기"
 # 매대 데이터는 GameState로 이사했다 — 방문마다 굴리고 세이브에 남아야 하므로
 # UI 상수로는 표현할 수 없다(GameState.MERCHANT_AMMO_GOODS / MERCHANT_SUNDRY_GOODS).
-# 행상인 입장 첫마디 — 떠돌이 상인은 떠도는 소문만 안다. 그 이상은 모른다.
+# 행상인 입장 첫마디 — 수다스럽고, 무슨 얘기를 하든 결국 물건 얘기로 돌아간다.
+# 떠도는 소문만 안다. 그 이상은 모른다.
 const MERCHANT_ENTRY_LINES := [
-	"“고맙다냥. 요즘 땅 밑에서 이상한 신호가 돈다는 소문이 있다냥… 자, 물건부터 보라냥.”",
-	"“살아 있는 쉘터는 냄새부터 다르다냥. 남쪽 봉쇄선 쪽은 요즘 아무도 안 다닌다냥.”",
-	"“좋은 물건만 골라 왔다냥. 소문은 덤이고, 값은 고철로 받는다냥.”",
+	"“이거? 남산 쪽에서 주웠어. 아, 거긴 묻지 마. 값이나 쳐.”",
+	"“땅 밑에서 신호가 돈다더라. 소문은 공짜야. 물건은 아니고.”",
+	"“살아 있는 쉘터는 냄새부터 달라. 자, 물건부터 봐.”",
 ]
 var player: CharacterBody3D
 var survivor: AnimatedSprite3D
@@ -920,7 +921,7 @@ func _interact_with_saja() -> void:
 		_open_pending_shelter_story()
 		return
 	if not GameState.is_contract_agent_available():
-		_show_status("사자 · 첫 출정에서 살아 돌아오면 쉘터 재건 계획을 맡기겠다.")
+		_show_status("사자 · 첫 출정에서 살아 돌아오면 재건 계획을 맡기겠습니다.")
 		return
 	_open_contract_ui()
 
@@ -1158,7 +1159,7 @@ func _spawn_story_emote(target: Node3D, glyph: String, color: Color) -> void:
 func _open_juhong_story() -> void:
 	var event: Dictionary = GameState.get_pending_juhong_event()
 	if event.is_empty():
-		_show_status("주홍은 더 남길 말 없이 도시로 돌아갔습니다.")
+		_show_status("주홍은 더 할 말 없이 도시로 돌아갔습니다.")
 		return
 	_open_contract_story(
 		str(event.get("title", "붉은 칼의 전령")),
@@ -2329,7 +2330,7 @@ func _refresh_contract_ui() -> void:
 	title_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	header.add_child(title_box)
 	var eyebrow := Label.new()
-	eyebrow.text = "쉘터 지킴이 사자  ·  공생 시설 건설 계약"
+	eyebrow.text = "쉘터 관리자 사자  ·  시설 건설 계약"
 	eyebrow.add_theme_font_override("font", FONT)
 	eyebrow.add_theme_font_size_override("font_size", 14)
 	eyebrow.add_theme_color_override("font_color", Color("#9fb2a9"))
@@ -2389,7 +2390,7 @@ func _refresh_contract_ui() -> void:
 		elif not commission.is_empty():
 			finished_body.text = "이번 의뢰는 완수했다. 다음 복귀 때 새 의뢰를 준비해 두지."
 		else:
-			finished_body.text = "사자가 약속한 시설은 모두 가동되었습니다.\n이제 주민 배치와 업그레이드로 쉘터를 거대한 생존 공장으로 키우세요."
+			finished_body.text = "계약한 시설은 전부 가동 중입니다.\n이제 주민 배치와 업그레이드로 쉘터를 키우세요."
 		finished_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		finished_body.add_theme_font_override("font", FONT)
 		finished_body.add_theme_font_size_override("font_size", 16)
@@ -2555,7 +2556,7 @@ func _add_contract_reward_chips(
 func _accept_current_contract() -> void:
 	var result := GameState.accept_current_contract()
 	if not bool(result.get("ok", false)):
-		contract_report_message = "사자: 지금 맡긴 계약부터 끝내자. 쉘터는 순서대로 세워야 해."
+		contract_report_message = "사자: 지금 맡긴 계약부터 끝내세요. 순서는 내가 정합니다."
 	else:
 		var definition := result.get("definition", {}) as Dictionary
 		var story_lines: Array[String] = []
@@ -2577,7 +2578,7 @@ func _accept_current_contract() -> void:
 func _claim_current_contract() -> void:
 	var result := GameState.claim_current_contract_reward()
 	if not bool(result.get("ok", false)):
-		contract_report_message = "사자: 아직 재료가 모자라. 계약 목표부터 확인하고 와."
+		contract_report_message = "사자: 수량이 모자랍니다. 목표부터 확인하고 오세요."
 	else:
 		var definition := result.get("definition", {}) as Dictionary
 		var construction_line := ""
@@ -2707,7 +2708,7 @@ func _open_merchant_arrival_dialog() -> void:
 	location.add_theme_color_override("font_color", Color("#a8bcb1"))
 	dialogue_box.add_child(location)
 	var line := Label.new()
-	line.text = "“문 좀 열어주실 수 있겠냥?”\n물건을 챙겨 온 행상인이 입장을 기다립니다."
+	line.text = "“문 좀 열어 줘. 물건 무겁다.”\n행상인이 입장을 기다립니다."
 	line.add_theme_font_override("font", FONT)
 	line.add_theme_font_size_override("font_size", 16)
 	line.add_theme_color_override("font_color", Color("#ebe5d4"))
@@ -2750,9 +2751,9 @@ func _open_merchant_intro_story() -> void:
 	# 사자 계약 대화 패널(타자기)을 재사용한다. 떠돌이 소문 장사꾼의 자기소개 —
 	# 세계관 비밀은 소문 수준까지만.
 	var intro_lines: Array[String] = [
-		"처음 보는 얼굴이군냥. 봉쇄선 밖을 도는 행상인이다냥 — 이름은 묻지 마라, 파는 놈한테 이름은 짐일 뿐이다냥.",
-		"고철이면 뭐든 구해 온다냥. 탄이든 부품이든… 어디서 났는지는 서로 묻지 않는 게 오래 사는 법이다냥.",
-		"소문도 판다냥. 요즘 땅 밑에서 이상한 신호가 돈다는 얘기, 첫 거래 기념으로 공짜로 얹어 주지냥. 자, 물건부터 보라냥.",
+		"처음 보는 얼굴이네. 봉쇄선 밖을 도는 행상인이야. 이름은 묻지 마.",
+		"고철이면 뭐든 구해 와. 탄이든 부품이든. 어디서 났는지도 묻지 마.",
+		"소문도 팔아. 첫 거래니까 하나 얹어 줄게 — 땅 밑에서 신호가 돈대. 자, 물건부터 봐.",
 	]
 	_open_contract_story(
 		"떠돌이 행상인의 첫 인사",
@@ -3740,19 +3741,21 @@ func _interact() -> void:
 	_update_stats()
 
 
-# 잡담은 정보가 아니라 공기다. 다만 그 공기에 세계의 비밀이 조금씩 섞여 나온다.
+# 잡담은 정보가 아니라 공기다. 겁먹은 보통 사람 말투, 짧은 문장.
+# 다만 그 공기에 사자에 대한 위화감이 한 방울씩 섞여 나온다.
 const RESIDENT_CHAT_LINES := [
-	"오늘도 사이렌은 남쪽에서만 울리더라.",
-	"사람들 냄새가 하나도 안 남았어. 삼백 밤이 지났는데도.",
-	"캣닢 배급이 늘었대. 나비 덕이라고들 해.",
-	"이상한 신호 얘기 들었어? 땅 밑에서 올라온다던데.",
+	"사이렌은 늘 남쪽에서만 울려.",
+	"사람 냄새가 하나도 안 남았어. 삼백 밤이나 됐는데.",
+	"캣닢 배급 늘었대. 나비 덕이라던데.",
+	"땅 밑에서 신호가 온대. 나는 안 들었어.",
 	"발톱 관리는 게으름이 아니야. 생존이지.",
-	"어젯밤 고철 더미에서 라디오가 지직거렸대. 아직 누가 있다는 거야.",
-	"같은 문장만 반복되는 방송이 있대. 소름 돋아서 더는 안 들었어.",
+	"고철 더미에서 라디오가 지직거렸대.",
+	"같은 문장만 반복되는 방송이 있대. 무서워서 껐대.",
 	"철근 교관 무섭지. 근데 그 덕에 다들 살아 있잖아.",
-	"바깥은 어때? …아니, 말 안 해도 돼. 얼굴에 다 써 있어.",
-	"꾹꾹이도 하다 보면 요령이 붙어. 뭐든 그래.",
-	"사자님은 뭔가 알고 있어. 말을 아끼는 것뿐이지.",
+	"바깥은 어때? …아니, 말 안 해도 돼.",
+	"꾹꾹이도 하다 보면 요령이 붙어.",
+	"사자님은 뭘 알고 있어. 말을 안 할 뿐이야.",
+	"사자님이 내 이름 적을 때, 손이 하나도 안 떨리더라.",
 	"비 오는 날엔 도시가 조용해. 그게 더 무서워.",
 ]
 

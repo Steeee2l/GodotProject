@@ -90,7 +90,8 @@ func _run() -> void:
 	var key_req := _req(goal, "namdaemun_depot_plans")
 	_check(not key_req.is_empty(), "③ goal includes key_item")
 	_check(bool(key_req.get("is_key", false)) and not bool(key_req.get("ok", true)), "③ key missing")
-	_check(str(key_req.get("hint", "")) == "남대문 폐시장 메인 미션 ‘상인 조합 금고’ 완료 보상", "③ key hint (got %s)" % str(key_req.get("hint")))
+	# 시나리오 전면 개편(2026-08)으로 미션 제목이 바뀌었다 — 힌트는 stage title을 그대로 끼워 넣는다.
+	_check(str(key_req.get("hint", "")) == "남대문 폐시장 메인 미션 ‘명단을 쓴 손’ 완료 보상", "③ key hint (got %s)" % str(key_req.get("hint")))
 	_check(not bool(goal.get("all_met", true)), "③ all_met false without key")
 	var line3: String = SHELTER_REQUISITION.format_goal_line(goal)
 	print("  ③ LINE=%s" % line3)
@@ -99,7 +100,7 @@ func _run() -> void:
 	_check(int(game_state.get("shelter_tier")) == 2 and int(game_state.get("scrap")) == 150000, "③ refusal keeps scrap/tier")
 	var reason: String = SHELTER_REQUISITION.get_upgrade_block_reason()
 	print("  ③ REASON=%s" % reason)
-	_check(reason == "확장 불가 · 남대문 창고 설계도 필요 — 남대문 폐시장 메인 미션 ‘상인 조합 금고’ 완료 보상", "③ block reason key")
+	_check(reason == "확장 불가 · 남대문 창고 설계도 필요 — 남대문 폐시장 메인 미션 ‘명단을 쓴 손’ 완료 보상", "③ block reason key")
 	_check(SHELTER_REQUISITION.get_settlement_line() == "다음 목표까지 남대문 창고 설계도 · 남대문 폐시장 메인 미션", "③ settlement line key (got %s)" % SHELTER_REQUISITION.get_settlement_line())
 	var goal_zones: Array[String] = SHELTER_REQUISITION.get_goal_zone_ids()
 	_check(goal_zones.size() == 1 and goal_zones[0] == "namdaemun_market", "③ goal zone = namdaemun (got %s)" % str(goal_zones))

@@ -153,8 +153,8 @@ const TEMPLATES := [
 	},
 	{
 		"type": "investigate",
-		"title": "사라진 운송대의 흔적",
-		"description": "봉쇄선 너머로 사라진 운송대의 표식을 차례로 읽는다.",
+		"title": "수송 표식 추적",
+		"description": "지하로 내려간 수송의 표식을 차례로 읽는다.",
 		"target_count": 3,
 		"investigate_duration": 1.7,
 		"guard_count": 2,
