@@ -8,6 +8,11 @@ const RESIDENT_PORTRAITS := preload("res://scripts/resident_portrait_catalog.gd"
 
 @export var interaction_radius := 4.0
 
+# 좌석이 400칸, 대기 주민이 900명이면 카드를 그 수만큼 만드는 순간 모달이 멈춘다.
+# 앞에서부터 이만큼만 그리고 나머지는 요약 카드 한 장이 대신한다.
+const SEAT_CARD_RENDER_LIMIT := 36
+const BENCH_CARD_RENDER_LIMIT := 36
+
 # 씬 없이 로직 노드로만 인스턴스될 수 있다 — 스프라이트는 없을 수 있다.
 @onready var sprite: Sprite3D = get_node_or_null("BankSprite") as Sprite3D
 
@@ -206,17 +211,41 @@ func _rebuild_ui() -> void:
 	body.add_theme_constant_override("separation", 10)
 	content.add_child(body)
 
-	body.add_child(_label("작업 좌석 · 앉은 고양이가 고철을 만듭니다", 14, Color("#e3decf")))
+	body.add_child(_seat_header(
+		"작업 좌석 · 앉은 고양이가 고철을 만듭니다",
+		Color("#e3decf"),
+		_assign_all_workers,
+		_clear_all_workers
+	))
+	# 좌석 목록도 스크롤 안에 산다 — 좌석이 400칸이면 벤치를 화면 밖으로 밀어낸다.
+	var seat_scroll := HudStyle.make_scroll()
+	seat_scroll.name = "ScratcherSeatScroll"
+	seat_scroll.custom_minimum_size = Vector2(0, 150)
+	seat_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	seat_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	seat_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(seat_scroll)
 	var seat_row := HFlowContainer.new()
+	seat_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	seat_row.add_theme_constant_override("h_separation", 8)
 	seat_row.add_theme_constant_override("v_separation", 8)
-	body.add_child(seat_row)
+	seat_scroll.add_child(seat_row)
 	var assigned_ids: Array[String] = []
+	var assigned_set: Dictionary = {}
 	for worker_id in GameState.assigned_worker_ids:
 		assigned_ids.append(str(worker_id))
-	for seat_index in slots:
+		assigned_set[str(worker_id)] = true
+	var rendered_seats := mini(slots, SEAT_CARD_RENDER_LIMIT)
+	for seat_index in rendered_seats:
 		var seat_id := assigned_ids[seat_index] if seat_index < assigned_ids.size() else ""
 		seat_row.add_child(_portrait_card(seat_id, true, slots))
+	if slots > rendered_seats:
+		seat_row.add_child(_overflow_card(
+			"그 외 %d석" % (slots - rendered_seats),
+			"앉은 고양이 %s" % GameState.format_compact_number(
+				maxi(0, assigned_ids.size() - rendered_seats)
+			)
+		))
 
 	body.add_child(_label(
 		"대기 주민 · 눌러서 좌석에 앉히기"
@@ -228,7 +257,7 @@ func _rebuild_ui() -> void:
 	if GameState.resident_cat_ids.is_empty():
 		body.add_child(_empty_resident_state(
 			"구출한 주민이 없습니다.",
-			"도시에서 주민을 구출해 함께 탈출하면 배치할 수 있습니다.",
+			"도시에서 구출하거나 영입소에서 불러오면 배치할 수 있습니다.",
 			compact
 		))
 	else:
@@ -243,11 +272,22 @@ func _rebuild_ui() -> void:
 		bench.add_theme_constant_override("h_separation", 8)
 		bench.add_theme_constant_override("v_separation", 8)
 		bench_scroll.add_child(bench)
+		var bench_shown := 0
+		var bench_hidden := 0
 		for resident_variant in GameState.resident_cat_ids:
 			var resident_id := str(resident_variant)
-			if assigned_ids.has(resident_id):
+			if assigned_set.has(resident_id):
 				continue  # 이미 좌석에 앉아 있다.
+			if bench_shown >= BENCH_CARD_RENDER_LIMIT:
+				bench_hidden += 1
+				continue
 			bench.add_child(_portrait_card(resident_id, false, slots))
+			bench_shown += 1
+		if bench_hidden > 0:
+			bench.add_child(_overflow_card(
+				"그 외 %s명" % GameState.format_compact_number(bench_hidden),
+				"전원 배치로 한 번에"
+			))
 
 	_rebuild_actions()
 
@@ -421,6 +461,75 @@ func _portrait_card(resident_id: String, is_seat: bool, slots: int) -> Button:
 		GameState.format_compact_number(GameState.get_resident_reroll_cost(resident_id)),
 	]
 	return button
+
+
+func _seat_header(title: String, color: Color, assign_all: Callable, clear_all: Callable) -> Control:
+	# 제목 줄 오른쪽에 일괄 배치·해제. 좌석이 400칸이면 한 장씩 누르게 두는 건
+	# UI가 아니라 벌이다.
+	var row := HBoxContainer.new()
+	row.name = "SeatHeaderRow"
+	row.add_theme_constant_override("separation", 8)
+	var title_label := _label(title, 14, color)
+	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(title_label)
+	var assign_button := _button("전원 배치")
+	assign_button.name = "AssignAllButton"
+	assign_button.custom_minimum_size = Vector2(88, 36)
+	assign_button.pressed.connect(assign_all)
+	row.add_child(assign_button)
+	var clear_button := _button("전원 해제")
+	clear_button.name = "ClearAllButton"
+	clear_button.custom_minimum_size = Vector2(88, 36)
+	clear_button.pressed.connect(clear_all)
+	row.add_child(clear_button)
+	return row
+
+
+func _overflow_card(title: String, subtitle: String) -> Control:
+	# 카드를 다 그리지 않았다는 사실을 숨기지 않는다 — "그 외 N석"이 그 자리를 지킨다.
+	var panel := PanelContainer.new()
+	panel.name = "SeatOverflowCard"
+	panel.custom_minimum_size = Vector2(104, 128)
+	panel.add_theme_stylebox_override(
+		"panel", _panel_style(Color(0.03, 0.035, 0.03, 0.9), Color("#4a5a4f"))
+	)
+	var center := CenterContainer.new()
+	panel.add_child(center)
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 4)
+	center.add_child(box)
+	var title_label := _label(title, 14, Color("#c8d3cb"))
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	box.add_child(title_label)
+	var subtitle_label := _label(subtitle, 11, Color("#7f8d85"))
+	subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	box.add_child(subtitle_label)
+	return panel
+
+
+func _assign_all_workers() -> void:
+	var added: int = GameState.assign_all_workers_to_scratcher()
+	if added <= 0:
+		_set_feedback("좌석에 앉힐 대기 주민이 없습니다.", false)
+		return
+	GameState.save_persistent_state()
+	get_tree().call_group("shelter_resident_host", "refresh_shelter_residents", false)
+	_set_feedback("주민 %s명을 좌석에 앉혔습니다." % GameState.format_compact_number(added), true)
+	_rebuild_ui()
+
+
+func _clear_all_workers() -> void:
+	var removed: int = GameState.unassign_all_workers_from_scratcher()
+	if removed <= 0:
+		_set_feedback("좌석에 앉아 있는 주민이 없습니다.", false)
+		return
+	GameState.save_persistent_state()
+	get_tree().call_group("shelter_resident_host", "refresh_shelter_residents", false)
+	_set_feedback("주민 %s명을 좌석에서 일으켰습니다." % GameState.format_compact_number(removed), true)
+	_rebuild_ui()
 
 
 func _reroll_worker(resident_id: String) -> void:

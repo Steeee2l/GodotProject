@@ -182,7 +182,14 @@ func _check_scratcher_bank() -> void:
 		upgrades += 1
 	_check(upgrades == 7 and int(game_state.get("scratcher_bank_level")) == 8, "③ Lv1→Lv8 7회 확장 뒤 멈춤 (level=%d)" % int(game_state.get("scratcher_bank_level")))
 	_check(is_equal_approx(float(game_state.get("scratcher_multiplier")), pow(1.9, 7.0)), "③ Lv8 배율 1.9^7 ≈ ×%.1f" % pow(1.9, 7.0))
-	_check(int(GAME_STATE_SCRIPT.KNEADING_SLOTS_BY_TIER.get(5, 0)) == 24, "③ 티어 5 좌석 24")
+	# 좌석 수는 24 → 400으로 열렸다(인크리멘탈 수용량 개편). 수입 곡선을 지키는 것은
+	# 이제 좌석 수가 아니라 '유효 배치수'다 — 크라우딩을 통과한 값이 예전 24와 같아야 한다.
+	_check(int(GAME_STATE_SCRIPT.KNEADING_SLOTS_BY_TIER.get(5, 0)) == 400, "③ 티어 5 좌석 400")
+	var effective_t5 := float(game_state.call("get_line_effective_workers", 400))
+	_check(
+		absf(effective_t5 - 24.0) <= 1.5,
+		"③ 티어 5 유효 배치수 ≈ 24 (실측 %.2f)" % effective_t5
+	)
 	# 세이브 왕복에서 Lv8이 5로 깎이지 않는다
 	var snapshot: Dictionary = game_state.call("build_persistent_snapshot") if game_state.has_method("build_persistent_snapshot") else {}
 	if not snapshot.is_empty():

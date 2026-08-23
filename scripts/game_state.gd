@@ -192,6 +192,13 @@ var pre_raid_snapshot: Dictionary = {}
 var workbench_starter_parts_claimed: bool = false
 var shelter_scrap_fraction: float = 0.0
 var shelter_catnip_fraction: float = 0.0
+# 자연 유입의 소수점 누적(1.0을 넘으면 고양이 한 마리가 합류한다).
+var resident_drift_fraction: float = 0.0
+# 주민 기록 정규화 캐시. _ensure_resident_records()는 get_resident_trait() 경유로
+# 매 프레임 수백 번 불린다 — 900명 규모에서 매번 전 주민을 deep duplicate 하면
+# 프레임이 통째로 녹는다. 실제로 바뀐 게 없으면 즉시 돌아가게 한다.
+var _resident_records_key: String = ""
+var _resident_id_set: Dictionary = {}
 # 이번 출정에만 적용되는 츄르 버프. 출정 종료/사망 시 소멸한다.
 var active_churu_buffs: Array[String] = []
 # 판 도중 강제 종료(Alt+F4) 감시 — 출정 시작에 켜고 정상 복귀에 끈다.
@@ -447,6 +454,8 @@ const SHELTER_FACILITY_NAMES := {
 	"workbench": "무기 작업대",
 	"scratcher_bank": "꾹꾹이 고철 생산기",
 	"catnip_scraper": "스크래핑 캣닢 생산기",
+	# 영입소는 3D 기물이 없다 — 운영 독의 버튼과 모달로만 존재한다(쉘터 UI-first).
+	"recruit": "주민 영입소",
 }
 const SHELTER_FACILITY_NAMES_V2 := {
 	"bed": "개인 침상",
@@ -455,6 +464,7 @@ const SHELTER_FACILITY_NAMES_V2 := {
 	"workbench": "무기 작업대",
 	"scratcher_bank": "꾹꾹이 고철 생산기",
 	"catnip_scraper": "스크래핑 캣닢 생산기",
+	"recruit": "주민 영입소",
 }
 const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 	{
@@ -817,10 +827,32 @@ const STORAGE_UPGRADE_COSTS := {
 	4: {"scrap": 170000, "churu": 2},
 	5: {"scrap": 700000, "churu": 4},
 }
-const SHELTER_CAPACITY_BY_TIER := {1: 5, 2: 10, 3: 20, 4: 35, 5: 50}
-# 티어 5 좌석 20 → 24(대개편 3단계): 최종 티어 수입 상한을 한 칸 더 연다.
-const KNEADING_SLOTS_BY_TIER := {1: 3, 2: 6, 3: 10, 4: 15, 5: 24}
-const CATNIP_SLOTS_BY_TIER := {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
+# ── 인크리멘탈 수용량 ─────────────────────────────────────────
+# 티어당 +5명씩 늘던 예전 표는 "쉘터가 자란다"는 감각을 못 줬다. 인크리멘탈의
+# 그림은 화면이 고양이로 빠글빠글해지는 것이다 — 티어마다 3배 이상 늘린다.
+# 좌석도 같이 늘리되, 수입은 아래 배치 체감 곡선이 눌러 준다(밸런스 밴드 유지).
+const SHELTER_CAPACITY_BY_TIER := {1: 8, 2: 30, 3: 100, 4: 300, 5: 900}
+const KNEADING_SLOTS_BY_TIER := {1: 4, 2: 14, 3: 45, 4: 130, 5: 400}
+const CATNIP_SLOTS_BY_TIER := {1: 2, 2: 6, 3: 18, 4: 50, 5: 150}
+# ── 배치 체감(크라우딩) ───────────────────────────────────────
+# 좌석이 24 → 400이 되면 시간당 고철이 그대로 16배가 된다. 그러면 3단계에서
+# 맞춰 둔 강화 곡선(+50 캐주얼 16h / +99 92h 밴드)이 통째로 무너진다.
+# 그래서 "한 생산기에 붙는 손이 많아질수록 서로 부딪힌다"를 공식으로 만든다.
+#
+#   유효 배치수 = min(N, FREE) + max(0, N - FREE)^EXPONENT
+#
+# 꾹꾹이 라인: FREE=3, EXPONENT=0.51이면 유효 배치수가 티어별로
+# 4.0/6.4/9.9/15.2/24.9 — 예전 좌석 수(3/6/10/15/24)와 사실상 같다.
+# 보이는 고양이는 16배가 되지만 시간당 수입은 그대로다. 그러면서도 배치수를
+# 2배로 늘리면 언제나 +42%가 붙어 "더 모으면 더 번다"는 약속은 안 깨진다.
+const WORKER_CROWDING_FREE := 3
+const WORKER_CROWDING_EXPONENT := 0.51
+# 착즙 라인은 더 세게 눌린다. 여기서 한정 자원은 손이 아니라 캣닢풀이라
+# 고양이를 아무리 붙여도 뜯을 잎이 그만큼 늘지는 않는다. FREE=1·0.35에서
+# 유효 배치수는 2.0/2.8/3.7/4.9/6.7 — 예전(1/2/3/4/5)의 1.2~1.4배에 머문다.
+# 캣닢이 폭주하면 고철 생산기 확장이 앞당겨져 강화 곡선까지 함께 무너진다.
+const CATNIP_CROWDING_FREE := 1
+const CATNIP_CROWDING_EXPONENT := 0.35
 # 예전 곡선은 티어마다 약 13배(30k→400k→5M→60M)라 중반부터 출정이 재미가
 # 아니라 고철 대기가 됐다. 스텝을 약 5배로 낮춰 진행이 계단이 아니라
 # 곡선이 되게 한다. 츄르 요구는 완만히 유지해 성취감은 남긴다.
@@ -845,6 +877,27 @@ const SHELTER_UPGRADE_COSTS := {
 const RESIDENT_REROLL_BASE_COST := 1
 const RESIDENT_REROLL_STEP := 1
 const RESIDENT_REROLL_MAX_COST := 5
+
+# ── 주민 영입 ─────────────────────────────────────────────────
+# 수용량이 900이 됐는데 획득 경로가 출정 후송(판당 1~2)뿐이면 그 900은 영원히
+# 숫자로만 남는다. 두 축을 더한다: 고철·캣닢으로 부르는 "영입"과 시간이 데려오는
+# "자연 유입". 출정 후송은 그대로 보너스로 남는다.
+#
+# 비용은 티어 구간 안에서 지수로 오른다. 티어를 올리면 새 구간의 첫 마리는 다시
+# 싸진다 — "확장했더니 또 빠글빠글해진다"가 티어업의 보상이 되게. 구간 끝의 한
+# 마리는 첫 마리의 RESIDENT_RECRUIT_BAND_SPAN배가 든다.
+const RESIDENT_RECRUIT_COSTS := {
+	1: {"scrap": 800, "catnip": 40},
+	2: {"scrap": 6000, "catnip": 260},
+	3: {"scrap": 90000, "catnip": 3200},
+	4: {"scrap": 2200000, "catnip": 65000},
+	5: {"scrap": 90000000, "catnip": 2200000},
+}
+const RESIDENT_RECRUIT_BAND_SPAN := 12.0
+# 자연 유입: 티어가 높을수록, 이미 사는 고양이가 많을수록 소문이 빨리 퍼진다.
+# 오프라인 정산에도 붙지만 SHELTER_OFFLINE_MAX_SECONDS(8h) 상한을 그대로 쓴다.
+const RESIDENT_DRIFT_PER_TIER_HOUR := 0.5
+const RESIDENT_DRIFT_PER_RESIDENT_HOUR := 0.02
 
 const CATNIP_BOOST_COST := 900
 const CATNIP_BOOST_DURATION_SECONDS := 600
@@ -1635,6 +1688,11 @@ func sync_shelter_progression_milestones() -> Array[String]:
 	if is_contract_agent_available():
 		if unlock_shelter_facility("training"):
 			newly_unlocked.append("training")
+	# 영입소는 생산 라인이 돌기 시작한 뒤에 열린다. 고철·캣닢을 벌 수단이
+	# 없는 상태에서 "고양이를 사세요"는 안내가 아니라 벽이다.
+	if is_shelter_facility_unlocked("scratcher_bank"):
+		if unlock_shelter_facility("recruit"):
+			newly_unlocked.append("recruit")
 	for contract_value in SAJA_FACILITY_CONTRACTS:
 		var contract := contract_value as Dictionary
 		if not completed_contract_ids.has(str(contract.get("id", ""))):
@@ -3185,12 +3243,181 @@ func try_add_rescued_workers(amount: int) -> int:
 	return accepted
 
 
+func get_resident_recruit_cost() -> Dictionary:
+	# 지금 한 마리를 부르는 값. 현재 티어 구간을 얼마나 채웠는지로 정해진다.
+	var tier := clampi(shelter_tier, 1, 5)
+	var base := RESIDENT_RECRUIT_COSTS.get(tier, RESIDENT_RECRUIT_COSTS[1]) as Dictionary
+	var band_floor := int(SHELTER_CAPACITY_BY_TIER.get(tier - 1, 0))
+	var band := maxi(1, get_resident_capacity() - band_floor)
+	_ensure_resident_records()
+	var filled := clampi(resident_cat_ids.size() - band_floor, 0, band)
+	var multiplier := pow(RESIDENT_RECRUIT_BAND_SPAN, float(filled) / float(band))
+	return {
+		"scrap": maxi(1, roundi(float(base.get("scrap", 800)) * multiplier)),
+		"catnip": maxi(1, roundi(float(base.get("catnip", 40)) * multiplier)),
+	}
+
+
+func try_recruit_resident() -> Dictionary:
+	# 실패는 조용히 두지 않는다 — 모달이 그대로 문구로 쓸 사유를 돌려준다.
+	if not is_shelter_facility_unlocked("recruit"):
+		return {"ok": false, "reason": "locked"}
+	_ensure_resident_records()
+	if get_available_resident_slots() <= 0:
+		return {"ok": false, "reason": "capacity"}
+	var cost := get_resident_recruit_cost()
+	var scrap_cost := int(cost.get("scrap", 0))
+	var catnip_cost := int(cost.get("catnip", 0))
+	if scrap < scrap_cost:
+		return {"ok": false, "reason": "scrap", "cost": cost}
+	if catnip < catnip_cost:
+		return {"ok": false, "reason": "catnip", "cost": cost}
+	scrap -= scrap_cost
+	catnip -= catnip_cost
+	if try_add_rescued_workers(1) <= 0:
+		# 방어적 롤백 — 수용량 검사와 실제 합류 사이가 어긋나면 값을 돌려준다.
+		scrap += scrap_cost
+		catnip += catnip_cost
+		return {"ok": false, "reason": "capacity", "cost": cost}
+	return {"ok": true, "cost": cost, "resident_id": str(resident_cat_ids[-1])}
+
+
+func get_resident_drift_per_hour() -> float:
+	# 소문을 듣고 제 발로 오는 고양이. 라인이 돌기 시작한 뒤부터, 수용량이 찰
+	# 때까지만 흐른다.
+	if not is_shelter_facility_unlocked("scratcher_bank"):
+		return 0.0
+	if get_available_resident_slots() <= 0:
+		return 0.0
+	return (
+		float(clampi(shelter_tier, 1, 5)) * RESIDENT_DRIFT_PER_TIER_HOUR
+		+ float(resident_cat_ids.size()) * RESIDENT_DRIFT_PER_RESIDENT_HOUR
+	)
+
+
+func accumulate_resident_drift(seconds: float) -> int:
+	# 소수점은 저장된다 — 짧게 여러 번 들어와도 손해가 없어야 한다.
+	_ensure_resident_records()
+	if get_available_resident_slots() <= 0:
+		resident_drift_fraction = 0.0
+		return 0
+	var rate := get_resident_drift_per_hour()
+	if rate <= 0.0:
+		return 0
+	resident_drift_fraction += rate * maxf(0.0, seconds) / 3600.0
+	var joined := int(floor(resident_drift_fraction))
+	if joined <= 0:
+		return 0
+	resident_drift_fraction -= float(joined)
+	return try_add_rescued_workers(joined)
+
+
+func _busy_worker_set() -> Dictionary:
+	var busy: Dictionary = {}
+	for worker_id in assigned_worker_ids:
+		busy[worker_id] = true
+	for worker_id in assigned_catnip_worker_ids:
+		busy[worker_id] = true
+	return busy
+
+
+func assign_all_workers_to_scratcher() -> int:
+	# 좌석이 400개면 한 장씩 누르게 두는 건 UI가 아니라 벌이다.
+	if not is_shelter_facility_unlocked("scratcher_bank"):
+		return 0
+	_ensure_resident_records()
+	var busy := _busy_worker_set()
+	var limit := get_scratcher_worker_slots()
+	var added := 0
+	for worker_id in resident_cat_ids:
+		if assigned_worker_ids.size() >= limit:
+			break
+		if busy.has(worker_id):
+			continue
+		busy[worker_id] = true
+		assigned_worker_ids.append(str(worker_id))
+		added += 1
+	return added
+
+
+func unassign_all_workers_from_scratcher() -> int:
+	var removed := assigned_worker_ids.size()
+	assigned_worker_ids.clear()
+	return removed
+
+
+func assign_all_workers_to_catnip() -> int:
+	if not is_shelter_facility_unlocked("catnip_scraper"):
+		return 0
+	_ensure_resident_records()
+	var busy := _busy_worker_set()
+	var limit := get_catnip_worker_slots()
+	var added := 0
+	for worker_id in resident_cat_ids:
+		if assigned_catnip_worker_ids.size() >= limit:
+			break
+		if busy.has(worker_id):
+			continue
+		busy[worker_id] = true
+		assigned_catnip_worker_ids.append(str(worker_id))
+		added += 1
+	return added
+
+
+func unassign_all_workers_from_catnip() -> int:
+	var removed := assigned_catnip_worker_ids.size()
+	assigned_catnip_worker_ids.clear()
+	return removed
+
+
 func get_scratcher_worker_slots() -> int:
 	return int(KNEADING_SLOTS_BY_TIER.get(shelter_tier, 3))
 
 
 func get_catnip_worker_slots() -> int:
 	return int(CATNIP_SLOTS_BY_TIER.get(shelter_tier, 1))
+
+
+func get_line_effective_workers(
+	assigned_count: int,
+	free_workers: int = WORKER_CROWDING_FREE,
+	exponent: float = WORKER_CROWDING_EXPONENT
+) -> float:
+	# 배치수 N이 실제로 몇 명 몫을 하는가. 앞의 free_workers명은 온전히 일하고,
+	# 그 뒤부터는 지수로 완만하게 체감한다.
+	var count := maxi(0, assigned_count)
+	if count <= free_workers:
+		return float(count)
+	return float(free_workers) + pow(float(count - free_workers), exponent)
+
+
+func get_catnip_line_effective_workers(assigned_count: int) -> float:
+	return get_line_effective_workers(
+		assigned_count, CATNIP_CROWDING_FREE, CATNIP_CROWDING_EXPONENT
+	)
+
+
+func get_line_crowding_factor(
+	assigned_count: int,
+	free_workers: int = WORKER_CROWDING_FREE,
+	exponent: float = WORKER_CROWDING_EXPONENT
+) -> float:
+	# 주민 한 명에게 곱해지는 계수(유효 배치수 / 배치수). 화면 위에 뜨는 생산
+	# 팝업과 합계가 어긋나지 않도록 모든 산출 경로가 이 값을 곱한다.
+	var count := maxi(0, assigned_count)
+	if count <= 0:
+		return 1.0
+	return get_line_effective_workers(count, free_workers, exponent) / float(count)
+
+
+func get_scratcher_crowding_factor() -> float:
+	return get_line_crowding_factor(assigned_worker_ids.size())
+
+
+func get_catnip_crowding_factor() -> float:
+	return get_line_crowding_factor(
+		assigned_catnip_worker_ids.size(), CATNIP_CROWDING_FREE, CATNIP_CROWDING_EXPONENT
+	)
 
 
 func get_active_scratcher_workers() -> int:
@@ -3212,6 +3439,13 @@ func get_active_catnip_workers() -> int:
 func get_resident_trait(worker_id: String) -> Dictionary:
 	_ensure_resident_records()
 	return (resident_traits.get(worker_id, RESIDENT_TRAIT_PRESETS[4]) as Dictionary).duplicate(true)
+
+
+func _resident_trait_ref(worker_id: String) -> Dictionary:
+	# 생산 합계 같은 핫 루프 전용 — 복사 없이 원본을 읽는다(수정 금지).
+	# 좌석 400칸 × 매 프레임이면 duplicate(true) 한 번의 값이 프레임이 된다.
+	_ensure_resident_records()
+	return resident_traits.get(worker_id, RESIDENT_TRAIT_PRESETS[4]) as Dictionary
 
 
 func _resident_trait_field(worker_id: String, key: String, default_value: Variant) -> Variant:
@@ -3243,7 +3477,7 @@ func get_resident_trait_quirk(worker_id: String) -> String:
 
 
 func get_worker_production_per_second(worker_id: String, production_kind: String) -> float:
-	var trait_data := get_resident_trait(worker_id)
+	var trait_data := _resident_trait_ref(worker_id)
 	match production_kind:
 		"scratcher", "kneading":
 			if not is_shelter_facility_unlocked("scratcher_bank"):
@@ -3253,7 +3487,12 @@ func get_worker_production_per_second(worker_id: String, production_kind: String
 			# 배율은 반올림 밖에서 곱한다. 안에서 곱하면 특성이 낮은 주민은
 			# 강화를 해도 정수 반올림에 먹혀 산출이 그대로다(죽은 업그레이드).
 			var base_rate := float(maxi(1, roundi(float(trait_data.get("kneading", 1.0)))))
-			return base_rate * scratcher_multiplier * get_production_multiplier()
+			return (
+				base_rate
+				* scratcher_multiplier
+				* get_production_multiplier()
+				* get_scratcher_crowding_factor()
+			)
 		"catnip":
 			if not is_shelter_facility_unlocked("catnip_scraper"):
 				return 0.0
@@ -3268,6 +3507,7 @@ func get_worker_production_per_second(worker_id: String, production_kind: String
 					)
 				))
 				* catnip_scraper_multiplier
+				* get_catnip_crowding_factor()
 			)
 	return 0.0
 
@@ -3381,13 +3621,14 @@ func get_base_scrap_per_hour() -> float:
 		return 0.0
 	var total_per_second := 0.0
 	for worker_id in assigned_worker_ids:
-		var trait_data := get_resident_trait(worker_id)
+		var trait_data := _resident_trait_ref(worker_id)
 		# 배율은 반올림 밖에서 — get_worker_production_per_second와 같은 이유.
 		total_per_second += (
 			float(maxi(1, roundi(float(trait_data.get("kneading", 1.0)))))
 			* scratcher_multiplier
 		)
-	return total_per_second * 3600.0
+	# 배치 체감은 라인 합계에 한 번만 곱한다(주민별 계산과 같은 값).
+	return total_per_second * get_scratcher_crowding_factor() * 3600.0
 
 
 func get_scrap_per_second() -> float:
@@ -3420,6 +3661,8 @@ func tick_shelter_live(delta: float) -> int:
 	var catnip_rate := get_catnip_per_second()
 	# 연료 게이트는 없다 — 주민이 배치돼 있으면 두 라인은 늘 함께 돈다.
 	var work_delta := safe_delta
+	# 온라인 동안에도 소문은 퍼진다 — 서 있기만 해도 가끔 한 마리가 들어온다.
+	accumulate_resident_drift(safe_delta)
 	var gain := scrap_rate * work_delta
 	var catnip_gain := catnip_rate * work_delta
 	shelter_scrap_fraction += gain
@@ -3436,7 +3679,20 @@ func tick_shelter_live(delta: float) -> int:
 	return whole
 
 
+func invalidate_resident_records_cache() -> void:
+	_resident_records_key = ""
+	_resident_id_set.clear()
+
+
 func _ensure_resident_records() -> void:
+	var cache_key := "%d:%d:%d" % [rescued_workers, shelter_tier, resident_traits.size()]
+	if cache_key == _resident_records_key and resident_cat_ids.size() == rescued_workers:
+		return
+	var used_names: Dictionary = {}
+	for resident_value in resident_traits.values():
+		var used_name := str((resident_value as Dictionary).get("display_name", ""))
+		if not used_name.is_empty():
+			used_names[used_name] = true
 	while resident_cat_ids.size() < rescued_workers:
 		var next_index := resident_cat_ids.size() + 1
 		var resident_id := "resident_%03d" % next_index
@@ -3444,41 +3700,48 @@ func _ensure_resident_records() -> void:
 		var new_record: Dictionary = RESIDENT_TRAIT_PRESETS[
 			(next_index - 1) % RESIDENT_TRAIT_PRESETS.size()
 		].duplicate(true)
-		resident_traits[resident_id] = _ensure_resident_identity(resident_id, new_record)
+		resident_traits[resident_id] = _ensure_resident_identity(
+			resident_id, new_record, used_names
+		)
 	if resident_cat_ids.size() > rescued_workers:
 		resident_cat_ids.resize(rescued_workers)
+	_resident_id_set.clear()
 	for resident_id in resident_cat_ids:
+		_resident_id_set[resident_id] = true
 		var record: Dictionary
 		if resident_traits.has(resident_id):
-			record = (resident_traits[resident_id] as Dictionary).duplicate(true)
+			record = resident_traits[resident_id] as Dictionary
 		else:
 			var resident_index := maxi(0, int(resident_id.trim_prefix("resident_")) - 1)
 			record = RESIDENT_TRAIT_PRESETS[resident_index % RESIDENT_TRAIT_PRESETS.size()].duplicate(true)
-		resident_traits[resident_id] = _ensure_resident_identity(resident_id, record)
+		resident_traits[resident_id] = _ensure_resident_identity(
+			resident_id, record, used_names
+		)
 	_sanitize_assigned_workers()
+	_resident_records_key = "%d:%d:%d" % [rescued_workers, shelter_tier, resident_traits.size()]
 
 
-func _ensure_resident_identity(resident_id: String, record: Dictionary) -> Dictionary:
+func _ensure_resident_identity(
+	resident_id: String, record: Dictionary, used_names: Dictionary
+) -> Dictionary:
 	if str(record.get("display_name", "")).is_empty():
-		var used_names: Array[String] = []
-		for resident_value in resident_traits.values():
-			var resident_record := resident_value as Dictionary
-			var used_name := str(resident_record.get("display_name", ""))
-			if not used_name.is_empty():
-				used_names.append(used_name)
 		var start_index := posmod(hash("%s:%d" % [resident_id, map_seed]), RESIDENT_NAME_POOL.size())
 		var selected_name := ""
-		for offset in RESIDENT_NAME_POOL.size():
-			var candidate := RESIDENT_NAME_POOL[(start_index + offset) % RESIDENT_NAME_POOL.size()]
-			if not used_names.has(candidate):
-				selected_name = candidate
-				break
+		# 이름 풀(약 55개)보다 주민이 많아지는 건 이제 정상이다 — 풀이 다 찼으면
+		# 곧바로 번호 이름으로 간다(풀 전체를 다시 훑지 않는다).
+		if used_names.size() < RESIDENT_NAME_POOL.size():
+			for offset in RESIDENT_NAME_POOL.size():
+				var candidate := RESIDENT_NAME_POOL[(start_index + offset) % RESIDENT_NAME_POOL.size()]
+				if not used_names.has(candidate):
+					selected_name = candidate
+					break
 		if selected_name.is_empty():
-			selected_name = "%s %02d" % [
+			selected_name = "%s %d" % [
 				RESIDENT_NAME_POOL[start_index],
-				resident_cat_ids.find(resident_id) + 1,
+				maxi(1, int(resident_id.trim_prefix("resident_"))),
 			]
 		record["display_name"] = selected_name
+		used_names[selected_name] = true
 	if not record.has("portrait_index"):
 		record["portrait_index"] = posmod(
 			hash("portrait:%s:%d" % [resident_id, map_seed]),
@@ -3488,18 +3751,25 @@ func _ensure_resident_identity(resident_id: String, record: Dictionary) -> Dicti
 
 
 func _sanitize_assigned_workers() -> void:
+	# 배열 has()로 훑던 예전 코드는 좌석 400 × 주민 900에서 호출마다 36만 번을
+	# 비교했다. 멤버십 판정은 전부 사전(Dictionary)으로 한다.
+	var seen: Dictionary = {}
 	var cleaned: Array[String] = []
+	var scratcher_limit := get_scratcher_worker_slots()
 	for worker_id in assigned_worker_ids:
-		if cleaned.size() >= get_scratcher_worker_slots():
+		if cleaned.size() >= scratcher_limit:
 			break
-		if resident_cat_ids.has(worker_id) and not cleaned.has(worker_id):
+		if _resident_id_set.has(worker_id) and not seen.has(worker_id):
+			seen[worker_id] = true
 			cleaned.append(worker_id)
 	assigned_worker_ids = cleaned
 	var cleaned_catnip: Array[String] = []
+	var catnip_limit := get_catnip_worker_slots()
 	for worker_id in assigned_catnip_worker_ids:
-		if cleaned_catnip.size() >= get_catnip_worker_slots():
+		if cleaned_catnip.size() >= catnip_limit:
 			break
-		if resident_cat_ids.has(worker_id) and not cleaned.has(worker_id) and not cleaned_catnip.has(worker_id):
+		if _resident_id_set.has(worker_id) and not seen.has(worker_id):
+			seen[worker_id] = true
 			cleaned_catnip.append(worker_id)
 	assigned_catnip_worker_ids = cleaned_catnip
 
@@ -3508,7 +3778,7 @@ func assign_worker_to_scratcher(worker_id: String) -> bool:
 	if not is_shelter_facility_unlocked("scratcher_bank"):
 		return false
 	_ensure_resident_records()
-	if not resident_cat_ids.has(worker_id):
+	if not _resident_id_set.has(worker_id):
 		return false
 	if assigned_worker_ids.has(worker_id):
 		return true
@@ -3534,7 +3804,7 @@ func assign_worker_to_catnip(worker_id: String) -> bool:
 	if not is_shelter_facility_unlocked("catnip_scraper"):
 		return false
 	_ensure_resident_records()
-	if not resident_cat_ids.has(worker_id):
+	if not _resident_id_set.has(worker_id):
 		return false
 	if assigned_catnip_worker_ids.has(worker_id):
 		return true
@@ -3618,7 +3888,15 @@ func process_shelter_progress() -> Dictionary:
 	shelter_offline_scrap_pending += scrap_gain
 	shelter_offline_catnip_pending += catnip_gain
 	shelter_offline_repair_pending += repair_gain
-	return {"scrap": scrap_gain, "catnip": catnip_gain, "repair": repair_gain, "elapsed": elapsed}
+	# 자리를 비운 동안의 자연 유입도 같은 8h 상한(elapsed)을 쓴다.
+	var joined := accumulate_resident_drift(float(elapsed))
+	return {
+		"scrap": scrap_gain,
+		"catnip": catnip_gain,
+		"repair": repair_gain,
+		"elapsed": elapsed,
+		"residents": joined,
+	}
 
 
 func get_current_raid_stage_tier() -> int:
@@ -5214,6 +5492,7 @@ func save_persistent_state() -> bool:
 		"workbench_starter_parts_claimed": workbench_starter_parts_claimed,
 		"shelter_scrap_fraction": shelter_scrap_fraction,
 		"shelter_catnip_fraction": shelter_catnip_fraction,
+		"resident_drift_fraction": resident_drift_fraction,
 		"shelter_return_serial": shelter_return_serial,
 		"survived_return_count": survived_return_count,
 		"city_commission": city_commission,
@@ -5343,6 +5622,8 @@ func load_persistent_state() -> bool:
 	fatigue = float(data.get("fatigue", fatigue))
 	rescued_workers = int(data.get("rescued_workers", rescued_workers))
 	resident_cat_ids = _to_string_array(data.get("resident_cat_ids", []))
+	# 세이브를 덮어썼으면 정규화 캐시는 무조건 버린다(같은 키로 우연히 겹치는 사고 방지).
+	invalidate_resident_records_cache()
 	assigned_worker_ids = _to_string_array(data.get("assigned_worker_ids", []))
 	assigned_catnip_worker_ids = _to_string_array(data.get("assigned_catnip_worker_ids", []))
 	resident_traits = (data.get("resident_traits", {}) as Dictionary).duplicate(true)
@@ -5454,6 +5735,7 @@ func load_persistent_state() -> bool:
 	workbench_starter_parts_claimed = bool(data.get("workbench_starter_parts_claimed", workbench_starter_parts_claimed))
 	shelter_scrap_fraction = float(data.get("shelter_scrap_fraction", shelter_scrap_fraction))
 	shelter_catnip_fraction = float(data.get("shelter_catnip_fraction", shelter_catnip_fraction))
+	resident_drift_fraction = maxf(0.0, float(data.get("resident_drift_fraction", 0.0)))
 	shelter_return_serial = int(data.get("shelter_return_serial", shelter_return_serial))
 	# 구 세이브 호환: 값이 없으면 기존 귀환 수를 생환 수로 간주한다.
 	survived_return_count = int(data.get("survived_return_count", shelter_return_serial))
@@ -5622,6 +5904,7 @@ func reset_run() -> void:
 	fatigue = 0.0
 	rescued_workers = 0
 	resident_cat_ids.clear()
+	invalidate_resident_records_cache()
 	assigned_worker_ids.clear()
 	assigned_catnip_worker_ids.clear()
 	resident_traits.clear()
@@ -5709,6 +5992,7 @@ func reset_run() -> void:
 	workbench_starter_parts_claimed = false
 	shelter_scrap_fraction = 0.0
 	shelter_catnip_fraction = 0.0
+	resident_drift_fraction = 0.0
 	workbench_starter_parts_claimed = false
 	shelter_return_serial = 0
 	survived_return_count = 0

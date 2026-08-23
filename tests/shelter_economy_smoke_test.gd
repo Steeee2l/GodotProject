@@ -66,9 +66,18 @@ func _run() -> void:
 		if resource_icon == null or resource_icon.texture == null:
 			_fail("shelter resource icon is missing for %s" % resource_name)
 			return
+	# 이 테스트는 2시간치 오프라인 정산을 태우므로 자연 유입(티어×0.5/h + 인원×0.02/h)이
+	# 주민을 한둘 더 데려온다. 고정 4명이 아니라 "명단 전원이 세워졌는가"를 본다
+	# (명단이 시각화 상한을 넘으면 상한까지).
+	var expected_residents := mini(
+		(game_state.get("resident_cat_ids") as Array).size(),
+		int(shelter.call("_visible_resident_limit"))
+	)
 	var resident_nodes := get_nodes_in_group("shelter_resident")
-	if resident_nodes.size() != 4:
-		_fail("rescued residents were not instantiated in the shelter")
+	if resident_nodes.size() != expected_residents or expected_residents < 4:
+		_fail("rescued residents were not instantiated in the shelter (%d/%d)" % [
+			resident_nodes.size(), expected_residents
+		])
 	# 침대는 폐지됐다 — 복귀 자체가 완전 회복이다.
 	if shelter.find_child("PlayerBed", true, false) != null:
 		_fail("the obsolete player bed is still present")
@@ -525,7 +534,9 @@ func _run() -> void:
 	game_state.set("churu", int(tier_cost.get("churu", 0)))
 	if not bool(game_state.call("try_upgrade_shelter_tier")):
 		_fail("shelter tier upgrade failed")
-	if int(game_state.call("get_resident_capacity")) != 10 or int(game_state.call("get_scratcher_worker_slots")) != 6 or int(game_state.call("get_catnip_worker_slots")) != 2:
+	# 티어 2 표는 인크리멘탈 개편으로 5/10/20/35/50 → 8/30/100/300/900이 됐다.
+	# 좌석도 함께 열렸고(꾹꾹이 14 · 스크래핑 6), 수입은 배치 체감이 눌러 준다.
+	if int(game_state.call("get_resident_capacity")) != 30 or int(game_state.call("get_scratcher_worker_slots")) != 14 or int(game_state.call("get_catnip_worker_slots")) != 6:
 		_fail("tier 2 capacity table is inconsistent")
 
 	print("SHELTER_ECONOMY_OK scrap=%d catnip=%d durability=%.1f workers=%d" % [

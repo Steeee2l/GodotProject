@@ -46,6 +46,16 @@ var wander_retarget_time := 0.0
 var wander_random := RandomNumberGenerator.new()
 # 캣닢 피버 동안 걸리는 체감 배속(이동·애니메이션·생산 팝업이 함께 빨라진다).
 var fever_speed_scale := 1.0
+# 생산 팝업(+고철) 허용 여부. 주민이 100명을 넘으면 똑같은 숫자가 100개 떠올라
+# 화면이 읽히지 않을뿐더러, Label3D + 트윈 3개가 매초 100세트씩 생긴다.
+# 호스트가 앞쪽 몇 명에게만 켜 준다(shelter_interior.PRODUCTION_POP_VISIBLE_LIMIT).
+var production_pop_enabled := true
+# 작업 라벨 문구 캐시. 매 물리 프레임 문자열을 다시 만들면 120명 규모에서
+# 초당 7천 번 포맷이 돈다.
+var work_indicator_cache := ""
+# SpriteFrames는 주민마다 다시 만들 이유가 없다(70프레임 × 인원). 한 벌을
+# 만들어 전원이 공유한다 — 재생 위치는 AnimatedSprite3D가 각자 들고 있다.
+static var shared_sprite_frames: SpriteFrames
 
 
 func configure(next_resident_id: String, spawn_position: Vector3) -> void:
@@ -124,6 +134,12 @@ func set_work_assignment(next_kind: String, next_target: Vector3, next_work_focu
 	_update_work_indicator()
 
 
+func set_production_pop_enabled(value: bool) -> void:
+	production_pop_enabled = value
+	if not value:
+		production_pop_timer = PRODUCTION_POP_INTERVAL
+
+
 func set_fever_speed_scale(value: float) -> void:
 	# 피버는 눈으로 먼저 읽혀야 한다 — 생산 수치보다 "다들 미쳐 날뛴다"가 먼저다.
 	fever_speed_scale = clampf(value, 0.1, 6.0)
@@ -176,6 +192,8 @@ func set_production_feedback(next_rate_per_second: float) -> void:
 
 
 func emit_production_feedback_now() -> void:
+	if not production_pop_enabled:
+		return
 	if assignment_kind == "waiting" or production_rate_per_second <= 0.0:
 		return
 	if position.distance_to(target_position) > 0.28:
@@ -185,6 +203,8 @@ func emit_production_feedback_now() -> void:
 
 
 func _update_production_pop(delta: float) -> void:
+	if not production_pop_enabled:
+		return
 	if assignment_kind == "waiting" or production_rate_per_second <= 0.0:
 		production_pop_timer = PRODUCTION_POP_INTERVAL
 		return
@@ -294,25 +314,32 @@ func _choose_wander_target() -> void:
 
 
 func _update_work_indicator() -> void:
-	if work_indicator:
-		var arrived := position.distance_to(target_position) <= 0.28
-		work_indicator.visible = assignment_kind != "waiting" and arrived
-		if assignment_kind != "waiting":
-			var resource_name := "캣닢" if assignment_kind == "catnip" else "고철"
-			if production_rate_per_second > 0.0:
-				work_indicator.text = "%s +%s/s" % [
-					resource_name,
-					_format_catnip_rate(production_rate_per_second)
-					if assignment_kind == "catnip"
-					else _format_production_rate(production_rate_per_second),
-				]
-				work_indicator.modulate = (
-					Color("#aeea78") if assignment_kind == "catnip" else Color("#f1cf68")
-				)
-			else:
-				work_indicator.text = "생산 대기"
-				work_indicator.modulate = Color("#e7836f")
-		work_indicator.modulate.a = 0.72 + sin(work_phase * 4.2) * 0.18
+	if work_indicator == null:
+		return
+	var arrived := position.distance_to(target_position) <= 0.28
+	work_indicator.visible = assignment_kind != "waiting" and arrived
+	if not work_indicator.visible:
+		return
+	var resource_name := "캣닢" if assignment_kind == "catnip" else "고철"
+	var next_text := "생산 대기"
+	var next_color := Color("#e7836f")
+	if production_rate_per_second > 0.0:
+		next_text = "%s +%s/s" % [
+			resource_name,
+			_format_catnip_rate(production_rate_per_second)
+			if assignment_kind == "catnip"
+			else _format_production_rate(production_rate_per_second),
+		]
+		next_color = Color("#aeea78") if assignment_kind == "catnip" else Color("#f1cf68")
+	# 문구가 그대로면 텍스트를 다시 넣지 않는다(라벨 메시 재생성 방지).
+	if next_text != work_indicator_cache:
+		work_indicator_cache = next_text
+		work_indicator.text = next_text
+	# 알파 맥박은 앞줄(팝업이 켜진) 고양이에게만. 120마리가 매 프레임 Label3D
+	# 머티리얼을 건드리면 그것만으로 물리 프레임이 밀린다.
+	next_color.a = 0.72 + sin(work_phase * 4.2) * 0.18 if production_pop_enabled else 0.82
+	if work_indicator.modulate != next_color:
+		work_indicator.modulate = next_color
 
 
 func _set_facing_from_world_direction(world_direction: Vector3) -> void:
@@ -353,6 +380,8 @@ func _play_animation() -> void:
 
 
 func _create_sprite_frames() -> SpriteFrames:
+	if shared_sprite_frames != null:
+		return shared_sprite_frames
 	var frames := SpriteFrames.new()
 	frames.remove_animation("default")
 	for direction_name in DIRECTION_NAMES:
@@ -384,4 +413,5 @@ func _create_sprite_frames() -> SpriteFrames:
 			frames.add_frame("kneading_ne", texture)
 		else:
 			push_error("Missing worker kneading frame: %s" % texture_path)
+	shared_sprite_frames = frames
 	return frames

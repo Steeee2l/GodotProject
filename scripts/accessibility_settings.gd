@@ -6,6 +6,7 @@ const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const SFX := preload("res://scripts/sfx_bank.gd")
 const SAVE_PATH := "user://accessibility.cfg"
+const OPENING_SCENE_PATH := "res://scenes/opening_sequence.tscn"
 const SAVED_PROPERTIES := [
 	"ui_scale", "combat_text_scale", "camera_shake_scale", "hit_flash_scale",
 	"vignette_scale", "minimum_brightness", "aim_assist_strength",
@@ -187,6 +188,26 @@ func _build_ui() -> void:
 		GameState.reset_tutorial_steps()
 		return "안내를 처음부터 다시 보여줍니다."
 	)
+	content.add_child(_label("데이터", 13, Color("#b9a86a")))
+	# 초기화·전체 해금은 디버그 빌드에만 있던 떠 있는 버튼이라 배포(웹·모바일)에서는
+	# 손댈 방법이 아예 없었다. 설정은 릴리스에도 있으므로 여기로 옮겨 둔다.
+	# (디버그 빌드의 떠 있는 버튼은 그대로 남는다 — shelter_debug_shortcut.gd)
+	_add_confirm_action(
+		content,
+		"저장 데이터 초기화",
+		"주민·창고·재화·장비와 모든 진행이 사라지고 오프닝부터 다시 시작합니다.",
+		"정말 초기화합니까? 모든 진행이 사라집니다.",
+		"초기화",
+		_perform_full_reset
+	)
+	_add_confirm_action(
+		content,
+		"쉘터 전체 해금 (테스트)",
+		"모든 시설을 즉시 건설하고 주민을 다섯 명까지 채웁니다.",
+		"모든 시설을 즉시 해금합니까? 진행 순서가 건너뛰어집니다.",
+		"해금",
+		_perform_debug_unlock
+	)
 	var footer := _label("색상만으로 상태를 구분하지 않으며 아이콘과 문자를 함께 표시합니다.", 12, Color("#8fa59b"))
 	footer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(footer)
@@ -242,6 +263,107 @@ func _add_action(parent: VBoxContainer, title: String, description: String, acti
 		settings_changed.emit()
 	)
 	row.add_child(button)
+
+
+func _add_confirm_action(
+	parent: VBoxContainer,
+	title: String,
+	description: String,
+	confirm_question: String,
+	confirm_label: String,
+	action: Callable
+) -> void:
+	# 되돌릴 수 없는 행동은 2단계다. 한 번 누르면 질문이 뜨고, 그 자리에서
+	# [실행]/[취소]를 고른다 — 잘못 스친 손가락이 세이브를 지우면 안 된다.
+	var box := VBoxContainer.new()
+	box.name = "SettingsDanger_%s" % title
+	box.add_theme_constant_override("separation", 6)
+	parent.add_child(box)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	box.add_child(row)
+	var text_box := VBoxContainer.new()
+	text_box.custom_minimum_size.x = 185
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(text_box)
+	text_box.add_child(_label(title, 14, Color("#d8ded9")))
+	var description_label := _label(description, 11, Color("#81938c"))
+	description_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	text_box.add_child(description_label)
+	var open_button := Button.new()
+	open_button.name = "SettingsAction_%s" % title
+	open_button.text = title
+	open_button.custom_minimum_size = Vector2(150, 44)
+	HudStyle.style_button(open_button, Color("#c4574f"))
+	row.add_child(open_button)
+
+	var confirm_box := VBoxContainer.new()
+	confirm_box.name = "SettingsConfirmBox_%s" % title
+	confirm_box.visible = false
+	confirm_box.add_theme_constant_override("separation", 6)
+	box.add_child(confirm_box)
+	var question := _label(confirm_question, 13, Color("#f0b7ad"))
+	question.name = "SettingsConfirmQuestion_%s" % title
+	question.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	confirm_box.add_child(question)
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 8)
+	buttons.alignment = BoxContainer.ALIGNMENT_END
+	confirm_box.add_child(buttons)
+	var cancel_button := Button.new()
+	cancel_button.name = "SettingsCancel_%s" % title
+	cancel_button.text = "취소"
+	cancel_button.custom_minimum_size = Vector2(110, 44)
+	HudStyle.style_button(cancel_button, HudStyle.LINE_FOCUS)
+	buttons.add_child(cancel_button)
+	var confirm_button := Button.new()
+	confirm_button.name = "SettingsConfirm_%s" % title
+	confirm_button.text = confirm_label
+	confirm_button.custom_minimum_size = Vector2(130, 44)
+	HudStyle.style_button(confirm_button, Color("#e08a7c"), true)
+	buttons.add_child(confirm_button)
+
+	open_button.pressed.connect(func() -> void:
+		confirm_box.visible = true
+		open_button.visible = false
+	)
+	cancel_button.pressed.connect(func() -> void:
+		confirm_box.visible = false
+		open_button.visible = true
+	)
+	confirm_button.pressed.connect(func() -> void:
+		confirm_box.visible = false
+		open_button.visible = true
+		var result := str(action.call())
+		if not result.is_empty():
+			description_label.text = result
+			description_label.add_theme_color_override("font_color", Color("#9de0b1"))
+		settings_changed.emit()
+	)
+
+
+func _perform_full_reset() -> String:
+	# 세이브 파일 삭제 + 새 게임 상태 + 오프닝부터 다시. 기존 리셋 경로를 그대로 쓴다.
+	GameState.reset_all_progress_for_opening()
+	backdrop.visible = false
+	panel_center.visible = false
+	was_tree_paused = false
+	get_tree().paused = false
+	_save_settings()
+	get_tree().call_deferred("change_scene_to_file", OPENING_SCENE_PATH)
+	return "초기화했습니다. 오프닝부터 다시 시작합니다."
+
+
+func _perform_debug_unlock() -> String:
+	GameState.rescued_workers = maxi(GameState.rescued_workers, 5)
+	GameState._ensure_resident_records()
+	GameState.unlock_all_shelter_facilities()
+	GameState.save_persistent_state()
+	# 쉘터 안이면 시설 로직 노드와 주민 배치를 그 자리에서 갱신한다.
+	var current := get_tree().current_scene
+	if current != null and current.has_method("_unlock_all_facilities_debug"):
+		current.call("_unlock_all_facilities_debug")
+	return "모든 시설을 해금했습니다."
 
 
 func _add_toggle(parent: VBoxContainer, title: String, value: bool, callback: Callable) -> void:

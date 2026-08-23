@@ -9,6 +9,7 @@ const BED_MODULE_SCENE := preload("res://scenes/modules/shelter_bed_module.tscn"
 const WORKBENCH_MODULE_SCRIPT := preload("res://scripts/shelter_workbench_module.gd")
 const SCRATCHER_BANK_MODULE_SCRIPT := preload("res://scripts/scratcher_bank_module.gd")
 const CATNIP_SCRAPER_MODULE_SCRIPT := preload("res://scripts/catnip_scraper_module.gd")
+const RECRUIT_MODULE_SCRIPT := preload("res://scripts/shelter_recruit_module.gd")
 const STORAGE_MODULE_SCRIPT := preload("res://scripts/shelter_storage_module.gd")
 const TRAINING_MODULE_SCRIPT := preload("res://scripts/shelter_training_module.gd")
 const SHELTER_OPS_CONSOLE_SCRIPT := preload("res://scripts/hud/shelter_ops_console.gd")
@@ -79,6 +80,20 @@ const ROOM_SIZE_BY_TIER := {
 	5: Vector2(80.0, 44.0),
 }
 const BED_MODULE_PLATE_SIZE := Vector2(2.65, 3.45)
+# ── 주민 시각화 상한 ──────────────────────────────────────────
+# 주민 1명 = CharacterBody3D + AnimatedSprite3D + Label3D + 매 프레임 이동이다.
+# 티어 5 수용량 900명을 전부 세우면 모바일은 물론 PC도 못 버틴다. 실제로 세우는
+# 것은 앞에서부터 이만큼이고, 초과분은 "그 외 N명" 표시가 대신한다.
+# 값은 창 모드 프로브 실측(tmp/resident_perf_probe.gd)에서 60fps를 지키는 선.
+const VISIBLE_RESIDENT_LIMIT := 120
+# 성능 프로브(tmp/resident_perf_probe.gd)가 0/50/100/200/400/900을 실측할 때만
+# 쓰는 스위치. 게임 코드는 건드리지 않는다(ShelterOpsConsole.force_touch_layout과 같은 규약).
+static var visible_resident_limit_override := 0
+# 고양이 한 마리가 차지하는 격자 간격(m). 캡슐 반지름 0.24라 겹치지 않는다.
+const RESIDENT_PACK_SPACING := 0.92
+# 생산 팝업(+고철)을 띄우는 인원 상한. 똑같은 숫자가 100개 떠오르면 정보가
+# 아니라 노이즈이고, Label3D + 트윈 3개가 매초 100세트씩 생긴다.
+const PRODUCTION_POP_VISIBLE_LIMIT := 20
 const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const PIPE_EXIT_LABEL := "파이프를 타고 도시로 올라가기"
 # 매대 데이터는 GameState로 이사했다 — 방문마다 굴리고 세이브에 남아야 하므로
@@ -138,6 +153,9 @@ var space_hold_elapsed := 0.0
 var space_hold_consumed := false
 var roll_audio_player: AudioStreamPlayer3D
 var shelter_residents: Array[CharacterBody3D] = []
+# id → 노드. 예전에는 스폰마다 배열을 통째로 훑어서 120명 규모에서 제곱으로 늘었다.
+var shelter_resident_nodes: Dictionary = {}
+var resident_overflow_label: Label3D
 var merchant: Node3D
 var merchant_waiting_marker: Node3D
 var merchant_notice_panel: PanelContainer
@@ -544,6 +562,7 @@ func _build_stage_one_modules() -> void:
 
 
 const LOCKED_FACILITY_HINTS := {
+	"recruit": "꾹꾹이 생산기 가동",
 	"scratcher_bank": "사자의 첫 계약",
 	"catnip_scraper": "사자의 두 번째 계약",
 	"workbench": "사자의 계약 진행",
@@ -564,6 +583,7 @@ func _refresh_unlocked_facilities(module_root: Node3D = null, animate: bool = tr
 		["workbench", "WeaponWorkbench", WORKBENCH_MODULE_SCRIPT],
 		["scratcher_bank", "ScratcherBank", SCRATCHER_BANK_MODULE_SCRIPT],
 		["catnip_scraper", "CatnipScraper", CATNIP_SCRAPER_MODULE_SCRIPT],
+		["recruit", "ShelterRecruit", RECRUIT_MODULE_SCRIPT],
 		["storage", "ShelterStorage", STORAGE_MODULE_SCRIPT],
 		["training", "SurvivalTrainingFacility", TRAINING_MODULE_SCRIPT],
 	]:
@@ -625,15 +645,37 @@ func _build_player() -> void:
 
 func _build_shelter_residents() -> void:
 	GameState._ensure_resident_records()
-	for resident_id in GameState.resident_cat_ids:
-		_spawn_shelter_resident(resident_id)
+	_sync_resident_population()
 	refresh_shelter_residents(true)
 
 
+func _visible_resident_limit() -> int:
+	if visible_resident_limit_override > 0:
+		return visible_resident_limit_override
+	return VISIBLE_RESIDENT_LIMIT
+
+
+func _sync_resident_population() -> void:
+	# 실제로 세우는 것은 명단 앞에서부터 VISIBLE_RESIDENT_LIMIT명까지.
+	# 일괄 배치가 명단 순서대로 좌석을 채우므로, 화면에 서는 고양이는
+	# 자연스럽게 "지금 일하고 있는 쪽"이 된다.
+	var visible_count := mini(GameState.resident_cat_ids.size(), _visible_resident_limit())
+	for index in visible_count:
+		_spawn_shelter_resident(str(GameState.resident_cat_ids[index]))
+	if shelter_residents.size() > visible_count:
+		# 초기화·주민 감소로 줄었으면 남은 노드를 걷어낸다.
+		for index in range(shelter_residents.size() - 1, visible_count - 1, -1):
+			var extra := shelter_residents[index]
+			if is_instance_valid(extra):
+				shelter_resident_nodes.erase(str(extra.get_meta("resident_id", "")))
+				extra.queue_free()
+			shelter_residents.remove_at(index)
+
+
 func _spawn_shelter_resident(resident_id: String) -> CharacterBody3D:
-	for resident in shelter_residents:
-		if is_instance_valid(resident) and str(resident.get_meta("resident_id", "")) == resident_id:
-			return resident
+	var existing := shelter_resident_nodes.get(resident_id) as CharacterBody3D
+	if is_instance_valid(existing):
+		return existing
 	var resident := SHELTER_RESIDENT_SCRIPT.new() as CharacterBody3D
 	var waiting_index := shelter_residents.size()
 	resident.name = "ShelterResident_%s" % resident_id
@@ -641,19 +683,44 @@ func _spawn_shelter_resident(resident_id: String) -> CharacterBody3D:
 	add_child(resident)
 	resident.call("set_roam_bounds", _resident_roam_bounds())
 	shelter_residents.append(resident)
+	shelter_resident_nodes[resident_id] = resident
 	return resident
 
 
+func _update_resident_overflow_label() -> void:
+	# "그 외 N명" — 세우지 못한 고양이도 존재한다는 것은 화면이 말해야 한다.
+	var hidden_count := maxi(0, GameState.resident_cat_ids.size() - shelter_residents.size())
+	if resident_overflow_label == null:
+		resident_overflow_label = Label3D.new()
+		resident_overflow_label.name = "ResidentOverflowLabel"
+		resident_overflow_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		resident_overflow_label.no_depth_test = true
+		resident_overflow_label.font = FONT
+		resident_overflow_label.font_size = 68
+		resident_overflow_label.pixel_size = 0.0075
+		resident_overflow_label.modulate = Color("#cfe0d6")
+		resident_overflow_label.outline_modulate = Color(0.0, 0.0, 0.0, 0.85)
+		resident_overflow_label.outline_size = 14
+		add_child(resident_overflow_label)
+	resident_overflow_label.visible = hidden_count > 0
+	if hidden_count <= 0:
+		return
+	resident_overflow_label.text = "그 외 %d명" % hidden_count
+	# 무리의 꼬리에 붙인다 — 화면에 선 마지막 고양이 바로 뒤가 "여기부터 더 있다"다.
+	var anchor := _resident_wait_position(maxi(0, shelter_residents.size() - 1))
+	for index in range(shelter_residents.size() - 1, -1, -1):
+		var tail := shelter_residents[index]
+		if is_instance_valid(tail):
+			anchor = tail.position
+			break
+	resident_overflow_label.position = Vector3(anchor.x, 1.9, anchor.z + RESIDENT_PACK_SPACING)
+
+
 func _add_debug_resident() -> bool:
-	var previous_ids := GameState.resident_cat_ids.duplicate()
 	if GameState.try_add_rescued_workers(1) <= 0:
 		_show_status("주민 수용 공간이 가득 찼습니다. 쉘터 Tier를 올려주세요.")
 		return false
 	GameState._ensure_resident_records()
-	for resident_id in GameState.resident_cat_ids:
-		if not previous_ids.has(resident_id):
-			_spawn_shelter_resident(resident_id)
-			break
 	refresh_shelter_residents(true)
 	GameState.save_persistent_state()
 	_update_stats()
@@ -1433,33 +1500,55 @@ func _merchant_face_texture() -> AtlasTexture:
 
 func refresh_shelter_residents(snap := false) -> void:
 	GameState._ensure_resident_records()
-	var waiting_ids: Array[String] = []
-	for resident_id in GameState.resident_cat_ids:
-		if not GameState.assigned_worker_ids.has(resident_id) and not GameState.assigned_catnip_worker_ids.has(resident_id):
-			waiting_ids.append(resident_id)
+	_sync_resident_population()
+	# 배열 find()로 순번을 찾던 예전 코드는 좌석 400 × 주민 900에서 호출마다
+	# 수십만 번을 훑었다. 멤버십 판정은 사전으로 한 번에 만든다.
+	var kneading_set: Dictionary = {}
+	for worker_id in GameState.assigned_worker_ids:
+		kneading_set[worker_id] = true
+	var catnip_set: Dictionary = {}
+	for worker_id in GameState.assigned_catnip_worker_ids:
+		catnip_set[worker_id] = true
+	# 자리 번호는 '화면에 세운 고양이들' 안에서만 센다 — 전역 순번(최대 400)을
+	# 그대로 쓰면 좌석 격자가 방 밖까지 뻗는다.
+	var waiting_slot := 0
+	var kneading_slot := 0
+	var catnip_slot := 0
+	var scratcher_focus := _scratcher_bank_position()
+	var catnip_focus := _catnip_scraper_position()
+	var bounds := _resident_roam_bounds()
 	for resident in shelter_residents:
 		if not is_instance_valid(resident):
 			continue
-		resident.call("set_roam_bounds", _resident_roam_bounds())
+		resident.call("set_roam_bounds", bounds)
 		var resident_id := str(resident.get_meta("resident_id", ""))
-		var kneading_index := GameState.assigned_worker_ids.find(resident_id)
-		var catnip_index := GameState.assigned_catnip_worker_ids.find(resident_id)
 		var assignment_kind := "waiting"
-		var target := _resident_wait_position(waiting_ids.find(resident_id))
-		var focus := target
-		if kneading_index >= 0:
+		var target := Vector3.ZERO
+		var focus := Vector3.ZERO
+		if kneading_set.has(resident_id):
 			assignment_kind = "kneading"
-			target = _scratcher_work_position(kneading_index)
-			focus = _scratcher_bank_position()
-		elif catnip_index >= 0:
+			target = _scratcher_work_position(kneading_slot)
+			focus = scratcher_focus
+			kneading_slot += 1
+		elif catnip_set.has(resident_id):
 			assignment_kind = "catnip"
-			target = _catnip_work_position(catnip_index)
-			focus = _catnip_scraper_position()
+			target = _catnip_work_position(catnip_slot)
+			focus = catnip_focus
+			catnip_slot += 1
+		else:
+			target = _resident_wait_position(waiting_slot)
+			focus = target
+			waiting_slot += 1
 		resident.call("set_work_assignment", assignment_kind, target, focus, snap)
+		resident.call(
+			"set_production_pop_enabled",
+			kneading_slot + catnip_slot <= PRODUCTION_POP_VISIBLE_LIMIT
+		)
 		resident.call(
 			"set_production_feedback",
 			GameState.get_worker_production_per_second(resident_id, assignment_kind)
 		)
+	_update_resident_overflow_label()
 
 
 func _refresh_resident_production_feedback() -> void:
@@ -1475,47 +1564,45 @@ func _refresh_resident_production_feedback() -> void:
 
 
 func _resident_wait_position(index: int) -> Vector3:
+	# 대기 주민이 서는 격자. 예전에는 수용량으로 열 수를 정해서(sqrt(900)=30열)
+	# 900명이면 격자가 방 밖까지 뻗었다. 이제는 화면에 세우는 상한만큼의
+	# 정사각 블록을 방 남동쪽(생산 라인 반대편)에 깔아 작업조와 안 겹치게 한다.
 	var bounds := _resident_roam_bounds()
-	var columns := maxi(3, ceili(sqrt(float(GameState.get_resident_capacity()))))
-	var column := maxi(0, index) % columns
-	var row := maxi(0, index) / columns
-	var x_spacing := minf(2.4, (bounds.size.x - 2.0) / float(maxi(1, columns - 1)))
-	var row_space := maxf(2.0, bounds.size.y - 2.0)
+	var columns := maxi(4, ceili(sqrt(float(_visible_resident_limit()))))
+	var safe_index := maxi(0, index)
+	var column := safe_index % columns
+	var row := safe_index / columns
+	var origin_x := maxf(bounds.position.x + 0.8, 2.4)
 	return Vector3(
-		bounds.position.x + 1.0 + float(column) * x_spacing,
+		minf(origin_x + float(column) * RESIDENT_PACK_SPACING, bounds.end.x - 0.6),
 		0.78,
-		bounds.position.y + 1.0 + fmod(float(row) * 2.2, row_space)
+		maxf(
+			bounds.end.y - 0.8 - float(row) * RESIDENT_PACK_SPACING,
+			bounds.position.y + 0.8
+		)
 	)
 
 
 func _scratcher_work_position(index: int) -> Vector3:
-	var station := _scratcher_bank_position()
-	var column := maxi(0, index) % 10
-	var row := maxi(0, index) / 10
-	return Vector3(
-		station.x + _factory_worker_x_offset(column),
-		0.78,
-		station.z + 2.35 + float(row) * 1.08
-	)
+	return _factory_work_position(_scratcher_bank_position(), index, 8)
 
 
 func _catnip_work_position(index: int) -> Vector3:
-	var station := _catnip_scraper_position()
-	var column := maxi(0, index) % 5
-	var row := maxi(0, index) / 5
+	return _factory_work_position(_catnip_scraper_position(), index, 5)
+
+
+func _factory_work_position(station: Vector3, index: int, columns: int) -> Vector3:
+	# 생산기 앞에 붙는 작업조. 열 수를 라인마다 못 박아(꾹꾹이 8 / 스크래핑 5)
+	# 두 무리가 서로 겹치지 않게 한다 — 두 기준점의 간격은 7m다.
+	var safe_index := maxi(0, index)
+	var column := safe_index % columns
+	var row := safe_index / columns
+	var offset_x := (float(column) - float(columns - 1) * 0.5) * RESIDENT_PACK_SPACING
 	return Vector3(
-		station.x + _factory_worker_x_offset(column),
+		station.x + offset_x,
 		0.78,
-		station.z + 2.35 + float(row) * 1.08
+		station.z + 2.0 + float(row) * RESIDENT_PACK_SPACING
 	)
-
-
-func _factory_worker_x_offset(column: int) -> float:
-	if column <= 0:
-		return 0.0
-	var step: int = (column + 1) / 2
-	var side: float = -1.0 if column % 2 == 1 else 1.0
-	return float(step) * 1.2 * side
 
 
 func _update_camera(delta: float) -> void:
@@ -3958,7 +4045,15 @@ func _update_raid_zone_goal_line(zone_id: String) -> void:
 
 
 func _update_live_shelter_income(delta: float) -> void:
+	# 자연 유입은 쉘터에 서 있는 동안에도 흐른다 — 새로 합류한 고양이는
+	# 다음 프레임에 실제로 방에 서 있어야 한다(숫자만 늘면 아무도 못 본다).
+	var residents_before := GameState.resident_cat_ids.size()
 	var gained := GameState.tick_shelter_live(delta)
+	var joined := GameState.resident_cat_ids.size() - residents_before
+	if joined > 0:
+		refresh_shelter_residents(false)
+		_update_stats()
+		_show_status("소문을 듣고 고양이 %d마리가 합류했습니다." % joined)
 	shelter_save_time += delta
 	if shelter_save_time >= 10.0:
 		shelter_save_time = 0.0
@@ -4917,6 +5012,7 @@ func _build_offline_status_text(progress: Dictionary) -> String:
 	var scrap_gain := int(progress.get("scrap", 0))
 	var catnip_gain := int(progress.get("catnip", 0))
 	var repair_gain := float(progress.get("repair", 0.0))
+	var joined_residents := int(progress.get("residents", 0))
 	var has_line := GameState.is_shelter_facility_unlocked("scratcher_bank") \
 		or GameState.is_shelter_facility_unlocked("catnip_scraper")
 	var lines: PackedStringArray = []
@@ -4929,6 +5025,9 @@ func _build_offline_status_text(progress: Dictionary) -> String:
 		if repair_gain > 0.01:
 			parts.append("내구도 +%.1f%%" % repair_gain)
 		lines.append("자리를 비운 사이 ·  %s" % "  ".join(parts))
+	if joined_residents > 0:
+		# 자연 유입은 "돌아왔더니 고양이가 늘어 있다"가 전부다 — 반드시 말해 준다.
+		lines.append("소문을 듣고 고양이 %d마리가 합류했습니다." % joined_residents)
 	if has_line and lines.is_empty():
 		# 연료 잔량 예고는 없다 — 주민만 있으면 라인은 계속 돈다.
 		lines.append("쉘터에 복귀했습니다. 생산기에 주민을 배치할 수 있습니다.")
