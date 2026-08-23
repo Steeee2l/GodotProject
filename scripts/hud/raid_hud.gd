@@ -62,6 +62,14 @@ var damage_direction_indicator: TextureRect
 var player_world_health_bar: Control
 var player_world_health_fill: Panel
 var player_health_fill_style: StyleBoxFlat
+# 피격 잔상(흰색) — 깎인 만큼이 잠깐 남았다 따라 줄어든다.
+var player_world_health_trail: Panel
+var player_health_trail_style: StyleBoxFlat
+var player_health_trail_ratio := 1.0
+var player_health_trail_delay := 0.0
+# 잔상이 따라 줄기 시작하기까지의 지연(초)과 추적 속도(비율/초).
+const PLAYER_HEALTH_TRAIL_DELAY := 0.28
+const PLAYER_HEALTH_TRAIL_SPEED := 0.9
 var roll_cooldown_indicator: Control
 var reload_reticle_indicator: Control
 var aim_direction_indicator: MeshInstance3D
@@ -1349,6 +1357,23 @@ void fragment() {
 	health_background.anti_aliasing = true
 	health_background_panel.add_theme_stylebox_override("panel", health_background)
 	player_world_health_bar.add_child(health_background_panel)
+	# 흰 잔상 — 방금 깎인 만큼이 흰색으로 잠깐 남는다. 초록 채움보다 먼저(아래에)
+	# 붙여야 채움이 그 위를 덮고, 줄어든 구간만 흰색으로 보인다.
+	# 보스 체력바(enemy.gd의 trail_white)와 같은 읽기 규칙이다.
+	player_world_health_trail = Panel.new()
+	player_world_health_trail.name = "Trail"
+	player_world_health_trail.position = Vector2(1, 1)
+	player_world_health_trail.size = Vector2(46, 5)
+	player_world_health_trail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	player_health_trail_style = StyleBoxFlat.new()
+	player_health_trail_style.bg_color = Color(0.96, 0.96, 0.93, 0.96)
+	player_health_trail_style.corner_radius_top_left = 3
+	player_health_trail_style.corner_radius_top_right = 3
+	player_health_trail_style.corner_radius_bottom_left = 3
+	player_health_trail_style.corner_radius_bottom_right = 3
+	player_health_trail_style.anti_aliasing = true
+	player_world_health_trail.add_theme_stylebox_override("panel", player_health_trail_style)
+	player_world_health_bar.add_child(player_world_health_trail)
 	player_world_health_fill = Panel.new()
 	player_world_health_fill.name = "Fill"
 	player_world_health_fill.position = Vector2(1, 1)
@@ -1372,6 +1397,38 @@ void fragment() {
 	reload_reticle_indicator.scale = Vector2.ONE * 1.25
 	aim_canvas.add_child(reload_reticle_indicator)
 	build_cover_chip()
+
+
+func update_player_health_trail(health_ratio: float, delta: float) -> void:
+	# 체력이 줄면 잔상은 그 자리에 흰색으로 남고, PLAYER_HEALTH_TRAIL_DELAY 뒤부터
+	# 따라 줄어든다 — "방금 얼마 깎였는지"가 한눈에 읽힌다(보스 바와 같은 규칙).
+	# 회복은 즉시 따라붙는다(회복분을 흰색으로 오래 보여 줄 이유가 없다).
+	if player_world_health_trail == null:
+		return
+	var clamped := clampf(health_ratio, 0.0, 1.0)
+	if clamped >= player_health_trail_ratio:
+		player_health_trail_ratio = clamped
+		player_health_trail_delay = 0.0
+	else:
+		player_health_trail_delay = PLAYER_HEALTH_TRAIL_DELAY
+	if player_health_trail_delay > 0.0:
+		player_health_trail_delay = maxf(0.0, player_health_trail_delay - delta)
+	else:
+		player_health_trail_ratio = move_toward(
+			player_health_trail_ratio,
+			clamped,
+			PLAYER_HEALTH_TRAIL_SPEED * delta
+		)
+	player_world_health_trail.size.x = 46.0 * player_health_trail_ratio
+	player_world_health_trail.visible = player_health_trail_ratio > clamped + 0.001
+
+
+func reset_player_health_trail(health_ratio: float) -> void:
+	# 판 시작·부활처럼 체력이 통째로 바뀌는 순간엔 잔상을 남기지 않는다.
+	player_health_trail_ratio = clampf(health_ratio, 0.0, 1.0)
+	player_health_trail_delay = 0.0
+	if player_world_health_trail:
+		player_world_health_trail.visible = false
 
 
 func build_cover_chip() -> void:

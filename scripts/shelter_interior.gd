@@ -89,8 +89,28 @@ const VISIBLE_RESIDENT_LIMIT := 120
 # 성능 프로브(tmp/resident_perf_probe.gd)가 0/50/100/200/400/900을 실측할 때만
 # 쓰는 스위치. 게임 코드는 건드리지 않는다(ShelterOpsConsole.force_touch_layout과 같은 규약).
 static var visible_resident_limit_override := 0
-# 고양이 한 마리가 차지하는 격자 간격(m). 캡슐 반지름 0.24라 겹치지 않는다.
+# 고양이 한 마리가 차지하는 간격(m). 캡슐 반지름 0.24라 겹치지 않는다.
 const RESIDENT_PACK_SPACING := 0.92
+# ── 대기 주민 무리 배치 ────────────────────────────────────
+# 자로 잰 격자는 "빠글빠글한 쉘터"가 아니라 고양이 카펫(타일 무늬)으로 읽힌다.
+# 대기 주민은 3~8마리 무리로 흩고, 무리 안에서도 자리를 흔들되 겹침 최소
+# 간격만은 지킨다. 계산은 진입 시 1회(레이아웃 캐시) — 매 프레임 비용 0.
+const WAIT_CLUSTER_MIN_SIZE := 3
+const WAIT_CLUSTER_MAX_SIZE := 8
+const WAIT_CLUSTER_MIN_GAP := 0.42
+const WAIT_CLUSTER_SEPARATION := 2.35
+# 무리 중심을 벽·구석 쪽으로 끌어당기는 비율. 대기조는 통로 한복판이 아니라
+# 가장자리에 몰려 있어야 "쉬는 무리"로 읽힌다.
+const WAIT_CLUSTER_WALL_BIAS := 0.66
+# 앉아 쉬는(웅크린) 포즈 비율. 무리에 정지점이 섞여야 산만하지 않다.
+const WAIT_REST_POSE_RATIO := 0.16
+# 무리 사이 통로까지 감안한 1인당 바닥(㎡).
+const WAIT_AREA_PER_RESIDENT := 2.6
+# 배치 난수 시드. 고정값이라 씬을 다시 들어와도 같은 자리가 나온다.
+const WAIT_LAYOUT_SEED := 0x5AFED00D
+# 작업조 좌석 흔들림(m). 줄은 유지하되 자로 잰 격자로는 안 보이게.
+# 0.19면 최악의 경우에도 이웃 간격이 0.92-0.38=0.54m로 겹침 하한을 넘는다.
+const WORK_SLOT_JITTER := 0.19
 # 생산 팝업(+고철)을 띄우는 인원 상한. 똑같은 숫자가 100개 떠오르면 정보가
 # 아니라 노이즈이고, Label3D + 트윈 3개가 매초 100세트씩 생긴다.
 const PRODUCTION_POP_VISIBLE_LIMIT := 20
@@ -156,6 +176,13 @@ var shelter_residents: Array[CharacterBody3D] = []
 # id → 노드. 예전에는 스폰마다 배열을 통째로 훑어서 120명 규모에서 제곱으로 늘었다.
 var shelter_resident_nodes: Dictionary = {}
 var resident_overflow_label: Label3D
+# 대기 무리 배치 캐시(자리·방향·앉은 포즈·무리 중심). 방 크기나 상한이
+# 바뀔 때만 다시 만든다.
+var waiting_layout: Array[Dictionary] = []
+var waiting_layout_key := ""
+# "그 외 N명"을 띄울 마지막 대기 무리의 중심.
+var waiting_tail_cluster_center := Vector3.ZERO
+var waiting_resident_count := 0
 var merchant: Node3D
 var merchant_waiting_marker: Node3D
 var merchant_notice_panel: PanelContainer
@@ -706,14 +733,22 @@ func _update_resident_overflow_label() -> void:
 	if hidden_count <= 0:
 		return
 	resident_overflow_label.text = "그 외 %d명" % hidden_count
-	# 무리의 꼬리에 붙인다 — 화면에 선 마지막 고양이 바로 뒤가 "여기부터 더 있다"다.
+	# 마지막 무리 위에 띄운다 — 꼬리 고양이 뒤통수에 붙이면 무엇을 가리키는지
+	# 안 읽힌다. 대기 무리가 하나도 없으면(전원 작업 중) 옛 방식대로 꼬리에.
+	if waiting_resident_count > 0 and waiting_tail_cluster_center != Vector3.ZERO:
+		resident_overflow_label.position = Vector3(
+			waiting_tail_cluster_center.x,
+			2.42,
+			waiting_tail_cluster_center.z
+		)
+		return
 	var anchor := _resident_wait_position(maxi(0, shelter_residents.size() - 1))
 	for index in range(shelter_residents.size() - 1, -1, -1):
 		var tail := shelter_residents[index]
 		if is_instance_valid(tail):
 			anchor = tail.position
 			break
-	resident_overflow_label.position = Vector3(anchor.x, 1.9, anchor.z + RESIDENT_PACK_SPACING)
+	resident_overflow_label.position = Vector3(anchor.x, 2.42, anchor.z + RESIDENT_PACK_SPACING)
 
 
 func _add_debug_resident() -> bool:
@@ -1514,6 +1549,7 @@ func refresh_shelter_residents(snap := false) -> void:
 	var waiting_slot := 0
 	var kneading_slot := 0
 	var catnip_slot := 0
+	waiting_tail_cluster_center = Vector3.ZERO
 	var scratcher_focus := _scratcher_bank_position()
 	var catnip_focus := _catnip_scraper_position()
 	var bounds := _resident_roam_bounds()
@@ -1536,8 +1572,13 @@ func refresh_shelter_residents(snap := false) -> void:
 			focus = catnip_focus
 			catnip_slot += 1
 		else:
-			target = _resident_wait_position(waiting_slot)
+			# 대기 주민은 무리 배치에서 자리·시선·앉은 포즈를 함께 받는다.
+			var slot := _waiting_slot(waiting_slot)
+			var slot_position: Vector3 = slot["position"]
+			target = slot_position
 			focus = target
+			waiting_tail_cluster_center = slot["center"]
+			resident.call("set_waiting_pose", str(slot["facing"]), bool(slot["rest"]))
 			waiting_slot += 1
 		resident.call("set_work_assignment", assignment_kind, target, focus, snap)
 		resident.call(
@@ -1548,6 +1589,7 @@ func refresh_shelter_residents(snap := false) -> void:
 			"set_production_feedback",
 			GameState.get_worker_production_per_second(resident_id, assignment_kind)
 		)
+	waiting_resident_count = waiting_slot
 	_update_resident_overflow_label()
 
 
@@ -1564,23 +1606,224 @@ func _refresh_resident_production_feedback() -> void:
 
 
 func _resident_wait_position(index: int) -> Vector3:
-	# 대기 주민이 서는 격자. 예전에는 수용량으로 열 수를 정해서(sqrt(900)=30열)
-	# 900명이면 격자가 방 밖까지 뻗었다. 이제는 화면에 세우는 상한만큼의
-	# 정사각 블록을 방 남동쪽(생산 라인 반대편)에 깔아 작업조와 안 겹치게 한다.
-	var bounds := _resident_roam_bounds()
-	var columns := maxi(4, ceili(sqrt(float(_visible_resident_limit()))))
-	var safe_index := maxi(0, index)
-	var column := safe_index % columns
-	var row := safe_index / columns
-	var origin_x := maxf(bounds.position.x + 0.8, 2.4)
-	return Vector3(
-		minf(origin_x + float(column) * RESIDENT_PACK_SPACING, bounds.end.x - 0.6),
-		0.78,
-		maxf(
-			bounds.end.y - 0.8 - float(row) * RESIDENT_PACK_SPACING,
-			bounds.position.y + 0.8
+	var slot := _waiting_slot(index)
+	var slot_position: Vector3 = slot["position"]
+	return slot_position
+
+
+func _waiting_slot(index: int) -> Dictionary:
+	# 대기 주민 한 자리 = {position, facing, rest, center}. 무리 배치의 결과물이다.
+	_ensure_waiting_layout()
+	if waiting_layout.is_empty():
+		var bounds := _resident_roam_bounds()
+		var fallback := Vector3(
+			maxf(bounds.position.x + 0.8, 2.4),
+			0.78,
+			bounds.end.y - 0.8
 		)
+		return {"position": fallback, "facing": "s", "rest": false, "center": fallback}
+	return waiting_layout[posmod(maxi(0, index), waiting_layout.size())]
+
+
+func _ensure_waiting_layout() -> void:
+	var bounds := _resident_roam_bounds()
+	var limit := _visible_resident_limit()
+	var key := "%.2f,%.2f,%.2f,%.2f,%d" % [
+		bounds.position.x,
+		bounds.position.y,
+		bounds.size.x,
+		bounds.size.y,
+		limit,
+	]
+	if key == waiting_layout_key and waiting_layout.size() >= limit:
+		return
+	waiting_layout_key = key
+	waiting_layout = _build_waiting_layout(limit)
+
+
+func _waiting_area(limit: int) -> Rect2:
+	# 대기 무리가 서는 구역 — 생산 라인(방 서쪽·북쪽 벽) 반대편인 남동쪽.
+	# 티어 5 방은 80×44m다. 그 넓이에 120마리를 흩으면 무리가 아니라 점이
+	# 되므로, 인원에 비례한 만큼만 잘라 쓴다.
+	var bounds := _resident_roam_bounds()
+	var side := clampf(sqrt(float(maxi(1, limit)) * WAIT_AREA_PER_RESIDENT), 4.5, 24.0)
+	var west := maxf(bounds.position.x + 0.8, 2.4)
+	var south := bounds.end.y - 0.8
+	var east := minf(west + side, bounds.end.x - 0.6)
+	var north := maxf(south - side, bounds.position.y + 0.8)
+	return Rect2(
+		Vector2(west, north),
+		Vector2(maxf(0.0, east - west), maxf(0.0, south - north))
 	)
+
+
+func _build_waiting_layout(limit: int) -> Array[Dictionary]:
+	# 진입 시 1회만 도는 배치 계산.
+	#  1) 무리 중심을 벽·구석 쪽으로 흩는다(최소 2.35m 간격).
+	#  2) 무리마다 3~8마리를 원판 샘플링으로 앉히고, 겹침 0.42m는 격자 해시로
+	#     기각한다(120마리 전수 비교는 진입 때만이라도 아깝다).
+	#  3) 작은 무리는 서로를 마주보게 — 2~3마리가 마주봐야 "잡담 중"으로 읽힌다.
+	var slots: Array[Dictionary] = []
+	if limit <= 0:
+		return slots
+	var area := _waiting_area(limit)
+	if area.size.x <= 0.6 or area.size.y <= 0.6:
+		return slots
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WAIT_LAYOUT_SEED
+	# 무리 중심을 넉넉히 뽑아 두고, 기준 모서리에서 가까운 순으로 채운다.
+	# 주민이 6명일 때 120명용 넓이에 흩어지면 무리가 아니라 미아가 된다 —
+	# 인원이 적으면 기준 모서리 근처 무리 한둘만 쓰이고, 늘수록 바깥으로 번진다.
+	var centers: Array[Vector2] = []
+	var cluster_budget := maxi(1, ceili(float(limit) / float(WAIT_CLUSTER_MIN_SIZE)))
+	for _cluster in cluster_budget:
+		centers.append(_pick_cluster_center(rng, area, centers))
+	var anchor := Vector2(area.position.x, area.end.y)
+	centers.sort_custom(
+		func(left: Vector2, right: Vector2) -> bool:
+			return left.distance_squared_to(anchor) < right.distance_squared_to(anchor)
+	)
+	var occupancy: Dictionary = {}
+	for center in centers:
+		if slots.size() >= limit:
+			break
+		var cluster_size := mini(
+			rng.randi_range(WAIT_CLUSTER_MIN_SIZE, WAIT_CLUSTER_MAX_SIZE),
+			limit - slots.size()
+		)
+		# 채워진 원판에 몰아넣으면 서로를 가려서 몇 마리인지 안 읽힌다.
+		# 둘레에 흩는 고리로 잡되(1마리당 0.78m 호), 반지름·각도를 흔들어
+		# 자로 잰 원이 아니라 "둘러앉은 무리"로 보이게 한다.
+		var ring_radius := maxf(0.5, float(cluster_size) * 0.78 / TAU)
+		var center_position := Vector3(center.x, 0.78, center.y)
+		# 작은 무리는 전원이 중심을 본다(마주보는 잡담). 큰 무리는 절반만.
+		var face_center_chance := 1.0 if cluster_size <= 4 else 0.45
+		for member_index in cluster_size:
+			var base_angle := TAU * float(member_index) / float(cluster_size)
+			var point := _pick_cluster_member(
+				rng,
+				center,
+				ring_radius,
+				base_angle,
+				area,
+				occupancy
+			)
+			_mark_occupancy(occupancy, point)
+			var toward := center - point
+			var facing := "s"
+			if rng.randf() < face_center_chance and toward.length_squared() > 0.02:
+				facing = _screen_facing_name(toward)
+			else:
+				facing = SCREEN_DIRECTION_NAMES[rng.randi_range(
+					0,
+					SCREEN_DIRECTION_NAMES.size() - 1
+				)]
+			slots.append({
+				"position": Vector3(point.x, 0.78, point.y),
+				"facing": facing,
+				"rest": rng.randf() < WAIT_REST_POSE_RATIO,
+				"center": center_position,
+			})
+	return slots
+
+
+func _pick_cluster_center(
+	rng: RandomNumberGenerator,
+	area: Rect2,
+	existing: Array[Vector2]
+) -> Vector2:
+	var best := area.get_center()
+	var best_gap := -1.0
+	for _attempt in 24:
+		var candidate := Vector2.ZERO
+		if rng.randf() < WAIT_CLUSTER_WALL_BIAS:
+			var inset := rng.randf_range(0.55, 2.1)
+			if rng.randf() < 0.5:
+				var z_edge := (area.position.y + inset) if rng.randf() < 0.5 else (area.end.y - inset)
+				candidate = Vector2(rng.randf_range(area.position.x, area.end.x), z_edge)
+			else:
+				var x_edge := (area.position.x + inset) if rng.randf() < 0.5 else (area.end.x - inset)
+				candidate = Vector2(x_edge, rng.randf_range(area.position.y, area.end.y))
+		else:
+			candidate = Vector2(
+				rng.randf_range(area.position.x, area.end.x),
+				rng.randf_range(area.position.y, area.end.y)
+			)
+		candidate.x = clampf(candidate.x, area.position.x, area.end.x)
+		candidate.y = clampf(candidate.y, area.position.y, area.end.y)
+		var nearest := INF
+		for other in existing:
+			nearest = minf(nearest, candidate.distance_to(other))
+		if nearest >= WAIT_CLUSTER_SEPARATION:
+			return candidate
+		if nearest > best_gap:
+			best_gap = nearest
+			best = candidate
+	return best
+
+
+func _pick_cluster_member(
+	rng: RandomNumberGenerator,
+	center: Vector2,
+	ring_radius: float,
+	base_angle: float,
+	area: Rect2,
+	occupancy: Dictionary
+) -> Vector2:
+	var fallback := center
+	for attempt in 12:
+		var angle := base_angle + rng.randf_range(-0.55, 0.55)
+		var distance := maxf(0.0, ring_radius * rng.randf_range(0.5, 1.2))
+		var candidate := Vector2(
+			clampf(center.x + cos(angle) * distance, area.position.x, area.end.x),
+			clampf(center.y + sin(angle) * distance, area.position.y, area.end.y)
+		)
+		if attempt == 0:
+			fallback = candidate
+		if not _is_occupied(occupancy, candidate):
+			return candidate
+	return fallback
+
+
+func _occupancy_cell(point: Vector2) -> Vector2i:
+	return Vector2i(
+		floori(point.x / WAIT_CLUSTER_MIN_GAP),
+		floori(point.y / WAIT_CLUSTER_MIN_GAP)
+	)
+
+
+func _mark_occupancy(occupancy: Dictionary, point: Vector2) -> void:
+	var cell := _occupancy_cell(point)
+	var bucket: Array = occupancy.get(cell, [])
+	bucket.append(point)
+	occupancy[cell] = bucket
+
+
+func _is_occupied(occupancy: Dictionary, point: Vector2) -> bool:
+	# 셀 크기 = 최소 간격이라 3×3 이웃만 보면 충분하다.
+	var cell := _occupancy_cell(point)
+	var threshold := WAIT_CLUSTER_MIN_GAP * WAIT_CLUSTER_MIN_GAP
+	for offset_x in [-1, 0, 1]:
+		for offset_z in [-1, 0, 1]:
+			var bucket: Array = occupancy.get(Vector2i(cell.x + offset_x, cell.y + offset_z), [])
+			for other in bucket:
+				if point.distance_squared_to(other) < threshold:
+					return true
+	return false
+
+
+func _screen_facing_name(world_direction: Vector2) -> String:
+	# 스프라이트 8방위는 화면 축 기준이다(아이소메트릭이라 월드 축과 45도 어긋난다).
+	var screen_direction := Vector2(
+		world_direction.x - world_direction.y,
+		world_direction.x + world_direction.y
+	)
+	if screen_direction.length_squared() <= 0.0001:
+		return "s"
+	screen_direction = screen_direction.normalized()
+	var angle := fposmod(rad_to_deg(atan2(screen_direction.x, -screen_direction.y)), 360.0)
+	var index := int(round(angle / 45.0)) % SCREEN_DIRECTION_NAMES.size()
+	return SCREEN_DIRECTION_NAMES[index]
 
 
 func _scratcher_work_position(index: int) -> Vector3:
@@ -1594,14 +1837,31 @@ func _catnip_work_position(index: int) -> Vector3:
 func _factory_work_position(station: Vector3, index: int, columns: int) -> Vector3:
 	# 생산기 앞에 붙는 작업조. 열 수를 라인마다 못 박아(꾹꾹이 8 / 스크래핑 5)
 	# 두 무리가 서로 겹치지 않게 한다 — 두 기준점의 간격은 7m다.
+	# 다만 자로 잰 격자는 작업조가 아니라 타일 무늬로 읽히므로, 줄을 반 칸씩
+	# 엇갈리고 자리를 결정적으로 흔든다(재진입해도 같은 자리).
 	var safe_index := maxi(0, index)
 	var column := safe_index % columns
 	var row := safe_index / columns
-	var offset_x := (float(column) - float(columns - 1) * 0.5) * RESIDENT_PACK_SPACING
+	var stagger := 0.5 if row % 2 == 1 else 0.0
+	var lateral := float(column) + stagger - float(columns - 1) * 0.5
+	# 가장자리를 뒤로 빼 얕은 호를 만든다 — 직사각 블록은 무리가 아니라 카펫이다.
+	var arc := absf(lateral) * 0.34
+	var jitter := _work_slot_jitter(int(station.x * 7.0) + safe_index * 31)
 	return Vector3(
-		station.x + offset_x,
+		station.x + lateral * RESIDENT_PACK_SPACING + jitter.x,
 		0.78,
-		station.z + 2.0 + float(row) * RESIDENT_PACK_SPACING
+		station.z + 2.0 + arc + float(row) * RESIDENT_PACK_SPACING + jitter.y
+	)
+
+
+func _work_slot_jitter(seed_value: int) -> Vector2:
+	# 좌석 번호만으로 정해지는 흔들림 — 난수 상태를 들고 다니지 않으므로
+	# 몇 번을 다시 들어와도 같은 값이 나온다.
+	var noise_x := float(posmod(hash(seed_value * 2 + 1), 1024)) / 1023.0
+	var noise_z := float(posmod(hash(seed_value * 2 + 7919), 1024)) / 1023.0
+	return Vector2(
+		(noise_x - 0.5) * 2.0 * WORK_SLOT_JITTER,
+		(noise_z - 0.5) * 2.0 * WORK_SLOT_JITTER
 	)
 
 

@@ -9,7 +9,7 @@ const SAVE_PATH := "user://accessibility.cfg"
 const OPENING_SCENE_PATH := "res://scenes/opening_sequence.tscn"
 const SAVED_PROPERTIES := [
 	"ui_scale", "combat_text_scale", "camera_shake_scale", "hit_flash_scale",
-	"vignette_scale", "minimum_brightness", "aim_assist_strength",
+	"vignette_scale", "hit_feedback_intensity", "minimum_brightness", "aim_assist_strength",
 	"damage_numbers_enabled", "auto_reload", "vibration_enabled", "battery_saver",
 	"ui_fx_enabled", "active_tutorial_enabled",
 	"master_volume", "sfx_volume", "ui_volume",
@@ -20,6 +20,9 @@ var combat_text_scale := 1.0
 var camera_shake_scale := 0.75
 var hit_flash_scale := 0.72
 var vignette_scale := 0.7
+# 피격 화면 효과 세기(0~1) — 붉은 비네트·방향 호·피격 흔들림을 한 번에 줄인다.
+# 0으로 두면 붉은 화면 효과가 아예 뜨지 않는다(광과민 대응). 기본은 현재 강도.
+var hit_feedback_intensity := 1.0
 var minimum_brightness := 0.16
 var aim_assist_strength := 0.65
 # 피해량 숫자 팝 — 기본 켜짐. 화면이 어지러운 유저를 위한 끄기 토글.
@@ -160,6 +163,7 @@ func _build_ui() -> void:
 	_add_slider(content, "화면 흔들림", "피격·암살·보스 연출", 0.0, 1.0, 0.05, camera_shake_scale, func(value: float) -> void: camera_shake_scale = value)
 	_add_slider(content, "피격 번쩍임", "캐릭터와 화면의 순간 섬광", 0.0, 1.0, 0.05, hit_flash_scale, func(value: float) -> void: hit_flash_scale = value)
 	_add_slider(content, "화면 가장자리 효과", "피격 시 붉은 비네팅 강도", 0.0, 1.0, 0.05, vignette_scale, func(value: float) -> void: vignette_scale = value)
+	_add_slider(content, "피격 화면 효과", "붉은 화면·방향 표시·피격 흔들림 (0%면 끔)", 0.0, 1.0, 0.05, hit_feedback_intensity, func(value: float) -> void: hit_feedback_intensity = value)
 	_add_slider(content, "최소 밝기", "밤과 실내의 가장 어두운 정도", 0.0, 0.5, 0.05, minimum_brightness, func(value: float) -> void: minimum_brightness = value)
 	_add_slider(content, "조준 보정", "모바일과 패드의 원뿔 조준 보정", 0.0, 1.0, 0.05, aim_assist_strength, func(value: float) -> void: aim_assist_strength = value)
 	content.add_child(_label("소리", 13, Color("#b9a86a")))

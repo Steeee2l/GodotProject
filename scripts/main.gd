@@ -60,6 +60,30 @@ const LOAF_MOVE_MULTIPLIER := 0.6
 const LOAF_STAMINA_DRAIN_PER_SECOND := 7.5
 const LOAF_MIN_STAMINA := 1.0
 const LOAF_VISIBILITY_MULTIPLIER := 0.48
+# ── 피격 피드백(표준형: 경직 없음, 화면으로 알린다) ──────────────
+# 유저 신고 "적 총알에 맞을 때 경직이 있는 게 되게 불편하다"의 교정.
+# 조작을 뺏는 대신(경직·히트스톱·큰 넉백) 화면·소리·진동으로 알린다.
+# 종류별 넉백 세기 — 총알은 사실상 밀지 않는다(예전 1.35 → 0.35).
+# 폭발·근접 같은 "큰 타격"만 몸이 밀리는 감각을 남긴다.
+const HIT_KNOCKBACK_BY_KIND := {
+	"bullet": 0.35,
+	"melee": 1.05,
+	"blast": 1.6,
+}
+const HIT_KNOCKBACK_DEFAULT := 0.35
+# 붉은 비네트 펄스 — 피격마다 BASE(+피해량 비례)로 튀고 DECAY초에 걸쳐 0으로.
+# 연타로 누적되지 않게 max()로만 올리고 MAX에서 자른다.
+const HIT_VIGNETTE_BASE := 0.55
+const HIT_VIGNETTE_PER_DAMAGE := 0.006
+const HIT_VIGNETTE_MAX := 0.8
+const HIT_VIGNETTE_DECAY := 0.25
+# 저체력(30% 이하) 상시 비네트 — 표준적인 "위험" 신호. 은은하게 심박한다.
+const LOW_HEALTH_VIGNETTE_RATIO := 0.3
+const LOW_HEALTH_VIGNETTE_BASE := 0.22
+# 연타 시 방향 호·진동이 매 탄마다 다시 터지지 않게 하는 최소 간격.
+const HIT_FEEDBACK_MIN_INTERVAL_MSEC := 70
+# 피격 카메라 셰이크 상한 — 예전 0.38은 조준이 흔들려 반격을 못 했다.
+const HIT_SHAKE_MAX := 0.24
 const WEAPON_FRAME_SIZE := Vector2(192, 192)
 const WEAPON_VISUAL_PIXEL_SIZE := 0.0018
 const AK_DIRECTIONAL_TEXTURE := preload("res://assets/weapons/ak47_directional.png")
@@ -279,7 +303,17 @@ var combat_hit_stop_cooldown := 0.0
 # 같은 프레임에 들어간 피해 합. 샷건 펠릿 8발이 한 방으로 읽히게 한다.
 var hit_stop_damage_accumulator := 0
 var player_hit_flash_time := 0.0
-var player_hit_stun_time := 0.0
+# 피격 반응 창(연출 전용). 예전 이름은 player_hit_stun_time이었고 이동 입력을
+# 0.18~0.24초 통째로 막았다 — 연사에 맞으면 잠금이 계속 겹쳐 사실상 조작
+# 불능이었다. 이제 경직은 없다: 이 값은 "방금 맞았다"를 읽는 연출 타이머일 뿐,
+# 어떤 입력도 막지 않는다.
+var player_hit_react_time := 0.0
+# 붉은 비네트 펄스 — 피격마다 HIT_VIGNETTE_* 만큼 튀었다가 선형 감쇠한다.
+var hit_vignette_pulse := 0.0
+# 연타로 효과(진동·방향 호)가 겹쳐 과해지지 않게 하는 최소 간격 기록.
+var last_hit_feedback_msec := 0
+# 저체력 상시 비네트의 심박 위상.
+var low_health_pulse_phase := 0.0
 var last_damage_source_name := "알 수 없는 공격자"
 var last_damage_weapon_name := "알 수 없는 무기"
 var last_damage_blocked := 0
@@ -539,6 +573,11 @@ func _ready() -> void:
 	alert_overlay.setup(player, camera)
 	hud.setup_aim_feedback()
 	hud.setup_player_combat_feedback()
+	# 판 시작 체력에 잔상을 맞춰 둔다 — 안 그러면 감소 체력으로 시작한 판에서
+	# 첫 프레임에 흰 잔상이 통째로 떴다가 줄어든다.
+	hud.reset_player_health_trail(
+		clampf(float(player_health) / float(GameState.get_max_health()), 0.0, 1.0)
+	)
 	game_over_screen.build(self)
 	lore_reader.build(self)
 	lore_reader.opened.connect(func() -> void:
@@ -746,7 +785,7 @@ func _physics_process(delta: float) -> void:
 			_layout_center_top_banners()
 	_update_melee_attack(delta)
 	aim_hold_time = maxf(0.0, aim_hold_time - delta)
-	player_hit_stun_time = maxf(0.0, player_hit_stun_time - delta)
+	player_hit_react_time = maxf(0.0, player_hit_react_time - delta)
 	_update_space_hold(delta)
 	if loafing:
 		roll_stamina = maxf(
@@ -806,8 +845,9 @@ func _physics_process(delta: float) -> void:
 	input_vector = input_vector.limit_length(1.0)
 	if touch_vector.length_squared() > input_vector.length_squared():
 		input_vector = touch_vector
-	if player_hit_stun_time > 0.0:
-		input_vector = Vector2.ZERO
+	# 예전에는 여기서 피격 경직(player_hit_stun_time) 동안 input_vector를 통째로
+	# 0으로 만들었다. 연사에 맞으면 0.18~0.24초 잠금이 계속 겹쳐 조작이 죽었다.
+	# 피격은 이제 화면(비네트·방향 호·체력바 잔상)과 진동으로만 알린다.
 	_update_fatigue(delta, input_vector.length_squared() > 0.01)
 	weapon_combat._update_weapon_ballistics(delta, input_vector.length_squared() > 0.01)
 
@@ -1789,9 +1829,12 @@ func _update_laser_beam(aim_direction: Vector3) -> void:
 
 
 func _update_player_combat_feedback(delta: float) -> void:
+	var health_ratio := clampf(float(player_health) / float(GameState.get_max_health()), 0.0, 1.0)
 	if hud.player_world_health_bar:
-		var health_ratio := clampf(float(player_health) / float(GameState.get_max_health()), 0.0, 1.0)
 		hud.player_world_health_fill.size.x = 46.0 * health_ratio
+		# 흰 잔상 — 방금 깎인 만큼이 흰색으로 잠깐 남았다가 따라 줄어든다
+		# (보스 체력바 damage_trail과 같은 패턴, 지연 0.28s · 초당 46px 추적).
+		hud.update_player_health_trail(health_ratio, delta)
 		hud.player_health_fill_style.bg_color = (
 			Color(0.88, 0.18, 0.12, 0.98) if health_ratio <= 0.3
 			else Color(0.94, 0.66, 0.16, 0.98) if health_ratio <= 0.6
@@ -1814,11 +1857,32 @@ func _update_player_combat_feedback(delta: float) -> void:
 	camera_shake_time = maxf(0.0, camera_shake_time - delta)
 	camera_shake_strength = move_toward(camera_shake_strength, 0.0, delta * 8.0)
 	var hit_strength := clampf(player_hit_flash_time / 0.32, 0.0, 1.0)
-	var flash_scale := clampf(float(AccessibilitySettings.hit_flash_scale), 0.0, 1.0)
+	var feedback_intensity := _get_hit_feedback_intensity()
+	var flash_scale := clampf(float(AccessibilitySettings.hit_flash_scale), 0.0, 1.0) * feedback_intensity
+	# 펄스 선형 감쇠 — 상한(0.8)에서 시작해도 HIT_VIGNETTE_DECAY(0.25s) 안에 0.
+	hit_vignette_pulse = maxf(
+		0.0,
+		hit_vignette_pulse - delta * (HIT_VIGNETTE_MAX / HIT_VIGNETTE_DECAY)
+	)
+	low_health_pulse_phase = fposmod(low_health_pulse_phase + delta * 4.4, TAU)
+	# 저체력 상시 비네트 — 30% 이하부터 은은하게, 0에 가까울수록 진하게 심박한다.
+	var low_health_floor := 0.0
+	if health_ratio <= LOW_HEALTH_VIGNETTE_RATIO and player_health > 0:
+		var danger := 1.0 - health_ratio / LOW_HEALTH_VIGNETTE_RATIO
+		low_health_floor = (
+			LOW_HEALTH_VIGNETTE_BASE
+			* (0.55 + 0.45 * danger)
+			* (0.78 + 0.22 * sin(low_health_pulse_phase))
+		)
 	if hud.damage_vignette_material:
+		var vignette_scale := clampf(float(AccessibilitySettings.vignette_scale), 0.0, 1.0)
 		hud.damage_vignette_material.set_shader_parameter(
 			"intensity",
-			hit_strength * hit_strength * clampf(float(AccessibilitySettings.vignette_scale), 0.0, 1.0)
+			clampf(
+				maxf(hit_vignette_pulse, low_health_floor) * vignette_scale * feedback_intensity,
+				0.0,
+				HIT_VIGNETTE_MAX
+			)
 		)
 	if hit_strength <= 0.0:
 		return
@@ -4107,7 +4171,9 @@ func take_damage(amount: int) -> void:
 	player_health = maxi(0, player_health - applied_damage)
 	GameState.player_health = player_health
 	player_hit_flash_time = 0.32
-	player_hit_stun_time = maxf(player_hit_stun_time, 0.18)
+	player_hit_react_time = maxf(player_hit_react_time, 0.18)
+	# 붉은 비네트 펄스 — 모든 피해가 지나는 단일 지점이라 여기서 올린다.
+	_pulse_hit_vignette(applied_damage)
 	# 플레이어 피격음 — 비네트·플래시와 같은 프레임.
 	SFX.play("hit_player")
 	var health_bar := get_node_or_null("HUD/TopLeft/Margin/VBox/Health") as ProgressBar
@@ -4128,27 +4194,48 @@ func take_damage(amount: int) -> void:
 		state_label.text = "행동 불능"
 
 
-func take_hit(amount: int, hit_direction: Vector3) -> void:
+func take_hit(amount: int, hit_direction: Vector3, impact_kind: String = "bullet") -> void:
+	# impact_kind — "bullet"(기본, 넉백 거의 없음) / "melee" / "blast".
+	# 총알에까지 몸이 밀리면 연사 중에 조준·이동이 통째로 무너진다.
 	if extraction_transition_active or player_death_sequence_active:
 		return
 	take_damage(amount)
 	hit_direction.y = 0.0
 	if player_health > 0 and hit_direction.length_squared() > 0.01:
 		# 방어구(몸) 돌파 +30 — 넉백 저항 50%(배율의 단일 지점은 GameState).
-		recoil_velocity += hit_direction.normalized() * 1.35 * GameState.get_armor_knockback_multiplier()
-		player_hit_stun_time = maxf(player_hit_stun_time, 0.24)
-		_show_damage_direction(hit_direction)
+		var knockback: float = float(
+			HIT_KNOCKBACK_BY_KIND.get(impact_kind, HIT_KNOCKBACK_DEFAULT)
+		)
+		recoil_velocity += (
+			hit_direction.normalized()
+			* knockback
+			* GameState.get_armor_knockback_multiplier()
+		)
+		player_hit_react_time = maxf(player_hit_react_time, 0.24)
+		var now_msec := Time.get_ticks_msec()
+		if now_msec - last_hit_feedback_msec >= HIT_FEEDBACK_MIN_INTERVAL_MSEC:
+			last_hit_feedback_msec = now_msec
+			_show_damage_direction(hit_direction)
+			_play_hit_haptic()
 		camera_shake_time = 0.22
-		camera_shake_strength = minf(0.38, 0.12 + float(amount) * 0.006)
-		_trigger_hit_stop(0.045)
+		# 상한 0.24(예전 0.38) — 맞는 동안에도 조준선이 읽혀야 반격할 수 있다.
+		camera_shake_strength = minf(
+			HIT_SHAKE_MAX,
+			(0.12 + float(amount) * 0.006) * _get_hit_feedback_intensity()
+		)
+		# 피격 히트스톱(0.045s 시간 정지)은 제거했다 — 연사에 맞으면 프레임이
+		# 계속 끊겨 조작이 이상해진다. 히트스톱은 '처치'에만 남긴다.
 
 
 func take_hostile_hit(
 	amount: int,
 	hit_direction: Vector3,
 	attacker = null,
-	source_position: Vector3 = Vector3.INF
+	source_position: Vector3 = Vector3.INF,
+	impact_kind: String = "bullet"
 ) -> void:
+	# impact_kind는 넉백 세기만 고른다("bullet"/"melee"/"blast"). 인자를 안 주는
+	# 옛 호출부(총알)는 기본값 그대로 총알 취급 — 거의 밀리지 않는다.
 	# 엄폐 — 공격원(또는 폭심) 기준으로 엄폐물 건너편이면 ×0.55. 사격 노출 중엔 없음.
 	var cover_source := source_position
 	if cover_source == Vector3.INF and is_instance_valid(attacker) and attacker is Node3D:
@@ -4164,7 +4251,7 @@ func take_hostile_hit(
 		var identity := attacker.call("get_combat_identity") as Dictionary
 		last_damage_source_name = str(identity.get("source_name", last_damage_source_name))
 		last_damage_weapon_name = str(identity.get("weapon_name", last_damage_weapon_name))
-	take_hit(amount, hit_direction)
+	take_hit(amount, hit_direction, impact_kind)
 	if last_damage_blocked > 0 and player_health > 0 and hud.ammo_notice:
 		hud.push_toast("방어구가 피해 %d을 막았다" % last_damage_blocked, Color("#8ed9ff"), 1.1)
 	if last_cover_blocked > 0 and player_health > 0 and hud.ammo_notice:
@@ -4225,6 +4312,26 @@ func _show_mastery_lesson(key: String, text: String, run_key: String = "") -> vo
 		hud.push_toast(text, HudStyle.GOLD, 3.4)
 
 
+func _get_hit_feedback_intensity() -> float:
+	# 접근성 — 피격 화면 효과 세기(0이면 붉은 화면·흔들림이 아예 안 뜬다).
+	# 광과민 유저를 위한 단일 지점. 기본값은 현재 강도(1.0).
+	return clampf(float(AccessibilitySettings.hit_feedback_intensity), 0.0, 1.0)
+
+
+func _pulse_hit_vignette(applied_damage: int) -> void:
+	# 연타로 값이 누적돼 화면이 새빨개지지 않게, max()로만 올리고 상한에서 자른다.
+	var target := HIT_VIGNETTE_BASE + float(applied_damage) * HIT_VIGNETTE_PER_DAMAGE
+	hit_vignette_pulse = minf(HIT_VIGNETTE_MAX, maxf(hit_vignette_pulse, target))
+
+
+func _play_hit_haptic() -> void:
+	if not DisplayServer.is_touchscreen_available():
+		return
+	if not bool(AccessibilitySettings.vibration_enabled):
+		return
+	Input.vibrate_handheld(35)
+
+
 func _show_damage_direction(hit_direction: Vector3) -> void:
 	if hud.damage_direction_indicator == null:
 		return
@@ -4239,7 +4346,8 @@ func _show_damage_direction(hit_direction: Vector3) -> void:
 	hud.damage_direction_indicator.rotation = screen_direction.angle() + PI * 0.5
 	if damage_direction_tween:
 		damage_direction_tween.kill()
-	hud.damage_direction_indicator.modulate.a = 1.0
+	# 접근성 0%면 방향 호도 뜨지 않는다(붉은 화면 효과 일괄 차단).
+	hud.damage_direction_indicator.modulate.a = _get_hit_feedback_intensity()
 	hud.damage_direction_indicator.scale = Vector2.ONE * 1.28
 	damage_direction_tween = create_tween()
 	damage_direction_tween.set_parallel(true)

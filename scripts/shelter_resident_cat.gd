@@ -16,11 +16,28 @@ const DIRECTION_STATES := {
 }
 const FRAME_COUNT := 4
 const KNEADING_FRAME_COUNT := 6
+# 앉아 쉬는 포즈. 새 아트를 그리지 않고 웅크린 주민 스프라이트를 재사용한다 —
+# 털색이 작업 고양이와 같아서 "다른 캐릭터"로 안 읽히고 실루엣만 확 달라진다.
+const REST_ANIMATION_ROOT := "res://assets/characters/cowering_resident"
+const REST_TEXTURE_NAMES := {
+	"n": "up_action-frame-0",
+	"ne": "up_right_action-frame-0",
+	"e": "right_action-frame-3",
+	"se": "down_right_action-frame-1",
+	"s": "down_action-frame-2",
+	"sw": "down_left_action-frame-2",
+	"w": "left_action-frame-3",
+	"nw": "up_left_action-frame-0",
+}
 const WALK_SPEED := 3.8
 const WANDER_SPEED := 2.15
 const WANDER_MIN_WAIT := 1.0
 const WANDER_MAX_WAIT := 3.2
 const WANDER_RETARGET_TIME := 9.0
+# 대기 주민이 자기 자리 주변에서만 서성이는 반경(m). 예전처럼 방 전체를
+# 목적지로 삼으면 애써 만든 무리가 몇 초 만에 균일 분포로 풀어진다.
+# 배치 최소 간격(0.42m)의 절반 아래로 잡아야 이웃과 겹쳐 서지 않는다.
+const WAITING_HOME_RADIUS := 0.2
 const PRODUCTION_POP_INTERVAL := 1.0
 const PRODUCTION_POP_HEIGHT := 1.34
 const PRODUCTION_POP_DURATION := 1.12
@@ -44,6 +61,22 @@ var roam_bounds := Rect2(Vector2(-12.0, -4.0), Vector2(24.0, 12.0))
 var wander_wait := 0.0
 var wander_retarget_time := 0.0
 var wander_random := RandomNumberGenerator.new()
+# 대기 무리가 잡아 준 "내 자리". 배회는 이 점 주변으로만 돈다.
+var home_position := Vector3.ZERO
+# 대기 포즈("stand" / "rest")와 대기 중 바라보는 방향. 호스트가 무리 배치와
+# 함께 정해 준다(set_waiting_pose).
+var waiting_pose := "stand"
+var waiting_facing := "s"
+# ── 개체 다양성(비용 0) ────────────────────────────────────
+# 같은 프레임·같은 속도·같은 방향으로 서 있으면 120마리는 타일 무늬가 된다.
+# 주민 id 해시로 시작 프레임·재생 속도·초기 방향만 흩어 준다.
+var personal_speed_scale := 1.0
+var animation_frame_offset := 0
+var animation_phase_offset := 0.0
+var current_animation := ""
+# 꾹꾹이 작업조 전원이 같은 kneading_ne 한 장을 돌리면 100마리가 한 덩어리
+# 무늬가 된다. 일부는 작업 구역을 바라보고 서 있게 해서 실루엣을 깬다.
+var kneading_pose := true
 # 캣닢 피버 동안 걸리는 체감 배속(이동·애니메이션·생산 팝업이 함께 빨라진다).
 var fever_speed_scale := 1.0
 # 생산 팝업(+고철) 허용 여부. 주민이 100명을 넘으면 똑같은 숫자가 100개 떠올라
@@ -62,7 +95,25 @@ func configure(next_resident_id: String, spawn_position: Vector3) -> void:
 	resident_id = next_resident_id
 	position = spawn_position
 	target_position = spawn_position
+	home_position = spawn_position
 	wander_random.seed = hash(resident_id)
+	# 외형 난수는 배회 난수와 분리한다 — 같은 스트림을 쓰면 배회 한 번에
+	# 외형 시드가 밀려서 재진입 때 다른 고양이가 된다.
+	var look_random := RandomNumberGenerator.new()
+	look_random.seed = hash("resident_look_%s" % resident_id)
+	personal_speed_scale = look_random.randf_range(0.9, 1.1)
+	animation_frame_offset = look_random.randi_range(0, FRAME_COUNT - 1)
+	animation_phase_offset = look_random.randf()
+	facing = DIRECTION_NAMES[look_random.randi_range(0, DIRECTION_NAMES.size() - 1)]
+	waiting_facing = facing
+	kneading_pose = look_random.randf() < 0.7
+
+
+func set_waiting_pose(next_facing: String, rest: bool) -> void:
+	# 무리 배치가 정해 준 "어디를 보고 있나 / 앉아 쉬고 있나". 대기 상태에서만 쓴다.
+	if DIRECTION_STATES.has(next_facing):
+		waiting_facing = next_facing
+	waiting_pose = "rest" if rest else "stand"
 
 
 func set_roam_bounds(next_bounds: Rect2) -> void:
@@ -126,9 +177,15 @@ func set_work_assignment(next_kind: String, next_target: Vector3, next_work_focu
 	if snap:
 		position = target_position
 	if assignment_kind == "waiting":
+		home_position = target_position
+		facing = waiting_facing
 		wander_wait = wander_random.randf_range(WANDER_MIN_WAIT, WANDER_MAX_WAIT)
 		wander_retarget_time = WANDER_RETARGET_TIME
-		if snap or previous_kind != "waiting":
+		if waiting_pose == "rest":
+			# 앉아 쉬는 고양이는 자리를 뜨지 않는다 — 무리에 정지점이 있어야
+			# 전체가 술렁이는 게 아니라 "모여서 쉬는 무리"로 읽힌다.
+			target_position = home_position
+		elif snap or previous_kind != "waiting":
 			_choose_wander_target()
 	_play_animation()
 	_update_work_indicator()
@@ -144,7 +201,7 @@ func set_fever_speed_scale(value: float) -> void:
 	# 피버는 눈으로 먼저 읽혀야 한다 — 생산 수치보다 "다들 미쳐 날뛴다"가 먼저다.
 	fever_speed_scale = clampf(value, 0.1, 6.0)
 	if sprite != null:
-		sprite.speed_scale = fever_speed_scale
+		sprite.speed_scale = fever_speed_scale * personal_speed_scale
 
 
 func _physics_process(raw_delta: float) -> void:
@@ -299,18 +356,25 @@ func _format_catnip_rate(value: float) -> String:
 
 
 func _choose_wander_target() -> void:
+	# 배회는 "내 자리 주변 한 걸음"이다. 방 전체를 목적지로 삼던 예전 코드는
+	# 무리 배치를 몇 초 만에 균일 분포로 풀어 버렸다.
+	wander_wait = wander_random.randf_range(WANDER_MIN_WAIT, WANDER_MAX_WAIT)
+	wander_retarget_time = WANDER_RETARGET_TIME
+	if waiting_pose == "rest":
+		target_position = home_position
+		return
 	var margin := 0.8
 	var minimum := roam_bounds.position + Vector2(margin, margin)
 	var maximum := roam_bounds.end - Vector2(margin, margin)
 	if maximum.x <= minimum.x or maximum.y <= minimum.y:
 		return
+	var angle := wander_random.randf() * TAU
+	var radius := sqrt(wander_random.randf()) * WAITING_HOME_RADIUS
 	target_position = Vector3(
-		wander_random.randf_range(minimum.x, maximum.x),
+		clampf(home_position.x + cos(angle) * radius, minimum.x, maximum.x),
 		position.y,
-		wander_random.randf_range(minimum.y, maximum.y)
+		clampf(home_position.z + sin(angle) * radius, minimum.y, maximum.y)
 	)
-	wander_wait = wander_random.randf_range(WANDER_MIN_WAIT, WANDER_MAX_WAIT)
-	wander_retarget_time = WANDER_RETARGET_TIME
 
 
 func _update_work_indicator() -> void:
@@ -369,14 +433,27 @@ func _set_motion_state(next_state: String) -> void:
 
 
 func _play_animation() -> void:
-	if sprite:
-		sprite.flip_h = false
-		sprite.rotation = Vector3.ZERO
-		var arrived := position.distance_to(target_position) <= 0.28
-		if assignment_kind == "kneading" and motion_state == "idle" and arrived:
-			sprite.play("kneading_ne")
-		else:
-			sprite.play("%s_%s" % [motion_state, facing])
+	if sprite == null:
+		return
+	sprite.flip_h = false
+	sprite.rotation = Vector3.ZERO
+	var arrived := position.distance_to(target_position) <= 0.28
+	var next_animation := "%s_%s" % [motion_state, facing]
+	if assignment_kind == "kneading" and motion_state == "idle" and arrived and kneading_pose:
+		next_animation = "kneading_ne"
+	elif assignment_kind == "waiting" and waiting_pose == "rest" and motion_state == "idle" and arrived:
+		next_animation = "rest_%s" % facing
+	if next_animation == current_animation:
+		return
+	current_animation = next_animation
+	sprite.play(next_animation)
+	# 같은 애니메이션을 100마리가 같은 프레임으로 돌리면 그건 무리가 아니라
+	# 타일 무늬다. 시작 프레임·위상·재생 속도만 흩어도 "숨 쉬는 무리"가 된다.
+	var frame_total := sprite.sprite_frames.get_frame_count(next_animation)
+	if frame_total > 1:
+		sprite.frame = animation_frame_offset % frame_total
+		sprite.frame_progress = animation_phase_offset
+	sprite.speed_scale = fever_speed_scale * personal_speed_scale
 
 
 func _create_sprite_frames() -> SpriteFrames:
@@ -403,6 +480,17 @@ func _create_sprite_frames() -> SpriteFrames:
 					frames.add_frame(animation_name, texture)
 				else:
 					push_error("Missing shelter resident frame: %s" % texture_path)
+		# 앉아 쉬는 포즈는 방향마다 한 장(정지)이면 충분하다.
+		var rest_animation_name := "rest_%s" % direction_name
+		frames.add_animation(rest_animation_name)
+		frames.set_animation_loop(rest_animation_name, true)
+		frames.set_animation_speed(rest_animation_name, 1.0)
+		var rest_path := "%s/%s.png" % [REST_ANIMATION_ROOT, REST_TEXTURE_NAMES[direction_name]]
+		var rest_texture := load(rest_path) as Texture2D
+		if rest_texture:
+			frames.add_frame(rest_animation_name, rest_texture)
+		else:
+			push_error("Missing shelter resident rest frame: %s" % rest_path)
 	frames.add_animation("kneading_ne")
 	frames.set_animation_loop("kneading_ne", true)
 	frames.set_animation_speed("kneading_ne", 8.0)

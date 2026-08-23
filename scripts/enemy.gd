@@ -2484,7 +2484,19 @@ func _perform_melee_strike() -> void:
 	# 엘리트 배율(일반 1.0)을 근접 타격에도 동일하게 적용한다.
 	var strike_damage := roundi(float(12 + roundi(6.0 * threat_level)) * elite_damage_multiplier)
 	if target.has_method("take_hostile_hit"):
-		target.call("take_hostile_hit", strike_damage, pending_attack_direction, self)
+		# 5인자(impact_kind)를 받는 상대(플레이어)에겐 근접이라고 알린다 —
+		# 방망이·발톱 같은 큰 타격만 몸이 밀리는 감각을 남긴다.
+		if target.get_method_argument_count("take_hostile_hit") >= 5:
+			target.call(
+				"take_hostile_hit",
+				strike_damage,
+				pending_attack_direction,
+				self,
+				global_position,
+				"melee"
+			)
+		else:
+			target.call("take_hostile_hit", strike_damage, pending_attack_direction, self)
 	elif target.has_method("take_damage"):
 		target.call("take_damage", strike_damage)
 	elif target.get_parent() != null and target.get_parent().has_method("take_hostile_hit"):

@@ -87,7 +87,9 @@ func _run() -> void:
 	var health_before_hit := int(main_scene.get("player_health"))
 	main_scene.call("take_hit", 5, Vector3.RIGHT)
 	assert(int(main_scene.get("player_health")) == health_before_hit - 5)
-	assert(float(main_scene.get("player_hit_stun_time")) > 0.0)
+	# 피격 경직(player_hit_stun_time)은 제거됐다 — 이동 입력을 통째로 막아
+	# 연사에 맞으면 조작이 죽었다. 지금은 연출 전용 반응 창만 남는다.
+	assert(float(main_scene.get("player_hit_react_time")) > 0.0)
 	assert((main_scene.get("recoil_velocity") as Vector3).x > 0.0)
 	# 옛 AK 픽업 플로우(_equip_ak47)는 죽은 코드로 제거됐다 — 무장 상태만 부여.
 	main_scene.set("has_ak", true)

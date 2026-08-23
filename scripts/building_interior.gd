@@ -473,6 +473,16 @@ func take_damage(amount: int) -> void:
 	GameState.player_health = maxi(0, GameState.player_health - applied_damage)
 	_update_health()
 	SFX.play("hit_player")
+	# 필드(main.take_damage)와 같은 규칙 — 경직·히트스톱은 없고, 화면 흔들림과
+	# 진동으로만 알린다. 흔들림 상한도 필드와 같은 0.24(조준이 죽지 않게).
+	camera_shake_time = maxf(camera_shake_time, 0.2)
+	var hit_feedback := clampf(float(accessibility_settings.hit_feedback_intensity), 0.0, 1.0)
+	camera_shake_strength = maxf(
+		camera_shake_strength,
+		minf(0.24, (0.1 + float(applied_damage) * 0.006) * hit_feedback)
+	)
+	if DisplayServer.is_touchscreen_available() and bool(accessibility_settings.vibration_enabled):
+		Input.vibrate_handheld(35)
 	_show_status("피격 -%d · 체력 %d" % [applied_damage, GameState.player_health])
 	if GameState.player_health <= 0:
 		_begin_player_death_sequence()

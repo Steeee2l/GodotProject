@@ -303,7 +303,18 @@ func _detonate() -> void:
 			var applied_damage := maxi(6, roundi(float(damage) * falloff))
 			var hit_direction := offset.normalized() if distance > 0.01 else Vector3.RIGHT
 			if target_body.has_method("take_hostile_hit"):
-				target_body.call("take_hostile_hit", applied_damage, hit_direction, valid_source)
+				# 5인자(impact_kind)를 받는 상대(플레이어)에겐 폭발로 알려 넉백을 남긴다.
+				if target_body.get_method_argument_count("take_hostile_hit") >= 5:
+					target_body.call(
+						"take_hostile_hit",
+						applied_damage,
+						hit_direction,
+						valid_source,
+						global_position,
+						"blast"
+					)
+				else:
+					target_body.call("take_hostile_hit", applied_damage, hit_direction, valid_source)
 			elif target_body.has_method("take_hit"):
 				target_body.call("take_hit", applied_damage, hit_direction)
 			elif target_body.get_parent() != null and target_body.get_parent().has_method("take_hostile_hit"):

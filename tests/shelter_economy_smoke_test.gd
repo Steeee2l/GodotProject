@@ -90,6 +90,10 @@ func _run() -> void:
 	if int(game_state.call("get_catnip_worker_slots")) <= 0:
 		_fail("catnip worker slots collapsed to zero")
 	var working_residents := 0
+	# 작업조 전원이 kneading_ne 한 장을 돌리면 100마리가 타일 무늬로 읽힌다.
+	# 일부(약 30%)는 작업 구역을 바라보고 서 있게 흩어 놨으므로, 여기서는
+	# "전원이 꾹꾹이"가 아니라 "과반이 꾹꾹이 + 나머지도 작업 포즈"를 본다.
+	var kneading_residents := 0
 	var worker_scrap_rate_total := 0.0
 	for resident in resident_nodes:
 		if bool(resident.get_meta("assigned_to_scratcher", false)):
@@ -103,8 +107,14 @@ func _run() -> void:
 				)
 			)
 			var resident_sprite := resident.get_node_or_null("ResidentSprite") as AnimatedSprite3D
-			if resident_sprite == null or resident_sprite.animation != "kneading_ne":
-				_fail("assigned scratcher worker is not playing the kneading animation")
+			if resident_sprite == null:
+				_fail("assigned scratcher worker has no sprite")
+				continue
+			var worker_animation := str(resident_sprite.animation)
+			if worker_animation == "kneading_ne":
+				kneading_residents += 1
+			elif not worker_animation.begins_with("idle_"):
+				_fail("assigned scratcher worker is not playing a work pose (%s)" % worker_animation)
 			if resident_sprite.sprite_frames.get_frame_count("kneading_ne") != 6:
 				_fail("kneading animation does not contain all six supplied frames")
 			var work_indicator := resident.get_node_or_null("WorkIndicator") as Label3D
@@ -116,6 +126,11 @@ func _run() -> void:
 				_fail("scratcher worker does not display its live production rate")
 	if working_residents != int(game_state.call("get_active_scratcher_workers")):
 		_fail("visible scratcher workers do not match assigned worker data")
+	# "배정하면 꾹꾹이를 한다"는 여전히 화면이 말해야 한다 — 과반은 꾹꾹이 포즈.
+	if working_residents > 0 and kneading_residents * 2 < working_residents:
+		_fail("most assigned scratcher workers should show the kneading pose (%d/%d)" % [
+			kneading_residents, working_residents
+		])
 	if not is_equal_approx(
 		worker_scrap_rate_total,
 		float(game_state.call("get_scrap_per_second"))

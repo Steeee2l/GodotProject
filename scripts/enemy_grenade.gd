@@ -193,7 +193,18 @@ func _has_clear_blast_path(body: CollisionObject3D) -> bool:
 func _deliver_blast_hit(receiver: Object, applied_damage: int, hit_direction: Vector3) -> void:
 	# 폭심 좌표(4번째 인자)는 엄폐 판정을 하는 플레이어만 받는다. 적·테스트
 	# 더미는 3인자 시그니처라 인자 수를 확인하지 않으면 호출 자체가 실패한다.
-	if receiver.get_method_argument_count("take_hostile_hit") >= 4:
+	# 5번째 인자(impact_kind)는 넉백 세기를 고른다 — 폭발은 "큰 타격"이라
+	# 플레이어를 실제로 밀어낸다(총알은 거의 밀지 않는다).
+	if receiver.get_method_argument_count("take_hostile_hit") >= 5:
+		receiver.call(
+			"take_hostile_hit",
+			applied_damage,
+			hit_direction,
+			source_body,
+			global_position,
+			"blast"
+		)
+	elif receiver.get_method_argument_count("take_hostile_hit") >= 4:
 		receiver.call("take_hostile_hit", applied_damage, hit_direction, source_body, global_position)
 	else:
 		receiver.call("take_hostile_hit", applied_damage, hit_direction, source_body)

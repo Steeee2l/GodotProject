@@ -201,7 +201,17 @@ func _detonate() -> void:
 			if receiver != null:
 				# 폭심 좌표는 플레이어(엄폐 판정)만 받는다. 적·더미는 3인자
 				# 시그니처라 인자 수를 확인하지 않고 넘기면 호출 자체가 실패한다.
-				if receiver.get_method_argument_count("take_hostile_hit") >= 4:
+				# 5번째 인자(impact_kind) — 폭발은 넉백을 남기는 "큰 타격".
+				if receiver.get_method_argument_count("take_hostile_hit") >= 5:
+					receiver.call(
+						"take_hostile_hit",
+						applied_damage,
+						hit_direction,
+						source_body,
+						impact_position,
+						"blast"
+					)
+				elif receiver.get_method_argument_count("take_hostile_hit") >= 4:
 					receiver.call(
 						"take_hostile_hit",
 						applied_damage,
