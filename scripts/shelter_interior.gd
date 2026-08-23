@@ -1838,7 +1838,6 @@ func _build_interface() -> void:
 	inventory_ui.connect("weapon_unequipped", _on_inventory_weapon_unequipped)
 	inventory_ui.connect("equipment_changed", _on_inventory_equipment_changed)
 	inventory_ui.connect("item_discard_requested", _on_inventory_item_discard_requested)
-	inventory_ui.connect("item_use_requested", _on_inventory_item_use_requested)
 	_refresh_inventory_state()
 	_build_shelter_weapon_card()
 	roll_cooldown_indicator = ROLL_COOLDOWN_INDICATOR_SCRIPT.new() as Control
@@ -2891,9 +2890,6 @@ func _merchant_bag_count(good: Dictionary) -> int:
 	match str(good["type"]):
 		"ammo":
 			return GameState.get_ammo_count(str(good["id"]))
-		"food":
-			# 통조림은 가방에만 있다(창고·쉘터 선반 없음).
-			return GameState.canned_food
 		"component":
 			return GameState.get_mod_component_count(str(good["id"]))
 		"medkit":
@@ -2929,8 +2925,6 @@ func _add_merchant_item(good: Dictionary, amount: int) -> void:
 		"ammo":
 			var ammo_id := str(good["id"])
 			GameState.set_ammo_count(ammo_id, GameState.get_ammo_count(ammo_id) + amount)
-		"food":
-			GameState.canned_food = maxi(0, GameState.canned_food + amount)
 		"component":
 			GameState.add_mod_component(str(good["id"]), amount)
 		"medkit":
@@ -3630,7 +3624,8 @@ func _update_stats() -> void:
 		# 아이콘이 이름을 대신한다. 숫자만 크게 — 4열 한 줄 컴팩트 표기의 핵심.
 		(shelter_currency_labels["scrap"] as Label).text = GameState.format_compact_number(GameState.scrap)
 		(shelter_currency_labels["catnip"] as Label).text = GameState.format_compact_number(GameState.catnip)
-		(shelter_currency_labels["food"] as Label).text = GameState.format_compact_number(GameState.canned_food)
+		# 쉘터에서 의미 있는 통조림 수량은 훈련에 쓸 수 있는 재고다(가방 몫이 아니다).
+		(shelter_currency_labels["food"] as Label).text = GameState.format_compact_number(GameState.shelter_canned_food)
 		(shelter_currency_labels["churu"] as Label).text = GameState.format_compact_number(GameState.churu)
 	_update_stats_summary()
 	if shelter_upgrade_button:
@@ -3795,24 +3790,6 @@ func _on_inventory_weapon_unequipped() -> void:
 func _on_inventory_equipment_changed() -> void:
 	GameState.save_persistent_state()
 	_refresh_inventory_state()
-
-
-func _on_inventory_item_use_requested(item_type: String, item_id: String) -> void:
-	# 쉘터에서도 가방의 통조림을 먹을 수 있다(필드·건물과 같은 규약). 복귀가 곧
-	# 완전 회복이라 보통은 할 일이 없지만, 피로가 남은 채 바로 나가려는 때 쓴다.
-	if item_type != "food" or item_id != "canned_food":
-		inventory_ui.call("apply_use_result", false, "사용할 수 없는 아이템입니다.")
-		return
-	var result: Dictionary = GameState.try_eat_canned_food(int(GameState.player_health), float(GameState.fatigue))
-	if not bool(result.get("ok", false)):
-		inventory_ui.call("apply_use_result", false, GameState.describe_canned_food_eat_failure(result))
-		return
-	_update_stats()
-	_refresh_inventory_state()
-	inventory_ui.call("apply_use_result", true, "통조림을 먹었다 · 체력 +%d · 피로 -%d" % [
-		int(result.get("healed", 0)),
-		roundi(float(result.get("fatigue_relief", 0.0))),
-	])
 
 
 func _on_inventory_item_discard_requested(item_type: String, item_id: String, amount: int) -> void:
@@ -4791,8 +4768,8 @@ func _build_return_settlement_card_lines(settlement: Dictionary) -> Array[String
 		return lines
 	var food := int(settlement.get("food", 0))
 	if food > 0:
-		# 통조림은 어디로도 안 간다 — 먹거나 던지는 소모품이라 가방에 그대로 남는다.
-		lines.append("통조림 %d개  ·  가방에 보관" % food)
+		# 통조림은 훈련 재화다 — 가방에서 쉘터 훈련 재고로 옮겨 담는다.
+		lines.append("통조림 %d개  →  쉘터 훈련 재고" % food)
 	var stored := int(settlement.get("stored", 0))
 	if stored > 0:
 		# 장비는 더 이상 창고로 안 간다(영구 귀속·0칸) — 창고행은 재료·부착물·조각뿐.
@@ -4901,7 +4878,7 @@ func _build_return_settlement_text(settlement: Dictionary) -> String:
 	var parts: PackedStringArray = []
 	var food := int(settlement.get("food", 0))
 	if food > 0:
-		parts.append("통조림 %d개 가방 보관" % food)
+		parts.append("통조림 %d개 → 훈련 재고" % food)
 	var stored := int(settlement.get("stored", 0))
 	if stored > 0:
 		parts.append("전리품 %d점 창고 입고" % stored)

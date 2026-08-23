@@ -12,6 +12,8 @@ func _run() -> void:
 	game_state.call("unlock_all_shelter_facilities")
 	game_state.set("scrap", 2_000_000)
 	game_state.set("canned_food", 200)
+	# 훈련 비용은 고철이 아니라 쉘터 통조림 재고다(유저 확정: "훈련은 통조림").
+	game_state.set("shelter_canned_food", 500)
 	game_state.set("churu", 99)
 	var base_health := int(game_state.call("get_max_health"))
 	var xp_result := game_state.call("add_raid_experience", game_state.call("get_raid_experience_reward", 4, 0)) as Dictionary

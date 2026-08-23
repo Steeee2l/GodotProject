@@ -325,7 +325,7 @@ var corpse_recovery_point: Node3D
 var game_over_screen := GameOverScreen.new()
 var lore_reader := LoreReader.new()
 var hud := RaidHud.new()
-# 액티브 튜토리얼(필드 가방 먹기 · 정산 성장 선택). 스텝 표·포인터·저장은 모듈이 쥔다.
+# 액티브 튜토리얼(필드 통조림 투척 · 정산 성장 선택). 스텝 표·포인터·저장은 모듈이 쥔다.
 # class_name 캐시(.godot)가 갱신되기 전에도 헤드리스 테스트가 돌도록 preload로 만든다.
 var active_tutorial := ACTIVE_TUTORIAL_SCRIPT.new()
 var main_mission := MainMissionChain.new()
@@ -3096,32 +3096,6 @@ func _on_inventory_item_discard_requested(item_type: String, item_id: String, am
 	_update_medkit_button()
 
 
-func _on_inventory_item_use_requested(item_type: String, item_id: String) -> void:
-	# 가방 상세 패널의 '먹기'. 통조림은 플레이어 소모품이다 — 체력 +18·피로 -12,
-	# 3초 쿨다운, 전투 중에도 먹는다(구급약과 달리 작고 잦은 회복).
-	if item_type != "food" or item_id != "canned_food":
-		hud.inventory_ui.call("apply_use_result", false, "사용할 수 없는 아이템입니다.")
-		return
-	var result: Dictionary = GameState.try_eat_canned_food(player_health, fatigue)
-	if not bool(result.get("ok", false)):
-		hud.inventory_ui.call("apply_use_result", false, GameState.describe_canned_food_eat_failure(result))
-		return
-	player_health = int(result.get("health", player_health))
-	fatigue = clampf(float(result.get("fatigue", fatigue)), 0.0, FATIGUE_MAX)
-	GameState.fatigue = fatigue
-	active_tutorial.notify("ate_food")
-	var health_bar := get_node_or_null("HUD/TopLeft/Margin/VBox/Health") as ProgressBar
-	if health_bar:
-		health_bar.value = player_health
-	_refresh_fatigue_hud()
-	_refresh_top_status_label()
-	_update_equipment_ui()
-	hud.inventory_ui.call("apply_use_result", true, "통조림을 먹었다 · 체력 +%d · 피로 -%d" % [
-		int(result.get("healed", 0)),
-		roundi(float(result.get("fatigue_relief", 0.0))),
-	])
-
-
 func _make_panel_style(background: Color, border: Color, radius: int = 4) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = background
@@ -5756,6 +5730,11 @@ func _refresh_objective_panel() -> void:
 		var jackpot_title := str(hud.jackpot_step_label.text)
 		if not jackpot_title.is_empty():
 			lines.append(jackpot_title)
+			# 제목만으로는 "어디로 가라"가 안 보인다. 방어 중 사수 지점 거리·방향처럼
+			# 매 순간 바뀌는 안내는 한 줄짜리 상세에 있으므로 같이 상시 노출한다.
+			var jackpot_detail := str(hud.jackpot_detail_label.text)
+			if not jackpot_detail.is_empty():
+				lines.append(jackpot_detail)
 	if not field_objective_title.is_empty():
 		lines.append(field_objective_title)
 		var detail_lines := field_objective_detail.split("\n", false)

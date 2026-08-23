@@ -873,8 +873,9 @@ static func get_stage_profile(stage_tier: int) -> Dictionary:
 
 static func get_guaranteed_canned_food_pickup_count(stage_tier: int) -> int:
 	# 판당 확정 통조림 픽업 수. 쉘터 연료 싱크가 사라지고(주민 식비 폐지) 통조림이
-	# 먹기·투척 소모품만 남으면서 예전 21~29개는 가방에 쌓이기만 했다 — 약 60%
-	# (12~17개)로 줄여 "한 판에 먹을 만큼 + 던질 여분" 선에 맞춘다.
+	# 투척 유인 + 훈련 재화만 남으면서 예전 21~29개는 가방에 쌓이기만 했다 — 약 60%
+	# (12~17개)로 줄였다. 지금은 이 수치가 훈련 진행 속도의 눈금이기도 하다
+	# (TRAINING_NODE_DEFS 주석: 판당 15~25개 ≈ 초반 노드 1랭크).
 	var profile := STAGE_PROFILES[clampi(stage_tier, 1, 5)] as Dictionary
 	return maxi(0, int(profile.get("guaranteed_canned_food_pickups", 0)))
 

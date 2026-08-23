@@ -331,11 +331,11 @@ func _show_extraction_result(rescued_count: int) -> void:
 		host.hud.add_result_reward_chip("churu", commission_text, HudStyle.GOLD)
 	# 이번 판에 실제로 들고 나온 것 — 숫자보다 이게 먼저 읽혀야 한다.
 	# 종류별로 묶어 칩 하나씩, 쉘터 귀속 규칙(재료→창고, 귀중품→고철)과 같은 순서.
-	# 통조림은 쉘터 연료가 아니라 플레이어 소모품이다 — 가방에 남아 다음 판에 먹거나 던진다.
+	# 통조림은 훈련 재화다 — 필드에선 던지는 도구지만, 살아 돌아오면 훈련 비용이 된다.
 	var haul_food := GameState.get_backpack_storage_count("food", "canned_food")
 	if haul_food > 0:
 		host.hud.add_result_reward_chip(
-			"food", "통조림 %d개 · 가방에 보관 (먹기·투척)" % haul_food, HudStyle.GREEN
+			"food", "통조림 %d개 · 훈련 비용으로 귀속" % haul_food, HudStyle.GREEN
 		)
 	var haul_components := 0
 	var haul_gear := 0
@@ -388,7 +388,7 @@ func _show_extraction_result(rescued_count: int) -> void:
 	# 귀속 규칙을 여기서 미리 말해 준다 — 쉘터에 도착해서야 알면 늦다.
 	# 귀속 규칙 예고에 귀중품 환전을 빠뜨리면, 쉘터에서 귀중품이 사라진 걸
 	# 보고 "털렸다"고 읽는다.
-	lines.append("통조림·구급약·탄약은 가방에 남고, 재료와 설계도 조각은 창고로, 귀중품은 고철로 바뀝니다. 장비는 몸에 그대로입니다.")
+	lines.append("통조림은 쉘터 훈련 재고로, 재료와 설계도 조각은 창고로, 귀중품은 고철로 바뀝니다. 구급약·탄약은 가방에 남고 장비는 몸에 그대로입니다.")
 	# 잉여 장비 분해(GameState.salvage_surplus_equipment)는 구세이브 중복 정리용 — 발생 시에만
 	# 정산 카드(shelter_interior)가 말한다. 여기서 미리 고지할 일은 이제 없다.
 	# "탭하면 쉘터로 복귀"는 요약 라벨에서 뺐다 — 레벨업 선택 UI보다 위에 있어

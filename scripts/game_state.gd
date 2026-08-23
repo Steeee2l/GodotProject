@@ -55,12 +55,18 @@ var weapon_level: int = 1
 # 구급약 1개를 쥐여 주고 시작한다. 0개로 첫 출정을 보내면 회복 수단이 운빨
 # 루팅(사실상 동전 던지기)이 되고, 사망 화면은 있지도 않던 구급약을 논한다.
 var medkits: int = 1
-# 통조림은 플레이어 전용 소모품이다 — 가방에서 먹거나(체력·피로 회복) 던진다
-# (적 유인). 쉘터 연료 개념은 폐지됐다(유저 요구: "쉘터에서 연료 개념은 없애자,
-# 통조림은 플레이어만 쓰는 것으로"). 이 값은 곧 "가방에 든 통조림 수"다 —
-# 창고에도 쉘터 선반에도 들어가지 않고, 복귀 정산에서도 가방에 그대로 남는다
-# (구급약·탄약과 같은 '가방 잔류' 그룹).
+# 통조림은 '먹는 것'이 아니다(유저 확정: "고철 투자해서 훈련 아니야 통조림
+# 소비해야해. 그리고 통조림은 먹는거 아님"). 쓰임은 딱 둘이다 —
+#   ① 훈련장 지불 재화 → 쉘터 재고(shelter_canned_food)
+#   ② 필드 투척 유인 소모품 → 가방(canned_food)
+# 쉘터 연료 개념은 여전히 없다(주민만 배치되면 생산은 돈다).
+#
+# canned_food = 출정 중 가방에 든 통조림. 던질 수 있고, 사망하면 시체와 함께
+# 사라진다. 창고에는 안 들어가고, 복귀 정산에서 전량 쉘터 재고로 귀속된다.
 var canned_food: int = 0
+# 쉘터 통조림 재고 = 훈련 비용을 내는 지갑. 필드에 들고 나가지 않으므로 사망에
+# 안전하다 — 훈련 저축이 한 판 실수로 통째로 날아가면 아무도 저축하지 않는다.
+var shelter_canned_food: int = 0
 var catnip: int = 0
 var churu: int = 0
 # 귀중품: 용도가 없고 오직 값어치만 있는 물건. 추출 슈터의 핵심 판단축인
@@ -285,16 +291,11 @@ const MERCHANT_SUNDRY_GOODS := [
 ]
 # 판매(매입) 목록은 매대와 별개다 — 상인이 오늘 뭘 파느냐와 내 물건을 사 주느냐는
 # 다른 문제다. 여기 있는 품목은 방문마다 항상 팔 수 있다.
-# 매입 대가는 고철(sell_scrap)이다. 예전엔 통조림으로 쳐줬는데, 통조림이 쉘터
-# 연료에서 플레이어 소모품으로 바뀌면서 화폐 노릇을 그만뒀다. 되팔기 가치는
-# 구매가의 약 30%(10 단위 반올림) — 상인은 사는 쪽이 늘 남는 장사다.
-# 통조림 자체도 매입 품목이다(가방 정리 출구): 1개 = CANNED_FOOD_SCRAP_VALUE.
+# 매입 대가는 고철(sell_scrap)이다. 되팔기 가치는 구매가의 약 30%(10 단위
+# 반올림) — 상인은 사는 쪽이 늘 남는 장사다.
+# 통조림은 매입 목록에서 뺐다: 훈련 재화를 고철로 팔 수 있으면 훈련 비용이
+# 사실상 고철이 되고(유저 의도와 정반대) 훈련 경제가 그 구멍으로 샌다.
 const MERCHANT_SELL_GOODS := [
-	{
-		"id": "canned_food", "type": "food", "title": "통조림", "amount": 1,
-		"buy_price": 0, "sell_scrap": 70, "icon": "",
-		"description": "먹거나 던지는 출정 소모품입니다. 남는 만큼 고철로 바꿀 수 있습니다.",
-	},
 	{
 		"id": "762_fmj", "type": "ammo", "title": "7.62mm 보통탄", "amount": 30,
 		"buy_price": 650, "sell_scrap": 200, "icon": "res://assets/items/ammo_762.png",
@@ -677,49 +678,53 @@ const PLAYER_LEVEL_REWARDS := {
 	"toughness": {"title": "충격 적응", "description": "받는 피해 -2%", "icon": "armor"},
 	"fatigue_resistance": {"title": "현장 적응", "description": "피로 획득 -5%", "icon": "fitness"},
 }
-# 훈련 비용은 고철이다. 예전엔 통조림(8/14/28 + 단계당 6/10/18)이었는데, 통조림이
-# 쉘터 연료에서 플레이어 소모품으로 바뀌며 쉘터 비용 화폐에서 빠졌다. 옛 수치에
-# CANNED_FOOD_SCRAP_VALUE(70)를 곱한 뒤 100 단위로 반올림 — 훈련 전 단계 합계
-# 약 3.8만 고철로, 장인 뽑기 1회(1.2만)·첫 방탄복(4.3천)과 같은 눈금에 놓인다.
+# 훈련 비용은 통조림이다(유저 확정: "고철 투자해서 훈련 아니야 통조림 소비해야해").
+# 지불처는 쉘터 재고(shelter_canned_food) — 가방 통조림은 던지기용이다.
+#
+# 수급 눈금: 판당 확정 픽업 12~17개(LootEconomy.get_guaranteed_canned_food_pickup_count)
+# ×더블스택 1.2~1.3 + 낱개 드랍 ≈ 판당 15~25개. 아래 표는 20개/판을 기준으로 잡았다.
+#   · 초반 노드 1랭크 14~20 = 출정 한 판 안쪽 → "다녀오면 한 칸 오른다"
+#   · 상위/후반 노드 상위 랭크 90~122 = 출정 4~6판 → 저축의 목표가 된다
+#   · 9종 만렙 합계 1,674 ≈ 출정 84판(25개/판이면 67판)
 const TRAINING_NODE_DEFS := {
 	"vitality": {
 		"title": "중량 훈련", "description": "랭크마다 최대 체력 +10", "icon": "health",
-		"max_rank": 5, "base_cost": 600, "cost_step": 400, "requires": {},
+		"max_rank": 5, "base_cost": 14, "cost_step": 9, "requires": {},
 	},
 	"endurance": {
 		"title": "유산소 훈련", "description": "랭크마다 최대 스태미나 +12", "icon": "stamina",
-		"max_rank": 5, "base_cost": 600, "cost_step": 400, "requires": {},
+		"max_rank": 5, "base_cost": 14, "cost_step": 9, "requires": {},
 	},
 	"recovery": {
 		"title": "회복 루틴", "description": "랭크마다 스태미나 회복 +8%", "icon": "recovery",
-		"max_rank": 4, "base_cost": 1000, "cost_step": 700, "requires": {"vitality": 2},
+		"max_rank": 4, "base_cost": 20, "cost_step": 14, "requires": {"vitality": 2},
 	},
 	"agility": {
 		"title": "풋워크", "description": "랭크마다 이동 속도 +2%", "icon": "speed",
-		"max_rank": 4, "base_cost": 1000, "cost_step": 700, "requires": {"endurance": 2},
+		"max_rank": 4, "base_cost": 20, "cost_step": 14, "requires": {"endurance": 2},
 	},
 	"fieldcraft": {
 		"title": "현장 체력", "description": "랭크마다 피로 획득 -7%", "icon": "fitness",
-		"max_rank": 3, "base_cost": 2000, "cost_step": 1300, "requires": {"recovery": 2, "agility": 2},
+		"max_rank": 3, "base_cost": 40, "cost_step": 26, "requires": {"recovery": 2, "agility": 2},
 	},
 	# ── 탄약 운용 훈련(유저 신고: "총기 업그레이드가 아니라 훈련으로 탄창 개수·기본
 	# 장착 개수를 늘릴 수 있어야지, 탄약 모자라고 장전이 잦아서 힘들다") ──
 	# 장탄·장전 배율은 build_player_weapon_stats(단일 지점)에서 곱한다. 적은 영향 없음.
 	"magazine_drill": {
 		"title": "탄창 숙련", "description": "랭크마다 장탄수 +8% (반올림, 최소 +1발)", "icon": "ammo",
-		"max_rank": 4, "base_cost": 900, "cost_step": 600, "requires": {},
+		"max_rank": 4, "base_cost": 18, "cost_step": 11, "requires": {},
 	},
 	"quick_hands": {
 		"title": "신속 장전", "description": "랭크마다 장전 시간 -8%", "icon": "reload",
-		"max_rank": 4, "base_cost": 1200, "cost_step": 800, "requires": {"magazine_drill": 1},
+		"max_rank": 4, "base_cost": 24, "cost_step": 16, "requires": {"magazine_drill": 1},
 	},
 	"ammo_carry": {
 		"title": "탄약 휴대", "description": "랭크마다 탄약 한 칸에 들어가는 발수 +25%", "icon": "backpack",
-		"max_rank": 4, "base_cost": 1500, "cost_step": 1000, "requires": {"vitality": 1},
+		"max_rank": 4, "base_cost": 30, "cost_step": 20, "requires": {"vitality": 1},
 	},
 	"sortie_supply": {
 		"title": "출정 보급", "description": "랭크마다 출정 시작 시 장착 구경 1탄창 지급", "icon": "raid",
-		"max_rank": 3, "base_cost": 2500, "cost_step": 2000, "requires": {"ammo_carry": 1},
+		"max_rank": 3, "base_cost": 50, "cost_step": 36, "requires": {"ammo_carry": 1},
 	},
 }
 # 탄약 한 칸에 들어가는 발수(훈련 0랭크). 예전엔 "탄약 한 종류 = 무조건 1칸"이라
@@ -851,16 +856,9 @@ const BASE_CATNIP_PER_WORKER_SECOND := 1.0
 # 시간 상한으로 옮긴 것. 껐다 켜서 하루치를 받는 일은 없다(러버밴딩 아님, 고정 상한).
 const SHELTER_OFFLINE_MAX_SECONDS := 8 * 3600
 
-# ── 통조림 = 플레이어 소모품 ───────────────────────────────────
-# 먹기: 체력 +18 · 피로 -12 · 3초 쿨다운. 구급약(즉시 +36~38, 체력만)과 겹치지
-# 않게 "작고 잦은 회복 + 피로 해소"로 갈라 둔다. 피로는 판에 남은 시간 그 자체라
-# 12면 도보 약 3.6분치(FATIGUE_MOVING_RATE 0.055/s 기준)다.
-const CANNED_FOOD_EAT_HEAL := 18
-const CANNED_FOOD_EAT_FATIGUE_RELIEF := 12.0
-const CANNED_FOOD_EAT_COOLDOWN_MSEC := 3000
-# 상인 매입가이자 쉘터 비용 환산 기준(통조림 1 ≈ 고철 70). 필드 base_value 35의
-# 두 배 — 먹는 쪽이 기본이고, 파는 건 가방 정리 출구라 "탄약 반 박스" 수준에 둔다.
-const CANNED_FOOD_SCRAP_VALUE := 70
+# ── 통조림 = 훈련 재화 + 투척 소모품 ───────────────────────────
+# '먹기'는 폐지됐다(유저 확정: "통조림은 먹는거 아님"). 회복은 구급약이 전담하고,
+# 통조림은 훈련장 지불(쉘터 재고)과 필드 투척 유인(가방)만 맡는다.
 
 # ── 문턱 해금 ──────────────────────────────────────────────────
 #
@@ -1334,7 +1332,8 @@ func clear_carried_raid_inventory_after_death() -> void:
 		for key in inventory.keys():
 			inventory[key] = 0
 	medkits = 0
-	# 통조림은 가방 소모품이라 구급약과 같이 시체와 함께 사라진다.
+	# 가방 통조림(이번 판에 주운 투척용)만 사라진다 — 쉘터 훈련 재고
+	# (shelter_canned_food)는 필드에 나온 적이 없으므로 손대지 않는다.
 	canned_food = 0
 	churu = 0
 	valuable_inventory.clear()
@@ -1409,8 +1408,9 @@ func register_shelter_return(survived: bool = true) -> void:
 # 복귀는 "가방을 든 채 쉘터에 서 있는 것"이 아니라 정산이다. 필드에서 주운
 # 것들이 다음 출정 가방을 그대로 좀먹으면, 매 판 시작이 정리 작업이 된다.
 # 재료·부착물·진행품·여분 장비 → 창고, 귀중품 → 고철.
-# 탄약·구급약·통조림은 가방에 남긴다: 다음 출정의 준비물이고(통조림은 먹거나 던지는
-# 소모품), 창고 인출 UI를 매판 거치게 만드는 건 순수한 마찰이다.
+# 탄약·구급약은 가방에 남긴다: 다음 출정의 준비물이고, 창고 인출 UI를 매판
+# 거치게 만드는 건 순수한 마찰이다. 통조림만 예외로 쉘터 재고로 귀속된다 —
+# 훈련 재화이기 때문이다(가방에 두면 다음 판 사망에 훈련 저축이 통째로 날아간다).
 func settle_shelter_return_inventory() -> Dictionary:
 	var report := {
 		"food": 0,
@@ -1419,8 +1419,11 @@ func settle_shelter_return_inventory() -> Dictionary:
 		"valuable_count": 0,
 		"valuable_scrap": 0,
 	}
-	# 1) 통조림: 아무 데도 안 간다. 정산 카드가 "가방에 그대로"를 말해 주기 위한 수치.
-	report["food"] = get_backpack_storage_count("food", "canned_food")
+	# 1) 통조림 → 쉘터 훈련 재고. 가방 통조림은 필드 투척용이고, 돌아오면 훈련
+	#    비용이 된다. 다음 판 투척분은 필드에서 다시 줍는다(판당 15~25개).
+	report["food"] = maxi(0, canned_food)
+	shelter_canned_food = maxi(0, shelter_canned_food + maxi(0, canned_food))
+	canned_food = 0
 	# 2) 귀중품: 용도가 없는 물건이다. 쉘터에 오는 순간이 곧 환전이다.
 	var valuable_result := sell_all_valuables()
 	report["valuable_count"] = int(valuable_result.get("count", 0))
@@ -2084,7 +2087,8 @@ func get_backpack_storage_count(item_type: String, item_id: String) -> int:
 			# (가방 '칸'은 안 먹는다 — get_raid_item_slot_cost에서 0으로 친다.)
 			return maxi(0, int(progression_item_inventory.get(item_id, 0)))
 		"food":
-			# 통조림은 창고에도 쉘터 선반에도 안 들어간다 — 보유량이 곧 가방 몫.
+			# 통조림은 창고에 안 들어간다 — canned_food가 곧 가방 몫(투척용)이다.
+			# 훈련에 쓰는 쉘터 재고는 shelter_canned_food로 따로 산다.
 			return maxi(0, canned_food)
 	return 0
 
@@ -2499,8 +2503,9 @@ func deposit_storage_item(
 ) -> Dictionary:
 	_normalize_storage_inventory()
 	if item_type == "food":
-		# 통조림은 플레이어 소모품이라 창고에 안 들어간다 — 먹거나 던지거나 상인에게 판다.
-		return {"ok": false, "moved": 0, "reason": "통조림은 창고에 보관하지 않습니다. 가방에서 먹거나 던지세요."}
+		# 통조림은 창고에 안 들어간다 — 필드에선 던지는 소모품이고, 돌아오면 정산이
+		# 쉘터 훈련 재고로 옮긴다.
+		return {"ok": false, "moved": 0, "reason": "통조림은 창고에 보관하지 않습니다. 귀환하면 쉘터 훈련 재고로 들어갑니다."}
 	var available := get_backpack_storage_count(item_type, item_id)
 	var moved := mini(maxi(amount, 0), available)
 	if moved <= 0:
@@ -3614,56 +3619,6 @@ func process_shelter_progress() -> Dictionary:
 	shelter_offline_catnip_pending += catnip_gain
 	shelter_offline_repair_pending += repair_gain
 	return {"scrap": scrap_gain, "catnip": catnip_gain, "repair": repair_gain, "elapsed": elapsed}
-
-
-# ── 통조림 먹기 ───────────────────────────────────────────────
-# 호스트(필드 main / 건물 내부)가 자기 체력·피로 로컬값을 넘기면 여기서 통조림을
-# 까고 GameState 값까지 갱신해 돌려준다. 전투 중에도 가능, 쿨다운 3초.
-var canned_food_eat_ready_msec: int = 0
-
-
-func try_eat_canned_food(current_health: int, current_fatigue: float) -> Dictionary:
-	if canned_food <= 0:
-		return {"ok": false, "reason": "no_food"}
-	var now_msec := Time.get_ticks_msec()
-	if now_msec < canned_food_eat_ready_msec:
-		return {
-			"ok": false,
-			"reason": "cooldown",
-			"remaining_seconds": float(canned_food_eat_ready_msec - now_msec) / 1000.0,
-		}
-	var maximum_health := get_max_health()
-	var health_before := clampi(current_health, 0, maximum_health)
-	var fatigue_before := clampf(current_fatigue, 0.0, 100.0)
-	if health_before >= maximum_health and fatigue_before <= 0.0:
-		return {"ok": false, "reason": "not_needed"}
-	canned_food -= 1
-	canned_food_eat_ready_msec = now_msec + CANNED_FOOD_EAT_COOLDOWN_MSEC
-	var health_after := mini(maximum_health, health_before + CANNED_FOOD_EAT_HEAL)
-	var fatigue_after := maxf(0.0, fatigue_before - CANNED_FOOD_EAT_FATIGUE_RELIEF)
-	player_health = health_after
-	fatigue = fatigue_after
-	save_persistent_state()
-	return {
-		"ok": true,
-		"health": health_after,
-		"fatigue": fatigue_after,
-		"healed": health_after - health_before,
-		"fatigue_relief": fatigue_before - fatigue_after,
-		"remaining": canned_food,
-	}
-
-
-static func describe_canned_food_eat_failure(result: Dictionary) -> String:
-	# 호스트(필드·건물·쉘터)가 같은 문구를 쓰도록 한 곳에 둔다.
-	match str(result.get("reason", "")):
-		"no_food":
-			return "통조림이 없습니다."
-		"cooldown":
-			return "아직 씹는 중 · %.1f초" % maxf(0.0, float(result.get("remaining_seconds", 0.0)))
-		"not_needed":
-			return "체력과 피로가 모두 온전합니다."
-	return "지금은 먹을 수 없습니다."
 
 
 func get_current_raid_stage_tier() -> int:
@@ -4792,9 +4747,10 @@ func try_upgrade_training(node_id: String) -> Dictionary:
 	if not get_training_requirements_met(node_id):
 		return {"ok": false, "reason": "prerequisite"}
 	var cost := get_training_cost(node_id)
-	if scrap < cost:
-		return {"ok": false, "reason": "scrap", "cost": cost}
-	scrap -= cost
+	# 지불은 쉘터 통조림 재고다 — 가방 통조림(던지기용)은 훈련에 못 쓴다.
+	if shelter_canned_food < cost:
+		return {"ok": false, "reason": "canned_food", "cost": cost}
+	shelter_canned_food -= cost
 	training_levels[node_id] = rank + 1
 	if node_id == "vitality":
 		player_health = mini(get_max_health(), player_health + 10)
@@ -5019,7 +4975,9 @@ func claim_current_contract_reward() -> Dictionary:
 		return {"ok": false, "reason": contract_status}
 	var reward := (definition.get("reward", {}) as Dictionary).duplicate(true)
 	var experience_result := add_raid_experience(maxi(0, int(reward.get("xp", 0))))
-	canned_food += maxi(0, int(reward.get("canned_food", 0)))
+	# 계약 보상 통조림은 쉘터에서 받는다 — 훈련 재고로 바로 들어가야 "받은 즉시
+	# 훈련에 쓸 수 있다"가 성립한다(가방에 넣으면 한 판 다녀와야 쓸 수 있다).
+	shelter_canned_food += maxi(0, int(reward.get("canned_food", 0)))
 	medkits += maxi(0, int(reward.get("medkits", 0)))
 	churu += maxi(0, int(reward.get("churu", 0)))
 	var ammo_reward := maxi(0, int(reward.get("ammo", 0)))
@@ -5167,7 +5125,7 @@ func save_persistent_state() -> bool:
 	_normalize_iron_mission_state()
 	save_equipped_weapon_loadout()
 	var data := {
-		"version": 13,
+		"version": 14,
 		"map_seed": map_seed,
 		"raid_serial": raid_serial,
 		"player_health": player_health,
@@ -5180,6 +5138,7 @@ func save_persistent_state() -> bool:
 		"scrap": scrap,
 		"medkits": medkits,
 		"canned_food": canned_food,
+		"shelter_canned_food": shelter_canned_food,
 		"catnip": catnip,
 		"churu": churu,
 		"valuable_inventory": valuable_inventory,
@@ -5354,6 +5313,7 @@ func load_persistent_state() -> bool:
 	scrap = int(data.get("scrap", scrap))
 	medkits = int(data.get("medkits", medkits))
 	canned_food = int(data.get("canned_food", canned_food))
+	shelter_canned_food = maxi(0, int(data.get("shelter_canned_food", shelter_canned_food)))
 	# 구 세이브의 쉘터 식료 선반 필드(구 연료 재고)는 읽지 않는다 — 그 몫은 이미
 	# canned_food 총량에 포함돼 있었으므로, 무시하면 그대로 가방 보유량이 된다.
 	catnip = maxi(0, roundi(float(data.get("catnip", catnip))))
@@ -5472,6 +5432,14 @@ func load_persistent_state() -> bool:
 	# 창고 통조림 슬롯은 폐지 — 구 세이브의 슬롯은 비우고 그 몫은 가방 보유량으로 남긴다.
 	_purge_stored_canned_food()
 	canned_food = maxi(0, canned_food)
+	shelter_canned_food = maxi(0, shelter_canned_food)
+	if int(data.get("version", 0)) < 14:
+		# v14: 통조림이 훈련 재화가 됐다(먹기 폐지). 구세이브가 가방에 쌓아 둔
+		# 통조림은 훈련에 쓸 수 있어야 의미가 있으니 쉘터 재고로 옮긴다. 복사가
+		# 아니라 이동이다 — 복사면 로드 한 번에 재화가 두 배가 된다. 위치가 여기인
+		# 이유: v12 원자재 환전·구 창고 슬롯 회수까지 끝난 최종 수량을 옮겨야 한다.
+		shelter_canned_food += canned_food
+		canned_food = 0
 	catnip_boost_end_time = int(data.get("catnip_boost_end_time", catnip_boost_end_time))
 	catnip_fever_gauge = clampf(
 		float(data.get("catnip_fever_gauge", 0.0)), 0.0, CATNIP_FEVER_GAUGE_MAX
@@ -5633,6 +5601,7 @@ func reset_run() -> void:
 	weapon_level = 1
 	medkits = 1
 	canned_food = 0
+	shelter_canned_food = 0
 	last_return_settlement.clear()
 	catnip = 0
 	churu = 0

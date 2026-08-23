@@ -6,7 +6,7 @@ extends SceneTree
 #
 # ① 첫 복귀 → 스텝1(쉘터 입문) 활성 · 운영 독 '생산' 버튼 림 펄스 · 카드 문구
 # ② 주민 앉히기 → ✓ → 스텝2(다음 목표 읽기)
-# ③ 고철 900 → 스텝3 훈련장 포인터 → 모달 열면 '탄창 숙련' 카드로 이동 → 구매 → 완료
+# ③ 통조림 재고 18 → 스텝3 훈련장 포인터 → 모달 열면 '탄창 숙련' 카드로 이동 → 구매 → 완료
 # ④ 건너뛰기 → 해당 스텝만 완료 · 저장
 # ⑤ 세이브 왕복
 # ⑥ 설정 '안내 다시 보기' 리셋
@@ -54,13 +54,15 @@ func _run() -> void:
 	game_state.set("saja_intro_seen", true)
 	game_state.set("saja_second_run_intro_seen", true)
 	game_state.set("merchant_status", "away")
-	# 첫 복귀: serial 1 · 생산기/훈련장 해금 · 주민 1명 · 고철 900(훈련 스텝 조건).
+	# 첫 복귀: serial 1 · 생산기/훈련장 해금 · 주민 1명 · 통조림 재고 18(훈련 스텝 조건).
 	game_state.call("register_shelter_return", true)
 	game_state.call("unlock_shelter_facility", "scratcher_bank")
 	game_state.call("unlock_shelter_facility", "training")
 	game_state.call("try_add_rescued_workers", 1)
 	game_state.call("consume_milestone_unlocks")
 	game_state.set("scrap", 900)
+	# 훈련 비용은 통조림이 됐다 — 탄창 숙련 1랭크 값(18개)만 딱 쥐여 준다.
+	game_state.set("shelter_canned_food", int(game_state.call("get_training_cost", "magazine_drill")))
 	game_state.set("catnip", 0)
 	root.get_node("AccessibilitySettings").set("active_tutorial_enabled", true)
 
@@ -148,11 +150,11 @@ func _run() -> void:
 	if training_modal != null:
 		training_modal.queue_free()
 	await _sleep(1.0)
-	_check(str(tutorial.call("get_active_step_id")) == "", "고철 0 → 남은 스텝 없음 (실제: %s)" % str(tutorial.call("get_active_step_id")))
+	_check(str(tutorial.call("get_active_step_id")) == "", "통조림 0 → 남은 스텝 없음 (실제: %s)" % str(tutorial.call("get_active_step_id")))
 
 	# ④ 건너뛰기 — 후속 훈련 스텝을 띄우고 건너뛴다.
 	print("[4] 건너뛰기")
-	game_state.set("scrap", 1500)
+	game_state.set("shelter_canned_food", int(game_state.call("get_training_cost", "ammo_carry")))
 	await _sleep(0.7)
 	_check(str(tutorial.call("get_active_step_id")) == "train_supply", "후속 스텝 train_supply 활성 (실제: %s)" % str(tutorial.call("get_active_step_id")))
 	var skip := layer.find_child("TutorialSkipButton", true, false) as Button

@@ -102,7 +102,8 @@ func _run() -> void:
 	ammo_sell_button.pressed.emit()
 	await get_tree().process_frame
 	assert(int(game_state.call("get_ammo_count", "762_fmj")) == ammo_before)
-	# 매입 대가는 고철이다(통조림 2개 → 고철 200, 구매가 650의 약 30%). 통조림 수는 그대로.
+	# 매입 대가는 고철이다(7.62mm 30발 → 고철 200, 구매가 650의 약 30%). 통조림은
+	# 매입 목록에서 아예 빠졌으므로(훈련 재화) 판매로 늘지도 줄지도 않는다.
 	assert(int(game_state.get("scrap")) == 350 + 200, "Merchant sales must pay scrap (sell_scrap), not canned food.")
 	assert(int(game_state.get("canned_food")) == canned_food_before)
 

@@ -4,7 +4,7 @@ extends RefCounted
 ##
 ## 토스트/레슨 카드(1회성 플래그 10개)는 전부 읽기만 하는 안내였다. 여기서는 스텝 표(STEPS)의
 ## 조건이 맞는 순간 대상 컨트롤에 골드 림 펄스 + 화살표 + 한 줄 지시 카드를 붙이고, 플레이어가
-## 실제 행동(주민 앉히기·훈련 구매·제작·판매·피버 충전·통조림 먹기·성장 선택…)을 하면 ✓ 뒤
+## 실제 행동(주민 앉히기·훈련 구매·제작·판매·피버 충전·통조림 투척·성장 선택…)을 하면 ✓ 뒤
 ## 다음 스텝으로 넘어간다. 건너뛰기는 그 스텝만 완료 처리한다.
 ##
 ## host 패턴: 쉘터(shelter_interior.gd)와 필드(main.gd)가 각각 한 인스턴스를 들고 attach →
@@ -49,7 +49,7 @@ const STEPS := [
 	},
 	{
 		"id": "train_magazine", "zone": "shelter", "title": "훈련장 — 탄약 운용",
-		"text": "총을 강화하기 전에 나비를 훈련시키세요 — 탄창 숙련은 장탄을 늘립니다.",
+		"text": "훈련은 통조림으로 삽니다. 주워 온 통조림을 부어 탄창 숙련을 올리세요 — 장탄이 늘어납니다.",
 		"targets": ["dock:training", "find:TrainingCard_magazine_drill"],
 	},
 	{
@@ -60,7 +60,7 @@ const STEPS := [
 	},
 	{
 		"id": "merchant_sell", "zone": "shelter", "title": "상인 — 판매",
-		"text": "행상인은 남는 탄약·통조림·부품을 고철로 사 줍니다. 판매 탭에서 하나 팔아 보세요.",
+		"text": "행상인은 남는 탄약·부품을 고철로 사 줍니다(통조림은 훈련 재화라 안 삽니다). 판매 탭에서 하나 팔아 보세요.",
 		"targets": ["merchant_notice", "interact:merchant", "find:MerchantSellTab", "merchant_sell_row"],
 	},
 	{
@@ -69,9 +69,12 @@ const STEPS := [
 		"targets": ["fever"],
 	},
 	{
-		"id": "bag_eat", "zone": "field", "title": "가방 — 먹기",
-		"text": "체력이 낮습니다. 가방의 통조림을 먹으면 체력 +18 · 피로 -12 (3초마다).",
-		"targets": ["bag", "find:BagItem_canned_food", "inv:action"],
+		# 통조림 먹기 스텝은 폐지됐다(유저 확정: "통조림은 먹는거 아님").
+		# 대신 통조림의 실제 용도 하나를 몸으로 익히게 한다 — 던져서 유인하기.
+		# 데스크톱은 CanInfoButton, 터치는 CanThrowButton이 뜬다(둘 중 보이는 쪽).
+		"id": "bag_throw", "zone": "field", "title": "통조림 — 던지기",
+		"text": "통조림은 먹는 게 아니라 던지는 겁니다. 링 안을 노려 던지면 소리에 적이 몰려옵니다.",
+		"targets": ["find:CanInfoButton", "find:CanThrowButton"],
 	},
 	{
 		"id": "level_choice", "zone": "extraction", "title": "정산 — 성장 선택",
@@ -114,7 +117,7 @@ var completing_cooldown := 0.0
 var check_playing := false
 var arrow_phase := 0.0
 var snapshots: Dictionary = {}
-# host가 notify()로 밀어 넣는 행동 사실(판매 1회·통조림 먹기 등).
+# host가 notify()로 밀어 넣는 행동 사실(판매 1회·통조림 투척 등).
 var notices: Dictionary = {}
 var goal_row_connected := false
 # 스텝이 한 번이라도 활성화된 적 있는지(세션). 정산 카드처럼 "닫히면 완료"인 스텝에 쓴다.
@@ -384,7 +387,7 @@ func _play_check(center: Vector2) -> void:
 
 
 func notify(event_id: String) -> void:
-	# host가 "판매 1회", "통조림 먹음" 같은 행동 사실을 밀어 넣는 입구.
+	# host가 "판매 1회", "통조림 던짐" 같은 행동 사실을 밀어 넣는 입구.
 	notices[event_id] = true
 	poll_timer = 0.0
 
@@ -442,7 +445,7 @@ func _trigger_met(step: Dictionary) -> bool:
 			return (
 				GameState.is_shelter_facility_unlocked("training")
 				and GameState.get_training_rank("magazine_drill") <= 0
-				and GameState.scrap >= maxi(900, GameState.get_training_cost("magazine_drill"))
+				and GameState.shelter_canned_food >= GameState.get_training_cost("magazine_drill")
 			)
 		"workbench_craft":
 			return (
@@ -461,12 +464,22 @@ func _trigger_met(step: Dictionary) -> bool:
 				and not GameState.catnip_fever_active
 				and GameState.catnip >= GameState.get_catnip_fever_charge_cost()
 			)
-		"bag_eat":
-			var max_health := maxi(1, GameState.get_max_health())
-			return (
-				GameState.canned_food >= 1
-				and int(host.get("player_health")) < int(ceilf(float(max_health) * 0.7))
-			)
+		"bag_throw":
+			# 던질 것이 있고(3개 이상), 아직 아무도 나를 못 본 상태에서 적이 둘 이상
+			# 있을 때 — 유인이 실제로 이득인 순간에만 가리킨다.
+			if GameState.canned_food < 3:
+				return false
+			var enemy_list = host.get("enemies")
+			if not (enemy_list is Array):
+				return false
+			var idle_enemies := 0
+			for enemy in enemy_list as Array:
+				if not is_instance_valid(enemy) or bool(enemy.get("dying")):
+					continue
+				if bool(enemy.get("alerted")):
+					return false
+				idle_enemies += 1
+			return idle_enemies >= 2
 		"level_choice":
 			return GameState.pending_level_choices > 0 and _extraction_panel_visible()
 		"salvage_notice":
@@ -477,7 +490,7 @@ func _trigger_met(step: Dictionary) -> bool:
 				and GameState.get_training_rank("magazine_drill") >= 1
 				and GameState.get_training_rank("sortie_supply") <= 0
 				and GameState.get_training_rank("ammo_carry") <= 0
-				and GameState.scrap >= GameState.get_training_cost("ammo_carry")
+				and GameState.shelter_canned_food >= GameState.get_training_cost("ammo_carry")
 			)
 	return false
 
@@ -502,8 +515,8 @@ func _complete_met(step: Dictionary) -> bool:
 				GameState.catnip_fever_active
 				or GameState.catnip_fever_gauge > float(snapshots.get("fever_gauge", 0.0)) + 0.01
 			)
-		"bag_eat":
-			return notices.has("ate_food")
+		"bag_throw":
+			return notices.has("can_thrown")
 		"level_choice":
 			return GameState.pending_level_choices < int(snapshots.get("pending_level_choices", 0))
 		"salvage_notice":
@@ -561,8 +574,7 @@ func _enhancement_total() -> int:
 
 func _has_sellable_goods() -> bool:
 	# 상인 매입 목록(MERCHANT_SELL_GOODS)에 있는 것 중 하나라도 들고 있으면 판매 가능.
-	if GameState.canned_food >= 1:
-		return true
+	# 통조림은 목록에서 빠졌다(훈련 재화) — 더 이상 여기서 세지 않는다.
 	for good_value in GameState.MERCHANT_SELL_GOODS:
 		var good := good_value as Dictionary
 		var good_id := str(good.get("id", ""))
@@ -628,14 +640,6 @@ func _resolve_target(spec: String) -> Control:
 			if not bool(host.get("merchant_ui_open")) or str(host.get("merchant_shop_mode")) != "sell":
 				return null
 			return _find_prefixed(host.get("merchant_ui_layer") as Node, "MerchantGood_")
-		"inv":
-			var inventory := _inventory_ui()
-			if inventory == null or not bool(inventory.call("is_open")):
-				return null
-			var action := inventory.get("item_action_button") as Button
-			if action == null or action.text != "먹기" or action.disabled:
-				return null
-			return _visible_control(action)
 		"extraction":
 			var hud = host.get("hud")
 			if hud == null or not _extraction_panel_visible():

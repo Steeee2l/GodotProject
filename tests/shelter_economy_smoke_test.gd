@@ -12,6 +12,8 @@ func _run() -> void:
 	game_state.call("unlock_all_shelter_facilities")
 	game_state.set("scrap", 500)
 	game_state.set("canned_food", 200)
+	# 훈련 지불처는 쉘터 통조림 재고다(가방 통조림은 투척용).
+	game_state.set("shelter_canned_food", 500)
 	game_state.set("rescued_workers", 4)
 	game_state.call("_ensure_resident_records")
 	var resident_ids := game_state.get("resident_cat_ids") as Array
@@ -383,8 +385,8 @@ func _run() -> void:
 	var training_scroll := root.find_child("TrainingTreeScroll", true, false) as ScrollContainer
 	if training_panel == null or training_resource == null or training_scroll == null:
 		_fail("training facility responsive panel structure is missing")
-	# 훈련 화폐는 고철이다(통조림 → 고철 전환).
-	_assert_resource_icon(training_panel, "scrap", "training facility")
+	# 훈련 화폐는 통조림이다(유저 확정: 고철 투자가 아니라 통조림 소비).
+	_assert_resource_icon(training_panel, "food", "training facility")
 	_assert_compact_close_button(training_panel, "training facility")
 	if training_resource.autowrap_mode != TextServer.AUTOWRAP_OFF:
 		_fail("training facility resource count can collapse into vertical text")

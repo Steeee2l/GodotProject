@@ -116,8 +116,12 @@ func register_raid_marker(
 	world_position: Vector3,
 	marker_type: String,
 	label: String,
-	discovered: bool = false
+	discovered: bool = false,
+	radius: float = 0.0
 ) -> void:
+	# radius(월드 단위)는 선택 항목이다. 0보다 크면 마커 둘레에 반투명 원을 그린다 —
+	# "그 자리를 지켜라"류 목표가 어디까지가 안쪽인지 지도에서 보이게 하기 위한 것.
+	# 기존 호출은 인자를 안 주므로 0.0 = 원 없음, 동작 불변.
 	if marker_id.is_empty():
 		return
 	for marker in raid_markers:
@@ -127,6 +131,7 @@ func register_raid_marker(
 		marker["type"] = marker_type
 		marker["label"] = label
 		marker["discovered"] = discovered
+		marker["radius"] = maxf(0.0, radius)
 		queue_redraw()
 		return
 	raid_markers.append({
@@ -135,6 +140,7 @@ func register_raid_marker(
 		"type": marker_type,
 		"label": label,
 		"discovered": discovered,
+		"radius": maxf(0.0, radius),
 	})
 	queue_redraw()
 
@@ -487,6 +493,28 @@ func _draw() -> void:
 		var marker_pulse := 0.5 + 0.5 * sin(
 			Time.get_ticks_msec() * (0.011 if marker_type == "incident" else 0.006)
 		)
+		# 사수 반경 같은 '구역' 마커는 월드 반경을 그대로 깐다. 이 지도는 아이소메트릭
+		# 이라 화면 원을 그리면 실제 구역과 어긋난다 — 월드에서 원을 샘플링해 투영한다.
+		var world_radius := float(marker.get("radius", 0.0))
+		if world_radius > 0.0 and map_size > 0.0:
+			var zone_center: Vector3 = marker.get("position", Vector3.ZERO)
+			var zone_polygon := PackedVector2Array()
+			for step in 32:
+				var angle := TAU * float(step) / 32.0
+				zone_polygon.append(_world_position_to_map_point(
+					zone_center + Vector3(cos(angle), 0.0, sin(angle)) * world_radius,
+					map_rect,
+					map_size
+				))
+			draw_colored_polygon(
+				zone_polygon,
+				Color(marker_color.r, marker_color.g, marker_color.b, 0.13)
+			)
+			draw_polyline(
+				_closed_polygon(zone_polygon),
+				Color(marker_color.r, marker_color.g, marker_color.b, 0.55 + marker_pulse * 0.3),
+				2.0
+			)
 		var marker_radius := marker_size * (0.42 + marker_pulse * 0.08)
 		draw_circle(
 			marker_center,

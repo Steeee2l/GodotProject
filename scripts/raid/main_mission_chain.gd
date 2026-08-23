@@ -23,6 +23,13 @@ const HUD_STYLE := preload("res://scripts/hud/hud_style.gd")
 const ALARM_WAVE_COUNT := 3
 const ALARM_WAVE_INTERVAL := 9.0
 const DEFENSE_HOLD_RADIUS := 9.0
+# 방어 중에는 지점 마커가 사라져 "어디로 돌아가야 하는지"를 알 수 없었다(유저 제보).
+# 사수 지점은 별도 id로 다시 걸고, 방어가 끝날 때만 걷는다.
+const DEFENSE_MARKER_ID := "main_mission_defense"
+# 회수물을 든 뒤에도 지도에 목표가 하나는 남아야 한다 — 가장 가까운 하수구를 찍어 준다.
+const EXTRACTION_MARKER_ID := "main_mission_extraction"
+const DEFENSE_ZONE_INSIDE_COLOR := Color("#5fd489")
+const DEFENSE_ZONE_OUTSIDE_COLOR := Color("#ef5f45")
 
 # 신규 3D 기물은 만들지 않는다. 이미 있는 사건 프롭 여섯 장을 돌려 쓴다.
 const PROP_TEXTURES := {
@@ -68,6 +75,7 @@ var defense_wave_timer := 0.0
 var defense_waves := 0
 var defense_waves_spawned := 0
 var defense_position := Vector3.ZERO
+var defense_zone_ring: Node3D
 var carried_sprite: Sprite3D
 var repeat_recovery := false
 
@@ -98,6 +106,7 @@ func setup(world: ProceduralCityMap) -> void:
 		_adopt_stage_from_carried_cargo()
 		state = "carried"
 		_attach_carry_visual()
+		_register_extraction_marker()
 		_set_step(
 			str(stage.get("carry_title", "탈출 필요")),
 			str(stage.get("carry_detail", "회수물 운반 중 · 가장 가까운 하수구로 이동하세요")),
@@ -319,6 +328,61 @@ func _remove_marker(index: int) -> void:
 		host.tactical_map.call("remove_raid_marker", "main_mission_%d" % index)
 
 
+func _register_defense_marker(label: String) -> void:
+	# 방어가 도는 동안 사수 지점은 지도에 남아 있어야 한다 — 반경 원까지 같이 넘긴다.
+	if not defense_active:
+		return
+	if not is_instance_valid(host.tactical_map):
+		call_deferred("_register_defense_marker", label)
+		return
+	if host.tactical_map.has_method("register_raid_marker"):
+		host.tactical_map.call(
+			"register_raid_marker",
+			DEFENSE_MARKER_ID,
+			defense_position,
+			"jackpot",
+			label,
+			true,
+			DEFENSE_HOLD_RADIUS
+		)
+
+
+func _remove_defense_marker() -> void:
+	if is_instance_valid(host.tactical_map) and host.tactical_map.has_method("remove_raid_marker"):
+		host.tactical_map.call("remove_raid_marker", DEFENSE_MARKER_ID)
+
+
+func _register_extraction_marker(retries: int = 20) -> void:
+	# 회수물을 들면 지점 마커가 전부 걷힌다. 그 순간 지도가 빈손이 되지 않도록
+	# 가장 가까운 하수구 하나를 "지금 목표"로 찍는다(나머지 탈출로는 여전히 미발견).
+	# 이어하기 판은 지도·탈출구가 아직 안 세워졌을 수 있어 몇 프레임 기다린다.
+	if state != "carried":
+		return
+	var nearest: Node3D = null
+	var nearest_distance := INF
+	for site in host.extraction_sites:
+		if not is_instance_valid(site):
+			continue
+		var distance: float = host.player.global_position.distance_to(site.global_position)
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest = site
+	if not is_instance_valid(host.tactical_map) or nearest == null:
+		if retries > 0:
+			call_deferred("_register_extraction_marker", retries - 1)
+		return
+	if not host.tactical_map.has_method("register_raid_marker"):
+		return
+	host.tactical_map.call(
+		"register_raid_marker",
+		EXTRACTION_MARKER_ID,
+		nearest.global_position,
+		"jackpot",
+		"회수물 반출 · 하수구",
+		true
+	)
+
+
 # ── 지점 처리 ──────────────────────────────────────────────────
 
 
@@ -467,9 +531,13 @@ func _begin_defense(index: int, point: Dictionary) -> void:
 	if not lines.is_empty():
 		host.monologue.play(lines)
 	_show_alarm_flash()
+	# 지점 마커는 handle_point가 이미 걷었다. 사수 지점을 반경과 함께 다시 걸고
+	# 바닥에도 구역 링을 깐다 — 지도와 세계 양쪽에 "여기"가 남아야 한다.
+	_register_defense_marker("사수 지점 · %s" % str(point.get("map_label", "제어반")))
+	_build_defense_zone_ring()
 	_set_step(
 		str(point.get("step_title", "메인 임무")),
-		"자리 사수 %.0f초 · 이탈하면 진행이 멈춘다" % defense_duration,
+		"자리 사수 %.0f초 · 바닥 원 안을 지켜라 · TAB 지도 확인" % defense_duration,
 		index
 	)
 
@@ -488,18 +556,26 @@ func _update_defense(delta: float) -> void:
 		defense_waves_spawned += 1
 		defense_wave_timer = maxf(3.0, defense_duration / float(maxi(1, defense_waves)))
 	var remaining := maxf(0.0, defense_duration - defense_elapsed)
+	# 밖으로 나갔을 때 "돌아가라"만 띄우면 어디로 돌아갈지 알 수 없었다.
+	# 남은 거리와 화면 기준 방향을 같이 말해 준다.
+	var away_distance: float = host.player.global_position.distance_to(defense_position)
+	_update_defense_zone_ring(inside)
 	_set_step(
 		str((points[point_index] as Dictionary).get("step_title", "메인 임무")),
 		(
 			"자리 사수 %.1f초 남음 · 웨이브 %d/%d" % [remaining, defense_waves_spawned, defense_waves]
 			if inside
-			else "구역을 벗어났다 · 제어반으로 돌아가라"
+			else "구역을 벗어났다 · 사수 지점 %.0fm %s" % [
+				away_distance, _describe_screen_direction(defense_position)
+			]
 		),
 		point_index
 	)
 	if defense_elapsed < defense_duration:
 		return
 	defense_active = false
+	_remove_defense_marker()
+	_clear_defense_zone_ring()
 	host._show_field_notice("봉쇄 해제 완료 · 안쪽의 회수물을 챙겨라")
 	point_index += 1
 	if point_index < points.size():
@@ -526,6 +602,107 @@ func _spawn_defense_wave() -> void:
 		defense_position,
 		{"jackpot_response": true}
 	)
+
+
+# ── 사수 구역 표시 ─────────────────────────────────────────────
+
+
+func _make_zone_material(color: Color, alpha: float, energy: float, depth_test: bool) -> StandardMaterial3D:
+	# 예고 데칼(telegraph_fx)과 같은 계열 — unshaded + 알파 + 발광. 차이는 수명뿐이다.
+	var material := StandardMaterial3D.new()
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(color.r, color.g, color.b, alpha)
+	material.emission_enabled = true
+	material.emission = color
+	material.emission_energy_multiplier = energy
+	material.no_depth_test = not depth_test
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return material
+
+
+func _build_defense_zone_ring() -> void:
+	# 지도만으로는 "지금 내가 안쪽인지"를 알 수 없다. 바닥에 실제 반경을 깔아
+	# 안이면 초록, 밖이면 붉게 점멸시킨다. 방어가 끝나면 사라진다.
+	_clear_defense_zone_ring()
+	var root := Node3D.new()
+	root.name = "MainMissionDefenseZone"
+	var disc := MeshInstance3D.new()
+	disc.name = "Disc"
+	var disc_mesh := CylinderMesh.new()
+	disc_mesh.height = 0.02
+	disc_mesh.radial_segments = 56
+	disc_mesh.top_radius = DEFENSE_HOLD_RADIUS
+	disc_mesh.bottom_radius = DEFENSE_HOLD_RADIUS
+	disc_mesh.material = _make_zone_material(DEFENSE_ZONE_INSIDE_COLOR, 0.12, 1.2, true)
+	disc.mesh = disc_mesh
+	disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(disc)
+	var ring := MeshInstance3D.new()
+	ring.name = "Ring"
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.rings = 56
+	ring_mesh.ring_segments = 8
+	ring_mesh.inner_radius = maxf(0.1, DEFENSE_HOLD_RADIUS - 0.22)
+	ring_mesh.outer_radius = DEFENSE_HOLD_RADIUS
+	ring_mesh.material = _make_zone_material(DEFENSE_ZONE_INSIDE_COLOR, 0.9, 3.2, false)
+	ring.mesh = ring_mesh
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(ring)
+	host.add_child(root)
+	root.global_position = Vector3(defense_position.x, 0.06, defense_position.z)
+	defense_zone_ring = root
+
+
+func _update_defense_zone_ring(inside: bool) -> void:
+	if not is_instance_valid(defense_zone_ring):
+		return
+	var color := DEFENSE_ZONE_INSIDE_COLOR if inside else DEFENSE_ZONE_OUTSIDE_COLOR
+	# 밖일 때만 점멸 — 안쪽에서는 조용히 켜져 있다.
+	var pulse := (
+		1.0 if inside else 0.45 + 0.55 * absf(sin(Time.get_ticks_msec() * 0.006))
+	)
+	var disc := defense_zone_ring.get_node_or_null("Disc") as MeshInstance3D
+	if disc != null:
+		var disc_material := (disc.mesh as CylinderMesh).material as StandardMaterial3D
+		disc_material.albedo_color = Color(color.r, color.g, color.b, 0.12 * pulse)
+		disc_material.emission = color
+	var ring := defense_zone_ring.get_node_or_null("Ring") as MeshInstance3D
+	if ring != null:
+		var ring_material := (ring.mesh as TorusMesh).material as StandardMaterial3D
+		ring_material.albedo_color = Color(color.r, color.g, color.b, 0.35 + 0.55 * pulse)
+		ring_material.emission = color
+
+
+func _clear_defense_zone_ring() -> void:
+	if is_instance_valid(defense_zone_ring):
+		defense_zone_ring.queue_free()
+	defense_zone_ring = null
+
+
+func _describe_screen_direction(target: Vector3) -> String:
+	# 화면 가장자리 화살표 UI는 아직 없다(폰트 화살표는 이 프로젝트에서 안 쓴다).
+	# 대신 카메라 기준 8방위를 말로 준다 — "왼쪽 뒤"면 몸을 어디로 돌릴지 바로 안다.
+	var camera := host.camera as Camera3D
+	if not is_instance_valid(camera) or not is_instance_valid(host.player):
+		return ""
+	var offset: Vector3 = target - host.player.global_position
+	offset.y = 0.0
+	if offset.length() < 0.05:
+		return ""
+	var forward := -camera.global_transform.basis.z
+	forward.y = 0.0
+	if forward.length() < 0.001:
+		return ""
+	var right := camera.global_transform.basis.x
+	right.y = 0.0
+	var angle := atan2(offset.normalized().dot(right.normalized()), offset.normalized().dot(forward.normalized()))
+	var octant := int(roundf(rad_to_deg(angle) / 45.0)) % 8
+	if octant < 0:
+		octant += 8
+	return [
+		"정면", "오른쪽 앞", "오른쪽", "오른쪽 뒤", "뒤쪽", "왼쪽 뒤", "왼쪽", "왼쪽 앞"
+	][octant]
 
 
 # ── 회수물 ─────────────────────────────────────────────────────
@@ -560,10 +737,13 @@ func attempt_take_recovery(point_node: Node3D) -> void:
 	if host.hud.field_interaction_panel:
 		host.hud.field_interaction_panel.visible = false
 	_remove_marker(index)
+	_remove_defense_marker()
+	_clear_defense_zone_ring()
 	point_sites.erase(index)
 	point_node.queue_free()
 	state = "carried"
 	_attach_carry_visual()
+	_register_extraction_marker()
 	GameState.save_persistent_state()
 	_set_step(
 		str(stage.get("carry_title", "탈출 필요")),
@@ -610,8 +790,12 @@ func restore_carry_presentation() -> void:
 			site.queue_free()
 		_remove_marker(index)
 	point_sites.clear()
+	defense_active = false
+	_remove_defense_marker()
+	_clear_defense_zone_ring()
 	state = "carried"
 	_attach_carry_visual()
+	_register_extraction_marker()
 	_set_step(
 		"회수물 재확보 · %d/%d" % [_total_steps(), _total_steps()],
 		"되찾은 회수물을 운반해 하수구로 탈출하세요",

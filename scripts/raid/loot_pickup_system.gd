@@ -731,7 +731,7 @@ func _raid_item_description(item_type: String, item_id: String) -> String:
 		"progression":
 			return "상위 제작과 봉인구역 진입에 필요한 희귀 물품입니다."
 		"food":
-			return "주민이 일하려면 먹어야 합니다. 떨어지면 쉘터 생산이 멈춥니다."
+			return "던져서 적을 유인하고, 귀환하면 쉘터 훈련 재고가 됩니다. 먹는 물건이 아닙니다."
 		"churu":
 			return "쉘터 확장에 쓰이는 희귀 재화입니다."
 		"valuable":

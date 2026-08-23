@@ -6,9 +6,8 @@ signal weapon_equipped(weapon_id: String)
 signal weapon_unequipped
 signal equipment_changed
 signal item_discard_requested(item_type: String, item_id: String, amount: int)
-# 소모품 사용(현재는 통조림 '먹기'). 실제 효과는 호스트가 GameState를 통해 적용하고
-# apply_use_result로 결과를 돌려준다 — 버리기(item_discard_requested)와 같은 규약.
-signal item_use_requested(item_type: String, item_id: String)
+# 소모품 '사용' 시그널은 없다 — 통조림 먹기가 폐지되면서(유저 확정: "통조림은
+# 먹는거 아님") 유일한 사용처가 사라졌다. 구급약은 SHIFT/치료 버튼이 따로 쓴다.
 
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
@@ -996,10 +995,7 @@ func _refresh_contents() -> void:
 		"id": "canned_food",
 		"type": "resource",
 		"title": "통조림",
-		"description": "먹으면 체력 +%d · 피로 -%d (3초 간격, 전투 중에도 가능). T로 던져 적을 유인할 수도 있습니다." % [
-			GameState.CANNED_FOOD_EAT_HEAL,
-			roundi(GameState.CANNED_FOOD_EAT_FATIGUE_RELIEF),
-		],
+		"description": "먹는 물건이 아닙니다. T로 던져 적을 유인하고, 귀환하면 쉘터 훈련 재고로 들어가 훈련 비용이 됩니다.",
 		"quantity": game_state.get_backpack_storage_count("food", "canned_food"),
 		"texture": UI_ICONS.get_icon("food", 64, Color("#e6b65c")),
 	})
@@ -1485,12 +1481,8 @@ func _refresh_item_detail() -> void:
 			str(selected_item.get("description", "레이드에서 사용하는 자원입니다.")),
 			int(selected_item.get("quantity", 0)),
 		]
-		if str(selected_item.get("id", "")) == "canned_food":
-			# 통조림은 가방에서 바로 먹는다. 단축키는 없다(T는 투척이 쓰고 있다).
-			item_action_button.text = "먹기"
-			item_action_button.icon = UI_ICONS.get_icon("food", 28, Color("#e6b65c"))
-			item_action_button.visible = true
-			item_action_button.disabled = int(selected_item.get("quantity", 0)) <= 0
+		# 통조림에는 가방 행동 버튼이 없다 — 던지기는 필드의 T(투척 버튼)가 쥐고,
+		# 훈련 지불은 쉘터 훈련장이 쥔다. 가방은 수량만 보여 준다.
 	elif item_type == "churu":
 		item_detail_description.text = "%s\n보유 수량 %d개" % [
 			str(selected_item.get("description", "희귀 재화입니다.")),
@@ -1597,17 +1589,6 @@ func _on_selected_item_discard() -> void:
 	item_discard_requested.emit(discard_type, item_id, amount)
 
 
-func apply_use_result(success: bool, message: String) -> void:
-	# 먹기 결과. 성공하면 수량이 줄었으니 그리드를 다시 그리고, 선택은 유지해
-	# 연속으로 먹을 수 있게 한다(쿨다운은 GameState가 막는다).
-	if success:
-		_refresh_contents()
-	_show_inventory_feedback(
-		message,
-		Color("#a3ff92") if success else Color("#ff9d8f")
-	)
-
-
 func apply_discard_result(success: bool, message: String) -> void:
 	if success:
 		# 연출: 버린 칸의 타일을 고스트로 떼어내 0.34초 동안 찢어 없앤다. 데이터와 그리드
@@ -1641,9 +1622,6 @@ func _on_selected_item_action() -> void:
 		return
 	var item_type := str(selected_item.get("type", ""))
 	var item_id := str(selected_item.get("id", ""))
-	if item_type == "resource" and item_id == "canned_food":
-		item_use_requested.emit("food", "canned_food")
-		return
 	if item_type == "weapon":
 		if has_weapon_state and item_id == game_state.equipped_weapon_id:
 			_request_weapon_unequip()

@@ -505,7 +505,6 @@ func build(owner_node: Node) -> void:
 	inventory_ui.connect("weapon_unequipped", Callable(host, "_on_inventory_weapon_unequipped"))
 	inventory_ui.connect("equipment_changed", Callable(host, "_on_inventory_equipment_changed"))
 	inventory_ui.connect("item_discard_requested", Callable(host, "_on_inventory_item_discard_requested"))
-	inventory_ui.connect("item_use_requested", Callable(host, "_on_inventory_item_use_requested"))
 	host._update_equipment_ui()
 	_watch_prompt_layout(ammo_prompt_panel)
 	_watch_prompt_layout(field_interaction_panel)

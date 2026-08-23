@@ -213,6 +213,10 @@ func _throw_to(landing: Vector3) -> void:
 	GameState.canned_food = maxi(0, int(GameState.canned_food) - 1)
 	if host.has_method("_refresh_resource_hud"):
 		host.call("_refresh_resource_hud")
+	# 액티브 튜토리얼 bag_throw 완료 판정 — "실제로 한 번 던졌다"가 조건이다.
+	var tutorial = host.get("active_tutorial")
+	if tutorial != null:
+		tutorial.call("notify", "can_thrown")
 	var can := Node3D.new()
 	can.name = "ThrownCan"
 	can.set_meta("can_lure", true)
