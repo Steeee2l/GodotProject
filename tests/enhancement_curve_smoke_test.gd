@@ -8,7 +8,7 @@ extends SceneTree
 # ③ 꾹꾹이 생산기 최대 Lv 8 — Lv8 비용 150M/캣닢 12M · 배율 1.9^7 · Lv9 없음
 # ④ 오버클럭 비용 900×1.5^L / 캣닢 60×1.5^L — Lv20 2,992,730 / 199,515
 # ⑤ 귀중품 존 가치 ×{1,2,4,10,25} — 존5 금니 480×25 = 12000 · 판 가치 캡도 같은 배율 · 환전 원장
-# ⑥ 돌파 재료 표 — 인장(무기 L/10 · 방어구 L/20) · 정밀 기어 (L/10)×2 · 군용 합금 (L−40)/5
+# ⑥ 돌파 비용 — [개정 2026-08-29] 고철 단독({"scrap": 그 단계 강화비 ×3}), 인장·부품 요구 폐지
 # ⑦ 돌파 정체성 보너스 판정 — +30 관통 +1 · +50 탄창 +25%/장전 −15% · +70 엘리트 배율 · +90 환급
 #    방어구 +30 넉백 · +50 피격 후 가드 · +70 피로 · +90 시큐어 슬롯
 # ⑧ 피해 곡선 — +50까지 기존 수렴 곡선 그대로, +99 ≈ ×2.1
@@ -142,13 +142,14 @@ func _check_cost_curve() -> void:
 	_check(_within(total30, 11.4e6, 0.10), "① K2 +30 누적 ≈ 11.4M (got %s)" % _fmt(total30))
 	_check(_within(total50, 213e6, 0.10), "① K2 +50 누적 ≈ 213M (got %s)" % _fmt(total50))
 	_check(_within(total99, 8.9e9, 0.10), "① K2 +99 누적 ≈ 8.9B (got %s)" % _fmt(total99))
-	# 강화 부품: 종류당 개수 1/2/3 단계 · 정밀 기어 +31 1 · +81 2 · 합금은 강화에 없음(돌파 전용)
-	levels["ak47"] = 40
-	var parts41: Dictionary = game_state.call("get_weapon_enhancement_part_cost", "ak47")
-	_check(int(parts41.get("magazine_spring", 0)) + int(parts41.get("rubber_gasket", 0)) + int(parts41.get("scope_lens", 0)) == 6 and int(parts41.get("precision_gear", 0)) == 1, "① +41 부품: 일반 3종×2 + 기어 1 (got %s)" % JSON.stringify(parts41))
-	levels["ak47"] = 80
-	var parts81: Dictionary = game_state.call("get_weapon_enhancement_part_cost", "ak47")
-	_check(int(parts81.get("magazine_spring", 0)) == 3 and int(parts81.get("precision_gear", 0)) == 2 and not parts81.has("military_alloy"), "① +81 부품: 일반 3종×3 + 기어 2 · 합금 없음 (got %s)" % JSON.stringify(parts81))
+	# [개정 2026-08-29] 강화는 고철 단독 — 부품 비용 함수는 어느 단계에서든 {}를 돌려준다.
+	# (옛 "일반 3종×n + 기어" 표 어서션은 폐지된 현실이라 빈 딕셔너리 검증으로 바꿨다.)
+	for probe_level in [10, 40, 80]:
+		levels["ak47"] = int(probe_level)
+		var parts: Dictionary = game_state.call("get_weapon_enhancement_part_cost", "ak47")
+		_check(parts.is_empty(), "① +%d 강화 부품 비용 없음(고철 단독) (got %s)" % [int(probe_level) + 1, JSON.stringify(parts)])
+	var armor_parts: Dictionary = game_state.call("get_armor_enhancement_part_cost", "military_vest")
+	_check(armor_parts.is_empty(), "① 방어구 강화 부품 비용 없음(고철 단독)")
 	levels["ak47"] = 0
 	sections_done.append("①")
 
@@ -263,34 +264,36 @@ func _check_valuable_stage_value() -> void:
 	sections_done.append("⑤")
 
 
-# ── ⑥ 돌파 재료 표 ────────────────────────────────────────────
+# ── ⑥ 돌파 비용 — 고철 단독 ───────────────────────────────────
+# [개정 2026-08-29] 인장·정밀 기어·합금 요구 폐지(유저: 고철만으로 신나게). 옛 재료
+# 표(인장 L/10 등) 어서션은 그 현실에 맞게 "{"scrap": 강화비 ×3} 단독"으로 바꿨다.
 func _check_breakthrough_table() -> void:
 	game_state.call("reset_run")
 	var levels: Dictionary = game_state.get("weapon_enhancement_levels")
 	var armor_levels: Dictionary = game_state.get("armor_enhancement_levels")
 	var breakthroughs: Dictionary = game_state.get("gear_breakthroughs")
-	var weapon_expect := {10: [1, 2, 0], 50: [5, 10, 2], 90: [9, 18, 10]}
-	var armor_expect := {10: [1, 2, 0], 50: [2, 10, 2], 90: [4, 18, 10]}
-	print("BREAKTHROUGH_TABLE (seal / gear / alloy)")
-	for level in weapon_expect.keys():
+	print("BREAKTHROUGH_COST (scrap only)")
+	for level in [10, 50, 90]:
 		breakthroughs.clear()
 		levels["k2"] = int(level)
 		var cost: Dictionary = game_state.call("get_breakthrough_cost", "weapon", "k2")
-		var e: Array = weapon_expect[level]
 		print("  weapon +%d: %s" % [int(level), JSON.stringify(cost)])
-		_check(int(cost.get("artisan_seal", 0)) == e[0] and int(cost.get("precision_gear", 0)) == e[1] and int(cost.get("military_alloy", 0)) == e[2], "⑥ 무기 +%d 돌파: 인장 %d · 기어 %d · 합금 %d" % [int(level), e[0], e[1], e[2]])
+		_check(cost.keys() == ["scrap"], "⑥ 무기 +%d 돌파 비용은 고철 단독 (got %s)" % [int(level), JSON.stringify(cost)])
 		_check(int(cost.get("scrap", 0)) == int(game_state.call("get_weapon_enhancement_cost", "k2")) * 3, "⑥ 무기 +%d 돌파 고철 ×3" % int(level))
 	levels["k2"] = 0
-	for level in armor_expect.keys():
+	for level in [10, 50, 90]:
 		breakthroughs.clear()
 		armor_levels["military_vest"] = int(level)
 		var cost: Dictionary = game_state.call("get_breakthrough_cost", "armor", "military_vest")
-		var e: Array = armor_expect[level]
 		print("  armor  +%d: %s" % [int(level), JSON.stringify(cost)])
-		_check(int(cost.get("artisan_seal", 0)) == e[0] and int(cost.get("precision_gear", 0)) == e[1] and int(cost.get("military_alloy", 0)) == e[2], "⑥ 방어구 +%d 돌파: 인장 %d · 기어 %d · 합금 %d" % [int(level), e[0], e[1], e[2]])
+		_check(cost.keys() == ["scrap"], "⑥ 방어구 +%d 돌파 비용은 고철 단독 (got %s)" % [int(level), JSON.stringify(cost)])
+		_check(int(cost.get("scrap", 0)) == int(game_state.call("get_armor_enhancement_cost", "military_vest")) * 3, "⑥ 방어구 +%d 돌파 고철 ×3" % int(level))
 	armor_levels.erase("military_vest")
 	breakthroughs.clear()
-	# 인장 소모는 비용표를 따른다(+50 무기 5개)
+	# 돌파 관문이 아니면 빈 비용
+	levels["k2"] = 37
+	_check((game_state.call("get_breakthrough_cost", "weapon", "k2") as Dictionary).is_empty(), "⑥ 관문 아님(+37) → 빈 비용")
+	# 소모는 고철만 — 인장·부품 재고는 그대로 남는다.
 	levels["k2"] = 50
 	game_state.call("add_weapon", "k2", 1)
 	levels["k2"] = 50
@@ -298,8 +301,11 @@ func _check_breakthrough_table() -> void:
 	game_state.call("add_progression_item", "artisan_seal", 5)
 	game_state.call("add_mod_component", "precision_gear", 10)
 	game_state.call("add_mod_component", "military_alloy", 2)
-	_check(bool(game_state.call("try_breakthrough", "weapon", "k2")), "⑥ +50 돌파 성공(인장 5 · 기어 10 · 합금 2)")
-	_check(int(game_state.call("get_progression_item_count", "artisan_seal")) == 0 and int(game_state.call("get_owned_component_total", "precision_gear")) == 0 and int(game_state.call("get_owned_component_total", "military_alloy")) == 0, "⑥ 재료 전량 소모")
+	var scrap_before := int(game_state.get("scrap"))
+	var expected_scrap := int((game_state.call("get_breakthrough_cost", "weapon", "k2") as Dictionary).get("scrap", 0))
+	_check(bool(game_state.call("try_breakthrough", "weapon", "k2")), "⑥ +50 돌파 성공(고철 단독)")
+	_check(int(game_state.get("scrap")) == scrap_before - expected_scrap, "⑥ 고철 ×3만 차감")
+	_check(int(game_state.call("get_progression_item_count", "artisan_seal")) == 5 and int(game_state.call("get_owned_component_total", "precision_gear")) == 10 and int(game_state.call("get_owned_component_total", "military_alloy")) == 2, "⑥ 인장·부품은 소모되지 않음")
 	game_state.call("reset_run")
 	sections_done.append("⑥")
 

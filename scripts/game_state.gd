@@ -4321,15 +4321,11 @@ func get_weapon_enhancement_cost(weapon_id: String) -> int:
 const WEAPON_ENHANCEMENT_PART_CYCLE: Array[String] = ["magazine_spring", "rubber_gasket", "scope_lens"]
 
 
-func get_weapon_enhancement_part_cost(weapon_id: String) -> Dictionary:
-	# 고단계 강화는 고철만으로 안 된다 — 필드 부품이 들어간다. +10까지는 고철만,
-	# +11~20 일반 부품 1종, +21~30 2종, +31부터 3종(한 종류씩). 종류당 개수는
-	# +1~40 1개 · +41~80 2개 · +81~99 3개(대개편 3단계 — 출정이 후반에도 이유가 되게).
-	# 희귀 부품: +31~80 정밀 기어 1, +81~99 정밀 기어 2. 군용 합금은 돌파(get_breakthrough_cost)
-	# 전용으로 옮겨 "합금 = 돌파 재료"라는 정체성을 준다.
-	# 부품은 필드 전용이라 넘치는 고철에 '출정 이유'를 한 번 더 묶는다. 부품 종류는
-	# 단계마다 돌아가며 요구해 한 종류만 쌓아 두는 플레이를 막는다.
-	return _gear_enhancement_part_cost(get_weapon_enhancement_level(weapon_id) + 1, MAX_WEAPON_ENHANCEMENT)
+func get_weapon_enhancement_part_cost(_weapon_id: String) -> Dictionary:
+	# [폐지 2026-08-29] 강화의 부품 비용 — 강화는 고철 단독 사다리다(유저: 인크리멘탈
+	# 게임이니 신나게 강화할 수 있어야). 필드 부품의 소비처는 제작 + 후속 신설
+	# 시스템으로 이관한다.
+	return {}
 
 
 func _gear_enhancement_part_cost(next_level: int, max_level: int) -> Dictionary:
@@ -4410,8 +4406,9 @@ func get_armor_enhancement_cost(equipment_id: String) -> int:
 	return maxi(400, roundi(ARMOR_ENHANCEMENT_BASE_COST * family_factor * _segmented_growth(level, ARMOR_ENHANCEMENT_SEGMENTS)))
 
 
-func get_armor_enhancement_part_cost(equipment_id: String) -> Dictionary:
-	return _gear_enhancement_part_cost(get_armor_enhancement_level(equipment_id) + 1, MAX_ARMOR_ENHANCEMENT)
+func get_armor_enhancement_part_cost(_equipment_id: String) -> Dictionary:
+	# [폐지 2026-08-29] 무기와 같은 규칙 — 강화는 고철 단독.
+	return {}
 
 
 func get_armor_enhancement_multiplier(equipment_id: String) -> float:
@@ -4558,20 +4555,9 @@ func get_breakthrough_cost(kind: String, item_id: String) -> Dictionary:
 	# 돌파가 필요 없는 상태면 빈 딕셔너리.
 	if not is_breakthrough_required(kind, item_id):
 		return {}
-	# 대개편 3단계 — 돌파가 '출정 이유'가 되게 희귀 재료를 단계에 비례시킨다.
-	#   인장: 무기 L/10(+10 1 … +90 9) · 방어구 L/20(+10~+30 1 … +90 4) — 방어구는 피스 3개라 절반.
-	#   정밀 기어: (L/10)×2 → +10 2 · +50 10 · +90 18.
-	#   군용 합금(+50~): (L−40)/5 → +50 2 · +70 6 · +90 10. 강화 단계 부품에서는 뺐다(돌파 전용).
-	var level := get_gear_enhancement_level(kind, item_id)
-	var seal_divisor := BREAKTHROUGH_STEP * 2 if kind == "armor" else BREAKTHROUGH_STEP
-	var cost := {
-		"scrap": get_gear_enhancement_cost(kind, item_id) * 3,
-		ARTISAN_SEAL_ID: maxi(1, level / seal_divisor),
-		"precision_gear": maxi(1, level / BREAKTHROUGH_STEP) * 2,
-	}
-	if level >= 50:
-		cost["military_alloy"] = maxi(1, (level - 40) / 5)
-	return cost
+	# [개정 2026-08-29] 돌파도 고철 단독 — 그 단계 강화비의 ×3. 인장·정밀 기어·
+	# 합금 요구는 폐지(유저: 고철만으로 신나게). 희귀 재료의 소비처는 후속 신설.
+	return {"scrap": get_gear_enhancement_cost(kind, item_id) * 3}
 
 
 func get_owned_component_total(component_id: String) -> int:
@@ -4610,13 +4596,6 @@ func get_breakthrough_block_reason(kind: String, item_id: String) -> String:
 	var cost := get_breakthrough_cost(kind, item_id)
 	if scrap < int(cost.get("scrap", 0)):
 		return "고철 %s 부족" % format_compact_number(int(cost.get("scrap", 0)) - scrap)
-	if get_progression_item_count(ARTISAN_SEAL_ID) < int(cost.get(ARTISAN_SEAL_ID, 1)):
-		return "장인의 인장 부족 — 보스 처치·메인 미션 3단계에서 나옵니다"
-	for component_id in RARE_COMPONENT_IDS:
-		var need := int(cost.get(component_id, 0))
-		if need > 0 and get_owned_component_total(component_id) < need:
-			var name := "정밀 기어" if component_id == "precision_gear" else "군용 합금"
-			return "%s %d개 부족 — 엘리트·보스·봉인 보급함에서 나옵니다" % [name, need - get_owned_component_total(component_id)]
 	return ""
 
 
@@ -4631,11 +4610,6 @@ func try_breakthrough(kind: String, item_id: String) -> bool:
 		return false
 	var cost := get_breakthrough_cost(kind, item_id)
 	scrap -= int(cost.get("scrap", 0))
-	consume_progression_item(ARTISAN_SEAL_ID, int(cost.get(ARTISAN_SEAL_ID, 1)))
-	for component_id in RARE_COMPONENT_IDS:
-		var need := int(cost.get(component_id, 0))
-		if need > 0:
-			consume_owned_component(component_id, need)
 	gear_breakthroughs[gear_breakthrough_key(kind, item_id)] = get_gear_enhancement_level(kind, item_id)
 	save_persistent_state()
 	return true

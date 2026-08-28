@@ -280,7 +280,6 @@ func _run() -> void:
 	var enhance_card := workbench_layer.find_child("WorkbenchEnhanceCard", true, false) as PanelContainer
 	var enhance_button := workbench_layer.find_child("WorkbenchEnhanceButton", true, false) as Button
 	var enhance_max_button := workbench_layer.find_child("WorkbenchEnhanceMaxButton", true, false) as Button
-	var materials_panel := workbench_layer.find_child("WorkbenchMaterialsPanel", true, false) as Control
 	if (
 		workbench_panel == null
 		or enhance_board == null
@@ -288,15 +287,16 @@ func _run() -> void:
 		or enhance_card == null
 		or enhance_button == null
 		or enhance_max_button == null
-		or materials_panel == null
 	):
 		_fail("workbench enhance board structure is missing")
 	if gear_list.find_child("WorkbenchGearRow_ak47", true, false) == null:
 		_fail("workbench enhance board must list the owned AK-47")
 	if enhance_button.custom_minimum_size.y < 44.0 or enhance_max_button.custom_minimum_size.y < 44.0:
 		_fail("workbench enhance actions must be touch-sized (>= 44px)")
-	for resource_id in ["magazine_spring", "rubber_gasket", "scope_lens", "precision_gear", "military_alloy", "artisan_seal"]:
-		_assert_resource_icon(materials_panel, str(resource_id), "workbench materials")
+	# [2026-08-29] 강화·돌파가 고철 단독이 되면서 우측 '재료 · 창고 합산' 패널은 폐지 —
+	# 부품 아이콘 6종 어서션도 함께 걷어냈다(부품은 제작 탭 비용 행이 보여 준다).
+	if workbench_layer.find_child("WorkbenchMaterialsPanel", true, false) != null:
+		_fail("workbench materials panel must be gone (scrap-only enhancement)")
 	var workbench_viewport_size := workbench.get_viewport().get_visible_rect().size
 	if workbench_panel.size.x > workbench_viewport_size.x or workbench_panel.size.y > workbench_viewport_size.y:
 		_fail("workbench enhance board panel exceeds the viewport")
@@ -386,18 +386,20 @@ func _run() -> void:
 	var workbench_resource_row := workbench_layer.find_child("ResourceCost_scrap", true, false) as HBoxContainer
 	if workbench_resource_row == null:
 		_fail("workbench resource cost row is missing")
-	# 재료 행은 이름 아래 "가방 N + 창고 M" 출처 줄을 갖게 되어 이름표가
-	# VBox 안으로 한 단계 들어갔다 — 직계 자식 조회 대신 재귀 탐색.
-	var workbench_resource_name := workbench_resource_row.find_child("ResourceName", true, false) as Label
+	# [2026-08-29] 재화 표기 전역 규칙: 고철 같은 재화는 아이콘 + 수치만(이름은 툴팁).
+	# 고철 행의 ResourceName 라벨 어서션은 그 규칙과 충돌해 '없어야 한다'로 뒤집었다.
+	# 부품 행(고무 패킹 등)은 이름을 유지한다 — 아이콘만으로 못 알아보는 재료다.
 	var workbench_resource_amount := workbench_resource_row.find_child("ResourceAmount", true, false) as Label
 	if (
-		workbench_resource_name == null
+		workbench_resource_row.find_child("ResourceName", true, false) != null
 		or workbench_resource_amount == null
-		or workbench_resource_name.autowrap_mode != TextServer.AUTOWRAP_OFF
 		or workbench_resource_amount.autowrap_mode != TextServer.AUTOWRAP_OFF
 		or workbench_resource_amount.custom_minimum_size.x < 100.0
 	):
-		_fail("workbench resource costs can collapse into vertical text")
+		_fail("workbench scrap cost row must be icon+amount only (name via tooltip)")
+	var workbench_part_row := workbench_layer.find_child("ResourceCost_rubber_gasket", true, false) as HBoxContainer
+	if workbench_part_row != null and workbench_part_row.find_child("ResourceName", true, false) == null:
+		_fail("workbench part cost rows must keep their name label")
 	workbench_layer.queue_free()
 	await process_frame
 
