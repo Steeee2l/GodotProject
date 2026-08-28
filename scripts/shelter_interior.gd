@@ -584,14 +584,14 @@ func _build_production_machine_sprites() -> void:
 		"ScratcherMachine",
 		SCRATCHER_MACHINE_TEXTURE_PATH,
 		_scratcher_bank_position(),
-		4.4,
+		3.2,
 		GameState.is_shelter_facility_unlocked("scratcher_bank")
 	)
 	_place_machine_sprite(
 		"CatnipMachine",
 		CATNIP_MACHINE_TEXTURE_PATH,
 		_catnip_scraper_position(),
-		3.8,
+		2.8,
 		GameState.is_shelter_facility_unlocked("catnip_scraper")
 	)
 
@@ -611,14 +611,15 @@ func _place_machine_sprite(
 		return
 	var machine := Sprite3D.new()
 	machine.name = sprite_name
-	# 작업조는 기준점 남쪽(카메라 앞쪽)에 줄지어 앉는다 — 기계는 그 뒤(북쪽)에
-	# 세워 고양이들이 기계 "앞에서" 일하는 그림을 만든다.
-	machine.position = Vector3(station.x, 0.02, station.z - 1.9)
 	machine.texture = load(texture_path) as Texture2D
 	# 월드 폭 고정(텍스처 해상도 무관) — 웹 다이어트로 텍스처가 줄어도 크기 유지.
 	machine.pixel_size = world_width / float(maxi(1, machine.texture.get_width()))
-	# 실루엣 바닥이 원점에 오도록 화면 공간에서 올린다(접지).
-	machine.offset = Vector2(0.0, machine.texture.get_height() * 0.5)
+	# 접지: 화면공간 offset은 첫 배포에서 이미지를 벽 위로 띄웠다(엉뚱한 위치
+	# 신고). 탈출 파이프와 같은 검증된 방식 — 이미지는 중앙 정렬로 두고, 밑변이
+	# 바닥에 닿도록 월드 Y를 절반 높이만큼 올린다(빌보드는 Y 1m = 화면 ~0.78m).
+	var visual_height := float(machine.texture.get_height()) * machine.pixel_size
+	# 작업조는 기준점 남쪽에 줄지어 앉는다 — 기계는 반걸음 뒤(북쪽).
+	machine.position = Vector3(station.x, visual_height * 0.5 / 0.78, station.z - 0.6)
 	machine.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	machine.shaded = false
 	machine.transparent = true
