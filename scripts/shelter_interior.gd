@@ -149,7 +149,6 @@ var stats_summary_label: Label
 var stats_body_box: VBoxContainer
 var stats_panel_expanded := true
 var stats_panel_default_applied := false
-var scrap_gain_label: Label
 # 스탯 패널 "다음 목표" 카드. 예전에는 확장 버튼 한 줄 + 요구 나열 한 줄이 따로
 # 있어 같은 말을 두 번 했고, 요구는 대시·중점으로 이어 붙인 통짜 텍스트라 게임
 # UI가 아니라 메모장처럼 읽혔다(유저 신고). 지금은 카드 하나가 전부를 맡는다 —
@@ -493,11 +492,6 @@ func _physics_process(delta: float) -> void:
 	_update_nearby_station()
 	_update_roll_feedback()
 	_update_live_shelter_income(delta)
-	if scrap_gain_label:
-		scrap_gain_label.modulate.a = move_toward(scrap_gain_label.modulate.a, 0.0, delta * 1.8)
-		# 다 사라진 라벨은 레이아웃에서도 빠져야 한다 — 안 그러면 스탯 카드 아래에
-		# 투명한 한 줄이 남아 어색한 여백으로 보인다(유저 신고).
-		scrap_gain_label.visible = scrap_gain_label.modulate.a > 0.01
 
 
 func _build_room() -> void:
@@ -2072,13 +2066,8 @@ func _build_interface() -> void:
 	# 잔여 가동시간 행은 없다 — 쉘터 연료 개념이 폐지돼 주민만 있으면 라인은 늘 돈다.
 	# 확장 버튼 + 목표 나열 줄(둘이 같은 티어를 두 번 말했다)을 카드 하나로 합친다.
 	_build_shelter_goal_card(stats_box)
-	scrap_gain_label = Label.new()
-	scrap_gain_label.add_theme_font_override("font", FONT)
-	scrap_gain_label.add_theme_font_size_override("font_size", 14)
-	scrap_gain_label.add_theme_color_override("font_color", Color("#f0d16f"))
-	scrap_gain_label.modulate.a = 0.0
-	scrap_gain_label.visible = false
-	stats_box.add_child(scrap_gain_label)
+	# "+N 고철" 플래시 라벨은 폐지(유저: 주민 머리 위에 어차피 뜬다) — 수입 체감은
+	# shelter_resident_cat의 생산 팝(숫자가 클수록 커짐)이 전담한다.
 	prompt_label = Label.new()
 	prompt_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	prompt_label.offset_left = -220.0
@@ -4506,7 +4495,7 @@ func _update_live_shelter_income(delta: float) -> void:
 	# 자연 유입은 쉘터에 서 있는 동안에도 흐른다 — 새로 합류한 고양이는
 	# 다음 프레임에 실제로 방에 서 있어야 한다(숫자만 늘면 아무도 못 본다).
 	var residents_before := GameState.resident_cat_ids.size()
-	var gained := GameState.tick_shelter_live(delta)
+	GameState.tick_shelter_live(delta)
 	var joined := GameState.resident_cat_ids.size() - residents_before
 	if joined > 0:
 		refresh_shelter_residents(false)
@@ -4522,13 +4511,6 @@ func _update_live_shelter_income(delta: float) -> void:
 		_update_stats()
 		_refresh_resident_production_feedback()
 		_update_npc_alert_markers()
-	if gained > 0 and scrap_gain_label:
-		scrap_gain_label.text = "+%s 고철   %s/s" % [
-			GameState.format_compact_number(gained),
-			GameState.format_compact_number(GameState.get_scrap_per_second()),
-		]
-		scrap_gain_label.modulate.a = 1.0
-		scrap_gain_label.visible = true
 
 
 func _open_raid_zone_select() -> void:

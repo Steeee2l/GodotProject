@@ -173,7 +173,8 @@ func _check_armor_curve() -> void:
 func _check_scratcher_bank() -> void:
 	game_state.call("reset_run")
 	_check(int(GAME_STATE_SCRIPT.SCRATCHER_BANK_MAX_LEVEL) == 8, "③ 최대 Lv 8")
-	_check(int(GAME_STATE_SCRIPT.SCRATCHER_UPGRADE_COSTS.get(8, 0)) == 150_000_000 and int(GAME_STATE_SCRIPT.SCRATCHER_UPGRADE_CATNIP_COSTS.get(8, 0)) == 12_000_000, "③ Lv8 비용 150M / 캣닢 12M")
+	# 확장 비용은 고철 단독(캣닢 비용 폐지, 2026-08-28 — 캣닢은 피버 전용).
+	_check(int(GAME_STATE_SCRIPT.SCRATCHER_UPGRADE_COSTS.get(8, 0)) == 150_000_000, "③ Lv8 비용 150M")
 	_check(int(GAME_STATE_SCRIPT.SCRATCHER_UPGRADE_COSTS.get(6, 0)) == 6_000_000 and int(GAME_STATE_SCRIPT.SCRATCHER_UPGRADE_COSTS.get(7, 0)) == 30_000_000, "③ Lv6 6M · Lv7 30M")
 	game_state.set("scrap", 10_000_000_000)
 	game_state.set("catnip", 1_000_000_000)
@@ -204,12 +205,15 @@ func _check_overclock() -> void:
 	game_state.call("reset_run")
 	game_state.set("scratcher_overclock_level", 20)
 	var cost := int(game_state.call("get_overclock_cost"))
-	var catnip_cost := int(game_state.call("get_overclock_catnip_cost"))
 	_check(cost == roundi(900.0 * pow(1.5, 20.0) / 10.0) * 10, "④ 오버클럭 Lv20 비용 900×1.5^20 = %d" % cost)
 	_check(cost == 2_992_730, "④ Lv20 고철 2,992,730 (got %d)" % cost)
-	_check(catnip_cost == 199_515, "④ Lv20 캣닢 199,515 (got %d)" % catnip_cost)
 	game_state.set("scratcher_overclock_level", 0)
-	_check(int(game_state.call("get_overclock_cost")) == 900 and int(game_state.call("get_overclock_catnip_cost")) == 60, "④ Lv0 900/60")
+	_check(int(game_state.call("get_overclock_cost")) == 900, "④ Lv0 900")
+	# 오버클럭은 고철 단독이다(캣닢 비용 폐지, 2026-08-28) — 캣닢 없이도 산다.
+	game_state.set("scrap", 900)
+	game_state.set("catnip", 0)
+	_check(bool(game_state.call("try_upgrade_scratcher_overclock")), "④ 캣닢 0으로도 오버클럭 구매")
+	_check(int(game_state.get("scrap")) == 0, "④ 고철만 소모")
 	sections_done.append("④")
 
 

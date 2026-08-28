@@ -296,7 +296,14 @@ func _spawn_production_pop() -> void:
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
 	label.render_priority = 127
-	label.scale = Vector3.ONE * 0.72
+	# 숫자가 클수록 팝도 커진다 — 자릿수(log10)당 +16%. 스탯 패널의 "+N 고철"
+	# 표시를 없앤 대신 여기가 수입 성장의 체감을 전담한다(인크리멘탈의 심장).
+	# 1/s ≈ x0.9, 100/s ≈ x1.2, 10K/s ≈ x1.5, 1M/s ≈ x1.9.
+	var magnitude := clampf(
+		log(maxf(production_rate_per_second, 1.0)) / log(10.0), 0.0, 6.0
+	)
+	var pop_scale := 0.9 + 0.16 * magnitude
+	label.scale = Vector3.ONE * (pop_scale * 0.7)
 	label.set_meta("production_kind", assignment_kind)
 	label.set_meta("production_rate", production_rate_per_second)
 	label.set_meta("rise_height", PRODUCTION_POP_HEIGHT)
@@ -320,13 +327,13 @@ func _spawn_production_pop() -> void:
 	scale_tween.tween_property(
 		label,
 		"scale",
-		Vector3.ONE * 1.42,
+		Vector3.ONE * (pop_scale * 1.35),
 		0.16
 	).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	scale_tween.tween_property(
 		label,
 		"scale",
-		Vector3.ONE * 1.08,
+		Vector3.ONE * pop_scale,
 		0.17
 	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 

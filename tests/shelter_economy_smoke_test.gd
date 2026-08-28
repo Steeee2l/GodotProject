@@ -433,7 +433,9 @@ func _run() -> void:
 	if bank_panel == null or bank_body == null:
 		_fail("scratcher bank responsive panel structure is missing")
 	_assert_resource_icon(bank_panel, "scrap", "scratcher bank")
-	_assert_resource_icon(bank_panel, "catnip", "scratcher bank")
+	# 캣닢 칩은 사라졌다 — 이 모달에 캣닢 기능이 없다(부스터 폐지, 피버 전용).
+	if bank_panel.find_child("ResourceValue_catnip", true, false) != null:
+		_fail("scratcher bank must not show a catnip wallet chip any more")
 	var bank_summary := bank_panel.find_child("ScratcherBankSummary", true, false) as GridContainer
 	if bank_summary == null or bank_summary.get_child_count() != 3:
 		_fail("scratcher bank summary must contain only three decision-critical values")

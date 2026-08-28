@@ -177,16 +177,12 @@ func _rebuild_ui() -> void:
 	wallet.add_theme_constant_override("v_separation", 6)
 	header.add_child(wallet)
 	# 지갑 칩은 아이콘 + 수치만(이름은 툴팁) — 재화 표기 규칙.
+	# 캣닢 칩은 뺐다 — 이 모달에 캣닢을 쓰는 기능이 더는 없다(피버 전용).
 	wallet.add_child(_fit_chip_text(SHELTER_UI.make_currency_chip(
 		"scrap",
 		GameState.format_compact_number(GameState.scrap),
 		compact
 	), "scrap"))
-	wallet.add_child(_fit_chip_text(SHELTER_UI.make_currency_chip(
-		"catnip",
-		GameState.format_compact_number(GameState.catnip),
-		compact
-	), "catnip"))
 	var workers: int = GameState.get_active_scratcher_workers()
 	var slots: int = GameState.get_scratcher_worker_slots()
 	var summary := GridContainer.new()
@@ -198,7 +194,14 @@ func _rebuild_ui() -> void:
 	content.add_child(summary)
 	summary.add_child(_summary_card("시간당", GameState.format_compact_number(GameState.get_scrap_per_hour()), "scrap", compact))
 	summary.add_child(_summary_card("작업자", "%d / %d명" % [workers, slots], "resident", compact))
-	summary.add_child(_summary_card("생산 배율", "x%.0f" % GameState.get_production_multiplier(), "catnip", compact))
+	# 세 번째 칸은 오버클럭 누적 배율 — 부스터가 사라진 자리에서 "사다리를 오르면
+	# 이 숫자가 큰다"를 보여 준다.
+	summary.add_child(_summary_card(
+		"오버클럭",
+		"+%d%%" % (GameState.scratcher_overclock_level * 8),
+		"upgrade",
+		compact
+	))
 
 	# ── 좌석 + 벤치 구조 ─────────────────────────────────────────
 	# "기계에 고양이를 앉힌다"가 한눈에 읽히게: 위에는 기계의 작업 좌석(슬롯 수만큼,
@@ -307,58 +310,34 @@ func _rebuild_actions() -> void:
 	actions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	actions.add_theme_constant_override("separation", 8)
 	action_bar.add_child(actions)
-	var boost_remaining: int = GameState.get_catnip_boost_remaining()
-	# 버튼 아이콘이 이미 캣닢이다 — 그 옆에 "캣닢"이라고 또 쓰지 않는다(재화 표기 규칙).
-	var boost := _button(
-		"가동 중  %02d:%02d" % [boost_remaining / 60, boost_remaining % 60]
-		if boost_remaining > 0
-		else "x%s · 10분 생산 x10" % GameState.format_compact_number(GameState.get_catnip_boost_cost()),
-		"catnip"
-	)
-	boost.tooltip_text = "생산 부스터 · 캣닢 %s (보유 %s)" % [
-		GameState.format_compact_number(GameState.get_catnip_boost_cost()),
-		GameState.format_compact_number(GameState.catnip),
-	]
-	boost.disabled = boost_remaining > 0 or GameState.catnip < GameState.get_catnip_boost_cost()
-	_stretch_action(boost)
-	boost.pressed.connect(_activate_boost)
-	actions.add_child(boost)
+	# 인크리멘탈 사다리 두 개만 남긴다 — 캣닢 부스터는 바깥 캣닢 피버가 그 역할이라
+	# 뺐고(유저 지시), 비용은 전부 고철 재투자다. "무엇이 얼마나 좋아지는가"를
+	# 버튼이 직접 말한다.
 	var upgrade_cost := int(GameState.SCRATCHER_UPGRADE_COSTS.get(GameState.scratcher_bank_level + 1, 0))
-	var upgrade_catnip := int(
-		GameState.SCRATCHER_UPGRADE_CATNIP_COSTS.get(GameState.scratcher_bank_level + 1, 0)
-	)
-	# 두 재화를 함께 보여 준다 — 고철만 보고 눌렀다 막히면 그건 UI의 잘못이다.
 	var upgrade := _button(
 		"최고 레벨"
-		if upgrade_cost == 0 else "고철 x%s · 캣닢 x%s · Lv.%d 확장(좌석+1)" % [
-			GameState.format_compact_number(upgrade_cost),
-			GameState.format_compact_number(upgrade_catnip),
-			GameState.scratcher_bank_level + 1,
-		],
+		if upgrade_cost == 0 else "x%s · 좌석 +1 · 생산 ×1.9" % (
+			GameState.format_compact_number(upgrade_cost)
+		),
 		"upgrade" if upgrade_cost == 0 else "scrap"
 	)
-	upgrade.disabled = (
-		upgrade_cost == 0
-		or GameState.scrap < upgrade_cost
-		or GameState.catnip < upgrade_catnip
-	)
+	upgrade.tooltip_text = "확장 Lv.%d → Lv.%d" % [
+		GameState.scratcher_bank_level, GameState.scratcher_bank_level + 1,
+	]
+	upgrade.disabled = upgrade_cost == 0 or GameState.scrap < upgrade_cost
 	_stretch_action(upgrade)
 	upgrade.pressed.connect(_upgrade)
 	actions.add_child(upgrade)
 	# 오버클럭: 고철을 다시 생산에 넣는 복리 사다리. "항상 다음에 살 것"을 만든다.
 	var overclock_cost := GameState.get_overclock_cost()
-	var overclock_catnip := GameState.get_overclock_catnip_cost()
 	var overclock := _button(
-		"오버클럭 Lv.%d · 고철 %s + 캣닢 %s → 시간당 +8%%" % [
-			GameState.scratcher_overclock_level,
-			GameState.format_compact_number(overclock_cost),
-			GameState.format_compact_number(overclock_catnip),
-		],
-		"upgrade"
+		"x%s · 시간당 +8%%" % GameState.format_compact_number(overclock_cost),
+		"scrap"
 	)
-	overclock.disabled = (
-		GameState.scrap < overclock_cost or GameState.catnip < overclock_catnip
-	)
+	overclock.tooltip_text = "오버클럭 Lv.%d → Lv.%d" % [
+		GameState.scratcher_overclock_level, GameState.scratcher_overclock_level + 1,
+	]
+	overclock.disabled = GameState.scrap < overclock_cost
 	_stretch_action(overclock)
 	overclock.pressed.connect(_upgrade_overclock)
 	actions.add_child(overclock)
@@ -566,21 +545,15 @@ func _toggle_worker(resident_id: String) -> void:
 
 func _upgrade() -> void:
 	# GameState는 성공 여부만 돌려준다 — 사유는 같은 조건을 모듈에서 다시 읽어 만든다.
+	# 비용은 고철 단독(캣닢은 피버 전용으로 이관, 2026-08-28).
 	var next_level: int = GameState.scratcher_bank_level + 1
 	var cost := int(GameState.SCRATCHER_UPGRADE_COSTS.get(next_level, 0))
-	var catnip_cost := int(GameState.SCRATCHER_UPGRADE_CATNIP_COSTS.get(next_level, 0))
 	if cost <= 0:
 		_set_feedback("이미 최고 레벨입니다.", false)
 		return
 	if GameState.scrap < cost:
 		_set_feedback(
 			"고철이 %s 부족합니다." % GameState.format_compact_number(cost - GameState.scrap),
-			false
-		)
-		return
-	if GameState.catnip < catnip_cost:
-		_set_feedback(
-			"캣닢이 %s 부족합니다." % GameState.format_compact_number(catnip_cost - GameState.catnip),
 			false
 		)
 		return
@@ -592,37 +565,11 @@ func _upgrade() -> void:
 	_rebuild_ui()
 
 
-func _activate_boost() -> void:
-	if GameState.get_catnip_boost_remaining() > 0:
-		_set_feedback("부스터가 이미 가동 중입니다.", false)
-		return
-	var cost := GameState.get_catnip_boost_cost()
-	if GameState.catnip < cost:
-		_set_feedback(
-			"캣닢이 %s 부족합니다." % GameState.format_compact_number(cost - GameState.catnip),
-			false
-		)
-		return
-	if not GameState.activate_catnip_boost():
-		_set_feedback("부스터를 가동하지 못했습니다.", false)
-		return
-	GameState.save_persistent_state()
-	_set_feedback("부스터 가동 · 10분간 생산 x10", true)
-	_rebuild_ui()
-
-
 func _upgrade_overclock() -> void:
 	var cost := GameState.get_overclock_cost()
-	var catnip_cost := GameState.get_overclock_catnip_cost()
 	if GameState.scrap < cost:
 		_set_feedback(
 			"고철이 %s 부족합니다." % GameState.format_compact_number(cost - GameState.scrap),
-			false
-		)
-		return
-	if GameState.catnip < catnip_cost:
-		_set_feedback(
-			"캣닢이 %s 부족합니다." % GameState.format_compact_number(catnip_cost - GameState.catnip),
 			false
 		)
 		return

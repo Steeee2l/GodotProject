@@ -333,12 +333,10 @@ func _rebuild_actions() -> void:
 	_stretch_action(infusion)
 	infusion.pressed.connect(_upgrade_infusion)
 	actions.add_child(infusion)
-	var remaining: int = GameState.get_catnip_boost_remaining()
 	# 안내 문구는 버튼 줄과 나란히 두면 폭을 잡아먹는다 — 아래 한 줄로 내린다.
+	# 부스터는 폐지됐다(캣닢의 쓸모는 캣닢 피버 하나로 모음, 2026-08-28).
 	var boost_note := _label(
-		"부스터 가동 중  %02d:%02d" % [remaining / 60, remaining % 60]
-		if remaining > 0
-		else "캣닢 %s = 생산 x10 부스터 (꾹꾹이 생산기에서 가동)" % GameState.format_compact_number(GameState.get_catnip_boost_cost()),
+		"캣닢은 운영 독의 캣닢 피버에 씁니다 — 쉘터 전체 생산 가속",
 		12,
 		Color("#cde79e")
 	)

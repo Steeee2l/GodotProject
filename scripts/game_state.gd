@@ -812,6 +812,8 @@ const SCRATCHER_UPGRADE_COSTS := {2: 12000, 3: 60000, 4: 280000, 5: 1300000, 6: 
 # 고철 생산기 확장에는 캣닢이 함께 든다. 캣닢은 출정 버프를 잃은 대신
 # "고철 라인을 키우는 재료"가 됐다 — 착즙 라인을 키워야 꾹꾹이 라인이 큰다.
 # 요구량은 대략 해당 시점 착즙 생산 30분~2시간치를 노린 지수 곡선이다.
+# [폐지 2026-08-28] 확장의 캣닢 비용 — 캣닢은 피버 전용이 됐다. 게임플레이는
+# 더 이상 안 읽는다(tmp 시뮬 호환용으로만 남김).
 const SCRATCHER_UPGRADE_CATNIP_COSTS := {2: 900, 3: 4500, 4: 22000, 5: 110000, 6: 500000, 7: 2500000, 8: 12000000}
 const CATNIP_SCRAPER_UPGRADE_COSTS := {2: 10000, 3: 50000, 4: 230000, 5: 1000000}
 const STORAGE_GRID_BY_LEVEL := {
@@ -2203,17 +2205,17 @@ func get_overclock_cost() -> int:
 
 
 func get_overclock_catnip_cost() -> int:
-	# 오버클럭도 고철 단독이 아니다. 캣닢 없이는 꾹꾹이 라인이 한 칸도 못 큰다. ×1.7 → ×1.5.
+	# [폐지 2026-08-28] 캣닢은 피버 전용 — 게임플레이는 더 이상 안 읽는다(tmp 시뮬 호환용).
 	return roundi(60.0 * pow(OVERCLOCK_CATNIP_COST_GROWTH, scratcher_overclock_level) / 5.0) * 5
 
 
 func try_upgrade_scratcher_overclock() -> bool:
+	# 캣닢 비용 폐지(2026-08-28) — 캣닢의 역할은 바깥 캣닢 피버 하나로 모은다.
+	# 꾹꾹이 라인은 고철을 고철에 재투자하는 순수 인크리멘탈 사다리다.
 	var cost := get_overclock_cost()
-	var catnip_cost := get_overclock_catnip_cost()
-	if scrap < cost or catnip < catnip_cost:
+	if scrap < cost:
 		return false
 	scrap -= cost
-	catnip -= catnip_cost
 	scratcher_overclock_level += 1
 	save_persistent_state()
 	return true
@@ -4236,12 +4238,11 @@ func try_upgrade_scratcher_bank() -> bool:
 	var next_level := scratcher_bank_level + 1
 	if next_level > SCRATCHER_BANK_MAX_LEVEL:
 		return false
+	# 캣닢 비용 폐지(2026-08-28) — 캣닢은 피버 전용. 확장은 고철 재투자만.
 	var cost := int(SCRATCHER_UPGRADE_COSTS.get(next_level, 0))
-	var catnip_cost := int(SCRATCHER_UPGRADE_CATNIP_COSTS.get(next_level, 0))
-	if scrap < cost or catnip < catnip_cost:
+	if scrap < cost:
 		return false
 	scrap -= cost
-	catnip -= catnip_cost
 	scratcher_bank_level = next_level
 	# 착즙(1.8ⁿ)과 균형 — 2.2ⁿ은 후반 고철 인플레를 만들었다.
 	scratcher_multiplier = pow(1.9, float(scratcher_bank_level - 1))
