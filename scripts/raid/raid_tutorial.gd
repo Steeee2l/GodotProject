@@ -22,7 +22,9 @@ const UI_SAFE_AREA := preload("res://scripts/ui_safe_area.gd")
 
 const LAYER_INDEX := 91
 const POLL_INTERVAL := 0.25
-const CARD_MAX_WIDTH := 300.0
+# 300 이면 본문 한 문장이 "…하세\n요"처럼 어색하게 꺾인다(유저 신고). 한 문장이
+# 두 줄 안에 자연스럽게 앉는 폭.
+const CARD_MAX_WIDTH := 372.0
 const CHECK_SECONDS := 0.4
 const ARROW_SIZE := 26.0
 const EDGE_MARGIN := 42.0
@@ -155,10 +157,10 @@ func _build_card() -> void:
 	card = PanelContainer.new()
 	card.name = "RaidTutorialCard"
 	var style := HudStyle.panel(HudStyle.INK, HudStyle.LINE_GOLD, HudStyle.RADIUS_CARD)
-	style.content_margin_left = 12.0
-	style.content_margin_right = 12.0
-	style.content_margin_top = 8.0
-	style.content_margin_bottom = 8.0
+	style.content_margin_left = 16.0
+	style.content_margin_right = 16.0
+	style.content_margin_top = 12.0
+	style.content_margin_bottom = 12.0
 	style.shadow_color = Color(0, 0, 0, 0.55)
 	style.shadow_size = 8
 	card.add_theme_stylebox_override("panel", style)
@@ -180,12 +182,18 @@ func _build_card() -> void:
 	header.add_child(card_title)
 	skip_button = Button.new()
 	skip_button.name = "RaidTutorialSkipButton"
-	skip_button.text = "건너뛰기"
+	skip_button.text = "건너뛰기 ›"
 	skip_button.tooltip_text = "이 안내만 건너뜁니다"
-	skip_button.custom_minimum_size = Vector2(84, 44)
-	HudStyle.style_button(skip_button, HudStyle.LINE)
+	# 안내 카드의 주인공은 본문이다 — 건너뛰기는 조용한 텍스트 링크로(유저:
+	# 버튼이 너무 크다). 터치 오차만 감안해 높이 32는 남긴다.
+	skip_button.custom_minimum_size = Vector2(0, 32)
+	skip_button.flat = true
+	skip_button.focus_mode = Control.FOCUS_NONE
+	skip_button.add_theme_font_override("font", HudStyle.FONT)
 	skip_button.add_theme_font_size_override("font_size", HudStyle.TYPE_FOOTNOTE)
 	skip_button.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
+	skip_button.add_theme_color_override("font_hover_color", HudStyle.GOLD_TEXT)
+	skip_button.add_theme_color_override("font_pressed_color", HudStyle.GOLD_TEXT)
 	skip_button.pressed.connect(func() -> void: _complete_active(true))
 	header.add_child(skip_button)
 	card_text = HudStyle.label("", HudStyle.TYPE_BODY, HudStyle.TEXT)

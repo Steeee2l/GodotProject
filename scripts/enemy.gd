@@ -1210,6 +1210,9 @@ func _update_reload(delta: float) -> void:
 				* PISTOL_SPEED
 				* 1.05
 			)
+	# 장전 중에도 위에서 이동/스트레이프를 하는데, _start_reload 가 idle 로 못 박아
+	# 걷는 프레임 없이 미끄러져 보였다(유저 신고). 속도에 맞춰 걷기/서기를 되돌린다.
+	_set_motion_state("walk" if velocity.length_squared() > 0.05 else "idle")
 	if progress >= 1.0:
 		magazine_ammo = magazine_size
 		combat_state = "normal"

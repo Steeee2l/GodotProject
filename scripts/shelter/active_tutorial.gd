@@ -223,13 +223,18 @@ func _build_card() -> void:
 	header.add_child(card_title)
 	skip_button = Button.new()
 	skip_button.name = "TutorialSkipButton"
-	skip_button.text = "건너뛰기"
+	skip_button.text = "건너뛰기 ›"
 	skip_button.tooltip_text = "이 안내만 건너뜁니다"
-	# 터치 타깃 ≥ 44px — 작은 글자여도 누르는 면은 작지 않게.
-	skip_button.custom_minimum_size = Vector2(84, TOUCH_MIN)
-	HudStyle.style_button(skip_button, HudStyle.LINE)
+	# 카드의 주인공은 본문 — 건너뛰기는 조용한 텍스트 링크로(유저: 버튼이 너무
+	# 크다). 터치 오차만 감안해 높이 32는 남긴다.
+	skip_button.custom_minimum_size = Vector2(0, 32)
+	skip_button.flat = true
+	skip_button.focus_mode = Control.FOCUS_NONE
+	skip_button.add_theme_font_override("font", HudStyle.FONT)
 	skip_button.add_theme_font_size_override("font_size", HudStyle.TYPE_FOOTNOTE)
 	skip_button.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
+	skip_button.add_theme_color_override("font_hover_color", HudStyle.GOLD_TEXT)
+	skip_button.add_theme_color_override("font_pressed_color", HudStyle.GOLD_TEXT)
 	skip_button.pressed.connect(func() -> void: _complete_active(true))
 	header.add_child(skip_button)
 	card_text = HudStyle.label("", HudStyle.TYPE_BODY, HudStyle.TEXT)
@@ -276,11 +281,20 @@ func _update_world_marker() -> void:
 	var anchor := Vector3(ground.x, 1.0, ground.y)
 	var screen_point := camera.unproject_position(anchor)
 	var viewport_size: Vector2 = host.get_viewport().get_visible_rect().size
-	if camera.is_position_behind(anchor):
+	var behind := camera.is_position_behind(anchor)
+	var on_screen := not behind and Rect2(
+		Vector2(60.0, 96.0), viewport_size - Vector2(120.0, 192.0)
+	).has_point(screen_point)
+	if behind:
 		screen_point = viewport_size * 0.5 + (viewport_size * 0.5 - screen_point)
 	screen_point.x = clampf(screen_point.x, 60.0, viewport_size.x - 60.0)
 	screen_point.y = clampf(screen_point.y, 96.0, viewport_size.y - 96.0)
 	world_marker.position = screen_point - world_marker.size * 0.5
+	# 대상이 화면 밖이면 가장자리에 빈 네모(림 펄스)를 그리지 않는다 —
+	# 화살표가 방향을 가리키는 걸로 충분하고, 네모는 실제 위치가 보일 때만.
+	var rim := world_marker.get_node_or_null("RimPulseFx")
+	if rim != null:
+		rim.visible = on_screen
 
 
 func _build_check() -> void:

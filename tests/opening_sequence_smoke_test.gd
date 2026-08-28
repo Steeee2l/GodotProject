@@ -52,6 +52,9 @@ func _run() -> void:
 	if scene == null:
 		_fail("opening scene could not be loaded")
 	var opening := scene.instantiate() as Node3D
+	# 정합 어서션이 디버그 판(VehicleCollisionDebug)으로 잰다 — 릴리스 기본값은
+	# 꺼져 있으므로 _ready 전에 켠다.
+	opening.set("show_vehicle_collision_debug", true)
 	root.add_child(opening)
 	await process_frame
 	await physics_frame
@@ -226,8 +229,9 @@ func _run() -> void:
 	var objective_panel := opening.get("objective_panel") as Control
 	if objective_panel == null or not objective_panel.visible:
 		_fail("tutorial objective panel is missing")
-	if not opening_medkit_button.visible:
-		_fail("opening medkit slot must appear when player control begins")
+	# 오프닝은 무적 — 구급약 버튼은 늘 숨김이다(첫 사용법은 필드 튜토리얼 몫).
+	if opening_medkit_button.visible:
+		_fail("invincible opening must keep the medkit slot hidden")
 	var visibility_rect := opening.get("visibility_rect") as ColorRect
 	if visibility_rect == null or not visibility_rect.visible:
 		_fail("gameplay visibility did not activate with player control")
@@ -272,26 +276,19 @@ func _run() -> void:
 	opening.call("_on_tutorial_enemy_died", tutorial_enemies[0])
 	if not stale_enemy_projectile.is_queued_for_deletion():
 		_fail("defeated enemy left a hostile projectile active")
-	var health_before_kill_grace := int(opening.get("player_health"))
-	opening.call("take_damage", 999)
-	if int(opening.get("player_health")) != health_before_kill_grace:
-		_fail("delayed damage after a mobile tutorial kill was not ignored")
+	# 오프닝은 무적 — 어떤 피해도 체력을 깎지 않고, 사망/재시작 경로는 도달 불가.
+	# (예전 최종킬 레이스 어서션은 사망 자체가 사라져 함께 은퇴했다.)
 	opening.set("tutorial_damage_grace_until_msec", 0)
-	opening.set("player_health", 1)
+	opening.set("player_hit_lock", 0.0)
+	var health_before_hit := int(opening.get("player_health"))
 	opening.call("take_damage", 999)
+	if int(opening.get("player_health")) != health_before_hit:
+		_fail("invincible opening still lost health to damage")
 	if bool(opening.get("restarting")):
-		_fail("opening restarted before the final-kill race could resolve")
-	if not bool(opening.get("death_resolution_pending")):
-		_fail("tutorial death did not enter deferred race resolution")
+		_fail("invincible opening must never restart from damage")
 	opening.call("_on_tutorial_enemy_died", tutorial_enemies[1])
 	await physics_frame
 	await process_frame
-	if bool(opening.get("restarting")):
-		_fail("same-frame final kill still restarted the opening")
-	if bool(opening.get("death_resolution_pending")):
-		_fail("final-kill race resolution did not finish")
-	if int(opening.get("player_health")) < 1:
-		_fail("same-frame final kill did not preserve the tutorial player")
 	opening.set("touch_enabled", false)
 
 	game_state.call("complete_opening_and_prepare_shelter")

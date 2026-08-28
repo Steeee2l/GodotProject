@@ -64,7 +64,10 @@ const AIM_VISIBILITY_INNER_FACTOR := 0.50
 const AIM_VISIBILITY_OUTER_FACTOR := 0.80
 const TUTORIAL_KILL_GRACE_MSEC := 900
 const INTRO_WALK_DIRECTION := Vector3(0, 0, -1)
-const SHOW_VEHICLE_COLLISION_DEBUG := true
+# 충돌 정합 검증이 끝나 기본값을 껐다(2026-08-28 유저 스크린샷으로 확인).
+# 스모크 테스트가 디버그 판으로 정합을 재기 때문에 상수가 아니라 변수다 —
+# 테스트는 _ready 전에 켠다.
+var show_vehicle_collision_debug := false
 
 var phase := "intro_walk"
 var dialogue_index := 0
@@ -563,7 +566,7 @@ func _add_vehicle(
 	# 방향은 회전이 아니라 x/z 크기 교환(along_z)으로만 정한다.
 	collision.position = Vector3(0.0, movement_size.y * 0.5, 0.0)
 	body.add_child(collision)
-	if SHOW_VEHICLE_COLLISION_DEBUG:
+	if show_vehicle_collision_debug:
 		_add_vehicle_collision_debug(body, movement_size)
 
 
@@ -1010,33 +1013,8 @@ func _build_objective_ui(hud: CanvasLayer) -> void:
 
 
 func _build_status_ui(hud: CanvasLayer) -> void:
-	var health_panel := PanelContainer.new()
-	health_panel.position = Vector2(30, 76)
-	health_panel.size = Vector2(264, 76)
-	health_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.015, 0.02, 0.022, 0.86), Color(0.34, 0.48, 0.43, 0.7), 1, 5))
-	hud.add_child(health_panel)
-	var health_margin := MarginContainer.new()
-	health_margin.add_theme_constant_override("margin_left", 14)
-	health_margin.add_theme_constant_override("margin_right", 14)
-	health_margin.add_theme_constant_override("margin_top", 9)
-	health_margin.add_theme_constant_override("margin_bottom", 9)
-	health_panel.add_child(health_margin)
-	var health_column := VBoxContainer.new()
-	health_column.add_theme_constant_override("separation", 5)
-	health_margin.add_child(health_column)
-	health_label = Label.new()
-	health_label.add_theme_font_override("font", FONT)
-	health_label.add_theme_font_size_override("font_size", 14)
-	health_label.add_theme_color_override("font_color", Color("#dce8e1"))
-	health_column.add_child(health_label)
-	health_bar = ProgressBar.new()
-	health_bar.max_value = PLAYER_MAX_HEALTH
-	health_bar.value = player_health
-	health_bar.show_percentage = false
-	health_bar.custom_minimum_size = Vector2(236, 18)
-	health_bar.add_theme_stylebox_override("background", _panel_style(Color("#182322"), Color("#445a55"), 1, 8))
-	health_bar.add_theme_stylebox_override("fill", _panel_style(Color("#59cf8f"), Color("#a9f2c9"), 1, 8))
-	health_column.add_child(health_bar)
+	# 오프닝은 무적이라 체력바·구급약이 의미가 없다(유저: 체력바 없애고 무적으로).
+	# health_bar/health_label 은 null 로 남고, 쓰는 곳은 전부 null 가드가 있다.
 	opening_medkit_button = Button.new()
 	opening_medkit_button.name = "OpeningMedkitButton"
 	opening_medkit_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
@@ -1870,14 +1848,12 @@ func take_damage(amount: int) -> void:
 			return
 		if player_hit_lock > 0.0:
 			return
-		amount = maxi(1, roundi(float(amount) * 0.62))
-	player_health = maxi(0, player_health - amount)
+	# 오프닝은 무적 — 체력은 깎지 않고 피격 플래시만 남긴다. 첫 5분에 죽어서
+	# 처음부터 다시 보는 경험을 만들지 않는다(사망 재시작 경로는 도달 불가).
 	player_hit_lock = 0.28
 	player_sprite.modulate = Color(1.55, 0.45, 0.35, 1.0)
 	var tween := create_tween()
 	tween.tween_property(player_sprite, "modulate", Color.WHITE, 0.16)
-	if player_health <= 0:
-		_restart_opening_after_death()
 
 
 func take_hit(amount: int, hit_direction: Vector3) -> void:
@@ -2055,17 +2031,8 @@ func _update_hud() -> void:
 	if health_label:
 		health_label.text = "체력  %d / %d" % [player_health, PLAYER_MAX_HEALTH]
 	if opening_medkit_button:
-		opening_medkit_button.text = (
-			"구급약\nx%d" % GameState.medkits
-			if touch_enabled
-			else "SHIFT\nx%d" % GameState.medkits
-		)
-		opening_medkit_button.disabled = (
-			GameState.medkits <= 0
-			or player_health <= 0
-			or player_health >= PLAYER_MAX_HEALTH
-		)
-		opening_medkit_button.visible = GAMEPLAY_PHASES.has(phase)
+		# 무적 오프닝에선 구급약을 쓸 일이 없다 — 늘 숨김(첫 사용법은 필드 튜토리얼이 맡는다).
+		opening_medkit_button.visible = false
 	if ammo_label:
 		ammo_label.text = "AK-47  ·  7.62mm"
 	if magazine_label:

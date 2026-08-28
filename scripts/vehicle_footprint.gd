@@ -142,6 +142,10 @@ static func apply_to_sprite(
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.transparent = true
 	sprite.shaded = false
+	# 원점이 지면이면 접지선 아래 픽셀(바퀴 앞쪽·그림자)이 바닥 메시 뒤로 깎인다 —
+	# 차가 "땅에 묻혀" 보인 원인. 필드 스프라이트 전부가 그렇듯 깊이 테스트를 끄고
+	# 정렬은 투명 정렬(카메라 거리)에 맡긴다.
+	sprite.no_depth_test = true
 	return result
 
 

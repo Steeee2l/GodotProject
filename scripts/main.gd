@@ -6574,7 +6574,9 @@ func _update_field_interactions(delta: float) -> void:
 		else:
 			hud.field_interaction_duration_label.text = "%.1f초" % hold_duration
 	if hud.field_interaction_progress:
-		hud.field_interaction_progress.max_value = maxf(hold_duration, 1.0)
+		# 링 최대값은 실제 홀드 시간과 같아야 한다. 1.0초로 바닥을 깔면 0.8초짜리
+		# 대상이 "게이지 80%에서 완료"로 보인다(유저: 게이지가 다 안 찼는데 열림).
+		hud.field_interaction_progress.max_value = maxf(hold_duration, 0.05)
 		hud.field_interaction_progress.value = field_interaction_hold_time
 		# 링은 홀드형에서만 그린다(즉시형·잠김은 트랙조차 없는 편이 조용하다).
 		hud.field_interaction_progress.visible = bool(prompt_state.get("show_progress", false))
