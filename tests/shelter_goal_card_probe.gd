@@ -63,7 +63,8 @@ func _run() -> void:
 	_check((scrap_row.find_child("GoalReqValue", true, false) as Label).text == "12K/30K", "① 고철 수치")
 	_check(absf(scrap_bar.value - 40.0) < 1.5, "① 고철 12K/30K → 진행 바 40%")
 	_check(churu_bar.value <= 0.5, "① 츄르 0/1 → 0%")
-	_check((scrap_row.get_node("GoalReqHint") as Label).visible, "① 미충족 행에 힌트 캡션")
+	# 획득 경로 힌트 줄은 삭제됐다(유저: 굳이 없어도 된다) — 행은 이름·수치·바만.
+	_check(scrap_row.get_node_or_null("GoalReqHint") == null, "① 힌트 캡션 줄 없음")
 
 	# 값이 오르면 바가 따라 흐르고, 충족되는 순간 ✓가 뜬다
 	game_state.set("scrap", 30000)
@@ -73,7 +74,6 @@ func _run() -> void:
 	await create_timer(0.5).timeout
 	_check(absf(scrap_bar.value - 100.0) < 1.5, "① 충족 후 바가 가득 (%.1f)" % scrap_bar.value)
 	_check((scrap_row.find_child("GoalReqCheck", true, false) as Label).modulate.a > 0.5, "① 충족 행에 ✓ 표시")
-	_check(not (scrap_row.get_node("GoalReqHint") as Label).visible, "① 충족 행 힌트는 사라진다")
 
 	# ② 전부 충족 → 금색
 	game_state.set("churu", 1)

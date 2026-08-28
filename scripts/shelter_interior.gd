@@ -495,6 +495,9 @@ func _physics_process(delta: float) -> void:
 	_update_live_shelter_income(delta)
 	if scrap_gain_label:
 		scrap_gain_label.modulate.a = move_toward(scrap_gain_label.modulate.a, 0.0, delta * 1.8)
+		# 다 사라진 라벨은 레이아웃에서도 빠져야 한다 — 안 그러면 스탯 카드 아래에
+		# 투명한 한 줄이 남아 어색한 여백으로 보인다(유저 신고).
+		scrap_gain_label.visible = scrap_gain_label.modulate.a > 0.01
 
 
 func _build_room() -> void:
@@ -2074,6 +2077,7 @@ func _build_interface() -> void:
 	scrap_gain_label.add_theme_font_size_override("font_size", 14)
 	scrap_gain_label.add_theme_color_override("font_color", Color("#f0d16f"))
 	scrap_gain_label.modulate.a = 0.0
+	scrap_gain_label.visible = false
 	stats_box.add_child(scrap_gain_label)
 	prompt_label = Label.new()
 	prompt_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -4321,15 +4325,11 @@ func _build_shelter_goal_requirement_row(requirement: Dictionary) -> Dictionary:
 	bar.add_theme_stylebox_override("fill", HudStyle.panel(accent, accent.lightened(0.2), 3))
 	row_root.add_child(bar)
 
-	var hint := HudStyle.label("", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_FAINT)
-	hint.name = "GoalReqHint"
-	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.visible = false
-	row_root.add_child(hint)
+	# 획득 경로 힌트 줄은 뺐다(유저: 굳이 없어도 된다) — 경로는 카드 툴팁이 말한다.
 	# 티어가 올라 새 요구가 생기면 툭 나타나지 않게 팝으로 들어온다.
 	HudStyle.pop_in(row_root)
 	return {
-		"root": row_root, "bar": bar, "value": value, "check": check, "hint": hint,
+		"root": row_root, "bar": bar, "value": value, "check": check,
 		"ok": false, "tween": null,
 	}
 
@@ -4415,10 +4415,6 @@ func _update_shelter_goal_requirement_row(row: Dictionary, requirement: Dictiona
 	elif not ok:
 		check.modulate.a = 0.0
 	row["ok"] = ok
-	var hint := row["hint"] as Label
-	var hint_text := str(requirement.get("hint_short", ""))
-	hint.visible = not ok and not hint_text.is_empty()
-	hint.text = hint_text
 
 
 func _apply_shelter_goal_final_tier(signature: String) -> void:
@@ -4532,6 +4528,7 @@ func _update_live_shelter_income(delta: float) -> void:
 			GameState.format_compact_number(GameState.get_scrap_per_second()),
 		]
 		scrap_gain_label.modulate.a = 1.0
+		scrap_gain_label.visible = true
 
 
 func _open_raid_zone_select() -> void:
