@@ -19,11 +19,16 @@ const CURRENCY_COLORS := {
 }
 
 
+# 재화 표기 규칙(유저 확정): 아이콘이 이름이다.
+# "🥫 통조림 x14"처럼 아이콘 옆에 이름을 또 쓰지 않는다 — 같은 말을 두 번 하는
+# 것이고, 그 이름이 자리를 먹어 정작 숫자가 잘렸다. 화면엔 아이콘 + 수치만,
+# 이름은 tooltip에 남긴다. show_name은 '아이콘이 없는 재료' 전용 예외다
+# (아이콘도 없고 이름도 없으면 무엇의 비용인지 알 길이 없어진다).
 static func make_currency_chip(
 	currency_id: String,
 	value_text: String,
 	compact := false,
-	show_name := true
+	show_name := false
 ) -> PanelContainer:
 	return make_resource_chip(
 		currency_id,
@@ -43,13 +48,18 @@ static func make_resource_chip(
 	texture: Texture2D,
 	accent: Color,
 	compact := false,
-	show_name := true
+	show_name := false
 ) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.name = "ResourceChip_%s" % resource_id
-	# 컴팩트 72px는 "x80"에서 마지막 글자가 잘리는 한계선이었다.
-	panel.custom_minimum_size = Vector2(86 if compact else 112, 36 if compact else 40)
-	panel.tooltip_text = "%s %s" % [display_name, value_text]
+	# 이름을 뗐으니 칩은 더 좁아도 된다. 컴팩트 72px는 "x80"에서 마지막 글자가
+	# 잘리는 한계선이었다 — 아이콘 + 수치만 남은 지금의 하한은 그보다 조금 위다.
+	panel.custom_minimum_size = Vector2(
+		(86 if compact else 112) if show_name else (66 if compact else 82),
+		36 if compact else 40
+	)
+	# 이름은 화면에서 사라져도 여기 남는다 — "이게 뭐지"는 툴팁이 답한다.
+	panel.tooltip_text = "%s x%s" % [display_name, value_text]
 	panel.add_theme_stylebox_override(
 		"panel",
 		_style(Color(0.035, 0.045, 0.042, 0.96), Color(accent, 0.58), 6)

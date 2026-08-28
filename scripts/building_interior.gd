@@ -120,6 +120,8 @@ var fire_cooldown := 0.0
 var loading_floor := false
 var weapon_stats: Dictionary = {}
 var weapon_reloading := false
+# 무기 표시 규칙(조준할 때만) — scripts/raid/weapon_reveal.gd
+var weapon_reveal := preload("res://scripts/raid/weapon_reveal.gd").new()
 var reload_timer := 0.0
 var mouse_fire_held := false
 var fire_button_held := false
@@ -259,7 +261,7 @@ func _physics_process(delta: float) -> void:
 		player.velocity = Vector3.ZERO
 		_set_motion_state("idle")
 	player.move_and_slide()
-	_update_weapon_visual()
+	_update_weapon_reveal(delta)
 	_update_aim_laser()
 	_update_camera(delta)
 	_update_player_world_health_bar()
@@ -683,10 +685,34 @@ func _setup_weapon_visual() -> void:
 	_update_weapon_visual()
 
 
+func _weapon_reveal_requested() -> bool:
+	# 조준·사격·재장전 중에만 총이 보인다(필드·오프닝과 같은 규칙).
+	if melee_attack_active:
+		return false
+	return laser_aim_held or mouse_fire_held or fire_button_held or weapon_reloading
+
+
+func _update_weapon_reveal(delta: float) -> void:
+	var alpha := weapon_reveal.update(
+		delta,
+		_has_equipped_firearm() and _weapon_reveal_requested()
+	)
+	if weapon_sprite == null:
+		return
+	weapon_sprite.modulate.a = alpha
+	_update_weapon_visual()
+
+
 func _update_weapon_visual() -> void:
 	if weapon_sprite == null:
 		return
-	weapon_sprite.visible = _has_equipped_firearm() and weapon_sprite.texture != null and not roll_active and not melee_attack_active
+	weapon_sprite.visible = (
+		_has_equipped_firearm()
+		and weapon_sprite.texture != null
+		and not roll_active
+		and not melee_attack_active
+		and weapon_reveal.is_drawn()
+	)
 	if not weapon_sprite.visible:
 		return
 	var screen_vectors := {

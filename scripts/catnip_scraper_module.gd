@@ -172,17 +172,16 @@ func _rebuild_ui() -> void:
 	wallet.add_theme_constant_override("h_separation", 8)
 	wallet.add_theme_constant_override("v_separation", 6)
 	header.add_child(wallet)
+	# 지갑 칩은 아이콘 + 수치만(이름은 툴팁) — 재화 표기 규칙.
 	wallet.add_child(_fit_chip_text(SHELTER_UI.make_currency_chip(
 		"catnip",
 		GameState.format_compact_number(GameState.catnip),
-		compact,
-		not narrow
+		compact
 	), "catnip"))
 	wallet.add_child(_fit_chip_text(SHELTER_UI.make_currency_chip(
 		"scrap",
 		GameState.format_compact_number(GameState.scrap),
-		compact,
-		not narrow
+		compact
 	), "scrap"))
 	var summary := GridContainer.new()
 	summary.name = "CatnipScraperSummary"
@@ -296,13 +295,22 @@ func _rebuild_actions() -> void:
 	actions.add_theme_constant_override("separation", 8)
 	action_bar.add_child(actions)
 	var upgrade_cost := int(GameState.CATNIP_SCRAPER_UPGRADE_COSTS.get(GameState.catnip_scraper_level + 1, 0))
+	# 버튼 아이콘이 이미 고철이다 — 그 옆에 "고철"이라고 또 쓰지 않는다(재화 표기 규칙).
 	var upgrade := _button(
 		"최고 레벨"
-		if upgrade_cost == 0 else "고철 x%s · Lv.%d 확장(좌석+1)" % [
+		if upgrade_cost == 0 else "x%s · Lv.%d 확장(좌석+1)" % [
 			GameState.format_compact_number(upgrade_cost),
 			GameState.catnip_scraper_level + 1,
 		],
 		"upgrade" if upgrade_cost == 0 else "scrap"
+	)
+	upgrade.tooltip_text = (
+		"이미 최고 레벨입니다."
+		if upgrade_cost == 0
+		else "좌석 확장 · 고철 %s (보유 %s)" % [
+			GameState.format_compact_number(upgrade_cost),
+			GameState.format_compact_number(GameState.scrap),
+		]
 	)
 	_stretch_action(upgrade)
 	upgrade.disabled = upgrade_cost == 0 or GameState.scrap < upgrade_cost
@@ -311,12 +319,16 @@ func _rebuild_actions() -> void:
 	# 농축: 캣닢을 다시 캣닢 생산에 넣는 복리 사다리.
 	var infusion_cost := GameState.get_infusion_cost()
 	var infusion := _button(
-		"농축 Lv.%d · 캣닢 %s → 생산 +8%%" % [
+		"농축 Lv.%d · x%s → 생산 +8%%" % [
 			GameState.catnip_infusion_level,
 			GameState.format_compact_number(infusion_cost),
 		],
 		"catnip"
 	)
+	infusion.tooltip_text = "농축 · 캣닢 %s (보유 %s)" % [
+		GameState.format_compact_number(infusion_cost),
+		GameState.format_compact_number(GameState.catnip),
+	]
 	infusion.disabled = GameState.catnip < infusion_cost
 	_stretch_action(infusion)
 	infusion.pressed.connect(_upgrade_infusion)

@@ -52,6 +52,9 @@ var rail_icon_width := 24.0
 var applied_rail_width := 128.0
 var tab_slot_width := 0.0
 var layout_ready := false
+# 해금된 버튼이 새로 생기면 레일 높이·탭 폭이 달라진다 — 마지막 safe 여백을
+# 들고 있다가 그 자리에서 레이아웃을 다시 잡는다.
+var last_safe := Vector4.ZERO
 
 
 func attach(owner_node: Node) -> void:
@@ -154,6 +157,7 @@ func charge_fever() -> void:
 func apply_layout(safe: Vector4) -> void:
 	if dock == null:
 		return
+	last_safe = safe
 	var viewport_size: Vector2 = host.get_viewport().get_visible_rect().size
 	var portrait := viewport_size.y > viewport_size.x
 	if portrait and (DisplayServer.is_touchscreen_available() or force_touch_layout):
@@ -174,7 +178,9 @@ func apply_layout(safe: Vector4) -> void:
 			button.add_theme_constant_override("h_separation", 0)
 			button.add_theme_constant_override("icon_max_width", 28)
 		# 탭 하나가 실제로 갖는 폭 — 여기에 글자가 들어가도록 글자 크기를 정한다.
-		var tab_slots := float(maxi(1, facility_buttons.size()))
+		# 잠긴 시설은 숨어 있으므로 '보이는 버튼 수'로 나눈다(컨테이너도 숨은
+		# 자식엔 자리를 주지 않는다) — 고정 6칸으로 나누면 남는 칸이 생긴다.
+		var tab_slots := float(maxi(1, _visible_button_count()))
 		tab_slot_width = (
 			viewport_size.x - 20.0 - safe.x - safe.z - 6.0 * (tab_slots - 1.0)
 		) / tab_slots
@@ -191,7 +197,10 @@ func apply_layout(safe: Vector4) -> void:
 		# 덮던 문제(실기기 신고)를 여기서 끊는다.
 		dock.offset_bottom = -maxf(218.0 + safe.w, _weapon_card_reserved_height(viewport_size, safe))
 		# 피버 카드(버튼+게이지 약 52px)가 아래로 밀려 잘리지 않도록 높이를 넓힌다.
-		dock.offset_top = dock.offset_bottom - 174.0
+		# 카드가 숨어 있으면(스크래핑 미해금) 그만큼 독도 낮아진다 — 안 그러면
+		# 탭바가 빈 자리 위로 떠서 엄지에서 멀어진다.
+		var fever_span := 63.0 if (fever_card != null and fever_card.visible) else 0.0
+		dock.offset_top = dock.offset_bottom - (111.0 + fever_span)
 	else:
 		# 가로(특히 모바일 가로)는 세로 공간이 귀하다. 레일이 고정 높이면
 		# 우하단 무기 카드와 겹치고 스크롤이 생겼다 — 남는 높이에 맞춰
@@ -210,7 +219,8 @@ func apply_layout(safe: Vector4) -> void:
 		if fever_card != null and fever_card.visible:
 			fever_height = maxf(64.0, fever_card.get_global_rect().size.y) + 6.0
 		var separation := 5.0
-		var slots := float(maxi(1, facility_buttons.size()))
+		# 잠긴 시설은 숨어 있다 — 남은 높이는 '보이는 버튼'끼리 나눠 갖는다.
+		var slots := float(maxi(1, _visible_button_count()))
 		var button_height := clampf(
 			(available_height - header_height - fever_height - separation * (slots + 1.0)) / slots,
 			26.0,
@@ -288,11 +298,24 @@ func _button_needed_width(button: Button, font_size := -1) -> float:
 	return text_width + reserved + BUTTON_TEXT_SLACK
 
 
+func _visible_button_count() -> int:
+	var count := 0
+	for facility_id in facility_buttons:
+		if (facility_buttons[facility_id] as Button).visible:
+			count += 1
+	return count
+
+
 func _required_rail_width(base_width: float) -> float:
 	var needed := base_width
+	# 숨은 버튼의 글자 폭은 세지 않는다 — 안 보이는 "영입 만실"이 레일을 넓히면
+	# 화면만 잡아먹는다.
 	for facility_id in facility_buttons:
-		needed = maxf(needed, _button_needed_width(facility_buttons[facility_id] as Button))
-	needed = maxf(needed, _button_needed_width(fever_button))
+		var button := facility_buttons[facility_id] as Button
+		if button.visible:
+			needed = maxf(needed, _button_needed_width(button))
+	if fever_card != null and fever_card.visible:
+		needed = maxf(needed, _button_needed_width(fever_button))
 	# 4px 단위로 올림 — 글자 한두 픽셀 차이로 레일이 떨리지 않게.
 	needed = ceilf(needed * 0.25) * 4.0
 	return clampf(needed, base_width, maxf(base_width, rail_max_width))
@@ -329,9 +352,9 @@ func _sync_text_fit() -> void:
 func _widest_tab_width(font_size: int) -> float:
 	var widest := 0.0
 	for facility_id in facility_buttons:
-		widest = maxf(
-			widest, _button_needed_width(facility_buttons[facility_id] as Button, font_size)
-		)
+		var button := facility_buttons[facility_id] as Button
+		if button.visible:
+			widest = maxf(widest, _button_needed_width(button, font_size))
 	return widest
 
 
@@ -354,35 +377,51 @@ func refresh() -> void:
 		return
 	var idle_count := _idle_resident_count()
 	header_label.text = "쉘터 운영" if idle_count <= 0 else "쉘터 운영 · 대기 %d" % idle_count
+	# 이번 refresh에서 '처음으로' 열린 것들 — 자리를 다시 잡은 뒤 팝으로 등장시킨다.
+	var revealed: Array[Control] = []
 	for entry in FACILITIES:
 		var facility_id := str(entry["id"])
 		var button := facility_buttons.get(facility_id) as Button
 		if button == null:
 			continue
+		# 잠긴 시설은 회색 버튼으로 자리를 지키는 대신 아예 사라진다(유저 신고:
+		# "오른쪽 비활성화된 버튼들 차라리 숨겨줘 — 해금될 때 생기면 되잖아").
+		# 잠금 사유 툴팁·토스트도 함께 사라진다 — 다음에 뭐가 열리는지는 목표
+		# 카드의 보상 캡션과 해금 배너가 말한다.
 		var unlocked: bool = GameState.is_shelter_facility_unlocked(facility_id)
-		var accent := entry["accent"] as Color
+		var was_visible := button.visible
+		button.visible = unlocked
+		if not unlocked:
+			continue
+		if not was_visible:
+			revealed.append(button)
 		var badge := _facility_badge(facility_id)
 		button.text = str(entry["label"]) if badge.is_empty() else "%s  %s" % [entry["label"], badge]
-		button.icon = UI_ICONS.get_icon(
-			str(entry["icon"]),
-			24,
-			accent if unlocked else HudStyle.TEXT_FAINT
-		)
-		button.modulate = Color.WHITE if unlocked else Color(0.62, 0.66, 0.64, 0.78)
-		button.tooltip_text = (
-			GameState.get_shelter_facility_name(facility_id)
-			if unlocked
-			else "잠김 · %s" % str(host.LOCKED_FACILITY_HINTS.get(facility_id, "계약으로 해금"))
-		)
-	_refresh_fever_card()
+		button.icon = UI_ICONS.get_icon(str(entry["icon"]), 24, entry["accent"] as Color)
+		button.tooltip_text = GameState.get_shelter_facility_name(facility_id)
+	_refresh_fever_card(revealed)
+	if not revealed.is_empty() and layout_ready:
+		# 버튼 하나가 늘면 레일 높이·탭 폭이 달라진다 — 자리를 먼저 잡고 연출한다.
+		apply_layout(last_safe)
+		for control in revealed:
+			HudStyle.pop_in(control)
+		return
 	# 글자가 바뀐 뒤에 폭을 다시 맞춘다 — 배지가 붙는 순간 끝 글자가 잘리던 문제.
 	_sync_text_fit()
 
 
-func _refresh_fever_card() -> void:
+func _refresh_fever_card(revealed: Array[Control] = []) -> void:
 	if fever_button == null or fever_gauge == null:
 		return
 	var unlocked: bool = GameState.is_shelter_facility_unlocked("catnip_scraper")
+	# 피버는 스크래핑 생산기에 딸린 사건이다 — 생산기가 없으면 카드도 없다.
+	if fever_card != null:
+		var was_visible := fever_card.visible
+		fever_card.visible = unlocked
+		if unlocked and not was_visible:
+			revealed.append(fever_card)
+	if not unlocked:
+		return
 	var cost: int = GameState.get_catnip_fever_charge_cost()
 	var affordable := GameState.catnip >= cost
 	fever_gauge.value = GameState.get_catnip_fever_ratio() * 100.0
@@ -396,26 +435,20 @@ func _refresh_fever_card() -> void:
 		fever_button.tooltip_text = "캣닢 피버 진행 중 — 모든 생산이 폭주합니다."
 	else:
 		fever_button.text = "캣닢 피버 %d%%" % roundi(GameState.get_catnip_fever_ratio() * 100.0)
-		# 잠김·캣닢 부족이어도 탭은 받는다. 사유는 charge_fever와 host의
-		# _charge_catnip_fever가 토스트로 돌려준다(시설 버튼과 같은 방식).
+		# 캣닢이 모자라도 탭은 받는다 — 사유는 host의 _charge_catnip_fever가
+		# 토스트로 돌려준다(시설 버튼과 같은 방식).
 		fever_button.disabled = false
-		fever_button.tooltip_text = (
-			FEVER_LOCKED_HINT
-			if not unlocked
-			else "캣닢 %s를 부어 게이지 %d%% 충전 · 만충 시 %.0f배 생산 %.0f초" % [
-				GameState.format_compact_number(cost),
-				roundi(GameState.CATNIP_FEVER_CHARGE_STEP),
-				GameState.get_catnip_fever_multiplier(),
-				GameState.get_catnip_fever_duration(),
-			]
-		)
-	fever_button.icon = UI_ICONS.get_icon(
-		"catnip", 22, Color("#aeea78") if unlocked else HudStyle.TEXT_FAINT
-	)
+		fever_button.tooltip_text = "캣닢 %s를 부어 게이지 %d%% 충전 · 만충 시 %.0f배 생산 %.0f초" % [
+			GameState.format_compact_number(cost),
+			roundi(GameState.CATNIP_FEVER_CHARGE_STEP),
+			GameState.get_catnip_fever_multiplier(),
+			GameState.get_catnip_fever_duration(),
+		]
+	fever_button.icon = UI_ICONS.get_icon("catnip", 22, Color("#aeea78"))
 	# 눌리기는 해도 '지금은 못 쓰는' 상태라는 건 색으로 남겨 둔다.
 	fever_button.modulate = (
 		Color.WHITE
-		if unlocked and (affordable or GameState.catnip_fever_active)
+		if affordable or GameState.catnip_fever_active
 		else Color(0.62, 0.66, 0.64, 0.78)
 	)
 

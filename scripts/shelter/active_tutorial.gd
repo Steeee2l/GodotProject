@@ -36,7 +36,22 @@ const TOUCH_MIN := 44.0
 
 # 스텝 표. 순서 = 우선순위. zone: shelter | field | extraction.
 # targets는 얕은 것 → 깊은 것 순(독 버튼 → 모달 안 요소). 해석 규칙은 _resolve_target 참조.
+# overlay: "briefing"이면 출정 브리핑(raid_zone_ui)이 떠 있어도 차단하지 않는다.
 const STEPS := [
+	{
+		# 첫 출정 ① — 배수관 출구(브리핑 진입점)를 가리킨다. 멀리 있으면 월드
+		# 마커(3D 위치 투영)를, 가까이 오면 상호작용 버튼을 가리킨다.
+		# 필드 도착 후는 RaidTutorial(이동→조준→수색→가방→탈출)이 이어받는다.
+		"id": "first_sortie_gate", "zone": "shelter", "title": "첫 출정",
+		"text": "쉘터의 물자는 바깥에서 온다 — 배수관 출구로 가서 작전 브리핑을 여세요.",
+		"targets": ["pipe_exit"],
+	},
+	{
+		# 첫 출정 ② — 브리핑 안: 구역 마커 → (선택 후) 출정 버튼 순으로 깊어진다.
+		"id": "first_sortie_launch", "zone": "shelter", "title": "작전 브리핑",
+		"text": "지도에서 구역을 고르고 출정 버튼을 누르세요. 탄약과 구급약은 자동 보급됩니다.",
+		"targets": ["raid_briefing"], "overlay": "briefing",
+	},
 	{
 		"id": "seat_worker", "zone": "shelter", "title": "쉘터 입문",
 		"text": "운영 독 · 생산을 열고 주민을 좌석에 앉히세요 — 앉은 주민이 고철을 만듭니다.",
@@ -44,7 +59,7 @@ const STEPS := [
 	},
 	{
 		"id": "read_goal", "zone": "shelter", "title": "다음 목표 읽기",
-		"text": "이 줄이 쉘터의 다음 목표입니다. 탭해서 무엇이 얼마나 모자란지 확인하세요.",
+		"text": "이 카드가 쉘터의 다음 목표입니다. 탭해서 무엇이 얼마나 모자란지 확인하세요.",
 		"targets": ["stats:goal"],
 	},
 	{
@@ -105,6 +120,9 @@ var skip_button: Button
 var check_label: Label
 # 컨테이너(HFlow 등) 대상은 자식을 더하면 레이아웃이 깨져 림 펄스를 못 붙인다 — 대신 테두리 헤일로.
 var halo: Panel
+# 월드 좌표(배수관 출구) 위에 띄우는 투영 프록시 — 컨트롤이 없는 3D 지점도
+# 같은 화살표/림 문법으로 가리키기 위한 빈 Control. 매 프레임 위치를 갱신한다.
+var world_marker: Control
 
 var active_step_id := ""
 var active_target: Control
@@ -148,6 +166,7 @@ func build(parent: Node, zone_list: Array) -> void:
 	_build_halo()
 	_build_card()
 	_build_check()
+	_build_world_marker()
 	var ticker := TutorialTicker.new()
 	ticker.name = "Ticker"
 	ticker.tick = update
@@ -235,6 +254,35 @@ func _build_halo() -> void:
 	root.add_child(halo)
 
 
+func _build_world_marker() -> void:
+	world_marker = Control.new()
+	world_marker.name = "TutorialWorldMarker"
+	world_marker.size = Vector2(44, 44)
+	world_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(world_marker)
+
+
+func _update_world_marker() -> void:
+	# 배수관 출구의 3D 위치를 화면에 투영해 프록시 컨트롤을 그 위에 놓는다.
+	if world_marker == null or not is_instance_valid(world_marker):
+		return
+	if host == null or not host.has_method("_pipe_exit_station"):
+		return
+	var camera := host.get_viewport().get_camera_3d()
+	if camera == null:
+		return
+	var station := host.call("_pipe_exit_station") as Dictionary
+	var ground := station.get("position", Vector2.ZERO) as Vector2
+	var anchor := Vector3(ground.x, 1.0, ground.y)
+	var screen_point := camera.unproject_position(anchor)
+	var viewport_size: Vector2 = host.get_viewport().get_visible_rect().size
+	if camera.is_position_behind(anchor):
+		screen_point = viewport_size * 0.5 + (viewport_size * 0.5 - screen_point)
+	screen_point.x = clampf(screen_point.x, 60.0, viewport_size.x - 60.0)
+	screen_point.y = clampf(screen_point.y, 96.0, viewport_size.y - 96.0)
+	world_marker.position = screen_point - world_marker.size * 0.5
+
+
 func _build_check() -> void:
 	check_label = HudStyle.label("✓", 40, HudStyle.GOLD_TEXT)
 	check_label.name = "TutorialCheck"
@@ -258,6 +306,7 @@ func update(delta: float) -> void:
 	if completing_cooldown > 0.0:
 		completing_cooldown = maxf(0.0, completing_cooldown - delta)
 		return
+	_update_world_marker()
 	poll_timer -= delta
 	if poll_timer <= 0.0:
 		poll_timer = POLL_INTERVAL
@@ -430,8 +479,21 @@ func handle_touch(screen_position: Vector2) -> bool:
 # ── 트리거 / 완료 조건 ───────────────────────────────────────────
 
 
+func _first_sortie() -> bool:
+	# 아직 한 번도 복귀한 적 없는 세이브만 — 기존 유저(복귀·주민 보유)는 스킵.
+	return (
+		GameState.opening_completed
+		and GameState.shelter_return_serial <= 0
+		and GameState.rescued_workers <= 0
+	)
+
+
 func _trigger_met(step: Dictionary) -> bool:
 	match str(step.get("id", "")):
+		"first_sortie_gate":
+			return _first_sortie() and not bool(host.get("raid_zone_ui_open"))
+		"first_sortie_launch":
+			return _first_sortie() and bool(host.get("raid_zone_ui_open"))
 		"seat_worker":
 			return (
 				GameState.shelter_return_serial >= 1
@@ -497,6 +559,10 @@ func _trigger_met(step: Dictionary) -> bool:
 
 func _complete_met(step: Dictionary) -> bool:
 	match str(step.get("id", "")):
+		"first_sortie_gate":
+			return bool(host.get("raid_zone_ui_open"))
+		"first_sortie_launch":
+			return bool(host.get("raid_launch_in_progress"))
 		"seat_worker":
 			return _assigned_worker_count() >= 1
 		"read_goal":
@@ -607,6 +673,39 @@ func _resolve_target(spec: String) -> Control:
 	var kind := str(parts[0])
 	var arg := str(parts[1]) if parts.size() > 1 else ""
 	match kind:
+		"pipe_exit":
+			# 첫 출정 ① — 출구 근처면 상호작용 버튼, 멀면 월드 투영 마커.
+			if bool(host.get("raid_zone_ui_open")):
+				return null
+			if str(host.get("current_station")) == "pipe_exit":
+				var interact := _visible_control(host.get("interact_button"))
+				if interact != null:
+					return interact
+			if not host.has_method("_pipe_exit_station"):
+				return null
+			# 마커는 튜토리얼 레이어 안에 산다 — 레이어가 꺼져 있어도(비활성 상태)
+			# 대상으로 인정해야 스텝이 켜질 수 있다. 가시성 검사는 건너뛴다.
+			if world_marker != null and is_instance_valid(world_marker):
+				return world_marker
+			return null
+		"raid_briefing":
+			# 첫 출정 ② — 구역 미선택이면 해금된 지도 마커, 선택했으면 출정 버튼.
+			if not bool(host.get("raid_zone_ui_open")):
+				return null
+			if str(host.get("raid_zone_selected_id")).is_empty():
+				var markers_value = host.get("raid_zone_map_markers")
+				if markers_value is Dictionary:
+					for zone_id in markers_value as Dictionary:
+						if not GameState.is_raid_zone_unlocked(str(zone_id)):
+							continue
+						var marker := _visible_control((markers_value as Dictionary)[zone_id])
+						if marker != null:
+							return marker
+				return null
+			var launch := host.get("raid_zone_launch_button") as Button
+			if launch == null or not is_instance_valid(launch) or launch.disabled:
+				return null
+			return _visible_control(launch)
 		"dock":
 			var console = host.get("ops_console")
 			if console == null:
@@ -619,7 +718,7 @@ func _resolve_target(spec: String) -> Control:
 				return null
 			return _visible_control(console.get("fever_button"))
 		"stats:goal", "stats":
-			return _visible_control(host.get("shelter_goal_row"))
+			return _visible_control(host.get("shelter_goal_card"))
 		"bag":
 			var inventory := _inventory_ui()
 			if inventory == null or bool(inventory.call("is_open")):
@@ -763,7 +862,11 @@ func _blocked_for(step: Dictionary) -> bool:
 			if tree.paused:
 				return true
 			# 서사·브리핑·계약 UI·시네마틱 위에는 올라타지 않는다.
-			if bool(host.get("contract_story_open")) or bool(host.get("raid_zone_ui_open")) or bool(host.get("contract_ui_open")):
+			# 단 overlay: "briefing" 스텝(첫 출정 안내)은 브리핑 자체가 무대다.
+			var allow_briefing := str(step.get("overlay", "")) == "briefing"
+			if bool(host.get("contract_story_open")) or bool(host.get("contract_ui_open")):
+				return true
+			if bool(host.get("raid_zone_ui_open")) and not allow_briefing:
 				return true
 			# 피버 발동 연출·주홍 시네마틱·해금 배너가 떠 있는 동안은 가리키지 않는다.
 			for layer_name in ["CatnipFeverLayer", "JuhongCinematicLayer", "MilestoneUnlockLayer"]:
@@ -983,7 +1086,8 @@ func get_arrow_rect() -> Rect2:
 func _connect_goal_row() -> void:
 	if goal_row_connected:
 		return
-	var row := host.get("shelter_goal_row") as Control
+	# 목표 줄이 카드로 재디자인되면서 노드 이름이 바뀌었다(shelter_goal_card).
+	var row := host.get("shelter_goal_card") as Control
 	if row == null:
 		return
 	goal_row_connected = true

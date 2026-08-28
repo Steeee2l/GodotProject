@@ -30,6 +30,12 @@ const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/maga
 # 옛 6탭(방어구/무기/개조품/보급/장인/+99 강화)은 이 셋으로 접혔고, '장인'은 강화
 # 보드의 [돌파] 버튼으로 흡수됐다. 비용·가능 판정·소비·부족 사유는 전부 1단계의
 # GameState 함수와 아래 _effective_cost/_can_craft/_craft가 담당한다 — 여기는 표시 계층.
+
+# 재화 표기 규칙(유저 확정): 아이콘이 이미 이름을 말하는 재화는 이름 라벨을 쓰지
+# 않는다. 반대로 부품·재료(스코프 렌즈·정밀 기어…)는 아이콘만으로 못 알아보므로
+# 이름을 유지한다 — 아이콘도 이름도 없으면 무슨 비용인지 알 길이 없어진다.
+const ICON_ONLY_RESOURCES := ["scrap", "catnip", "canned_food", "churu"]
+
 const RECIPES := {
 	"armor": [
 		{
@@ -704,8 +710,9 @@ func _build_resource_strip() -> Control:
 	# 통조림은 제작 재료가 아니므로 자원 띠에서 뺐다(플레이어 소모품).
 	for key in ["scrap", "catnip", "scope_lens", "rubber_gasket", "magazine_spring", "precision_gear", "military_alloy"]:
 		var resource_key := str(key)
-		# 좁은 화면에서 이름까지 넣으면 정작 수치가 잘려 "아이콘 x"만 남는다.
-		# 컴팩트에선 아이콘이 이름을 대신하고 수치만 남긴다.
+		# 재화(고철·캣닢)는 아이콘이 곧 이름이라 수치만 남긴다. 부품·재료는
+		# 아이콘만으로 무엇인지 알 수 없어 이름을 유지한다 — 다만 좁은 화면에서는
+		# 이름이 수치를 잡아먹으므로 그때도 아이콘에 맡긴다.
 		var chip := SHELTER_UI.make_resource_chip(
 			resource_key,
 			_resource_name(resource_key),
@@ -713,7 +720,7 @@ func _build_resource_strip() -> Control:
 			_resource_icon(resource_key),
 			_resource_accent(resource_key),
 			compact,
-			not compact
+			not compact and not ICON_ONLY_RESOURCES.has(resource_key)
 		)
 		_fit_chip_text(chip, resource_key)
 		var value_label := chip.find_child("ResourceValue_%s" % resource_key, true, false) as Label
@@ -1414,13 +1421,27 @@ func _build_stat_grid(kind: String, gear_id: String, level: int) -> Control:
 	return grid
 
 
-func _cost_pair(label_text: String, value_text: String, ok: bool) -> Control:
+func _cost_pair(label_text: String, value_text: String, ok: bool, resource_key := "") -> Control:
 	# 비용 한 쌍 — 모자란 것만 빨강(충족은 초록 글로우).
+	# 재화(고철·캣닢·통조림·츄르)는 아이콘이 곧 이름이라 이름 라벨을 걷어내고
+	# 아이콘 + 수치만 남긴다(유저 확정: "아이콘 옆에 이름을 또 쓸 필요 없다").
+	# 부품·재료는 아이콘만으로 무엇인지 알 수 없으니 이름을 유지한다.
 	var pair := HBoxContainer.new()
 	pair.add_theme_constant_override("separation", 4)
-	var key := _label(label_text, 11, DIM)
-	key.autowrap_mode = TextServer.AUTOWRAP_OFF
-	pair.add_child(key)
+	pair.tooltip_text = "%s %s" % [label_text, value_text]
+	if ICON_ONLY_RESOURCES.has(resource_key):
+		var icon := TextureRect.new()
+		icon.custom_minimum_size = Vector2(15, 15)
+		icon.texture = _resource_icon(resource_key)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		pair.add_child(icon)
+	else:
+		var key := _label(label_text, 11, DIM)
+		key.autowrap_mode = TextServer.AUTOWRAP_OFF
+		pair.add_child(key)
 	var value := _label(value_text, 12, GREEN if ok else DANGER)
 	value.autowrap_mode = TextServer.AUTOWRAP_OFF
 	pair.add_child(value)
@@ -1460,20 +1481,20 @@ func _build_enhance_cost_row(kind: String, gear_id: String, level: int) -> Contr
 			gate_parts.append("%s %d" % [_resource_name(key), need])
 		flow.add_child(_cost_pair("돌파", " · ".join(gate_parts), gate_ok))
 		var gate_scrap := int(gate_cost.get("scrap", 0))
-		flow.add_child(_cost_pair("고철", GameState.format_compact_number(gate_scrap), _owned_resource("scrap") >= gate_scrap))
+		flow.add_child(_cost_pair("고철", GameState.format_compact_number(gate_scrap), _owned_resource("scrap") >= gate_scrap, "scrap"))
 	elif level >= max_level:
 		flow.add_child(_cost_pair("최고 단계", "+%d" % max_level, true))
 	else:
 		var cost: Dictionary = _effective_cost(_enhance_recipe_for(kind, gear_id))
 		var scrap_cost := int(cost.get("scrap", 0))
-		flow.add_child(_cost_pair("고철", GameState.format_compact_number(scrap_cost), _owned_resource("scrap") >= scrap_cost))
+		flow.add_child(_cost_pair("고철", GameState.format_compact_number(scrap_cost), _owned_resource("scrap") >= scrap_cost, "scrap"))
 		for key_value in cost.keys():
 			var key := str(key_value)
 			if key == "scrap":
 				continue
 			var need := int(cost[key])
 			var have := _owned_resource(key)
-			flow.add_child(_cost_pair(_resource_name(key), "%d /%d" % [need, have], have >= need))
+			flow.add_child(_cost_pair(_resource_name(key), "%d /%d" % [need, have], have >= need, key))
 	var next_label := _label(
 		("돌파 +%d" % level) if gate_required else ("다음 +%d" % mini(level + 1, max_level)),
 		10, DANGER if gate_required else FAINT
@@ -1508,7 +1529,7 @@ func _build_locked_card_blocks(entry: Dictionary) -> Array[Control]:
 		var key := str(key_value)
 		var need := int(cost[key])
 		var have := _owned_resource(key)
-		flow.add_child(_cost_pair(_resource_name(key), GameState.format_compact_number(need) if key == "scrap" else "%d /%d" % [need, have], have >= need))
+		flow.add_child(_cost_pair(_resource_name(key), GameState.format_compact_number(need) if key == "scrap" else "%d /%d" % [need, have], have >= need, key))
 	blocks.append(panel)
 	var source := _label("조각은 %s에서 나옵니다.%s" % [_blueprint_source_text(gear_id), _transfer_preview_sentence(kind, gear_id)], 12, DIM)
 	source.name = "WorkbenchCraftGuide"
@@ -2865,6 +2886,8 @@ func _resource_icon(key: String) -> Texture2D:
 		"artisan_seal": return UI_ICONS.get_icon("craft", 48, Color("#e2c06b"))
 		"762_fmj", "9mm_fmj", "12g_buckshot": return AMMO_TEXTURE
 		"scrap": return UI_ICONS.get_icon("scrap", 48, Color("#b9c4c2"))
+		# 캣닢이 빠져 있어 기본값(통조림 그림)이 나왔다. 이름을 떼는 이상 아이콘이 틀리면 안 된다.
+		"catnip": return UI_ICONS.get_icon("catnip", 48, Color("#91d46f"))
 		"canned_food": return UI_ICONS.get_icon("food", 48, Color("#e6b65c"))
 		"churu": return UI_ICONS.get_icon("churu", 48, Color("#e9a66e"))
 	return UI_ICONS.get_icon("resource", 48, Color("#9ab4aa"))

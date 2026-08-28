@@ -99,17 +99,25 @@ var fatigue_bar: ProgressBar
 var fatigue_fill_style: StyleBoxFlat
 var fatigue_panel: PanelContainer
 var fatigue_status_label: Label
-var field_interaction_action_card: PanelContainer
 var field_interaction_action_detail_label: Label
 var field_interaction_action_label: Label
 var field_interaction_button: Button
 var field_interaction_duration_label: Label
 var field_interaction_icon: TextureRect
+var field_interaction_info_label: Label
+var field_interaction_key_icon: TextureRect
 var field_interaction_key_label: Label
 var field_interaction_key_panel: PanelContainer
 var field_interaction_panel: PanelContainer
-var field_interaction_progress: ProgressBar
+var field_interaction_progress: RingGauge
+var field_interaction_ring_wrap: Control
 var field_interaction_touch_held := false
+var field_interaction_shown := false
+var field_prompt_tween: Tween
+# 슬라이드 기준 오프셋 — 트윈이 중간에 끊겨도 +6px가 누적되지 않게 복원 지점을 기억한다.
+var field_prompt_rest_top := 0.0
+var field_prompt_rest_bottom := 0.0
+var field_prompt_animating := false
 var fire_button: Button
 var inventory_ui: Control
 var melee_button: Button
@@ -133,7 +141,10 @@ func build(owner_node: Node) -> void:
 	ammo_prompt_panel.offset_top = -198
 	ammo_prompt_panel.offset_right = 170
 	ammo_prompt_panel.offset_bottom = -144
-	ammo_prompt_panel.add_theme_stylebox_override("panel", HudStyle.panel(HudStyle.INK, Color("#b8a66d")))
+	# 탄약 프롬프트도 상호작용 카드와 같은 캡슐 문법 — 하단 프롬프트는 한 가족처럼.
+	ammo_prompt_panel.add_theme_stylebox_override(
+		"panel", make_prompt_capsule_style(Color("#b8a66d"))
+	)
 	ammo_prompt_panel.visible = false
 	host.get_node("HUD").add_child(ammo_prompt_panel)
 	ammo_pickup_button = Button.new()
@@ -151,125 +162,145 @@ func build(owner_node: Node) -> void:
 	ammo_pickup_button.pressed.connect(Callable(host, "_collect_nearby_ammo"))
 	ammo_prompt_panel.add_child(ammo_pickup_button)
 
+	# 상호작용 프롬프트 — 유리 캡슐 카드 하나(유저 신고: "덜 만든 티, 정렬 이상").
+	#   [키캡+링 게이지] | 동사(굵게) ─ 소요시간
+	#                    | 대상 이름(작게) / (필요할 때만) 부가 정보 한 줄
+	# 홀드 진행은 아래 막대가 아니라 키캡을 감싸는 링이 차오른다 — 시선이
+	# 눌러야 하는 그 자리에서 떠나지 않는다.
 	field_interaction_panel = PanelContainer.new()
 	field_interaction_panel.name = "FieldInteractionPrompt"
 	field_interaction_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	field_interaction_panel.offset_left = -220
-	field_interaction_panel.offset_top = -334
-	field_interaction_panel.offset_right = 220
-	field_interaction_panel.offset_bottom = -210
-	var field_panel_style := HudStyle.panel(
-		HudStyle.INK,
-		Color("#79a994"),
-		7
+	field_interaction_panel.offset_left = -190
+	field_interaction_panel.offset_top = -318
+	field_interaction_panel.offset_right = 190
+	field_interaction_panel.offset_bottom = -246
+	field_interaction_panel.add_theme_stylebox_override(
+		"panel", make_prompt_capsule_style(Color("#7fc5a4"))
 	)
-	field_panel_style.content_margin_left = 12.0
-	field_panel_style.content_margin_right = 12.0
-	field_panel_style.content_margin_top = 9.0
-	field_panel_style.content_margin_bottom = 9.0
-	field_interaction_panel.add_theme_stylebox_override("panel", field_panel_style)
 	field_interaction_panel.visible = false
 	host.get_node("HUD").add_child(field_interaction_panel)
-	var field_box := VBoxContainer.new()
-	field_box.name = "VBoxContainer"
-	field_box.add_theme_constant_override("separation", 4)
-	field_interaction_panel.add_child(field_box)
-	# 예전에는 대상 이름 / 행동 / 상세 / 소요시간 / 안내 다섯 줄을 동시에 띄웠다.
-	# "F를 눌러 분해"를 말하는 데 여섯 줄이 필요할 이유가 없다. 한 줄로 합치고,
-	# 상세줄은 정말 할 말이 있을 때(잠김 사유·탈출 배율)만 자리를 쓴다.
-	field_interaction_action_card = PanelContainer.new()
-	field_interaction_action_card.name = "ActionCard"
-	field_interaction_action_card.custom_minimum_size = Vector2(0.0, 52.0)
-	field_interaction_action_card.add_theme_stylebox_override(
-		"panel",
-		HudStyle.panel(HudStyle.INK_WELL, Color("#38584b"), 7)
-	)
-	field_box.add_child(field_interaction_action_card)
 	var action_row := HBoxContainer.new()
 	action_row.name = "ActionRow"
-	action_row.add_theme_constant_override("separation", 9)
-	field_interaction_action_card.add_child(action_row)
+	action_row.add_theme_constant_override("separation", 12)
+	field_interaction_panel.add_child(action_row)
 
-	# 터치에서는 카드 전체가 버튼이라 키캡이 가리킬 키가 없다. 데스크톱에서만 남긴다.
+	# 키캡 + 링 게이지. 터치에서는 키 글자 대신 탭 아이콘.
+	field_interaction_ring_wrap = Control.new()
+	field_interaction_ring_wrap.name = "KeycapWrap"
+	field_interaction_ring_wrap.custom_minimum_size = Vector2(48.0, 48.0)
+	field_interaction_ring_wrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	field_interaction_ring_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	action_row.add_child(field_interaction_ring_wrap)
+	field_interaction_progress = RingGauge.new()
+	field_interaction_progress.name = "HoldRing"
+	field_interaction_progress.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	field_interaction_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	field_interaction_ring_wrap.add_child(field_interaction_progress)
 	field_interaction_key_panel = PanelContainer.new()
 	field_interaction_key_panel.name = "Keycap"
-	field_interaction_key_panel.visible = not DisplayServer.is_touchscreen_available()
-	field_interaction_key_panel.custom_minimum_size = Vector2(40.0, 40.0)
+	field_interaction_key_panel.set_anchors_preset(Control.PRESET_CENTER)
+	field_interaction_key_panel.offset_left = -18.0
+	field_interaction_key_panel.offset_top = -18.0
+	field_interaction_key_panel.offset_right = 18.0
+	field_interaction_key_panel.offset_bottom = 18.0
 	field_interaction_key_panel.add_theme_stylebox_override(
 		"panel",
-		HudStyle.panel(Color("#17231f"), Color("#8bc5a8"), 5)
+		HudStyle.panel(Color("#17231f"), Color("#8bc5a8"), 9)
 	)
-	action_row.add_child(field_interaction_key_panel)
+	field_interaction_key_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	field_interaction_ring_wrap.add_child(field_interaction_key_panel)
 	field_interaction_key_label = Label.new()
-	field_interaction_key_label.text = "길게" if DisplayServer.is_touchscreen_available() else "F"
+	field_interaction_key_label.name = "KeycapLabel"
+	field_interaction_key_label.text = "F"
 	field_interaction_key_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	field_interaction_key_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	field_interaction_key_label.add_theme_font_override("font", font)
-	field_interaction_key_label.add_theme_font_size_override(
-		"font_size",
-		10 if DisplayServer.is_touchscreen_available() else 18
-	)
+	field_interaction_key_label.add_theme_font_size_override("font_size", 17)
 	field_interaction_key_label.add_theme_color_override("font_color", Color("#e9f5ee"))
+	field_interaction_key_label.visible = not touch_enabled
+	field_interaction_key_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	field_interaction_key_panel.add_child(field_interaction_key_label)
-
-	field_interaction_icon = TextureRect.new()
-	field_interaction_icon.name = "ActionIcon"
-	field_interaction_icon.custom_minimum_size = Vector2(28.0, 28.0)
-	field_interaction_icon.texture = UI_ICONS.get_icon("interact", 28, Color("#b9dec9"))
-	field_interaction_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	field_interaction_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	field_interaction_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	action_row.add_child(field_interaction_icon)
+	field_interaction_key_icon = TextureRect.new()
+	field_interaction_key_icon.name = "KeycapIcon"
+	field_interaction_key_icon.custom_minimum_size = Vector2(20.0, 20.0)
+	field_interaction_key_icon.texture = UI_ICONS.get_icon("interact", 20, Color("#e9f5ee"))
+	field_interaction_key_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	field_interaction_key_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	field_interaction_key_icon.visible = touch_enabled
+	field_interaction_key_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	field_interaction_key_panel.add_child(field_interaction_key_icon)
 
 	var action_copy := VBoxContainer.new()
 	action_copy.name = "ActionCopy"
 	action_copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	action_copy.add_theme_constant_override("separation", 0)
+	action_copy.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	action_copy.add_theme_constant_override("separation", 1)
 	action_row.add_child(action_copy)
+	var verb_row := HBoxContainer.new()
+	verb_row.name = "VerbRow"
+	verb_row.add_theme_constant_override("separation", 8)
+	action_copy.add_child(verb_row)
 	field_interaction_action_label = Label.new()
 	field_interaction_action_label.name = "ActionLabel"
 	field_interaction_action_label.text = "상호작용"
+	field_interaction_action_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	field_interaction_action_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	field_interaction_action_label.add_theme_font_override("font", font)
 	field_interaction_action_label.add_theme_font_size_override("font_size", 16)
 	field_interaction_action_label.add_theme_color_override("font_color", Color("#edf5f0"))
-	action_copy.add_child(field_interaction_action_label)
-	field_interaction_action_detail_label = Label.new()
-	field_interaction_action_detail_label.name = "ActionDetailLabel"
-	field_interaction_action_detail_label.text = "길게 눌러 진행"
-	field_interaction_action_detail_label.add_theme_font_override("font", font)
-	field_interaction_action_detail_label.add_theme_font_size_override("font_size", 11)
-	field_interaction_action_detail_label.add_theme_color_override("font_color", Color("#8fa79b"))
-	field_interaction_action_detail_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	action_copy.add_child(field_interaction_action_detail_label)
-
+	verb_row.add_child(field_interaction_action_label)
 	field_interaction_duration_label = Label.new()
 	field_interaction_duration_label.name = "DurationLabel"
 	field_interaction_duration_label.text = "1.0초"
 	field_interaction_duration_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	field_interaction_duration_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	field_interaction_duration_label.custom_minimum_size = Vector2(58.0, 0.0)
 	field_interaction_duration_label.add_theme_font_override("font", font)
-	field_interaction_duration_label.add_theme_font_size_override("font_size", 12)
+	field_interaction_duration_label.add_theme_font_size_override("font_size", 11)
 	field_interaction_duration_label.add_theme_color_override("font_color", Color("#91b7a6"))
-	action_row.add_child(field_interaction_duration_label)
+	verb_row.add_child(field_interaction_duration_label)
+	field_interaction_action_detail_label = Label.new()
+	field_interaction_action_detail_label.name = "ActionTargetLabel"
+	field_interaction_action_detail_label.text = ""
+	field_interaction_action_detail_label.add_theme_font_override("font", font)
+	field_interaction_action_detail_label.add_theme_font_size_override("font_size", 11)
+	field_interaction_action_detail_label.add_theme_color_override("font_color", Color("#8fa79b"))
+	field_interaction_action_detail_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	action_copy.add_child(field_interaction_action_detail_label)
+	field_interaction_info_label = Label.new()
+	field_interaction_info_label.name = "ActionInfoLabel"
+	field_interaction_info_label.text = ""
+	field_interaction_info_label.visible = false
+	field_interaction_info_label.add_theme_font_override("font", font)
+	field_interaction_info_label.add_theme_font_size_override("font_size", 10)
+	field_interaction_info_label.add_theme_color_override("font_color", Color("#7d938a"))
+	field_interaction_info_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	action_copy.add_child(field_interaction_info_label)
+
+	field_interaction_icon = TextureRect.new()
+	field_interaction_icon.name = "ActionIcon"
+	field_interaction_icon.custom_minimum_size = Vector2(24.0, 24.0)
+	field_interaction_icon.texture = UI_ICONS.get_icon("interact", 24, Color("#b9dec9"))
+	field_interaction_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	field_interaction_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	field_interaction_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	field_interaction_icon.modulate.a = 0.85
+	field_interaction_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	action_row.add_child(field_interaction_icon)
 
 	field_interaction_button = Button.new()
 	field_interaction_button.name = "Button"
-	field_interaction_button.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	field_interaction_button.text = ""
+	field_interaction_button.flat = true
 	field_interaction_button.focus_mode = Control.FOCUS_NONE
 	field_interaction_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	var action_button_normal := StyleBoxFlat.new()
 	action_button_normal.bg_color = Color.TRANSPARENT
 	field_interaction_button.add_theme_stylebox_override("normal", action_button_normal)
 	field_interaction_button.add_theme_stylebox_override("disabled", action_button_normal)
-	field_interaction_button.add_theme_stylebox_override(
-		"hover",
-		HudStyle.panel(Color(0.35, 0.68, 0.54, 0.08), Color(0.55, 0.78, 0.66, 0.45), 7)
-	)
+	field_interaction_button.add_theme_stylebox_override("hover", action_button_normal)
 	field_interaction_button.add_theme_stylebox_override(
 		"pressed",
-		HudStyle.panel(Color(0.35, 0.68, 0.54, 0.15), Color("#9cd0b4"), 7)
+		make_prompt_capsule_style(Color("#9cd0b4"), 0.1)
 	)
 	field_interaction_button.button_down.connect(func() -> void:
 		field_interaction_touch_held = true
@@ -277,22 +308,8 @@ func build(owner_node: Node) -> void:
 			host._begin_extraction()
 	)
 	field_interaction_button.button_up.connect(func() -> void: field_interaction_touch_held = false)
-	field_interaction_action_card.add_child(field_interaction_button)
+	field_interaction_panel.add_child(field_interaction_button)
 	field_interaction_button.move_to_front()
-
-	field_interaction_progress = ProgressBar.new()
-	field_interaction_progress.custom_minimum_size = Vector2(0.0, 6.0)
-	field_interaction_progress.show_percentage = false
-	field_interaction_progress.add_theme_stylebox_override(
-		"background",
-		HudStyle.panel(Color("#101917"), Color("#263b33"), 3)
-	)
-	field_interaction_progress.add_theme_stylebox_override(
-		"fill",
-		HudStyle.panel(Color("#76c79e"), Color("#bce9cc"), 3)
-	)
-	field_interaction_progress.name = "ProgressBar"
-	field_box.add_child(field_interaction_progress)
 	host._setup_stealth_takedown_prompt(font)
 
 	fatigue_panel = PanelContainer.new()
@@ -1484,6 +1501,11 @@ func build_controls_lesson() -> void:
 	# (모바일 버튼은 라벨이 곧 설명이라 필요 없다.)
 	if DisplayServer.is_touchscreen_available() or GameState.field_controls_lesson_seen:
 		return
+	# 첫 출정 액티브 튜토리얼이 조작을 직접 가르치는 중이면 토스트는 양보한다.
+	# seen 플래그를 태우지 않으니 다음 출정에서 다시 기회가 온다.
+	var field_tutorial = host.get("raid_tutorial")
+	if field_tutorial != null and bool(field_tutorial.call("is_chain_active")):
+		return
 	GameState.field_controls_lesson_seen = true
 	GameState.save_persistent_state()
 	var panel := PanelContainer.new()
@@ -1610,5 +1632,107 @@ func setup_aim_feedback() -> void:
 	aim_reticle.name = "AimReticle"
 	aim_canvas.add_child(aim_reticle)
 	aim_reticle.visible = not DisplayServer.is_touchscreen_available()
+
+
+# ── 상호작용 캡슐 프롬프트 ──────────────────────────────────────────
+
+
+static func make_prompt_capsule_style(accent: Color, bg_mix := 0.0) -> StyleBoxFlat:
+	# 필드 하단 프롬프트(상호작용·탄약 줍기)의 공용 캡슐. 어디서 떠도 같은 모양.
+	var background := HudStyle.INK
+	if bg_mix > 0.0:
+		background = Color(
+			lerpf(background.r, accent.r, bg_mix),
+			lerpf(background.g, accent.g, bg_mix),
+			lerpf(background.b, accent.b, bg_mix),
+			background.a
+		)
+	var style := HudStyle.panel(background, Color(accent, 0.72), 999)
+	style.content_margin_left = 12.0
+	style.content_margin_right = 16.0
+	style.content_margin_top = 9.0
+	style.content_margin_bottom = 9.0
+	style.shadow_color = Color(0, 0, 0, 0.5)
+	style.shadow_size = 7
+	return style
+
+
+func set_field_interaction_visible(value: bool) -> void:
+	# 프롬프트 등장/퇴장 — 0.12초 페이드 + 6px 슬라이드. 매 프레임 불려도 안전.
+	if field_interaction_panel == null or not is_instance_valid(field_interaction_panel):
+		return
+	if value == field_interaction_shown and field_interaction_panel.visible == value:
+		return
+	field_interaction_shown = value
+	if field_prompt_tween != null and field_prompt_tween.is_valid():
+		field_prompt_tween.kill()
+		field_prompt_tween = null
+	if not field_interaction_panel.is_inside_tree():
+		field_interaction_panel.visible = value
+		field_interaction_panel.modulate.a = 1.0
+		return
+	if value:
+		field_interaction_panel.visible = true
+		# 끊긴 트윈이 남긴 어긋난 오프셋을 먼저 복원한다 — 아니면 +6이 쌓인다.
+		if field_prompt_animating:
+			field_interaction_panel.offset_top = field_prompt_rest_top
+			field_interaction_panel.offset_bottom = field_prompt_rest_bottom
+		else:
+			field_prompt_rest_top = field_interaction_panel.offset_top
+			field_prompt_rest_bottom = field_interaction_panel.offset_bottom
+		field_prompt_animating = true
+		field_interaction_panel.modulate.a = 0.0
+		field_interaction_panel.offset_top = field_prompt_rest_top + 6.0
+		field_interaction_panel.offset_bottom = field_prompt_rest_bottom + 6.0
+		field_prompt_tween = field_interaction_panel.create_tween()
+		field_prompt_tween.set_parallel(true)
+		field_prompt_tween.tween_property(field_interaction_panel, "modulate:a", 1.0, 0.12).set_trans(Tween.TRANS_SINE)
+		field_prompt_tween.tween_property(field_interaction_panel, "offset_top", field_prompt_rest_top, 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		field_prompt_tween.tween_property(field_interaction_panel, "offset_bottom", field_prompt_rest_bottom, 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		field_prompt_tween.chain().tween_callback(func() -> void: field_prompt_animating = false)
+	else:
+		if field_prompt_animating:
+			field_interaction_panel.offset_top = field_prompt_rest_top
+			field_interaction_panel.offset_bottom = field_prompt_rest_bottom
+			field_prompt_animating = false
+		if not field_interaction_panel.visible:
+			return
+		field_prompt_tween = field_interaction_panel.create_tween()
+		field_prompt_tween.tween_property(field_interaction_panel, "modulate:a", 0.0, 0.12).set_trans(Tween.TRANS_SINE)
+		field_prompt_tween.tween_callback(func() -> void:
+			field_interaction_panel.visible = false
+			field_interaction_panel.modulate.a = 1.0
+		)
+
+
+class RingGauge:
+	extends Control
+	# 키캡을 감싸는 홀드 게이지 링. ProgressBar 인터페이스(value/max_value)를 흉내내
+	# 갱신 코드는 값만 밀어 넣으면 된다.
+	var value := 0.0:
+		set(new_value):
+			value = new_value
+			queue_redraw()
+	var max_value := 1.0:
+		set(new_value):
+			max_value = maxf(0.01, new_value)
+			queue_redraw()
+	var ring_color := Color("#7fc5a4"):
+		set(new_color):
+			ring_color = new_color
+			queue_redraw()
+
+	func _draw() -> void:
+		var center := size * 0.5
+		var radius := minf(size.x, size.y) * 0.5 - 2.0
+		if radius <= 2.0:
+			return
+		draw_arc(center, radius, 0.0, TAU, 48, Color(ring_color, 0.2), 2.0, true)
+		var ratio := clampf(value / max_value, 0.0, 1.0)
+		if ratio > 0.004:
+			draw_arc(
+				center, radius, -PI * 0.5, -PI * 0.5 + TAU * ratio, 48,
+				ring_color, 3.0, true
+			)
 
 

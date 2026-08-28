@@ -10,6 +10,8 @@ extends SceneTree
 # ⑤ 구세이브(체인 완료·키 없음) → ensure_story_key_items가 보정
 # ⑥ Tier 5 → 빈 목표 / 최종 표기
 # ⑦ 러버밴딩 없음 — 고철·츄르를 바꿔도 need는 그대로(비용표 고정)
+# ⑧ 존별 장비 목표 → 브리핑 칩 2개(세트·무기)
+# ⑨ 목표 카드 조각 — 행 수치/진행 비율/아이콘/색/재구성 지문
 
 # GameState를 참조하는 스크립트는 preload하지 않는다 — --script 로드 시점엔 autoload가
 # 아직 없어 컴파일이 실패한다. _run 안에서 load()로 받는다.
@@ -225,23 +227,47 @@ func _run() -> void:
 	_check(int(SHELTER_REQUISITION.get_zone_gear_goal("yongsan_blockade").get("weapon_level", 0)) == 20, "⑧ 용산 +20")
 	_check(int(SHELTER_REQUISITION.get_zone_gear_goal("namdaemun_market").get("weapon_level", 0)) == 10, "⑧ 남대문 +10")
 	_check(SHELTER_REQUISITION.get_zone_gear_goal("no_such_zone").is_empty(), "⑧ 모르는 존 → 빈 딕셔너리")
-	# 브리핑 라벨 부착 — anchor 뒤 형제로 1회 생성, 이후 갱신만. 충족 초록/미충족 빨강.
-	var box := VBoxContainer.new()
-	root.add_child(box)
-	var anchor := Label.new()
-	box.add_child(anchor)
-	var tail := Label.new()
-	box.add_child(tail)
-	var gear_line: Label = SHELTER_REQUISITION.attach_zone_gear_goal_line(anchor, "euljiro_depths", null)
-	_check(gear_line != null and gear_line.get_parent() == box and gear_line.get_index() == anchor.get_index() + 1, "⑧ 라벨은 anchor 바로 뒤")
-	_check(gear_line.visible and gear_line.text.begins_with("권장: T2 세트 제작"), "⑧ 라벨 문구")
-	_check(gear_line.get_theme_color("font_color") == SHELTER_REQUISITION.GEAR_GOAL_MISSING_COLOR, "⑧ 미충족 빨강")
-	var again_line: Label = SHELTER_REQUISITION.attach_zone_gear_goal_line(anchor, "jongno_outskirts", null)
-	_check(again_line == gear_line and box.get_child_count() == 3, "⑧ 두 번째 호출은 재사용")
+	# 브리핑 장비 목표는 라벨 한 줄(attach_zone_gear_goal_line)에서 칩 2개로 바뀌었다
+	# — 브리핑이 "텍스트 위주"라는 신고에 따른 재디자인. 라벨 부착 함수는 삭제됐다.
+	var gear_chips: Array[Dictionary] = SHELTER_REQUISITION.build_zone_gear_chips("euljiro_depths")
+	_check(gear_chips.size() == 2, "⑧ 칩 2개(세트·무기)")
+	_check(str(gear_chips[0].get("id", "")) == "set" and str(gear_chips[0].get("icon", "")) == "armor", "⑧ 세트 칩")
+	_check(str(gear_chips[0].get("text", "")) == "T2 세트 0/3", "⑧ 세트 칩 문구 (got %s)" % str(gear_chips[0].get("text", "")))
+	_check(str(gear_chips[1].get("id", "")) == "weapon" and str(gear_chips[1].get("icon", "")) == "weapon", "⑧ 무기 칩")
+	# 펌프 +15 장착 상태(위에서 세팅) → 을지로 AKM+15 권장 충족
+	_check(str(gear_chips[1].get("text", "")) == "펌프 +15/15" and bool(gear_chips[1].get("ok", false)), "⑧ 무기 칩 충족 (got %s)" % str(gear_chips[1].get("text", "")))
 	game_state.set("equipped_weapon_id", "ak47")
-	again_line = SHELTER_REQUISITION.attach_zone_gear_goal_line(anchor, "jongno_outskirts", null)
-	_check(again_line.get_theme_color("font_color") == SHELTER_REQUISITION.GEAR_GOAL_OK_COLOR, "⑧ 충족 초록 (text=%s)" % again_line.text)
-	box.queue_free()
+	gear_chips = SHELTER_REQUISITION.build_zone_gear_chips("euljiro_depths")
+	_check(str(gear_chips[1].get("text", "")) == "AKM +15 필요" and not bool(gear_chips[1].get("ok", true)), "⑧ 단 부족이면 기종부터 (got %s)" % str(gear_chips[1].get("text", "")))
+	_check(str(gear_chips[1].get("tooltip", "")).contains("현재 AK +5"), "⑧ 이유는 툴팁으로 (got %s)" % str(gear_chips[1].get("tooltip", "")))
+	_check(SHELTER_REQUISITION.build_zone_gear_chips("no_such_zone").is_empty(), "⑧ 모르는 존 → 칩 없음")
+
+	# ⑨ 목표 카드 조각 — 카드가 행을 그리는 데 필요한 값(수치·비율·아이콘·색·지문)
+	game_state.set("shelter_tier", 1)
+	game_state.set("scrap", 12000)
+	game_state.set("churu", 0)
+	goal = SHELTER_REQUISITION.get_next_goal()
+	var scrap_req := _req(goal, "scrap")
+	var churu_req := _req(goal, "churu")
+	_check(SHELTER_REQUISITION.format_requirement_value(scrap_req) == "12K/30K", "⑨ 고철 수치 (got %s)" % SHELTER_REQUISITION.format_requirement_value(scrap_req))
+	_check(SHELTER_REQUISITION.format_requirement_value(churu_req) == "0/1", "⑨ 츄르 수치")
+	_check(absf(SHELTER_REQUISITION.get_requirement_ratio(scrap_req) - 0.4) < 0.001, "⑨ 고철 비율 0.4")
+	_check(SHELTER_REQUISITION.get_requirement_ratio(churu_req) == 0.0, "⑨ 츄르 비율 0")
+	# 초과분은 잘라서 보여준다 — "45K/30K"는 정보가 아니라 소음이다.
+	game_state.set("scrap", 45000)
+	goal = SHELTER_REQUISITION.get_next_goal()
+	_check(SHELTER_REQUISITION.format_requirement_value(_req(goal, "scrap")) == "30K/30K", "⑨ 초과분은 need로 캡")
+	_check(SHELTER_REQUISITION.get_requirement_ratio(_req(goal, "scrap")) == 1.0, "⑨ 초과 비율 1.0")
+	_check(SHELTER_REQUISITION.get_requirement_icon("scrap") == "scrap" and SHELTER_REQUISITION.get_requirement_icon("churu") == "churu", "⑨ 재화 아이콘")
+	_check(SHELTER_REQUISITION.get_requirement_icon("namdaemun_depot_plans") == "lore", "⑨ 서사 키는 문서 아이콘")
+	_check(SHELTER_REQUISITION.get_requirement_color("scrap") == Color("#c7d1ce"), "⑨ 고철 색은 스탯 패널 칩과 같다")
+	# 지문은 '요구 목록'만 본다 — 수량이 바뀌어도 행을 다시 만들지 않는다.
+	var signature_a: String = SHELTER_REQUISITION.get_goal_signature(goal)
+	game_state.set("scrap", 1)
+	var signature_b: String = SHELTER_REQUISITION.get_goal_signature(SHELTER_REQUISITION.get_next_goal())
+	_check(signature_a == signature_b and signature_a == "2|scrap,churu", "⑨ 지문은 수량과 무관 (got %s / %s)" % [signature_a, signature_b])
+	game_state.set("shelter_tier", 5)
+	_check(SHELTER_REQUISITION.get_goal_signature(SHELTER_REQUISITION.get_next_goal()) == "final", "⑨ 최종 티어 지문")
 
 	if failures > 0:
 		push_error("SHELTER_REQUISITION_FAIL failures=%d" % failures)

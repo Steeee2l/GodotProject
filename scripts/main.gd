@@ -90,6 +90,8 @@ const AK_DIRECTIONAL_TEXTURE := preload("res://assets/weapons/ak47_directional.p
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
 const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
 const ACTIVE_TUTORIAL_SCRIPT := preload("res://scripts/shelter/active_tutorial.gd")
+const RAID_TUTORIAL_SCRIPT := preload("res://scripts/raid/raid_tutorial.gd")
+const MISSION_TRACKER_SCRIPT := preload("res://scripts/hud/mission_tracker.gd")
 const PERCEPTION_SYSTEM_SCRIPT := preload("res://scripts/perception_system.gd")
 const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
 const LOOT_CONTAINER_VISUALS := preload("res://scripts/loot_container_visual_catalog.gd")
@@ -362,6 +364,10 @@ var hud := RaidHud.new()
 # 액티브 튜토리얼(필드 통조림 투척 · 정산 성장 선택). 스텝 표·포인터·저장은 모듈이 쥔다.
 # class_name 캐시(.godot)가 갱신되기 전에도 헤드리스 테스트가 돌도록 preload로 만든다.
 var active_tutorial := ACTIVE_TUTORIAL_SCRIPT.new()
+# 첫 출정 액티브 튜토리얼(이동→조준→수색→가방→탈출). 필드 전용 체인은 별도 모듈.
+var raid_tutorial := RAID_TUTORIAL_SCRIPT.new()
+# 좌상단 임무 트래커 카드 — 목표 텍스트 나열을 카드 한 장으로.
+var mission_tracker := MISSION_TRACKER_SCRIPT.new()
 var main_mission := MainMissionChain.new()
 var field_missions := FieldMissionController.new()
 var incidents := FieldIncidents.new()
@@ -547,6 +553,9 @@ func _ready() -> void:
 	# WORD_SMART는 폭이 모자라면 단어 안에서도 끊는다 — 세로(패널 폭 221px)에서
 	# "지하철역"이 "지하/철역"으로 쪼개져 읽히지 않았다. 단어는 통째로 지킨다.
 	objective_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	# 임무 트래커 카드가 목표 패널을 인수한다(통짜 라벨은 카드가 숨긴다).
+	mission_tracker.attach(self)
+	mission_tracker.build(objective_panel)
 	touch_stick.visible = DisplayServer.is_touchscreen_available()
 	_build_sprite_frames()
 	_setup_weapon_layer()
@@ -564,6 +573,7 @@ func _ready() -> void:
 	cover_system.attach(self)
 	can_throw.attach(self)
 	active_tutorial.attach(self)
+	raid_tutorial.attach(self)
 	# 발각 방향 인디케이터 — 화면 밖(또는 안개에 가려진) 경계 상태 적의 방향을
 	# 화면 가장자리에 느낌표로 띄운다. 시야가 좁은 모바일에서 "어디서 걸렸는지"를
 	# 보고 도망칠 수 있게 하는 장치인데, 클래스만 있고 어디서도 생성되지 않았다.
@@ -600,6 +610,8 @@ func _ready() -> void:
 	# 액티브 튜토리얼 레이어는 HUD(가방 버튼·정산 패널)가 선 뒤에 붙는다. 오프닝은 제외.
 	if GameState.opening_completed:
 		active_tutorial.build(self, ["field", "extraction"])
+		# 첫 출정 체인(이동→조준→수색→가방→탈출) — 첫 판이 아니면 스스로 잠잔다.
+		raid_tutorial.build(self)
 	# 출정 보급 훈련 — 판 시작(오프닝·건물 내부 복귀 제외)에 장착 구경 탄창을 예비탄에 넣는다.
 	# 모듈 attach와 HUD(토스트) 빌드 뒤에 불러야 한다.
 	if GameState.opening_completed and not bool(BuildingRunState.pending_field_return):
@@ -914,6 +926,8 @@ func _physics_process(delta: float) -> void:
 	_update_player_combat_feedback(delta)
 	_update_cover_feedback()
 	_update_camera_follow(delta)
+	# 무기 표시 규칙은 오버레이 복사 직전에 확정한다(오버레이가 modulate를 그대로 쓴다).
+	weapon_combat.update_weapon_reveal(delta)
 	_update_building_overlays()
 	stealth._update_visibility_fog()
 	stealth._update_enemy_visibility(delta)
@@ -2724,12 +2738,8 @@ func _apply_hud_layout() -> void:
 	var safe_left_width := clampf(viewport_size.x * 0.33 * ui_scale, 205.0, 460.0)
 	# Stats 텍스트 줄 삭제 후 이름+체력바만 남아 얇아졌다.
 	var status_height := clampf(64.0 * ui_scale, 58.0, 78.0)
-	var objective_line_count := objective_label.text.count("\n") + 1
-	var objective_height := clampf(
-		24.0 + float(objective_line_count) * 21.0 * ui_scale,
-		72.0,
-		148.0
-	)
+	# 트래커 카드는 내용(헤더+목표+바/핍+체크 행)이 높이를 정한다.
+	var objective_height := clampf(mission_tracker.content_height() + 2.0, 52.0, 190.0)
 	var hud_blocked := _is_inventory_open() or _is_tactical_map_open() or lore_reader.is_open()
 
 	lore_reader.apply_layout(viewport_size)
@@ -2776,11 +2786,8 @@ func _apply_hud_layout() -> void:
 	objective_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	objective_panel.offset_left = side_margin
 	objective_panel.offset_top = left_column_cursor
-	# 목표 문장은 체력/피로 패널보다 길다 — 좌측 열 폭에 묶으면 단어가 쪼개진다.
-	# 세로에서도 최소 300px는 확보하되 화면 폭은 넘지 않게.
-	var objective_width := maxf(
-		safe_left_width, minf(viewport_size.x - side_margin * 2.0, 320.0)
-	)
+	# 전투 중 방해되지 않게 카드 폭은 300px에서 자른다(제목·목표 줄은 말줄임).
+	var objective_width := clampf(viewport_size.x - side_margin * 2.0, 200.0, 300.0)
 	objective_panel.offset_right = side_margin + objective_width
 	objective_panel.offset_bottom = objective_panel.offset_top + minf(
 		objective_height,
@@ -2836,18 +2843,16 @@ func _apply_hud_layout() -> void:
 
 	if hud.field_interaction_panel:
 		hud.field_interaction_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-		var field_panel_w := clampf(viewport_size.x * 0.54, 320.0, 410.0)
-		# 내용(액션 카드 52 + 진행바 6 + 여백)에 맞는 높이. 예전 118~134는 절반이
-		# 빈 바닥이라 카드가 위로 쏠려 미완성처럼 보였다.
-		var field_panel_h := clampf(88.0 * ui_scale, 84.0, 94.0)
+		# 캡슐은 내용이 폭·높이를 정한다 — 빈 바닥이 없어야 카드가 아니라 캡슐이다.
+		var field_min := hud.field_interaction_panel.get_combined_minimum_size()
+		var field_panel_w := clampf(
+			maxf(field_min.x, 300.0), 300.0, minf(400.0, viewport_size.x - side_margin * 2.0)
+		)
+		var field_panel_h := maxf(field_min.y, 66.0)
 		hud.field_interaction_panel.offset_left = -field_panel_w * 0.5
 		hud.field_interaction_panel.offset_right = field_panel_w * 0.5
 		hud.field_interaction_panel.offset_bottom = -maxf(bottom_margin + 154.0, viewport_size.y * 0.24)
 		hud.field_interaction_panel.offset_top = hud.field_interaction_panel.offset_bottom - field_panel_h
-		if hud.field_interaction_action_card != null:
-			hud.field_interaction_action_card.custom_minimum_size = Vector2(0.0, 52.0)
-		if hud.field_interaction_progress != null:
-			hud.field_interaction_progress.custom_minimum_size = Vector2(0.0, 6.0)
 
 	_layout_center_top_banners()
 
@@ -3171,7 +3176,8 @@ func _make_panel_style(background: Color, border: Color, radius: int = 4) -> Sty
 
 func _get_field_interaction_accent(interaction_type: String, is_locked: bool) -> Color:
 	if is_locked:
-		return Color("#c97871")
+		# 잠긴 대상 = 골드 톤 + 자물쇠. "위험"이 아니라 "조건이 필요하다"는 신호.
+		return Color("#c29c5b")
 	match interaction_type:
 		"extraction":
 			return Color("#e1c36f")
@@ -3213,66 +3219,36 @@ func _refresh_field_interaction_visual(interaction_type: String, is_locked: bool
 		return
 	field_interaction_visual_signature = signature
 	var accent: Color = _get_field_interaction_accent(interaction_type, is_locked)
-	var border_color: Color = accent
-	border_color.a = 0.78
-	var panel_style: StyleBoxFlat = _make_panel_style(
-		HudStyle.INK,
-		border_color,
-		7
+	var touch_enabled := DisplayServer.is_touchscreen_available()
+	hud.field_interaction_panel.add_theme_stylebox_override(
+		"panel", RaidHud.make_prompt_capsule_style(accent)
 	)
-	panel_style.content_margin_left = 12.0
-	panel_style.content_margin_right = 12.0
-	panel_style.content_margin_top = 9.0
-	panel_style.content_margin_bottom = 9.0
-	hud.field_interaction_panel.add_theme_stylebox_override("panel", panel_style)
-
-	var card_background: Color = accent
-	card_background.a = 0.075 if not is_locked else 0.055
-	var card_border: Color = accent
-	card_border.a = 0.38
-	var card_style: StyleBoxFlat = _make_panel_style(card_background, card_border, 6)
-	card_style.content_margin_left = 7.0
-	card_style.content_margin_right = 8.0
-	card_style.content_margin_top = 5.0
-	card_style.content_margin_bottom = 5.0
-	hud.field_interaction_action_card.add_theme_stylebox_override("panel", card_style)
-
+	# 키캡: 잠김이면 자물쇠 아이콘, 아니면 [F](터치는 탭 아이콘).
 	var key_background: Color = accent.darkened(0.72)
 	key_background.a = 0.98
-	hud.field_interaction_key_panel.add_theme_stylebox_override(
-		"panel",
-		_make_panel_style(key_background, accent, 5)
-	)
-	hud.field_interaction_key_label.text = (
-		"!"
-		if is_locked
-		else ("길게" if DisplayServer.is_touchscreen_available() else "F")
-	)
+	var key_style: StyleBoxFlat = _make_panel_style(key_background, accent, 9)
+	hud.field_interaction_key_panel.add_theme_stylebox_override("panel", key_style)
+	hud.field_interaction_key_label.visible = not touch_enabled and not is_locked
 	hud.field_interaction_key_label.add_theme_color_override("font_color", accent.lightened(0.24))
+	hud.field_interaction_key_icon.visible = touch_enabled or is_locked
+	hud.field_interaction_key_icon.texture = UI_ICONS.get_icon(
+		"secure" if is_locked else "interact",
+		20,
+		accent.lightened(0.24)
+	)
 	hud.field_interaction_icon.texture = UI_ICONS.get_icon(
 		_get_field_interaction_icon_name(interaction_type),
-		28,
+		24,
 		accent.lightened(0.18)
 	)
 	hud.field_interaction_duration_label.add_theme_color_override("font_color", accent.lightened(0.12))
-	hud.field_interaction_progress.add_theme_stylebox_override(
-		"fill",
-		_make_panel_style(accent, accent.lightened(0.28), 3)
+	hud.field_interaction_action_label.add_theme_color_override(
+		"font_color", accent.lightened(0.3) if is_locked else Color("#edf5f0")
 	)
-
-	var hover_background: Color = accent
-	hover_background.a = 0.09
-	var hover_border: Color = accent
-	hover_border.a = 0.52
-	hud.field_interaction_button.add_theme_stylebox_override(
-		"hover",
-		_make_panel_style(hover_background, hover_border, 6)
-	)
-	var pressed_background: Color = accent
-	pressed_background.a = 0.17
+	hud.field_interaction_progress.ring_color = accent
 	hud.field_interaction_button.add_theme_stylebox_override(
 		"pressed",
-		_make_panel_style(pressed_background, accent, 6)
+		RaidHud.make_prompt_capsule_style(accent, 0.12)
 	)
 
 
@@ -4545,7 +4521,8 @@ func _update_building_overlays() -> void:
 		var weapon_texture := weapon_sprite.sprite_frames.get_frame_texture(weapon_sprite.animation, weapon_sprite.frame)
 		if weapon_texture:
 			weapon_overlay.texture = weapon_texture
-		weapon_overlay.visible = true
+		# 자세·깊이는 늘 따라가고, 보이는 여부만 조준 규칙이 정한다.
+		weapon_overlay.visible = weapon_combat.weapon_reveal.is_drawn()
 		weapon_overlay.position = camera.unproject_position(weapon_sprite.global_position)
 		weapon_overlay.scale = Vector2.ONE * weapon_sprite.pixel_size * screen_scale
 		weapon_overlay.offset = weapon_sprite.offset
@@ -5831,49 +5808,98 @@ func _get_basic_mission_lines() -> Array[String]:
 func _refresh_objective_panel() -> void:
 	if objective_panel == null or objective_label == null:
 		return
-	var lines: Array[String] = []
-	# 주 목표(격리 신호)는 좌상단에서 항상 인지돼야 한다(유저 피드백) —
-	# 배너는 순간 알림용이고, 상시 인지는 이 패널의 몫이다.
+	# 임무 트래커 카드에 구조화된 상태를 밀어 넣는다.
+	# 주 목표 우선순위: 진행 중 현장 임무 > 메인 임무(격리 신호) > 계약 > 기본 목표.
+	# 주 목표가 아닌 것들은 아래 체크 행(✓/○)으로 내려간다.
+	var state := {}
+	var subs: Array = []
+	var jackpot_title := ""
+	var jackpot_detail := ""
+	var jackpot_pips := {}
 	if hud != null and is_instance_valid(hud.jackpot_hud):
-		var jackpot_title := str(hud.jackpot_step_label.text)
-		if not jackpot_title.is_empty():
-			lines.append(jackpot_title)
-			# 제목만으로는 "어디로 가라"가 안 보인다. 방어 중 사수 지점 거리·방향처럼
-			# 매 순간 바뀌는 안내는 한 줄짜리 상세에 있으므로 같이 상시 노출한다.
-			var jackpot_detail := str(hud.jackpot_detail_label.text)
-			if not jackpot_detail.is_empty():
-				lines.append(jackpot_detail)
+		jackpot_title = str(hud.jackpot_step_label.text)
+		jackpot_detail = str(hud.jackpot_detail_label.text)
+		if is_instance_valid(hud.jackpot_progress) and hud.jackpot_progress.max_value > 1.0:
+			jackpot_pips = {
+				"count": int(hud.jackpot_progress.max_value),
+				"filled": int(hud.jackpot_progress.value),
+			}
+	var contract_state := GameState.get_contract_state()
+	var contract_status := str(contract_state.get("status", "available"))
+	var contract_definition := contract_state.get("definition", {}) as Dictionary
+	var has_contract: bool = (
+		contract_status in ["active", "complete"] and not contract_definition.is_empty()
+	)
 	if not field_objective_title.is_empty():
-		lines.append(field_objective_title)
 		var detail_lines := field_objective_detail.split("\n", false)
-		if not detail_lines.is_empty():
-			lines.append(str(detail_lines[0]))
-	else:
-		var contract_state := GameState.get_contract_state()
-		var contract_status := str(contract_state.get("status", "available"))
-		var contract_definition := contract_state.get("definition", {}) as Dictionary
-		if contract_status in ["active", "complete"] and not contract_definition.is_empty():
-			if contract_status == "complete":
-				lines.append("계약 완료 · %s · 쉘터에서 보고" % str(
-					contract_definition.get("title", "현장 계약")
-				))
-			else:
-				lines.append("계약 · %s  %d/%d" % [
-					str(contract_definition.get("title", "현장 계약")),
+		state = {
+			"icon": "raid",
+			"title": field_objective_title,
+			"objective": str(detail_lines[0]) if not detail_lines.is_empty() else "",
+			"color": field_objective_color,
+		}
+		if not jackpot_title.is_empty():
+			subs.append({"done": false, "label": jackpot_title})
+	elif not jackpot_title.is_empty():
+		state = {
+			"icon": "secure",
+			"title": jackpot_title,
+			"objective": jackpot_detail,
+			"color": Color("#efd28a"),
+			"pips": jackpot_pips,
+		}
+	if has_contract:
+		var contract_row := {
+			"done": contract_status == "complete",
+			"label": "계약 · %s" % str(contract_definition.get("title", "현장 계약")),
+			"count": (
+				"보고"
+				if contract_status == "complete"
+				else "%d/%d" % [
 					int(contract_state.get("progress", 0)),
 					maxi(1, int(contract_state.get("target", 1))),
-				])
-		var basic_lines := _get_basic_mission_lines()
-		if not basic_lines.is_empty():
-			lines.append("기본 목표 · %s" % " · ".join(basic_lines.slice(0, 2)))
-	objective_label.text = "\n".join(lines)
-	objective_label.add_theme_color_override(
-		"font_color",
-		field_objective_color if not field_objective_title.is_empty() else Color("#d9cfab")
-	)
-	# 상시 표시하지 않는다. 내용이 있어도 목표 스팟 근처에 왔을 때만 스윽 드러난다.
-	# 실제 노출은 _update_objective_reveal이 근접도로 페이드한다.
-	objective_panel.visible = not lines.is_empty()
+				]
+			),
+		}
+		if state.is_empty():
+			state = {
+				"icon": "collect",
+				"title": str(contract_row.get("label", "")),
+				"objective": "쉘터의 철근에게 보고" if contract_status == "complete" else "",
+				"color": Color("#d9cfab"),
+				"progress": {
+					"value": float(contract_state.get("progress", 0)),
+					"max": float(maxi(1, int(contract_state.get("target", 1)))),
+				},
+			}
+		else:
+			subs.append(contract_row)
+	for mission_value in basic_raid_missions:
+		var mission := mission_value as Dictionary
+		var mission_target := maxi(1, int(mission.get("target", 1)))
+		var mission_progress := mini(mission_target, int(mission.get("progress", 0)))
+		var mission_row := {
+			"done": bool(mission.get("completed", false)),
+			"label": str(mission.get("title", "기본 목표")),
+			"count": "%d/%d" % [mission_progress, mission_target],
+		}
+		if state.is_empty() and not bool(mission.get("completed", false)):
+			state = {
+				"icon": "loot",
+				"title": str(mission.get("title", "기본 목표")),
+				"objective": str(mission.get("detail", "")),
+				"color": Color("#d9cfab"),
+				"progress": {
+					"value": float(mission_progress),
+					"max": float(mission_target),
+				},
+			}
+		else:
+			subs.append(mission_row)
+	state["subs"] = subs
+	mission_tracker.set_state(state)
+	# 숨은 통짜 라벨은 프로브/캡처 테스트의 데이터 통로로만 유지한다.
+	objective_label.text = "%s | %s" % [str(state.get("title", "")), str(state.get("objective", ""))]
 	_apply_hud_layout()
 
 
@@ -6467,8 +6493,7 @@ func _update_field_interactions(delta: float) -> void:
 		and not _is_tactical_map_open()
 		and not lore_reader.is_open()
 	)
-	if hud.field_interaction_panel:
-		hud.field_interaction_panel.visible = can_show
+	hud.set_field_interaction_visible(can_show)
 	if not can_show:
 		field_interaction_hold_time = 0.0
 		if hud.field_interaction_progress:
@@ -6509,12 +6534,14 @@ func _update_field_interactions(delta: float) -> void:
 		)
 	if hud.field_interaction_button:
 		hud.field_interaction_button.disabled = bool(prompt_state.get("disabled", false))
-	# 주 문구 한 줄: "행동 · 대상". 대상 이름과 행동을 따로 띄울 이유가 없다.
+	# 2단 텍스트: 위는 동사(굵게), 아래는 대상 이름(작게).
 	if hud.field_interaction_action_label:
-		hud.field_interaction_action_label.text = "%s · %s" % [action_label, display_name]
-	# 보조 문구는 정말 할 말이 있을 때만. 평상시 "길게 눌러 진행"은 한 번 배우면
-	# 다시 읽지 않는 문장이라 자리를 비운다.
+		hud.field_interaction_action_label.text = action_label
 	if hud.field_interaction_action_detail_label:
+		hud.field_interaction_action_detail_label.text = display_name
+		hud.field_interaction_action_detail_label.visible = not display_name.is_empty()
+	# 부가 정보 줄은 정말 할 말이 있을 때만(잠김 사유·탈출 배율·[G] 순환).
+	if hud.field_interaction_info_label:
 		var detail := ""
 		if is_locked:
 			detail = locked_reason
@@ -6524,7 +6551,7 @@ func _update_field_interactions(delta: float) -> void:
 			var carried_value := _get_carried_loot_value_cached()
 			var multiplier := float(nearby_field_interaction.get_meta("reward_multiplier", 1.0))
 			if carried_value > 0:
-				detail = "지금 확보 %s  ·  죽으면 장착 무기 빼고 잃는다  ·  정산 ×%.2f" % [
+				detail = "지금 확보 %s · 죽으면 장착 무기 빼고 잃는다 · ×%.2f" % [
 					GameState.format_compact_number(roundi(float(carried_value) * multiplier)),
 					multiplier,
 				]
@@ -6532,8 +6559,8 @@ func _update_field_interactions(delta: float) -> void:
 				detail = "가방이 비었다 · 정산 ×%.2f로 빈손 탈출" % multiplier
 		elif field_interaction_candidates.size() > 1:
 			detail = "[G] 다음 · %s" % next_name
-		hud.field_interaction_action_detail_label.text = detail
-		hud.field_interaction_action_detail_label.visible = not detail.is_empty()
+		hud.field_interaction_info_label.text = detail
+		hud.field_interaction_info_label.visible = not detail.is_empty()
 	if hud.field_interaction_duration_label:
 		if is_locked:
 			hud.field_interaction_duration_label.text = "잠김"
@@ -6549,6 +6576,7 @@ func _update_field_interactions(delta: float) -> void:
 	if hud.field_interaction_progress:
 		hud.field_interaction_progress.max_value = maxf(hold_duration, 1.0)
 		hud.field_interaction_progress.value = field_interaction_hold_time
+		# 링은 홀드형에서만 그린다(즉시형·잠김은 트랙조차 없는 편이 조용하다).
 		hud.field_interaction_progress.visible = bool(prompt_state.get("show_progress", false))
 	if not bool(prompt_state.get("can_hold", false)):
 		return
@@ -6619,8 +6647,7 @@ func _complete_field_interaction(point: Node3D) -> void:
 			field_interaction_hold_time = 0.0
 			field_interaction_keyboard_held = false
 			hud.field_interaction_touch_held = false
-			if hud.field_interaction_panel:
-				hud.field_interaction_panel.visible = false
+			hud.set_field_interaction_visible(false)
 			field_missions._start_field_mission(point)
 		return
 	if interaction_type == "lore_clue":
@@ -6682,8 +6709,9 @@ func _complete_field_interaction(point: Node3D) -> void:
 	field_interaction_hold_time = 0.0
 	field_interaction_keyboard_held = false
 	hud.field_interaction_touch_held = false
-	if hud.field_interaction_panel:
-		hud.field_interaction_panel.visible = false
+	hud.set_field_interaction_visible(false)
+	# 첫 출정 튜토리얼 — "수색을 실제로 해냈다"는 사실을 밀어 넣는다.
+	raid_tutorial.notify("interaction_done")
 	if interaction_type == "loot_container":
 		_mark_field_loot_container_opened(point)
 	else:
@@ -7254,6 +7282,9 @@ func _input(event: InputEvent) -> void:
 		var touch := event as InputEventScreenTouch
 		# 튜토리얼 카드의 건너뛰기는 조이스틱 영역과 겹칠 수 있어 제일 먼저 본다.
 		if touch.pressed and active_tutorial.handle_touch(touch.position):
+			get_viewport().set_input_as_handled()
+			return
+		if touch.pressed and raid_tutorial.handle_touch(touch.position):
 			get_viewport().set_input_as_handled()
 			return
 		if (

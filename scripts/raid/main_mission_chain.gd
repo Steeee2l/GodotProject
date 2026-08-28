@@ -734,8 +734,7 @@ func attempt_take_recovery(point_node: Node3D) -> void:
 	host.field_interaction_hold_time = 0.0
 	host.field_interaction_keyboard_held = false
 	host.hud.field_interaction_touch_held = false
-	if host.hud.field_interaction_panel:
-		host.hud.field_interaction_panel.visible = false
+	host.hud.set_field_interaction_visible(false)
 	_remove_marker(index)
 	_remove_defense_marker()
 	_clear_defense_zone_ring()

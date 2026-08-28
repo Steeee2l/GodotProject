@@ -150,10 +150,26 @@ var stats_body_box: VBoxContainer
 var stats_panel_expanded := true
 var stats_panel_default_applied := false
 var scrap_gain_label: Label
-var shelter_upgrade_button: Button
-# 스탯 패널 "다음 목표" 줄 — 확장 요구를 조각별로 색 입혀 보여준다. 문구가 바뀔 때만 재구성.
-var shelter_goal_row: HFlowContainer
-var shelter_goal_cache := ""
+# 스탯 패널 "다음 목표" 카드. 예전에는 확장 버튼 한 줄 + 요구 나열 한 줄이 따로
+# 있어 같은 말을 두 번 했고, 요구는 대시·중점으로 이어 붙인 통짜 텍스트라 게임
+# UI가 아니라 메모장처럼 읽혔다(유저 신고). 지금은 카드 하나가 전부를 맡는다 —
+# 헤더가 무엇을·무엇을 위해, 요구 행이 얼마나 남았는지, 전부 채우면 카드 자체가
+# 확장 버튼이 된다.
+var shelter_goal_card: PanelContainer
+var shelter_goal_card_style: StyleBoxFlat
+var shelter_goal_header_icon: TextureRect
+var shelter_goal_title_label: Label
+var shelter_goal_reward_label: Label
+var shelter_goal_rows_box: VBoxContainer
+# id → {root, bar, value, check, hint, ok}. 행은 요구 목록이 바뀔 때만 다시 만든다.
+var shelter_goal_row_nodes: Dictionary = {}
+var shelter_goal_signature := ""
+var shelter_goal_all_met := false
+var shelter_goal_highlight_applied := false
+var shelter_goal_glow_tween: Tween
+# 수치는 탭 숫자로 — 12K→30K처럼 자릿수가 바뀌어도 오른쪽 끝이 흔들리지 않는다.
+# 프로젝트에 모노스페이스 폰트가 없으므로 Pretendard의 tnum 기능을 켜서 대신한다.
+var tabular_number_font: FontVariation
 var interact_button: Button
 var dash_button: Button
 var shelter_medkit_button: Button
@@ -237,11 +253,15 @@ var raid_zone_detail_state: Label
 var raid_zone_detail_title: Label
 var raid_zone_detail_description: Label
 var raid_zone_detail_rule: Label
-var raid_zone_detail_reward: Label
-var raid_zone_detail_loadout: Label
 var raid_zone_detail_requirement: Label
-# 브리핑 "다음 목표" 줄 — 쉘터 확장에 모자란 것 + 출처만.
-var raid_zone_detail_goal: Label
+# 브리핑 우측 패널은 문장 나열을 걷어내고 칩 행 셋으로 말한다.
+#   전리품(무엇이 나오나) · 출정 준비(내가 갖췄나) · 권장 장비(이 구역 기준).
+# 셋 다 존을 고를 때마다 다시 채워진다.
+var raid_zone_loot_chips: HFlowContainer
+var raid_zone_loadout_chips: HFlowContainer
+var raid_zone_loadout_warning: Label
+var raid_zone_gear_chips: HFlowContainer
+var raid_zone_death_note: Label
 var raid_zone_launch_button: Button
 var raid_zone_resupply_button: Button
 var auto_paused_for_background := false
@@ -2047,23 +2067,8 @@ func _build_interface() -> void:
 		resource_grid.add_child(chip)
 		shelter_currency_labels[str(resource_data[0])] = chip.get_meta("value_label")
 	# 잔여 가동시간 행은 없다 — 쉘터 연료 개념이 폐지돼 주민만 있으면 라인은 늘 돈다.
-	shelter_upgrade_button = Button.new()
-	shelter_upgrade_button.icon = UI_ICONS.get_icon("upgrade", 28, Color("#d8c47b"))
-	shelter_upgrade_button.expand_icon = true
-	# expand_icon은 반드시 폭 상한과 함께 — 대형 재화 PNG가 버튼을 통째로 삼킨 전례가 있다.
-	shelter_upgrade_button.add_theme_constant_override("icon_max_width", 26)
-	shelter_upgrade_button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	shelter_upgrade_button.add_theme_font_override("font", FONT)
-	shelter_upgrade_button.add_theme_font_size_override("font_size", 13)
-	shelter_upgrade_button.pressed.connect(_upgrade_shelter_tier)
-	stats_box.add_child(shelter_upgrade_button)
-	# 다음 목표 줄 — 버튼은 한 색뿐이라 요구 조각(충족 ✓ 초록 / 미충족 빨강 + 출처)은
-	# 따로 둔다. HFlow라 370px 패널 폭에서 저절로 줄바꿈된다.
-	shelter_goal_row = HFlowContainer.new()
-	shelter_goal_row.name = "ShelterGoalRow"
-	shelter_goal_row.add_theme_constant_override("h_separation", 0)
-	shelter_goal_row.add_theme_constant_override("v_separation", 0)
-	stats_box.add_child(shelter_goal_row)
+	# 확장 버튼 + 목표 나열 줄(둘이 같은 티어를 두 번 말했다)을 카드 하나로 합친다.
+	_build_shelter_goal_card(stats_box)
 	scrap_gain_label = Label.new()
 	scrap_gain_label.add_theme_font_override("font", FONT)
 	scrap_gain_label.add_theme_font_size_override("font_size", 14)
@@ -2847,7 +2852,9 @@ func _open_merchant_shop() -> void:
 	currency_box.add_theme_constant_override("separation", 12)
 	header.add_child(currency_box)
 	# 화폐는 고철 하나다 — 판매 대가도 고철로 받는다(통조림은 더 이상 화폐가 아니다).
-	var scrap_chip := _currency_chip("scrap", "고철", Color("#d4d9d6"), 24, 112)
+	# 지갑은 아이콘 + 숫자만(재화 표기 규칙) — 아이콘 옆에 "고철"을 또 쓰지 않는다.
+	var scrap_chip := _currency_chip("scrap", "고철", Color("#d4d9d6"), 24, 82)
+	scrap_chip.tooltip_text = "보유 고철"
 	currency_box.add_child(scrap_chip)
 	merchant_shop_currency_labels["scrap"] = scrap_chip.get_meta("value_label")
 	var close := _shelter_close_button()
@@ -2899,7 +2906,7 @@ func _refresh_merchant_shop() -> void:
 	for child in merchant_shop_list.get_children():
 		merchant_shop_list.remove_child(child)
 		child.queue_free()
-	(merchant_shop_currency_labels.get("scrap") as Label).text = "고철  %s" % GameState.format_compact_number(GameState.scrap)
+	(merchant_shop_currency_labels.get("scrap") as Label).text = GameState.format_compact_number(GameState.scrap)
 	_update_merchant_tab_styles()
 	var visible_good_count := 0
 	# 구매는 "이번 방문의 매대"를, 판매는 "항상 받아 주는 목록"을 본다.
@@ -3109,7 +3116,8 @@ func _merchant_trade_row(good: Dictionary, stock_index: int = -1) -> Button:
 	# 못 사는 이유가 화면에 없었다 — 가격 칩에 부족분을 병기한다.
 	var shortage_note := ""
 	if buying and not sold_out and GameState.scrap < price:
-		shortage_note = "고철 %s 부족" % GameState.format_compact_number(price - GameState.scrap)
+		# 바로 위 아이콘이 이미 고철이다 — 이름 없이 부족분만.
+		shortage_note = "%s 부족" % GameState.format_compact_number(price - GameState.scrap)
 	elif not buying and price > 0 and owned < int(good["amount"]):
 		shortage_note = "%s %d개 부족" % [str(good["title"]), int(good["amount"]) - owned]
 	row.add_child(_merchant_trade_chip(
@@ -3745,7 +3753,7 @@ func _interact() -> void:
 # 다만 그 공기에 사자에 대한 위화감이 한 방울씩 섞여 나온다.
 const RESIDENT_CHAT_LINES := [
 	"사이렌은 늘 남쪽에서만 울려.",
-	"사람 냄새가 하나도 안 남았어. 삼백 밤이나 됐는데.",
+	"사람 냄새가 하나도 안 남았어. 하룻밤 만에 그렇게 되나.",
 	"캣닢 배급 늘었대. 나비 덕이라던데.",
 	"땅 밑에서 신호가 온대. 나는 안 들었어.",
 	"발톱 관리는 게으름이 아니야. 생존이지.",
@@ -3978,32 +3986,7 @@ func _update_stats() -> void:
 		(shelter_currency_labels["food"] as Label).text = GameState.format_compact_number(GameState.shelter_canned_food)
 		(shelter_currency_labels["churu"] as Label).text = GameState.format_compact_number(GameState.churu)
 	_update_stats_summary()
-	if shelter_upgrade_button:
-		var cost := GameState.get_shelter_upgrade_cost()
-		if cost.is_empty():
-			shelter_upgrade_button.text = "쉘터 최고 Tier"
-			shelter_upgrade_button.disabled = true
-		else:
-			# 확장이 뭘 바꾸는지 버튼이 직접 말한다. 다음 티어로 열리는 출정 구역이
-			# 있으면 그것부터 — 구역 해금이 확장의 가장 큰 이유다. 비용·충족 여부는
-			# 바로 아래 "다음 목표" 줄(조각별 색)이 맡는다 — 버튼에 숫자를 겹쳐 쓰지 않는다.
-			var goal: Dictionary = SHELTER_REQUISITION.get_next_goal()
-			var all_met := bool(goal.get("all_met", false))
-			shelter_upgrade_button.text = "%s → %s%s" % [
-				str(goal.get("title", "Tier %d 확장" % (GameState.shelter_tier + 1))),
-				str(goal.get("unlock_hint", "")),
-				"  ·  지금 확장 가능" if all_met else "",
-			]
-			# 서사 키까지 포함해 전부 충족했을 때만 눌린다(try_upgrade와 같은 판정).
-			shelter_upgrade_button.disabled = not all_met
-			# 전부 충족 → 버튼 금색 강조. "이제 누르면 된다"가 눈에 먼저 들어와야 한다.
-			if all_met:
-				shelter_upgrade_button.add_theme_color_override("font_color", Color("#f3d77a"))
-				shelter_upgrade_button.icon = UI_ICONS.get_icon("upgrade", 28, Color("#f3d77a"))
-			else:
-				shelter_upgrade_button.remove_theme_color_override("font_color")
-				shelter_upgrade_button.icon = UI_ICONS.get_icon("upgrade", 28, Color("#d8c47b"))
-	_update_shelter_goal_row()
+	_update_shelter_goal_card()
 	_update_shelter_medkit_button()
 
 
@@ -4221,90 +4204,306 @@ func _shelter_tier_upgrade_failure_reason() -> String:
 	return reason if not reason.is_empty() else "쉘터를 지금 확장할 수 없습니다."
 
 
-# ── 다음 목표 줄(스탯 패널) ────────────────────────────────────
-# 힌트까지 붙인 전체 줄이 이 길이를 넘으면 힌트를 뺀다 — 370px 패널·12px 글자에서
-# 한글 30자+숫자 30자쯤이 2줄이다(실측: 57자 줄이 1.6줄). 티어 3의 세 항목 전부
-# 미충족(약 95자)이면 힌트 없이 항목만 남긴다.
-const SHELTER_GOAL_LINE_HINT_MAX_CHARS := 72
+# ── 다음 목표 카드(스탯 패널) ──────────────────────────────────
+# 카드 = [헤더: ↑ 아이콘 · "다음 목표 — Tier N 확장" · 보상 캡션]
+#      + [요구마다 한 행: 재화 아이콘 · 이름 · 수치 · 미니 진행 바 · (미충족)힌트]
+# 전부 충족하면 보더가 금색으로 빛나고 헤더가 "지금 확장 가능!"이 되며, 카드를
+# 탭하는 것이 곧 확장이다(예전 확장 버튼을 카드가 대체했다).
+const GOAL_CARD_ICON_SIZE := 18
+const GOAL_CARD_BAR_HEIGHT := 5
+const GOAL_CARD_TITLE_COLOR := Color("#c8d6ce")
+const GOAL_CARD_GOLD := Color("#f3d77a")
 
 
-func _update_shelter_goal_row() -> void:
-	if not is_instance_valid(shelter_goal_row):
+func _tabular_number_font() -> FontVariation:
+	if tabular_number_font == null:
+		tabular_number_font = FontVariation.new()
+		tabular_number_font.base_font = FONT
+		# tnum이 없는 폰트에서는 조용히 무시된다 — 안전한 개선.
+		tabular_number_font.opentype_features = {"tnum": 1}
+	return tabular_number_font
+
+
+func _build_shelter_goal_card(parent: Node) -> void:
+	shelter_goal_card = PanelContainer.new()
+	shelter_goal_card.name = "ShelterGoalCard"
+	# 패널 속 패널(INK_WELL) — 스탯 패널 바탕보다 한 단계 밝아 카드로 읽힌다.
+	shelter_goal_card_style = HudStyle.panel(HudStyle.INK_WELL, HudStyle.LINE, HudStyle.RADIUS_CARD)
+	shelter_goal_card_style.content_margin_left = 10.0
+	shelter_goal_card_style.content_margin_right = 10.0
+	shelter_goal_card_style.content_margin_top = 9.0
+	shelter_goal_card_style.content_margin_bottom = 9.0
+	shelter_goal_card.add_theme_stylebox_override("panel", shelter_goal_card_style)
+	# 카드가 곧 확장 버튼이다 — 탭을 받아야 하므로 STOP.
+	shelter_goal_card.mouse_filter = Control.MOUSE_FILTER_STOP
+	shelter_goal_card.gui_input.connect(_on_shelter_goal_card_input)
+	parent.add_child(shelter_goal_card)
+	var card_box := VBoxContainer.new()
+	card_box.add_theme_constant_override("separation", 7)
+	shelter_goal_card.add_child(card_box)
+
+	var header := HBoxContainer.new()
+	header.name = "GoalCardHeader"
+	header.add_theme_constant_override("separation", 7)
+	card_box.add_child(header)
+	shelter_goal_header_icon = TextureRect.new()
+	shelter_goal_header_icon.custom_minimum_size = Vector2(GOAL_CARD_ICON_SIZE, GOAL_CARD_ICON_SIZE)
+	shelter_goal_header_icon.texture = UI_ICONS.get_icon("upgrade", GOAL_CARD_ICON_SIZE, HudStyle.GOLD)
+	shelter_goal_header_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	shelter_goal_header_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	shelter_goal_header_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(shelter_goal_header_icon)
+	# 제목 EXPAND_FILL · 값 SHRINK_END — 세로 모드에서 라벨이 1px로 짜부라지던
+	# 사고를 막는 패널 규약. 제목은 clip, 보상 캡션은 자기 폭만 가져간다.
+	shelter_goal_title_label = HudStyle.label("", 13, GOAL_CARD_TITLE_COLOR)
+	shelter_goal_title_label.name = "GoalCardTitle"
+	shelter_goal_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	shelter_goal_title_label.clip_text = true
+	header.add_child(shelter_goal_title_label)
+	shelter_goal_reward_label = HudStyle.label("", HudStyle.TYPE_FOOTNOTE, HudStyle.GOLD)
+	shelter_goal_reward_label.name = "GoalCardReward"
+	shelter_goal_reward_label.size_flags_horizontal = Control.SIZE_SHRINK_END
+	shelter_goal_reward_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	header.add_child(shelter_goal_reward_label)
+
+	shelter_goal_rows_box = VBoxContainer.new()
+	shelter_goal_rows_box.name = "GoalCardRequirements"
+	shelter_goal_rows_box.add_theme_constant_override("separation", 6)
+	card_box.add_child(shelter_goal_rows_box)
+
+
+func _build_shelter_goal_requirement_row(requirement: Dictionary) -> Dictionary:
+	var item_id := str(requirement.get("id", ""))
+	var accent: Color = SHELTER_REQUISITION.get_requirement_color(item_id)
+	var row_root := VBoxContainer.new()
+	row_root.name = "GoalReq_%s" % item_id
+	row_root.add_theme_constant_override("separation", 3)
+	shelter_goal_rows_box.add_child(row_root)
+
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 7)
+	row_root.add_child(head)
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(GOAL_CARD_ICON_SIZE, GOAL_CARD_ICON_SIZE)
+	icon.texture = UI_ICONS.get_icon(
+		SHELTER_REQUISITION.get_requirement_icon(item_id), GOAL_CARD_ICON_SIZE, accent
+	)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head.add_child(icon)
+	var name_label := HudStyle.label(str(requirement.get("label", item_id)), 13, HudStyle.TEXT_DIM)
+	name_label.name = "GoalReqName"
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.clip_text = true
+	head.add_child(name_label)
+	# ✓는 충족되는 순간에만 팝으로 뜬다 — 자리는 늘 잡아 둬서 수치가 흔들리지 않게.
+	var check := HudStyle.label("✓", 13, HudStyle.GREEN)
+	check.name = "GoalReqCheck"
+	check.modulate.a = 0.0
+	head.add_child(check)
+	var value := HudStyle.label("", 13, accent)
+	value.name = "GoalReqValue"
+	value.size_flags_horizontal = Control.SIZE_SHRINK_END
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value.add_theme_font_override("font", _tabular_number_font())
+	head.add_child(value)
+
+	var bar := ProgressBar.new()
+	bar.name = "GoalReqBar"
+	bar.custom_minimum_size = Vector2(0, GOAL_CARD_BAR_HEIGHT)
+	bar.show_percentage = false
+	bar.min_value = 0.0
+	bar.max_value = 100.0
+	bar.value = 0.0
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_theme_stylebox_override("background", HudStyle.panel(HudStyle.INK, HudStyle.LINE, 3))
+	bar.add_theme_stylebox_override("fill", HudStyle.panel(accent, accent.lightened(0.2), 3))
+	row_root.add_child(bar)
+
+	var hint := HudStyle.label("", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_FAINT)
+	hint.name = "GoalReqHint"
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.visible = false
+	row_root.add_child(hint)
+	# 티어가 올라 새 요구가 생기면 툭 나타나지 않게 팝으로 들어온다.
+	HudStyle.pop_in(row_root)
+	return {
+		"root": row_root, "bar": bar, "value": value, "check": check, "hint": hint,
+		"ok": false, "tween": null,
+	}
+
+
+func _update_shelter_goal_card() -> void:
+	if not is_instance_valid(shelter_goal_card):
 		return
 	var goal: Dictionary = SHELTER_REQUISITION.get_next_goal()
-	var full_line: String = SHELTER_REQUISITION.format_goal_line(goal, true)
-	var with_hints := full_line.length() <= SHELTER_GOAL_LINE_HINT_MAX_CHARS
-	var all_met := bool(goal.get("all_met", false))
-	var cache_key := "%s|%s|%s" % [full_line, str(with_hints), str(all_met)]
-	if cache_key == shelter_goal_cache:
-		return
-	shelter_goal_cache = cache_key
-	for child in shelter_goal_row.get_children():
-		child.queue_free()
+	var signature: String = SHELTER_REQUISITION.get_goal_signature(goal)
 	if goal.is_empty():
-		_add_shelter_goal_piece(SHELTER_REQUISITION.get_final_tier_text(), Color("#9db3a9"))
-		shelter_goal_row.tooltip_text = ""
+		_apply_shelter_goal_final_tier(signature)
 		return
-	# 툴팁엔 긴 출처를 전부 — 줄에서 생략됐어도 마우스를 올리면 읽힌다.
+	if signature != shelter_goal_signature:
+		# 요구 '목록'이 바뀔 때만 행을 새로 만든다. 수량만 바뀌면 기존 행을 트윈한다.
+		shelter_goal_signature = signature
+		for child in shelter_goal_rows_box.get_children():
+			shelter_goal_rows_box.remove_child(child)
+			child.queue_free()
+		shelter_goal_row_nodes.clear()
+		for requirement in goal.get("requirements", []) as Array:
+			var item := requirement as Dictionary
+			shelter_goal_row_nodes[str(item.get("id", ""))] = (
+				_build_shelter_goal_requirement_row(item)
+			)
+	var all_met := bool(goal.get("all_met", false))
+	shelter_goal_header_icon.visible = true
+	shelter_goal_rows_box.visible = true
+	shelter_goal_title_label.text = (
+		"지금 확장 가능!" if all_met else "다음 목표 — %s" % str(goal.get("title", ""))
+	)
+	shelter_goal_title_label.add_theme_color_override(
+		"font_color", GOAL_CARD_GOLD if all_met else GOAL_CARD_TITLE_COLOR
+	)
+	shelter_goal_reward_label.text = str(goal.get("unlock_hint", ""))
+	shelter_goal_reward_label.visible = not shelter_goal_reward_label.text.is_empty()
 	var tooltip_lines: Array[String] = []
-	var segments: Array[Dictionary] = SHELTER_REQUISITION.build_goal_segments(goal)
-	for index in segments.size():
-		var segment: Dictionary = segments[index]
-		var state := str(segment.get("state", ""))
-		var color := Color("#9db3a9")
-		match state:
-			"ok":
-				color = Color("#7fc79e")
-			"missing":
-				color = Color("#e06c5c")
-		# 전부 충족이면 줄 전체가 금색 — 빨강/초록 구분은 더 이상 정보가 아니다.
-		if all_met:
-			color = Color("#f3d77a")
-		if index > 0:
-			_add_shelter_goal_piece(" · ", Color("#6f837b"))
-		_add_shelter_goal_piece(str(segment.get("text", "")), color)
-		var hint := str(segment.get("hint", ""))
-		if not hint.is_empty():
-			if with_hints:
-				_add_shelter_goal_piece(" — %s" % hint, Color("#c29a6b"))
 	for requirement in goal.get("requirements", []) as Array:
 		var item := requirement as Dictionary
+		var row_nodes: Variant = shelter_goal_row_nodes.get(str(item.get("id", "")))
+		if row_nodes is Dictionary:
+			_update_shelter_goal_requirement_row(row_nodes as Dictionary, item)
 		if not bool(item.get("ok", false)) and not str(item.get("hint", "")).is_empty():
 			tooltip_lines.append("%s · %s" % [str(item.get("label", "")), str(item.get("hint", ""))])
-	shelter_goal_row.tooltip_text = "\n".join(tooltip_lines)
+	shelter_goal_card.tooltip_text = (
+		"조건을 모두 채웠습니다 — 탭하면 확장합니다."
+		if all_met
+		else "\n".join(tooltip_lines)
+	)
+	_set_shelter_goal_card_highlight(all_met)
 
 
-func _add_shelter_goal_piece(text: String, color: Color) -> void:
-	var piece := Label.new()
-	piece.text = text
-	piece.add_theme_font_override("font", FONT)
-	piece.add_theme_font_size_override("font_size", 12)
-	piece.add_theme_color_override("font_color", color)
-	piece.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	shelter_goal_row.add_child(piece)
-
-
-func _update_raid_zone_goal_line(zone_id: String) -> void:
-	# 브리핑 한 줄: 모자란 것 + 출처만. 이 구역이 그 품목의 출처면 덧붙인다.
-	if not is_instance_valid(raid_zone_detail_goal):
+func _update_shelter_goal_requirement_row(row: Dictionary, requirement: Dictionary) -> void:
+	if row.is_empty():
 		return
-	# 존별 장비 목표(그 존 세트 n/3 · 권장 무기 강화) — 충족 초록/미충족 빨강. 라벨 생성·갱신은 모듈이 맡는다.
-	SHELTER_REQUISITION.attach_zone_gear_goal_line(raid_zone_detail_goal, zone_id, FONT)
-	var goal: Dictionary = SHELTER_REQUISITION.get_next_goal()
-	if goal.is_empty():
-		raid_zone_detail_goal.visible = false
+	var item_id := str(requirement.get("id", ""))
+	var ok := bool(requirement.get("ok", false))
+	var accent: Color = SHELTER_REQUISITION.get_requirement_color(item_id)
+	var value := row["value"] as Label
+	value.text = SHELTER_REQUISITION.format_requirement_value(requirement)
+	value.add_theme_color_override("font_color", HudStyle.GREEN if ok else accent)
+	var bar := row["bar"] as ProgressBar
+	var fill := bar.get_theme_stylebox("fill") as StyleBoxFlat
+	if fill != null:
+		# 채워진 바는 초록으로 굳는다 — 색만 봐도 끝난 줄이 구분된다.
+		fill.bg_color = HudStyle.GREEN if ok else accent
+	var target: float = SHELTER_REQUISITION.get_requirement_ratio(requirement) * 100.0
+	if absf(bar.value - target) > 0.5:
+		# 값이 변하면 바가 흘러간다 — 숫자만 바뀌면 무엇이 늘었는지 못 본다.
+		# 스탯 패널은 0.5초마다 갱신되므로, 흐르는 중에 또 갱신되면 앞 트윈을
+		# 끊고 새로 흘린다(둘이 겹치면 바가 떨린다).
+		var previous := row.get("tween") as Tween
+		if is_instance_valid(previous):
+			previous.kill()
+		var tween := bar.create_tween()
+		tween.tween_property(bar, "value", target, 0.3).set_trans(
+			Tween.TRANS_SINE
+		).set_ease(Tween.EASE_OUT)
+		row["tween"] = tween
+	var check := row["check"] as Label
+	if ok and not bool(row.get("ok", false)):
+		# 충족되는 그 순간에만 ✓가 튄다. 매 갱신마다 튀면 산만하다.
+		HudStyle.pop_in(check, 0.24)
+	elif not ok:
+		check.modulate.a = 0.0
+	row["ok"] = ok
+	var hint := row["hint"] as Label
+	var hint_text := str(requirement.get("hint_short", ""))
+	hint.visible = not ok and not hint_text.is_empty()
+	hint.text = hint_text
+
+
+func _apply_shelter_goal_final_tier(signature: String) -> void:
+	# 최종 티어엔 카드가 할 일이 없다 — 보더 없는 한 줄로 접는다.
+	if signature == shelter_goal_signature:
 		return
-	var text := ""
-	if bool(goal.get("all_met", false)):
-		text = "다음 → %s · 조건 충족 ✓ — 쉘터로 돌아가면 확장할 수 있다" % str(goal.get("title", ""))
-		raid_zone_detail_goal.add_theme_color_override("font_color", Color("#f3d77a"))
-	else:
-		text = SHELTER_REQUISITION.format_goal_line(goal, true, true)
-		if SHELTER_REQUISITION.get_goal_zone_ids().has(zone_id):
-			text += "\n이 구역에서 구할 수 있다"
-		raid_zone_detail_goal.add_theme_color_override("font_color", Color("#e3cf67"))
-	raid_zone_detail_goal.text = text
-	raid_zone_detail_goal.visible = not text.is_empty()
+	shelter_goal_signature = signature
+	shelter_goal_all_met = false
+	shelter_goal_highlight_applied = false
+	if is_instance_valid(shelter_goal_glow_tween):
+		shelter_goal_glow_tween.kill()
+	for child in shelter_goal_rows_box.get_children():
+		shelter_goal_rows_box.remove_child(child)
+		child.queue_free()
+	shelter_goal_row_nodes.clear()
+	shelter_goal_rows_box.visible = false
+	shelter_goal_header_icon.visible = false
+	shelter_goal_reward_label.visible = false
+	shelter_goal_title_label.text = SHELTER_REQUISITION.get_final_tier_text()
+	shelter_goal_title_label.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
+	shelter_goal_card_style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+	shelter_goal_card_style.set_border_width_all(0)
+	shelter_goal_card.tooltip_text = ""
+
+
+func _set_shelter_goal_card_highlight(all_met: bool) -> void:
+	shelter_goal_card_style.bg_color = HudStyle.INK_WELL
+	shelter_goal_card_style.set_border_width_all(2 if all_met else 1)
+	if all_met == shelter_goal_all_met and shelter_goal_highlight_applied:
+		return
+	shelter_goal_highlight_applied = true
+	shelter_goal_all_met = all_met
+	if is_instance_valid(shelter_goal_glow_tween):
+		shelter_goal_glow_tween.kill()
+	if not all_met:
+		shelter_goal_card_style.border_color = HudStyle.LINE
+		return
+	# 전부 충족 — 보더가 금색으로 천천히 숨을 쉰다. "이제 누르면 된다"가
+	# 문장보다 먼저 눈에 들어와야 한다.
+	shelter_goal_card_style.border_color = HudStyle.GOLD
+	HudStyle.pop_in(shelter_goal_card, 0.22)
+	shelter_goal_glow_tween = shelter_goal_card.create_tween()
+	shelter_goal_glow_tween.set_loops()
+	shelter_goal_glow_tween.tween_property(
+		shelter_goal_card_style, "border_color", GOAL_CARD_GOLD, 0.9
+	).set_trans(Tween.TRANS_SINE)
+	shelter_goal_glow_tween.tween_property(
+		shelter_goal_card_style, "border_color", HudStyle.GOLD, 0.9
+	).set_trans(Tween.TRANS_SINE)
+
+
+func _on_shelter_goal_card_input(event: InputEvent) -> void:
+	var pressed := (
+		(event is InputEventMouseButton
+			and (event as InputEventMouseButton).pressed
+			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT)
+		or (event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed)
+	)
+	if not pressed:
+		return
+	shelter_goal_card.accept_event()
+	_activate_shelter_goal_card()
+
+
+func _activate_shelter_goal_card() -> void:
+	# 카드가 곧 확장 버튼이다. 전부 충족했을 때만 확장을 실행하고, 아니면
+	# 예전 확장 버튼의 disabled 사유를 토스트로 돌려준다(막힌 이유는 늘 말한다).
+	if _ui_blocks_player() or SHELTER_REQUISITION.is_final_tier():
+		return
+	if not shelter_goal_all_met:
+		_show_status(_shelter_tier_upgrade_failure_reason())
+		return
+	_upgrade_shelter_tier()
+
+
+func _first_sentence(text: String) -> String:
+	# 브리핑 존 설명은 한 문장만 남긴다. 마침표가 없으면(짧은 문구) 그대로 둔다.
+	var trimmed := text.strip_edges()
+	var stop := trimmed.find(". ")
+	if stop < 0:
+		stop = trimmed.find(".\n")
+	if stop >= 0:
+		return trimmed.substr(0, stop + 1)
+	var newline := trimmed.find("\n")
+	return trimmed.substr(0, newline) if newline >= 0 else trimmed
 
 
 func _update_live_shelter_income(delta: float) -> void:
@@ -4531,25 +4730,42 @@ func _open_raid_zone_select() -> void:
 	detail_box.add_child(raid_zone_detail_rule)
 	# 위협도는 헤더 오른쪽의 등급 칩으로만 말한다(막대·퍼센트 제거). 작전 규모/
 	# 예상 시간/보급 수치는 화면만 채워서 걷어냈다. 츄르 보급 버프도 제거.
-	raid_zone_detail_reward = Label.new()
-	raid_zone_detail_reward.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	detail_box.add_child(_build_raid_zone_detail_entry("loot", "주요 전리품", raid_zone_detail_reward))
-	# 출정 준비 — 지금 몸에 걸친 것. 가방 여유·탄약·구급약을 한눈에. 위협도 숫자
-	# 대신 "내가 준비됐나"를 말하는, 실제로 결정에 쓰이는 정보다.
-	raid_zone_detail_loadout = Label.new()
-	raid_zone_detail_loadout.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	detail_box.add_child(_build_raid_zone_detail_entry("backpack", "출정 준비", raid_zone_detail_loadout))
-	# 사망 페널티 사전 고지 — 지금까지는 탈출 비콘 앞에서만 떴다. 첫 판에
-	# 죽는 유저는 거기까지 가 보지도 못하고 규칙을 사후에 배웠다.
-	var death_penalty_notice := Label.new()
-	death_penalty_notice.name = "RaidDeathPenaltyNotice"
-	# 영구 귀속(2026-08) 반영 — 이 고지가 거짓이 되면 안 된다.
-	death_penalty_notice.text = "죽으면 가방의 재료·탄약·귀중품만 현장에 남긴다 · 장비(무기·방어구·부착물)·창고·고철은 전부 안전"
-	death_penalty_notice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	death_penalty_notice.add_theme_font_override("font", FONT)
-	death_penalty_notice.add_theme_font_size_override("font_size", 13)
-	death_penalty_notice.add_theme_color_override("font_color", Color("#9b8b6a"))
-	detail_box.add_child(death_penalty_notice)
+	#
+	# 아래 세 블록(전리품·출정 준비·장비 목표)은 전부 '칩 행'이다. 예전에는 문장
+	# 나열이었고, 브리핑 오른쪽이 통짜 텍스트로 읽혔다(유저 신고). 이 화면의 일은
+	# "어디로 갈지 고르고 떠나기"뿐이라, 그 결정에 안 쓰이는 줄은 다 걷어냈다.
+	detail_box.add_child(_build_raid_zone_section_caption("주요 전리품"))
+	raid_zone_loot_chips = HFlowContainer.new()
+	raid_zone_loot_chips.name = "RaidZoneLootChips"
+	raid_zone_loot_chips.add_theme_constant_override("h_separation", 6)
+	raid_zone_loot_chips.add_theme_constant_override("v_separation", 5)
+	detail_box.add_child(raid_zone_loot_chips)
+	# 출정 준비 — 지금 몸에 걸친 것. 무기·가방·탄약·구급약을 칩 하나씩.
+	# 모자란 칩만 경고색이 되므로, 읽지 않아도 부족한 것이 먼저 보인다.
+	detail_box.add_child(_build_raid_zone_section_caption("출정 준비"))
+	raid_zone_loadout_chips = HFlowContainer.new()
+	raid_zone_loadout_chips.name = "RaidZoneLoadoutChips"
+	raid_zone_loadout_chips.add_theme_constant_override("h_separation", 6)
+	raid_zone_loadout_chips.add_theme_constant_override("v_separation", 5)
+	detail_box.add_child(raid_zone_loadout_chips)
+	raid_zone_loadout_warning = Label.new()
+	raid_zone_loadout_warning.name = "RaidZoneLoadoutWarning"
+	raid_zone_loadout_warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	raid_zone_loadout_warning.add_theme_font_override("font", FONT)
+	raid_zone_loadout_warning.add_theme_font_size_override("font_size", 12)
+	raid_zone_loadout_warning.add_theme_color_override("font_color", Color("#ee806c"))
+	raid_zone_loadout_warning.visible = false
+	detail_box.add_child(raid_zone_loadout_warning)
+	# 존 장비 목표 — "권장: T1 세트 제작 0/3 · AK +0/5" 문장을 칩 둘로.
+	detail_box.add_child(_build_raid_zone_section_caption("이 구역 권장 장비"))
+	raid_zone_gear_chips = HFlowContainer.new()
+	raid_zone_gear_chips.name = "RaidZoneGearChips"
+	raid_zone_gear_chips.add_theme_constant_override("h_separation", 6)
+	raid_zone_gear_chips.add_theme_constant_override("v_separation", 5)
+	detail_box.add_child(raid_zone_gear_chips)
+	# 사망 페널티 — 세 줄 문단이었다. 규칙은 한 줄이면 충분하고, 강조가 필요한
+	# 건 아직 한 번도 안 나가 본 플레이어뿐이다(그 뒤엔 각주 색으로 물러난다).
+	detail_box.add_child(_build_raid_zone_death_note())
 	# 잠긴 구역일 때만 뜨는 상태 문구(키카드/티어 필요). 평상시엔 숨긴다.
 	raid_zone_detail_requirement = Label.new()
 	raid_zone_detail_requirement.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -4558,16 +4774,8 @@ func _open_raid_zone_select() -> void:
 	raid_zone_detail_requirement.add_theme_color_override("font_color", Color("#d78371"))
 	raid_zone_detail_requirement.visible = false
 	detail_box.add_child(raid_zone_detail_requirement)
-	# 다음 목표 — 쉘터 확장에 모자란 것 + 출처. 나가기 직전에 "이번 판에 뭘
-	# 노리나"가 보여야 출정이 심부름이 아니라 투자가 된다.
-	raid_zone_detail_goal = Label.new()
-	raid_zone_detail_goal.name = "RaidZoneGoalLine"
-	raid_zone_detail_goal.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	raid_zone_detail_goal.add_theme_font_override("font", FONT)
-	raid_zone_detail_goal.add_theme_font_size_override("font_size", 13)
-	raid_zone_detail_goal.add_theme_color_override("font_color", Color("#e3cf67"))
-	raid_zone_detail_goal.visible = false
-	detail_box.add_child(raid_zone_detail_goal)
+	# 쉘터 "다음 목표" 줄은 여기서 삭제했다 — 스탯 패널의 목표 카드가 이미
+	# 같은 말을 한다. 출정 화면에서 두 번 읽을 이유가 없다.
 	raid_zone_resupply_button = _merchant_button("창고에서 빠른 보충", false, "backpack")
 	raid_zone_resupply_button.name = "RaidZoneResupplyButton"
 	raid_zone_resupply_button.custom_minimum_size.y = 44
@@ -4660,30 +4868,188 @@ func _build_raid_zone_map_marker(zone_id: String, zone_index: int) -> Control:
 	return wrapper
 
 
-func _build_raid_zone_detail_entry(icon_name: String, title: String, value_label: Label) -> Control:
+# ── 브리핑 칩 ─────────────────────────────────────────────────
+# 칩 = [아이콘 + 짧은 글]. 문장을 늘어놓는 대신 눈이 훑을 수 있는 단위로 쪼갠다.
+# 세로 모드에서는 HFlow가 알아서 줄바꿈하므로 별도 분기가 필요 없다.
+const BRIEFING_CHIP_ICON_SIZE := 16
+const BRIEFING_CHIP_OK_COLOR := Color("#a9bcb3")
+const BRIEFING_CHIP_WARN_COLOR := Color("#e39b55")
+const BRIEFING_CHIP_DANGER_COLOR := Color("#ee806c")
+# 전리품 문구("통조림 · 보통탄 · 기본 부품")를 아이콘으로 옮기는 표. 카탈로그가
+# 사람 말로 적혀 있으므로 키워드로 고른다 — 못 찾으면 일반 전리품 아이콘.
+const BRIEFING_LOOT_ICONS := [
+	["통조림", "food"], ["츄르", "churu"], ["캣닢", "catnip"],
+	["탄", "ammo"], ["부품", "parts"], ["공구", "parts"],
+	["방어구", "armor"], ["의류", "armor"], ["장비", "armor"],
+	["청사진", "lore"], ["도면", "lore"], ["설계", "lore"],
+	["총기", "weapon"], ["무기", "weapon"],
+]
+
+
+func _build_raid_zone_section_caption(title: String) -> Label:
+	var caption := Label.new()
+	caption.text = title
+	caption.add_theme_font_override("font", FONT)
+	caption.add_theme_font_size_override("font_size", 11)
+	caption.add_theme_color_override("font_color", Color("#82958b"))
+	return caption
+
+
+func _briefing_chip(icon_name: String, text: String, accent: Color) -> PanelContainer:
+	var chip := PanelContainer.new()
+	chip.add_theme_stylebox_override("panel", HudStyle.chip(Color(accent.r, accent.g, accent.b, 0.5)))
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
+	row.add_theme_constant_override("separation", 5)
+	chip.add_child(row)
 	var icon := TextureRect.new()
-	icon.custom_minimum_size = Vector2(34, 34)
-	icon.texture = UI_ICONS.get_icon(icon_name, 34, Color("#d3b86b"))
+	icon.custom_minimum_size = Vector2(BRIEFING_CHIP_ICON_SIZE, BRIEFING_CHIP_ICON_SIZE)
+	icon.texture = UI_ICONS.get_icon(icon_name, BRIEFING_CHIP_ICON_SIZE, accent)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(icon)
-	var text_box := VBoxContainer.new()
-	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	text_box.add_theme_constant_override("separation", 1)
-	row.add_child(text_box)
-	var title_label := Label.new()
-	title_label.text = title
-	title_label.add_theme_font_override("font", FONT)
-	title_label.add_theme_font_size_override("font_size", 11)
-	title_label.add_theme_color_override("font_color", Color("#82958b"))
-	text_box.add_child(title_label)
-	value_label.add_theme_font_override("font", FONT)
-	value_label.add_theme_font_size_override("font_size", 14)
-	value_label.add_theme_color_override("font_color", Color("#e2d3a7"))
-	text_box.add_child(value_label)
+	var label := HudStyle.label(text, HudStyle.TYPE_CAPTION, accent)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(label)
+	return chip
+
+
+func _briefing_loot_icon(text: String) -> String:
+	for pair in BRIEFING_LOOT_ICONS:
+		if text.contains(str(pair[0])):
+			return str(pair[1])
+	return "loot"
+
+
+func _build_raid_zone_death_note() -> Control:
+	var row := HBoxContainer.new()
+	row.name = "RaidDeathPenaltyNotice"
+	row.add_theme_constant_override("separation", 7)
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(16, 16)
+	icon.texture = UI_ICONS.get_icon("secure", 16, Color("#9b8b6a"))
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(icon)
+	# 영구 귀속(2026-08) 반영 — 이 고지가 거짓이 되면 안 된다.
+	raid_zone_death_note = HudStyle.label(
+		"죽어도 장비·창고·고철은 안전 — 가방 재료만 남긴다", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_FAINT
+	)
+	raid_zone_death_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	raid_zone_death_note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(raid_zone_death_note)
 	return row
+
+
+func _refresh_raid_zone_loot_chips(zone: Dictionary) -> void:
+	if not is_instance_valid(raid_zone_loot_chips):
+		return
+	for child in raid_zone_loot_chips.get_children():
+		raid_zone_loot_chips.remove_child(child)
+		child.queue_free()
+	var focus := str(zone.get("loot_focus", zone.get("reward", "")))
+	for piece in focus.split("·", false):
+		var text := str(piece).strip_edges()
+		if text.is_empty():
+			continue
+		raid_zone_loot_chips.add_child(
+			_briefing_chip(_briefing_loot_icon(text), text, Color("#d3b86b"))
+		)
+	HudStyle.pop_in(raid_zone_loot_chips, 0.18)
+
+
+func _refresh_raid_zone_loadout_chips(manifest: Dictionary) -> void:
+	# 무기 · 가방(미니 게이지) · 탄약 · 구급약. 모자란 칩만 색이 바뀐다.
+	if not is_instance_valid(raid_zone_loadout_chips):
+		return
+	for child in raid_zone_loadout_chips.get_children():
+		raid_zone_loadout_chips.remove_child(child)
+		child.queue_free()
+	var weapon_id := str(manifest.get("weapon_id", ""))
+	var weapon_text := "맨손 · 현장 조달"
+	var weapon_color := BRIEFING_CHIP_WARN_COLOR
+	if not weapon_id.is_empty():
+		var short_name := str(
+			WEAPON_SYSTEM.get_weapon(weapon_id).get("display_name", weapon_id)
+		).split("\"")[0].strip_edges()
+		weapon_text = "%s +%d" % [short_name, GameState.get_weapon_enhancement_level(weapon_id)]
+		weapon_color = BRIEFING_CHIP_OK_COLOR
+	raid_zone_loadout_chips.add_child(_briefing_chip("weapon", weapon_text, weapon_color))
+	var used_slots := int(GameState.get_raid_bag_used_slots())
+	var bag_capacity := int(GameState.get_raid_bag_capacity())
+	var bag_overflow := used_slots > bag_capacity
+	raid_zone_loadout_chips.add_child(_build_raid_zone_bag_chip(used_slots, bag_capacity, bag_overflow))
+	var ammo_count := int(manifest.get("ammo_count", 0))
+	raid_zone_loadout_chips.add_child(_briefing_chip(
+		"ammo",
+		"%d발" % ammo_count,
+		BRIEFING_CHIP_OK_COLOR if ammo_count >= 60 else (
+			BRIEFING_CHIP_DANGER_COLOR if ammo_count <= 0 else BRIEFING_CHIP_WARN_COLOR
+		)
+	))
+	var medkit_count := int(manifest.get("medkits", 0))
+	raid_zone_loadout_chips.add_child(_briefing_chip(
+		"medkit",
+		"%d개" % medkit_count,
+		BRIEFING_CHIP_OK_COLOR if medkit_count > 0 else BRIEFING_CHIP_WARN_COLOR
+	))
+	# 가방이 넘치면 출정 버튼이 거부한다 — 누르기 전에 여기서 먼저 말한다.
+	raid_zone_loadout_warning.visible = bag_overflow
+	if bag_overflow:
+		raid_zone_loadout_warning.text = "가방 초과 · 창고에 %d칸을 비워야 출정할 수 있습니다." % (
+			used_slots - bag_capacity
+		)
+	HudStyle.pop_in(raid_zone_loadout_chips, 0.18)
+
+
+func _build_raid_zone_bag_chip(used_slots: int, capacity: int, overflow: bool) -> PanelContainer:
+	# 가방만은 숫자보다 '얼마나 찼나'가 중요해서 미니 게이지를 단다.
+	var accent := BRIEFING_CHIP_DANGER_COLOR if overflow else BRIEFING_CHIP_OK_COLOR
+	var chip := _briefing_chip("backpack", "%d/%d칸" % [used_slots, capacity], accent)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 3)
+	var row := chip.get_child(0) as Control
+	chip.remove_child(row)
+	box.add_child(row)
+	var gauge := ProgressBar.new()
+	gauge.custom_minimum_size = Vector2(0, 4)
+	gauge.show_percentage = false
+	gauge.min_value = 0.0
+	gauge.max_value = 100.0
+	gauge.value = clampf(float(used_slots) / maxf(1.0, float(capacity)), 0.0, 1.0) * 100.0
+	gauge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gauge.add_theme_stylebox_override("background", HudStyle.panel(HudStyle.INK, HudStyle.LINE, 2))
+	gauge.add_theme_stylebox_override("fill", HudStyle.panel(accent, accent.lightened(0.2), 2))
+	box.add_child(gauge)
+	chip.add_child(box)
+	return chip
+
+
+func _refresh_raid_zone_gear_chips(zone_id: String) -> void:
+	if not is_instance_valid(raid_zone_gear_chips):
+		return
+	for child in raid_zone_gear_chips.get_children():
+		raid_zone_gear_chips.remove_child(child)
+		child.queue_free()
+	for entry in SHELTER_REQUISITION.build_zone_gear_chips(zone_id):
+		var chip_data := entry as Dictionary
+		var ok := bool(chip_data.get("ok", false))
+		var accent: Color = (
+			SHELTER_REQUISITION.GEAR_GOAL_OK_COLOR
+			if ok
+			else SHELTER_REQUISITION.GEAR_GOAL_PENDING_COLOR
+		)
+		var chip := _briefing_chip(
+			str(chip_data.get("icon", "loot")),
+			str(chip_data.get("text", "")),
+			accent
+		)
+		# 왜 모자란지는 툴팁으로 — 칩 위에 문장을 다시 늘어놓지 않는다.
+		chip.tooltip_text = str(chip_data.get("tooltip", ""))
+		chip.mouse_filter = Control.MOUSE_FILTER_STOP
+		raid_zone_gear_chips.add_child(chip)
+	HudStyle.pop_in(raid_zone_gear_chips, 0.18)
 
 
 func _select_raid_zone_preview(zone_id: String) -> void:
@@ -4702,11 +5068,11 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 	var identity := str(zone.get("identity", ""))
 	var base_description := str(zone.get("description", ""))
 	var tactical_rule := str(zone.get("tactical_rule", ""))
-	# 정체성과 설명은 같은 말을 두 번 하는 경우가 많다. 화면엔 한 줄만 남기고
-	# 상세 설명은 툴팁으로 내린다.
-	raid_zone_detail_description.text = identity if not identity.is_empty() else base_description
-	if not tactical_rule.is_empty():
-		raid_zone_detail_description.text += "\n전술 · %s" % tactical_rule
+	# 정체성과 설명은 같은 말을 두 번 하는 경우가 많다. 화면엔 '한 문장'만 남긴다 —
+	# 두 문단을 읽고 나서 구역을 고르는 사람은 없다. 전문(설명·전술)은 툴팁으로.
+	raid_zone_detail_description.text = _first_sentence(
+		identity if not identity.is_empty() else base_description
+	)
 	# 존 고유 규칙 — 이 구역이 다른 구역과 어떻게 다르게 굴러가는지. 위협도
 	# 숫자가 아니라, 준비물이 달라지는 정보라 눈에 띄게 노란색으로 붙인다.
 	# 특수 규칙이 있는 구역에서만 노란 줄로 알린다. 규칙 없는 초반 구역에서
@@ -4719,15 +5085,27 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 		else:
 			raid_zone_detail_rule.visible = true
 			raid_zone_detail_rule.text = "⚑ %s" % rule_brief
-	# 나가기 직전에 "지난 출정 이후 내가 뭐가 나아졌는지"를 확인시킨다. 성장은
-	# 숫자가 오르는 순간이 아니라, 그 숫자를 들고 나가는 순간에 체감된다.
-	var growth := GameState.build_pre_raid_changes()
-	if not growth.is_empty():
-		raid_zone_detail_description.text += "\n\n지난 출정 이후 ·  %s" % "    ".join(growth)
-	raid_zone_detail_description.tooltip_text = base_description
-	raid_zone_detail_reward.text = str(zone.get("loot_focus", zone.get("reward", "-")))
-	_update_raid_zone_goal_line(zone_id)
+	# "지난 출정 이후 · 새 시설 1곳 가동" 줄은 삭제했다 — 뉴스지 결정 정보가 아니고,
+	# 해금 배너가 이미 같은 사실을 알린다.
+	raid_zone_detail_description.tooltip_text = (
+		"%s\n전술 · %s" % [base_description, tactical_rule]
+		if not tactical_rule.is_empty()
+		else base_description
+	)
+	_refresh_raid_zone_loot_chips(zone)
+	_refresh_raid_zone_gear_chips(zone_id)
+	# 사망 규칙은 아직 한 번도 안 나가 본 플레이어에게만 눈에 띈다.
+	if is_instance_valid(raid_zone_death_note):
+		raid_zone_death_note.add_theme_color_override(
+			"font_color", Color("#c9b47f") if GameState.raid_serial <= 0 else HudStyle.TEXT_FAINT
+		)
 	var threat_percent := roundi(float(zone.get("threat", 0.0)) * 100.0)
+	# 로드아웃은 구역이 아니라 '나'의 상태다 — 봉쇄 구역을 보고 있어도 그대로 보인다.
+	# 문장 한 덩어리였던 출정 준비를 칩 넷으로. 모자란 칩만 색이 바뀐다.
+	var manifest := GameState.build_raid_loadout_manifest(zone_id)
+	var ammo_count := int(manifest.get("ammo_count", 0))
+	var medkit_count := int(manifest.get("medkits", 0))
+	_refresh_raid_zone_loadout_chips(manifest)
 	if unlocked:
 		# 위협도는 헤더 칩에 등급으로만. 낮음/보통/높음/극심.
 		var tier_label := "위협 낮음"
@@ -4747,37 +5125,6 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 		raid_zone_detail_requirement.visible = false
 		# 출정 거부 사유로 덮어썼던 색을 원래 잠금 안내 색으로 되돌린다.
 		raid_zone_detail_requirement.add_theme_color_override("font_color", Color("#d78371"))
-		var manifest := GameState.build_raid_loadout_manifest(zone_id)
-		var ammo_count := int(manifest.get("ammo_count", 0))
-		var medkit_count := int(manifest.get("medkits", 0))
-		if is_instance_valid(raid_zone_detail_loadout):
-			var manifest_weapon_id := str(manifest.get("weapon_id", ""))
-			var weapon_display := (
-				str(WEAPON_SYSTEM.get_weapon(manifest_weapon_id).get("display_name", manifest_weapon_id))
-				if not manifest_weapon_id.is_empty()
-				else "맨손 · 현장 조달"
-			)
-			var used_slots := int(GameState.get_raid_bag_used_slots())
-			var bag_capacity := int(GameState.get_raid_bag_capacity())
-			var bag_overflow := used_slots > bag_capacity
-			raid_zone_detail_loadout.text = "%s\n가방 %d/%d칸 · 탄약 %d발 · 구급약 %d개%s" % [
-				weapon_display,
-				used_slots,
-				bag_capacity,
-				ammo_count,
-				medkit_count,
-				# 가방이 넘치면 출정 버튼이 거부한다 — 누르기 전에 준비 줄이 먼저 말한다.
-				"\n가방 초과 · 창고에 %d칸을 비워야 출정할 수 있습니다." % (used_slots - bag_capacity)
-				if bag_overflow
-				else "",
-			]
-			var loadout_short := ammo_count < 60 or medkit_count <= 0 or bag_overflow
-			var loadout_color := Color("#b7c7bf")
-			if bag_overflow:
-				loadout_color = Color("#ee806c")
-			elif loadout_short:
-				loadout_color = Color("#e0b06a")
-			raid_zone_detail_loadout.add_theme_color_override("font_color", loadout_color)
 		var weapon_id := str(manifest.get("weapon_id", ""))
 		var ammo_id := str(GameState.equipped_ammo_id) if not weapon_id.is_empty() else ""
 		var stored_ammo := (
@@ -4996,8 +5343,12 @@ func _close_raid_zone_select() -> void:
 	raid_zone_detail_state = null
 	raid_zone_detail_title = null
 	raid_zone_detail_description = null
-	raid_zone_detail_reward = null
-	raid_zone_detail_loadout = null
+	raid_zone_detail_rule = null
+	raid_zone_loot_chips = null
+	raid_zone_loadout_chips = null
+	raid_zone_loadout_warning = null
+	raid_zone_gear_chips = null
+	raid_zone_death_note = null
 	raid_zone_detail_requirement = null
 	raid_zone_resupply_button = null
 	raid_zone_launch_button = null

@@ -176,17 +176,16 @@ func _rebuild_ui() -> void:
 	wallet.add_theme_constant_override("h_separation", 8)
 	wallet.add_theme_constant_override("v_separation", 6)
 	header.add_child(wallet)
+	# 지갑 칩은 아이콘 + 수치만(이름은 툴팁) — 재화 표기 규칙.
 	wallet.add_child(_fit_chip_text(SHELTER_UI.make_currency_chip(
 		"scrap",
 		GameState.format_compact_number(GameState.scrap),
-		compact,
-		not narrow
+		compact
 	), "scrap"))
 	wallet.add_child(_fit_chip_text(SHELTER_UI.make_currency_chip(
 		"catnip",
 		GameState.format_compact_number(GameState.catnip),
-		compact,
-		not narrow
+		compact
 	), "catnip"))
 	var workers: int = GameState.get_active_scratcher_workers()
 	var slots: int = GameState.get_scratcher_worker_slots()
@@ -309,12 +308,17 @@ func _rebuild_actions() -> void:
 	actions.add_theme_constant_override("separation", 8)
 	action_bar.add_child(actions)
 	var boost_remaining: int = GameState.get_catnip_boost_remaining()
+	# 버튼 아이콘이 이미 캣닢이다 — 그 옆에 "캣닢"이라고 또 쓰지 않는다(재화 표기 규칙).
 	var boost := _button(
 		"가동 중  %02d:%02d" % [boost_remaining / 60, boost_remaining % 60]
 		if boost_remaining > 0
-		else "캣닢 x%s · 10분 생산 x10" % GameState.format_compact_number(GameState.get_catnip_boost_cost()),
+		else "x%s · 10분 생산 x10" % GameState.format_compact_number(GameState.get_catnip_boost_cost()),
 		"catnip"
 	)
+	boost.tooltip_text = "생산 부스터 · 캣닢 %s (보유 %s)" % [
+		GameState.format_compact_number(GameState.get_catnip_boost_cost()),
+		GameState.format_compact_number(GameState.catnip),
+	]
 	boost.disabled = boost_remaining > 0 or GameState.catnip < GameState.get_catnip_boost_cost()
 	_stretch_action(boost)
 	boost.pressed.connect(_activate_boost)

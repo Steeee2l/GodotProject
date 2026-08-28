@@ -148,13 +148,13 @@ func _rebuild_ui() -> void:
 	top_row.add_child(title)
 	# 훈련 화폐는 통조림이다(유저 확정). 지갑 칩도 쉘터 통조림 재고를 보여 준다 —
 	# 가방 통조림(투척용)이 아니라 훈련에 실제로 쓸 수 있는 수량이어야 한다.
+	# 지갑 칩은 아이콘 + 수치만 — 통조림 아이콘 옆에 "통조림"이라고 또 쓰지 않는다.
 	var resource_panel := _fit_chip_text(SHELTER_UI.make_currency_chip(
 		"food",
 		GameState.format_compact_number(GameState.shelter_canned_food),
-		compact_layout,
-		not narrow_layout
+		compact_layout
 	), "food")
-	resource_panel.custom_minimum_size.x = 104 if compact_layout else 148
+	resource_panel.custom_minimum_size.x = 78 if compact_layout else 98
 	resource_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var resource_value := resource_panel.find_child("ResourceValue_food", true, false) as Label
 	if resource_value != null:
@@ -373,8 +373,20 @@ func _add_training_card(parent: GridContainer, node_id: String) -> void:
 		action_label.text = "선행 필요 · %s" % _training_requirement_text(definition)
 		action_label.add_theme_color_override("font_color", Color("#7f8b85"))
 	else:
+		# 아이콘이 이미 통조림이다 — 그 옆에 "통조림"과 "필요"를 또 쓰지 않는다.
+		# 재고가 모자라면 수치가 빨강으로 바뀐다(글보다 색이 먼저 읽힌다).
 		action_icon.texture = UI_ICONS.get_icon("food", 24, Color("#efbd66"))
-		action_label.text = "통조림 x%s 필요" % GameState.format_compact_number(cost)
+		action_label.text = "x%s" % GameState.format_compact_number(cost)
+		action_label.add_theme_color_override(
+			"font_color",
+			Color("#efbd66") if GameState.shelter_canned_food >= cost else Color("#e06c5c")
+		)
+	# 재화 이름은 화면에서 뺐으니 카드 툴팁이 대신 말한다.
+	card.tooltip_text = "%s · 훈련 비용 통조림 %s개 (보유 %s)" % [
+		str(definition.get("title", node_id)),
+		GameState.format_compact_number(cost),
+		GameState.format_compact_number(GameState.shelter_canned_food),
+	]
 	_set_mouse_passthrough(card_body)
 
 

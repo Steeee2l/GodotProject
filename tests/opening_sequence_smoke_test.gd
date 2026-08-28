@@ -1,5 +1,8 @@
 extends SceneTree
 
+const VEHICLE_CATALOG := preload("res://scripts/vehicle_catalog.gd")
+const VEHICLE_FOOTPRINT := preload("res://scripts/vehicle_footprint.gd")
+
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -123,18 +126,57 @@ func _run() -> void:
 	if wrecks.size() < 4:
 		_fail("opening wreck set is incomplete")
 	for wreck in wrecks:
-		var wreck_sprite := (wreck as Node).find_child("*", true, false) as Sprite3D
-		if wreck_sprite == null or wreck_sprite.position.y < 0.85:
-			_fail("opening wreck sprite can clip into the bridge deck")
+		var wreck_body := wreck as StaticBody3D
+		var wreck_sprite := wreck_body.get_node_or_null("VehicleSprite") as Sprite3D
+		# 예전 어서션은 "스프라이트가 y>=0.85 로 떠 있어야 한다"였다. 그건 월드 Y로
+		# 그림을 띄워 접지선을 맞추던 옛 방식의 흔적이고, 빌보드 스프라이트에서는
+		# 월드 Y 이동이 화면에서 ×0.77 로 줄어 반드시 어긋난다. 이제 스프라이트
+		# 원점은 지면(y≈0.02)에 두고 접지면 중심 보정은 offset(화면 공간)이 한다.
+		if wreck_sprite == null or absf(wreck_body.global_position.y + wreck_sprite.position.y - 0.02) > 0.01:
+			_fail("opening wreck sprite origin is not planted on the bridge deck")
 		var vehicle_collision := (wreck as Node).get_node_or_null("VehicleCollision") as CollisionShape3D
 		if vehicle_collision == null or not (vehicle_collision.shape is BoxShape3D):
 			_fail("opening wreck collision is missing")
 		var vehicle_shape := vehicle_collision.shape as BoxShape3D
 		if vehicle_shape.size.z <= vehicle_shape.size.x:
 			_fail("opening wreck collision length is not aligned with the bridge")
-		var collision_yaw := absf(vehicle_collision.rotation_degrees.y)
-		if collision_yaw < 65.0 or collision_yaw > 115.0:
-			_fail("opening wreck collision axis does not follow the visible vehicle")
+		# 예전 어서션은 yaw 가 65~115° 이길 요구했다. 차량 스프라이트는 전부
+		# BILLBOARD_ENABLED 라 셰이더가 노드 basis 를 카메라 basis 로 갈아끼운다 —
+		# 노드 회전은 화면에 아예 그려지지 않으므로, 상자를 돌리면 그림과 무조건
+		# 어긋난다. 방향은 회전이 아니라 x/z 크기 교환으로만 정한다(yaw = 0).
+		if absf(vehicle_collision.rotation_degrees.y) > 0.01:
+			_fail("opening wreck collision must stay axis aligned with the billboard art")
+		# 그림 대 충돌 — 아트의 접지 사각형(vehicle_footprint)을 월드로 되돌려
+		# 충돌 상자와 겹쳐 본다. 유저 신고("빨간 영역이 그림보다 작고 아래로 치우쳤다")를
+		# 그대로 재는 어서션이다.
+		var wreck_definition := VEHICLE_CATALOG.get_definition(str(wreck_body.get_meta("vehicle_type", "")))
+		var visual: Dictionary = VEHICLE_FOOTPRINT.visual_footprint_from_sprite(
+			wreck_sprite,
+			wreck_definition,
+			opening_camera
+		)
+		if not bool(visual.get("valid", false)):
+			_fail("opening wreck sprite footprint could not be measured")
+		var visual_center: Vector2 = visual["center"]
+		var visual_size: Vector2 = visual["size"]
+		var collision_center_2d := Vector2(vehicle_collision.position.x, vehicle_collision.position.z)
+		if collision_center_2d.distance_to(visual_center) > 0.3:
+			_fail(
+				"opening wreck collision centre drifts from the drawn footprint: %s vs %s"
+				% [collision_center_2d, visual_center]
+			)
+		var size_ratio := Vector2(
+			vehicle_shape.size.x / maxf(0.01, visual_size.x),
+			vehicle_shape.size.z / maxf(0.01, visual_size.y)
+		)
+		if (
+			size_ratio.x < 0.8 or size_ratio.x > 1.2
+			or size_ratio.y < 0.8 or size_ratio.y > 1.2
+		):
+			_fail(
+				"opening wreck collision size does not match the drawn footprint: %s"
+				% size_ratio
+			)
 		var collision_debug := (wreck as Node).get_node_or_null("VehicleCollisionDebug") as MeshInstance3D
 		if collision_debug == null or not (collision_debug.mesh is PlaneMesh):
 			_fail("opening wreck collision debug marker is missing")

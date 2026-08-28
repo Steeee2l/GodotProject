@@ -121,12 +121,14 @@ func _run() -> void:
 	await _sleep(1.0)
 	_check(str(tutorial.call("get_active_step_id")) == "read_goal", "다음 스텝 = read_goal (실제: %s)" % str(tutorial.call("get_active_step_id")))
 	target = tutorial.call("get_active_target") as Control
-	_check(target != null and target.name == "ShelterGoalRow", "대상 = 스탯 패널 목표 줄")
-	_check(target != null and target.get_node_or_null("RimPulseFx") == null and (layer.find_child("TutorialHalo", true, false) as Control).visible, "컨테이너 대상은 헤일로로 강조(림 대신)")
+	# 목표 줄은 카드로 재디자인됐다(ShelterGoalRow → ShelterGoalCard).
+	_check(target != null and target.name == "ShelterGoalCard", "대상 = 스탯 패널 목표 카드")
+	# 카드는 PanelContainer라 _rim_allowed()가 참 — 예전 HFlow 줄과 달리 림 펄스가 붙는다.
+	_check(target != null and target.get_node_or_null("RimPulseFx") != null, "패널 대상은 림 펄스로 강조")
 	_log_rects("step2-landscape")
-	# 목표 줄 탭(터치 경로) → 완료
+	# 목표 카드 탭(터치 경로) → 완료
 	var goal_center := target.get_global_rect().get_center()
-	_check(bool(tutorial.call("handle_touch", goal_center)), "목표 줄 터치가 튜토리얼에 잡힌다")
+	_check(bool(tutorial.call("handle_touch", goal_center)), "목표 카드 터치가 튜토리얼에 잡힌다")
 	await _sleep(0.35)
 	_check(bool(game_state.call("is_tutorial_step_done", "read_goal")), "read_goal 완료")
 	await _sleep(1.0)

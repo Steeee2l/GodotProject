@@ -94,10 +94,14 @@ const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const WEAPON_VISUAL_PIXEL_SIZE := 0.0018
 
+const WEAPON_REVEAL := preload("res://scripts/raid/weapon_reveal.gd")
+
 var host: Node
 var spawn_random: RandomNumberGenerator
 var player: CharacterBody3D
 var camera: Camera3D
+# 무기는 조준·사격·재장전 중에만 보인다. 규칙은 scripts/raid/weapon_reveal.gd.
+var weapon_reveal := WEAPON_REVEAL.new()
 
 
 func attach(owner_node: Node) -> void:
@@ -338,10 +342,45 @@ func _update_weapon_ballistics(delta: float, is_moving: bool) -> void:
 			_finish_reload()
 
 
+func is_weapon_reveal_requested() -> bool:
+	# 조준(우클릭 정조준·모바일 조준 버튼)·사격(마우스/발사 버튼)·재장전 중에만 참.
+	# 근접 스윙은 방망이 스프라이트(melee_bat_sprite)가 따로 뜨므로 총은 숨긴다.
+	if host.melee_attack_active or host.loafing:
+		return false
+	return (
+		host.laser_aim_held
+		or host.mouse_fire_held
+		or host.fire_button_held
+		or host.weapon_reloading
+	)
+
+
+func update_weapon_reveal(delta: float) -> float:
+	# 매 프레임 마지막에 한 번 — 피격 플래시·차폐 실루엣이 modulate 를 만진 뒤에
+	# 알파를 덮어써야 한다(그것들은 알파를 1로 되돌린다).
+	var alpha := weapon_reveal.update(delta, host.has_ak and is_weapon_reveal_requested())
+	if host.weapon_sprite != null:
+		var tint: Color = host.weapon_sprite.modulate
+		tint.a = alpha
+		host.weapon_sprite.modulate = tint
+		host.weapon_sprite.visible = _weapon_sprite_should_draw()
+	return alpha
+
+
+func _weapon_sprite_should_draw() -> bool:
+	return (
+		host.has_ak
+		and not host.melee_attack_active
+		and not host.loafing
+		and host.building_canvas == null
+		and weapon_reveal.is_drawn()
+	)
+
+
 func _update_weapon_pose() -> void:
 	if host.weapon_sprite == null:
 		return
-	host.weapon_sprite.visible = host.has_ak and not host.melee_attack_active and not host.loafing and host.building_canvas == null
+	host.weapon_sprite.visible = _weapon_sprite_should_draw()
 	if not host.has_ak or host.melee_attack_active or host.loafing:
 		return
 	if WEAPON_VISUAL_CATALOG.has_weapon_texture(host.equipped_weapon_id):

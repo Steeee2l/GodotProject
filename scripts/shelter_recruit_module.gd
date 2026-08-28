@@ -163,11 +163,12 @@ func _rebuild_ui() -> void:
 	wallet.add_theme_constant_override("h_separation", 8)
 	wallet.add_theme_constant_override("v_separation", 6)
 	content.add_child(wallet)
+	# 지갑 칩은 아이콘 + 수치만(이름은 툴팁) — 재화 표기 규칙.
 	wallet.add_child(SHELTER_UI.make_currency_chip(
-		"scrap", GameState.format_compact_number(GameState.scrap), compact, not narrow
+		"scrap", GameState.format_compact_number(GameState.scrap), compact
 	))
 	wallet.add_child(SHELTER_UI.make_currency_chip(
-		"catnip", GameState.format_compact_number(GameState.catnip), compact, not narrow
+		"catnip", GameState.format_compact_number(GameState.catnip), compact
 	))
 
 	var residents: int = GameState.resident_cat_ids.size()

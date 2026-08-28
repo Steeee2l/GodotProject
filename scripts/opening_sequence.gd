@@ -5,9 +5,10 @@ const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
+const VEHICLE_CATALOG := preload("res://scripts/vehicle_catalog.gd")
+const VEHICLE_FOOTPRINT := preload("res://scripts/vehicle_footprint.gd")
 const TOUCH_JOYSTICK := preload("res://scripts/hud/touch_joystick.gd")
 
-var _texture_bottom_padding_cache: Dictionary = {}
 const CAT_ROOT := "res://assets/characters/cat_8way"
 const ROLL_ROOT := "res://assets/characters/cat_roll"
 const SHELTER_SCENE := "res://scenes/shelter_interior.tscn"
@@ -31,16 +32,15 @@ const GAMEPLAY_PHASES := [
 	"tutorial_extract",
 ]
 const DIALOGUE_LINES := [
-	# 화자는 고양이 '나비'. 짧게, 한 줄에 한 가지만. 은유로 두 겹 싸지 않는다.
-	# 앞 3줄 = 그날 밤 무슨 일이 있었나, 카메라 리빌 후 4줄 = 신호와 출발.
-	# 마지막 줄이 이 게임 전체의 질문이다 — "왜 나만 남았나".
-	"삼백 밤 전, 이 도시에서 사람이 전부 사라졌다.",
-	"싸운 자국도, 도망친 자국도 없었다. 밥은 식탁에 그대로 있었다.",
-	"나는 그날 밤 창밖에 있었다. 그래서 남았다.",
-	"사흘 전, 강 건너에서 빛이 세 번 깜빡였다.",
-	"기계는 혼자 깜빡이지 않는다. 누가 살아 있다는 뜻이다.",
-	"통조림 두 개, 탄창 하나. 다리를 건넌다.",
-	"사람을 찾으면, 왜 나만 남았는지도 알게 되겠지.",
+	# 첫 줄은 반드시 라디오 육성이다 — 설명 이전에 목소리부터 들려주는 훅.
+	# 앞 3줄(리빌 전) = 지금 벌어진 일, 뒤 3줄(리빌 후) = 그래서 어디로 가는가.
+	# 짧게, 현재형으로. "삼백 밤"·"밥은 식탁에" 같은 문어체 비유는 쓰지 않는다.
+	"— 들리나. …들리면, 강을 건너와.",
+	"죽은 라디오가 방금 말을 했다. 사람들이 사라진 뒤 처음으로.",
+	"그날 밤 무슨 일이 있었는지 나는 모른다. 아침에 눈을 떴을 때, 도시에 사람이 한 명도 없었다.",
+	"그리고 지금, 강 건너에서 누군가 나를 부른다.",
+	"사람일까. 사람이면 — 왜 하필 지금일까.",
+	"총 한 자루, 통조림 두 개. 확인하러 간다.",
 ]
 
 const PLAYER_SPEED := 5.2
@@ -108,6 +108,8 @@ var touch_enabled := false
 var mobile_move_vector := Vector2.ZERO
 var mobile_joystick_touch := -1
 var mobile_aim_active := false
+# 무기 표시 규칙(조준할 때만) — scripts/raid/weapon_reveal.gd
+var weapon_reveal := preload("res://scripts/raid/weapon_reveal.gd").new()
 var sewer_exit: Node3D
 var signal_beacon: Node3D
 var signal_beacon_light: OmniLight3D
@@ -208,7 +210,7 @@ func _physics_process(delta: float) -> void:
 		player.velocity = Vector3.ZERO
 		player.move_and_slide()
 	_update_camera(delta)
-	_update_weapon_visual()
+	_update_weapon_visual(delta)
 	_update_visibility_fog()
 	_update_hud()
 
@@ -380,18 +382,12 @@ func _build_environment() -> void:
 	)
 	_add_bridge_rail(-6.15)
 	_add_bridge_rail(6.15)
-	# 차량 인자 셋째는 월드 폭(m) — 텍스처 해상도(size_limit)와 무관하게 같은 크기.
-	_add_vehicle("res://assets/opening/opening_wrecked_taxi_v1.png", Vector3(-3.5, 0.84, 27.0), 4.5144, 12.0, Vector3(1.75, 1.1, 4.0))
-	_add_vehicle(
-		"res://assets/opening/opening_wrecked_truck_v1.png",
-		Vector3(2.4, 0.95, 2.0),
-		5.016,
-		-8.0,
-		Vector3(2.05, 1.3, 4.8),
-		Vector3(-0.23, -0.2, 0.23)
-	)
-	_add_vehicle("res://assets/opening/opening_wrecked_taxi_v1.png", Vector3(3.7, 0.82, -19.0), 4.0128, -18.0, Vector3(1.6, 1.0, 3.55))
-	_add_vehicle("res://assets/opening/opening_wrecked_bus_v1.png", Vector3(-1.8, 1.0, -35.0), 5.5176, 4.0, Vector3(2.15, 1.3, 5.65))
+	# 다리는 Z 축으로 뻗는다 — 잔해도 전부 다리 방향(along_z)으로 눕는다.
+	# 크기·중심·충돌은 카탈로그의 접지 사각형이 결정한다(손으로 넣던 숫자 제거).
+	_add_vehicle("opening_taxi", Vector3(-3.5, 0.0, 27.0))
+	_add_vehicle("opening_truck", Vector3(2.4, 0.0, 2.0))
+	_add_vehicle("opening_taxi", Vector3(3.7, 0.0, -19.0), true, 0.889)
+	_add_vehicle("opening_bus", Vector3(-1.8, 0.0, -35.0))
 	_add_fire(Vector3(-3.2, 0.35, 26.7), 0.72)
 	_add_fire(Vector3(2.9, 0.4, 1.8), 0.82)
 	_add_fire(Vector3(-5.5, 0.3, -27.0), 0.62)
@@ -435,7 +431,8 @@ func _build_signal_beacon() -> void:
 
 
 func _pulse_signal_beacon() -> void:
-	# 세 번, 쉬고, 다시 — 대사의 "세 번, 쉬고, 다시 세 번"과 리듬을 맞춘다.
+	# 세 번, 쉬고, 다시 — 강 건너에서 부르는 신호의 호흡. 대사 4번째 줄의
+	# "누군가 나를 부른다"를 눈으로 보여주는 장치다.
 	if not is_instance_valid(signal_beacon):
 		return
 	var glow := signal_beacon.get_node_or_null("BeaconGlow") as MeshInstance3D
@@ -510,105 +507,67 @@ func _add_bridge_rail(x_position: float) -> void:
 
 
 func _add_vehicle(
-	texture_path: String,
+	vehicle_type: String,
 	world_position: Vector3,
-	world_width: float,
-	screen_rotation: float,
-	collision_size: Vector3,
-	collision_offset: Vector3 = Vector3(0.0, -0.2, 0.0)
+	along_z: bool = true,
+	size_scale: float = 1.0
 ) -> void:
+	# 오프닝 잔해도 필드 차량과 완전히 같은 규칙을 쓴다 — 카탈로그의 접지 사각형에서
+	# 스프라이트 크기·중심·충돌 상자를 유도한다(scripts/vehicle_footprint.gd).
+	# 예전에는 여기서만 world_width·screen_rotation·collision_offset 를 손으로
+	# 넣었고, 그 숫자들이 그림과 어긋나 충돌 영역이 작고 아래로 치우쳐 보였다.
+	var definition := VEHICLE_CATALOG.get_definition(vehicle_type)
+	if definition.is_empty():
+		return
+	var texture := load(str(definition["texture_path"])) as Texture2D
+	if texture == null:
+		return
+	var collision_size := VEHICLE_FOOTPRINT.world_collision_size(
+		definition, along_z, size_scale
+	)
 	var body := StaticBody3D.new()
 	body.name = "OpeningWreck"
 	body.add_to_group("opening_wreck")
-	body.position = world_position
+	body.position = Vector3(world_position.x, 0.0, world_position.z)
 	body.collision_layer = 2
 	body.collision_mask = 0
+	body.set_meta("vehicle_type", vehicle_type)
+	body.set_meta("vehicle_axis", "z" if along_z else "x")
+	body.set_meta("collision_size", collision_size)
+	add_child(body)
+
 	var sprite := Sprite3D.new()
-	sprite.texture = load(texture_path) as Texture2D
-	var pixel_size := world_width / float(maxi(1, sprite.texture.get_width()))
-	sprite.pixel_size = pixel_size
-	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sprite.shaded = false
-	sprite.transparent = true
-	sprite.rotation_degrees.z = screen_rotation
-	# 스프라이트를 텍스처 높이의 임의 비율(0.32)로 띄우면 아트의 접지선이
-	# 지면에 닿지 않는다. 버스는 0.71, 택시는 0.81만큼 공중에 떠 있었고
-	# 아이소메트릭에서 그 높이 차이가 그대로 화면상 어긋남으로 보였다.
-	# 알파의 실제 바닥을 찾아 그 지점이 y=0에 오도록 맞춘다.
-	sprite.position.y = _ground_aligned_sprite_height(
-		sprite.texture, pixel_size, world_position.y
-	)
+	sprite.name = "VehicleSprite"
+	sprite.texture = texture
 	body.add_child(sprite)
+	VEHICLE_FOOTPRINT.apply_to_sprite(
+		sprite,
+		definition,
+		collision_size,
+		VEHICLE_FOOTPRINT.should_flip(definition, along_z),
+		0.0
+	)
+	sprite.render_priority = 1
+
+	var profile: Dictionary = COLLISION_PROFILES.get_profile(
+		str(definition.get("collision_profile", "vehicle_standard")),
+		collision_size
+	)
+	var movement_size: Vector3 = profile["movement_size"]
 	var collision := CollisionShape3D.new()
 	collision.name = "VehicleCollision"
 	var shape := BoxShape3D.new()
-	shape.size = collision_size
+	shape.size = movement_size
 	collision.shape = shape
-	collision.position = collision_offset
-	# 스프라이트는 화면 공간(z회전), 충돌은 월드 공간(y yaw)이다. 두 각도를
-	# 그냥 더하면 아이소메트릭 투영 때문에 반드시 어긋난다. 예전 코드의
-	# `90.0 + screen_rotation`은 상자를 통째로 옆 축으로 돌려버렸다.
-	var collision_yaw := COLLISION_PROFILES.sprite_tilt_to_collision_yaw(screen_rotation)
-	collision.rotation_degrees.y = collision_yaw
+	# yaw 는 0 이다. 빌보드 스프라이트는 노드 회전이 화면에 반영되지 않으므로,
+	# 방향은 회전이 아니라 x/z 크기 교환(along_z)으로만 정한다.
+	collision.position = Vector3(0.0, movement_size.y * 0.5, 0.0)
 	body.add_child(collision)
-	body.set_meta("collision_size", collision_size)
-	body.set_meta("collision_yaw", collision_yaw)
-	body.set_meta("collision_offset", collision_offset)
 	if SHOW_VEHICLE_COLLISION_DEBUG:
-		_add_vehicle_collision_debug(body, collision_size, collision_yaw, collision_offset)
-	add_child(body)
+		_add_vehicle_collision_debug(body, movement_size)
 
 
-func _ground_aligned_sprite_height(
-	texture: Texture2D, pixel_size: float, body_height: float
-) -> float:
-	# 텍스처 아래쪽 투명 여백만큼 스프라이트를 내려서, 눈에 보이는 바닥이
-	# 실제 지면과 만나게 한다. 이 값이 틀리면 충돌 영역이 아무리 정확해도
-	# 그림과 어긋나 보인다.
-	if texture == null:
-		return maxf(0.9, body_height)
-	var height := float(texture.get_height())
-	var bottom_padding_px := _texture_bottom_padding(texture)
-	return maxf(
-		0.05,
-		height * pixel_size * 0.5 - bottom_padding_px * pixel_size - body_height
-	)
-
-
-func _texture_bottom_padding(texture: Texture2D) -> float:
-	# 아래에서부터 올라가며 처음으로 불투명 픽셀이 나오는 행을 찾는다.
-	var cache_key := texture.resource_path
-	if _texture_bottom_padding_cache.has(cache_key):
-		return float(_texture_bottom_padding_cache[cache_key])
-	var image := texture.get_image()
-	if image == null:
-		return 0.0
-	if image.is_compressed():
-		# 압축 텍스처는 픽셀을 직접 못 읽는다. 여백 보정을 포기하고 원래대로 둔다.
-		_texture_bottom_padding_cache[cache_key] = 0.0
-		return 0.0
-	var width := image.get_width()
-	var height := image.get_height()
-	var padding := 0.0
-	for row in range(height - 1, -1, -1):
-		var opaque := false
-		for column in range(0, width, 3):  # 3픽셀 간격이면 충분히 정확하다
-			if image.get_pixel(column, row).a > 0.02:
-				opaque = true
-				break
-		if opaque:
-			padding = float(height - 1 - row)
-			break
-	_texture_bottom_padding_cache[cache_key] = padding
-	return padding
-
-
-func _add_vehicle_collision_debug(
-	body: StaticBody3D,
-	collision_size: Vector3,
-	world_yaw: float,
-	collision_offset: Vector3
-) -> void:
+func _add_vehicle_collision_debug(body: StaticBody3D, movement_size: Vector3) -> void:
 	var material := StandardMaterial3D.new()
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -616,16 +575,11 @@ func _add_vehicle_collision_debug(
 	material.no_depth_test = true
 	material.render_priority = 126
 	var mesh := PlaneMesh.new()
-	mesh.size = Vector2(collision_size.x, collision_size.z)
+	mesh.size = Vector2(movement_size.x, movement_size.z)
 	mesh.material = material
 	var marker := MeshInstance3D.new()
 	marker.name = "VehicleCollisionDebug"
-	marker.position = Vector3(
-		collision_offset.x,
-		-body.position.y + 0.035,
-		collision_offset.z
-	)
-	marker.rotation_degrees.y = world_yaw
+	marker.position = Vector3(0.0, 0.035, 0.0)
 	marker.mesh = mesh
 	marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	marker.add_to_group("opening_vehicle_collision_debug")
@@ -759,6 +713,8 @@ func _build_player() -> void:
 	weapon_sprite.transparent = true
 	weapon_sprite.no_depth_test = true
 	weapon_sprite.render_priority = 119
+	# 조준하기 전까지는 손에 아무것도 없다(_update_weapon_visual 이 매 프레임 결정).
+	weapon_sprite.visible = false
 	player.add_child(weapon_sprite)
 	_build_muzzle_flash()
 
@@ -1719,7 +1675,8 @@ func _start_tutorial_aim() -> void:
 	tutorial_transitioning = false
 	_show_objective(
 		"본다",
-		"조준을 누른 채 — 시야가 열리고 총구가 따라온다." if touch_enabled else "우클릭을 누른 채 — 시야가 열리고 총구가 따라온다.",
+		# 이 단계에서 총이 처음 손에 들린다 — 문구가 그 순간을 가리킨다.
+		"조준을 누른 채 — 총을 들고, 어둠이 열린다." if touch_enabled else "우클릭을 누른 채 — 총을 들고, 어둠이 열린다.",
 		"조준 유지 0.5초"
 	)
 
@@ -2056,9 +2013,18 @@ func _get_mobile_aim_assisted_direction() -> Vector3:
 	return base_direction.lerp(best_direction, 0.72).normalized()
 
 
-func _update_weapon_visual() -> void:
+func _update_weapon_visual(delta: float = 0.0) -> void:
 	if not is_instance_valid(weapon_sprite):
 		return
+	# 조준·사격·재장전 중에만 총이 보인다. 다리를 걸어 올라가는 인트로에서
+	# 손에 총이 떠 있으면 이상하다 — 튜토리얼 '조준' 단계에서 총이 나타나는
+	# 순간이 곧 연출이 된다. 규칙은 scripts/raid/weapon_reveal.gd.
+	var reveal_alpha := weapon_reveal.update(
+		delta,
+		(aim_held or fire_held or reloading) and GAMEPLAY_PHASES.has(phase)
+	)
+	weapon_sprite.visible = weapon_reveal.is_drawn()
+	weapon_sprite.modulate.a = reveal_alpha
 	var direction := current_aim_direction if aim_held else _get_facing_world_direction()
 	weapon_sprite.position = direction * 0.62 + Vector3(0, 0.27, 0)
 	var screen_direction := Vector2(direction.x - direction.z, direction.x + direction.z).normalized()

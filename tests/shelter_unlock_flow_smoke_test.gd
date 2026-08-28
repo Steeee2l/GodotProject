@@ -52,13 +52,18 @@ func _run() -> void:
 	first_shelter.call("_use_shelter_medkit")
 	assert(int(game_state.get("player_health")) == 88)
 	assert(int(game_state.get("medkits")) == 0)
-	# 운영 독: 시설 5종 버튼이 항상 떠 있고 잠금 상태를 보여준다.
+	# 운영 독: 잠긴 시설 버튼은 "잠김" 배지를 달고 서 있는 대신 아예 숨는다
+	# (유저 신고: "비활성화된 버튼들 차라리 숨겨줘"). 노드는 남아 있고
+	# visible만 false — 해금되는 순간 팝으로 다시 나타난다.
 	var ops_dock := root.find_child("ShelterOpsDock", true, false) as VBoxContainer
 	assert(ops_dock != null)
 	# 버튼들은 방향 반응형 컨테이너(OpsButtons) 아래로 이사했다 — 경로 대신 탐색.
 	var ops_button := ops_dock.find_child("OpsButton_scratcher_bank", true, false) as Button
 	assert(ops_button is Button)
-	assert(ops_button.text.contains("잠김"))
+	assert(not ops_button.visible)
+	# 창고는 첫 복귀 전에도 열려 있으므로 그 버튼은 보인다.
+	var storage_button := ops_dock.find_child("OpsButton_storage", true, false) as Button
+	assert(storage_button.visible == bool(game_state.call("is_shelter_facility_unlocked", "storage")))
 	first_shelter.queue_free()
 	await process_frame
 

@@ -210,17 +210,16 @@ func _rebuild_ui() -> void:
 	wallet.add_theme_constant_override("h_separation", 8)
 	wallet.add_theme_constant_override("v_separation", 6)
 	header.add_child(wallet)
+	# 지갑 칩은 아이콘 + 수치만(이름은 툴팁) — 재화 표기 규칙.
 	wallet.add_child(_fit_chip_text(SHELTER_UI.make_currency_chip(
 		"scrap",
 		GameState.format_compact_number(GameState.scrap),
-		compact,
-		not narrow
+		compact
 	), "scrap"))
 	wallet.add_child(_fit_chip_text(SHELTER_UI.make_currency_chip(
 		"churu",
 		GameState.format_compact_number(GameState.churu),
-		compact,
-		not narrow
+		compact
 	), "churu"))
 
 	# 귀중품은 쓸 데가 없다. 여기가 유일한 출구다.
@@ -477,12 +476,11 @@ func _upgrade_card() -> Control:
 	row.add_child(_fit_chip_text(SHELTER_UI.make_currency_chip(
 		"scrap",
 		GameState.format_compact_number(scrap_cost),
-		true,
-		false
+		true
 	), "scrap"))
 	if churu_cost > 0:
 		row.add_child(_fit_chip_text(
-			SHELTER_UI.make_currency_chip("churu", str(churu_cost), true, false), "churu"
+			SHELTER_UI.make_currency_chip("churu", str(churu_cost), true), "churu"
 		))
 	return panel
 

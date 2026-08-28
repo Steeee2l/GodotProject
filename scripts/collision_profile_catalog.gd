@@ -107,28 +107,9 @@ static func get_profile(profile_id: String, base_size: Vector3) -> Dictionary:
 	}
 
 
-const SCREEN_RIGHT_AXIS_SCALE := 1.4142135623730951  # 1 / (1/√2)
-const SCREEN_UP_AXIS_SCALE := 2.449489742783178      # 1 / (1/√6)
-
-# 월드 +Z가 화면에 맺히는 각도. 세로로 놓인 아트의 기준 각도다.
-const SCREEN_ANGLE_FOR_WORLD_Z_DEG := 210.0
-
-
-static func screen_angle_to_world_yaw(screen_degrees: float) -> float:
-	# 반환값은 "긴 축이 Z인 상자"에 그대로 넣을 수 있는 yaw(도)다.
-	var alpha := deg_to_rad(screen_degrees)
-	var sin_a := sin(alpha)
-	var cos_a := cos(alpha)
-	var axis_x := cos_a * SCREEN_RIGHT_AXIS_SCALE - sin_a * SCREEN_UP_AXIS_SCALE
-	var axis_z := -sin_a * SCREEN_UP_AXIS_SCALE - cos_a * SCREEN_RIGHT_AXIS_SCALE
-	var phi := atan2(axis_z, axis_x)
-	# Godot의 yaw는 +Z를 (sin ψ, 0, cos ψ)로 보낸다. φ = 90° - ψ.
-	return rad_to_deg(PI * 0.5 - phi)
-
-
-static func sprite_tilt_to_collision_yaw(sprite_screen_rotation_degrees: float) -> float:
-	# 스프라이트를 화면에서 기울인 만큼 충돌 상자를 월드에서 돌린다.
-	# 기울기가 0이면 yaw도 0이 되어 아트의 원래 축과 정확히 일치한다.
-	return screen_angle_to_world_yaw(
-		SCREEN_ANGLE_FOR_WORLD_Z_DEG + sprite_screen_rotation_degrees
-	)
+# screen_angle_to_world_yaw / sprite_tilt_to_collision_yaw 는 제거했다.
+# 차량·엄폐물 스프라이트는 전부 BILLBOARD_ENABLED 라 셰이더가 노드 basis 를 카메라
+# basis 로 갈아끼운다 — 스프라이트의 화면 회전은 애초에 그려지지 않는데, 그 값으로
+# 충돌 상자의 yaw 를 돌리고 있었다. 그림과 충돌이 어긋나던 근본 원인이다.
+# 이제 접지 사각형은 scripts/vehicle_footprint.gd 가 아트에서 직접 유도하고,
+# 충돌 상자는 축정렬(yaw = 0) 상태로 x/z 크기만 바꿔 맞춘다.

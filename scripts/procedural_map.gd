@@ -11,6 +11,7 @@ const ISOMETRIC_VERTICAL_PROJECTION := 0.816496580927726
 const BUILDING_CATALOG := preload("res://scripts/building_catalog.gd")
 const LANDMARK_CATALOG := preload("res://scripts/urban_landmark_catalog.gd")
 const VEHICLE_CATALOG := preload("res://scripts/vehicle_catalog.gd")
+const VEHICLE_FOOTPRINT := preload("res://scripts/vehicle_footprint.gd")
 const STREET_PROP_CATALOG := preload("res://scripts/street_prop_catalog.gd")
 const RAID_REGION_CATALOG := preload("res://scripts/raid_region_catalog.gd")
 const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
@@ -931,25 +932,14 @@ func _spawn_road_cover_obstacle(cell: Vector2i, center: Vector3, vertical: bool)
 	sprite.modulate = _zone_tint("prop_tint")
 	var collision_size: Vector3 = definition.get("collision_size", Vector3(4.0, 1.4, 1.4))
 	# 발자국 좌표를 런타임 텍스처 크기로 보정한다(size_limit 로 줄어든 텍스처 대응).
-	var footprint_corners: Array = _texture_space_footprint_corners(definition, texture)
-	if footprint_corners.size() >= 4:
-		var left_corner := footprint_corners[0] as Vector2
-		var right_corner := footprint_corners[2] as Vector2
-		var footprint_center_px := _footprint_centroid(footprint_corners)
-		var base_pixel_width := maxf(1.0, absf(right_corner.x - left_corner.x))
-		var projected_width := (collision_size.x + collision_size.z) / sqrt(2.0)
-		sprite.pixel_size = projected_width / base_pixel_width
-		sprite.offset = Vector2(
-			texture.get_width() * 0.5 - footprint_center_px.x,
-			texture.get_height() * 0.5 - footprint_center_px.y
-		)
-		sprite.position = Vector3(0.0, -body.position.y + 0.02, 0.0)
-	else:
-		sprite.pixel_size = float(definition.get("pixel_size", 0.007))
-		sprite.position.y = -body.position.y + 0.02
-	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sprite.transparent = true
-	sprite.shaded = false
+	# 엄폐물 아트도 차량과 같은 규칙을 쓴다(발자국 좌표 → pixel_size·offset).
+	VEHICLE_FOOTPRINT.apply_to_sprite(
+		sprite,
+		definition,
+		collision_size,
+		false,
+		-body.position.y
+	)
 	sprite.no_depth_test = true
 	sprite.render_priority = 4
 	body.add_child(sprite)
@@ -971,12 +961,7 @@ func _spawn_road_cover_obstacle(cell: Vector2i, center: Vector3, vertical: bool)
 
 
 func _footprint_centroid(corners: Array) -> Vector2:
-	if corners.is_empty():
-		return Vector2.ZERO
-	var centroid := Vector2.ZERO
-	for corner_variant in corners:
-		centroid += corner_variant as Vector2
-	return centroid / float(corners.size())
+	return VEHICLE_FOOTPRINT.centroid(corners)
 
 
 func _build_parking_lot(cell: Vector2i) -> void:
@@ -1519,22 +1504,8 @@ func _texture_space_footprint_corners(
 	definition: Dictionary,
 	texture: Texture2D
 ) -> Array[Vector2]:
-	var result: Array[Vector2] = []
-	var raw_corners: Array = definition.get("footprint_corners_px", [])
-	var source_size: Vector2i = definition.get(
-		"source_size",
-		Vector2i(texture.get_width(), texture.get_height())
-	)
-	var coordinate_scale := Vector2.ONE
-	if source_size.x > 0 and source_size.y > 0:
-		coordinate_scale = Vector2(
-			float(texture.get_width()) / float(source_size.x),
-			float(texture.get_height()) / float(source_size.y)
-		)
-	for corner_variant in raw_corners:
-		var corner: Vector2 = corner_variant
-		result.append(corner * coordinate_scale)
-	return result
+	# 계산은 scripts/vehicle_footprint.gd 한 곳에만 있다(오프닝·필드·엄폐물 공용).
+	return VEHICLE_FOOTPRINT.texture_space_corners(definition, texture)
 
 
 func _spawn_vehicle(node_name: String, vehicle_type: String, position: Vector3, along_z: bool = false) -> void:
@@ -1544,8 +1515,7 @@ func _spawn_vehicle(node_name: String, vehicle_type: String, position: Vector3, 
 	var texture := load(str(definition["texture_path"])) as Texture2D
 	if texture == null:
 		return
-	var footprint: Vector3 = definition["collision_size"]
-	var collision_size := Vector3(footprint.z, footprint.y, footprint.x) if along_z else footprint
+	var collision_size := VEHICLE_FOOTPRINT.world_collision_size(definition, along_z)
 	var body := StaticBody3D.new()
 	body.name = node_name
 	body.position = position
@@ -1559,28 +1529,16 @@ func _spawn_vehicle(node_name: String, vehicle_type: String, position: Vector3, 
 	sprite.name = "VehicleSprite"
 	sprite.texture = texture
 	sprite.modulate = _zone_tint("vehicle_tint")
-	var corners: Array[Vector2] = _texture_space_footprint_corners(definition, texture)
-	var base_pixel_width := absf((corners[2] as Vector2).x - (corners[0] as Vector2).x)
-	var projected_width := (footprint.x + footprint.z) / sqrt(2.0)
-	sprite.pixel_size = projected_width / base_pixel_width
-	var footprint_center_px := _footprint_centroid(corners)
-	var sprite_offset := Vector2(
-		texture.get_width() * 0.5 - footprint_center_px.x,
-		texture.get_height() * 0.5 - footprint_center_px.y
+	# 아트의 긴 축이 원하는 월드 축과 다를 때만 반전한다. 좌우 반전은 아이소메트릭
+	# 화면 대각선 둘을 맞바꾸므로 그림의 긴 축이 X↔Z 로 옮겨간다.
+	var flip_vehicle := VEHICLE_FOOTPRINT.should_flip(definition, along_z)
+	VEHICLE_FOOTPRINT.apply_to_sprite(
+		sprite,
+		definition,
+		collision_size,
+		flip_vehicle,
+		-body.position.y
 	)
-	# The source art's long axis projects along world Z. Mirroring it turns that
-	# axis onto world X, so only horizontal-road vehicles should be flipped.
-	# The old rule did the opposite: the picture pointed across its own physics
-	# box even though the box dimensions themselves were correct.
-	var flip_vehicle := not along_z
-	if flip_vehicle:
-		sprite_offset.x = -sprite_offset.x
-	sprite.offset = sprite_offset
-	sprite.flip_h = flip_vehicle
-	sprite.position = Vector3(0.0, -body.position.y + 0.02, 0.0)
-	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sprite.transparent = true
-	sprite.shaded = false
 	sprite.no_depth_test = true
 	sprite.render_priority = 5
 	body.add_child(sprite)

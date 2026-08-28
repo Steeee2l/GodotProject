@@ -273,6 +273,33 @@ static func enter_modal(panel: Control) -> void:
 	tween.tween_property(panel, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
+static func pop_in(control: Control, duration := 0.2) -> void:
+	# 이미 자리를 잡은 컨테이너 안에서 '새로 생긴' 요소용(해금된 독 버튼, 새 목표 행).
+	# position은 컨테이너가 매 프레임 덮어쓰므로 건드리지 않는다 — 스케일 + 페이드만.
+	# enter()가 아니라 이걸 쓰는 이유: 컨테이너 자식에게 enter()를 쓰면 이동이
+	# 첫 프레임에 지워져 "툭" 나타난 것처럼 보인다.
+	if not is_instance_valid(control):
+		return
+	control.visible = true
+	# 트리 밖에서는 트윈을 만들 수 없다(빌드 중 호출). 그럴 땐 그냥 보이게 둔다.
+	if not control.is_inside_tree():
+		control.modulate.a = 1.0
+		control.scale = Vector2.ONE
+		return
+	# 방금 보이게 된 노드는 size가 아직 0이다(레이아웃은 다음 프레임에 돈다).
+	# 그 상태로 pivot을 잡으면 좌상단에서 자라 어색하다 — 최소 크기로 대신한다.
+	var extent := control.size
+	if extent.x <= 1.0 or extent.y <= 1.0:
+		extent = control.get_combined_minimum_size()
+	control.pivot_offset = extent * 0.5
+	control.modulate.a = 0.0
+	control.scale = Vector2(0.85, 0.85)
+	var tween := control.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(control, "modulate:a", 1.0, duration).set_trans(Tween.TRANS_SINE)
+	tween.tween_property(control, "scale", Vector2.ONE, duration).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
 static func exit(control: Control, and_free := false) -> void:
 	if not is_instance_valid(control):
 		return

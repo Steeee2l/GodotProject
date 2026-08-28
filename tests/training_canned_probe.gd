@@ -124,7 +124,9 @@ func _run() -> void:
 		_check(card != null, "탄창 숙련 카드 존재")
 		if card != null:
 			var action := card.find_child("Action", true, false) as Label
-			var expected := "통조림 x%d 필요" % int(game_state.call("get_training_cost", "magazine_drill"))
+			# 재화 표기 규칙(유저 확정): 아이콘 옆에 재화 이름을 또 쓰지 않는다.
+			# 카드 비용은 통조림 아이콘 + "x18"이고, 이름은 카드 툴팁이 말한다.
+			var expected := "x%d" % int(game_state.call("get_training_cost", "magazine_drill"))
 			_check(
 				action != null and action.text == expected,
 				"⑥ 카드 비용 표기 = '%s' (실제: %s)" % [expected, action.text if action != null else "<null>"]

@@ -41,7 +41,8 @@ const WEAPON_SHORT_NAMES := {
 	"m1911": "M1911", "mp5": "MP5",
 }
 const GEAR_GOAL_OK_COLOR := Color("#72d6a0")
-const GEAR_GOAL_MISSING_COLOR := Color("#e36f55")
+# 미충족은 빨강이 아니라 주황이다 — "못 간다"가 아니라 "덜 갖췄다"는 뜻이라서.
+const GEAR_GOAL_PENDING_COLOR := Color("#e39b55")
 
 # 요구 품목 표시명. 키 아이템의 이름은 ITEM_CATALOG(loot_economy)와 같아야 한다.
 const REQUIREMENT_LABELS := {
@@ -51,6 +52,14 @@ const REQUIREMENT_LABELS := {
 	"euljiro_grid_schematic": "을지로 배전 도면",
 	"yongsan_control_key": "용산 통제 키",
 }
+
+# 요구 품목의 아이콘·색. 목표 카드의 행이 아이콘으로 먼저 읽히게 하는 단일 출처다.
+# 색은 스탯 패널의 재화 칩과 같은 값을 쓴다 — 같은 재화가 화면마다 다른 색이면
+# 눈이 그걸 같은 것으로 묶지 못한다. 서사 키는 재화가 아니라 문서라 문서 아이콘.
+const REQUIREMENT_ICONS := {"scrap": "scrap", "churu": "churu"}
+const REQUIREMENT_COLORS := {"scrap": Color("#c7d1ce"), "churu": Color("#d99b67")}
+const KEY_ITEM_ICON := "lore"
+const KEY_ITEM_COLOR := Color("#9fc9d8")
 
 # "어디서 구하는가" — 긴 판(스탯 패널 툴팁·정산)과 짧은 판(한 줄 문구) 둘 다 둔다.
 # 세로 모달 폭에서 목표 줄이 2줄을 넘으면 짧은 판조차 생략된다.
@@ -239,6 +248,49 @@ static func format_requirement(requirement: Dictionary) -> String:
 			GameState.format_compact_number(have), GameState.format_compact_number(need),
 		]
 	return "%s %d/%d%s" % [label, mini(have, need), need, " ✓" if ok else ""]
+
+
+# ── 목표 카드(스탯 패널) ──────────────────────────────────────
+# 카드는 요구 하나를 '한 행 = 아이콘 + 이름 + 진행 바 + 수치'로 그린다.
+# 아래 넷은 그 행이 필요로 하는 조각 전부다. 문자열을 이어 붙이지 않는 이유:
+# 나열된 텍스트는 메모장처럼 읽히고, 얼마나 남았는지가 눈에 안 들어온다(유저 신고).
+
+
+static func format_requirement_value(requirement: Dictionary) -> String:
+	# 행 오른쪽 수치. "현재/필요"만 — 충족 표시(✓)는 UI가 아이콘으로 말한다.
+	# 초과분은 잘라서 보여준다(45K/30K는 정보가 아니라 소음이다).
+	var need := maxi(0, int(requirement.get("need", 0)))
+	var have := clampi(int(requirement.get("have", 0)), 0, need)
+	if str(requirement.get("id", "")) == "scrap":
+		return "%s/%s" % [
+			GameState.format_compact_number(have), GameState.format_compact_number(need),
+		]
+	return "%d/%d" % [have, need]
+
+
+static func get_requirement_ratio(requirement: Dictionary) -> float:
+	# 진행 바 값(0~1).
+	var need := maxi(1, int(requirement.get("need", 0)))
+	return clampf(float(int(requirement.get("have", 0))) / float(need), 0.0, 1.0)
+
+
+static func get_requirement_icon(item_id: String) -> String:
+	return str(REQUIREMENT_ICONS.get(item_id, KEY_ITEM_ICON))
+
+
+static func get_requirement_color(item_id: String) -> Color:
+	return REQUIREMENT_COLORS.get(item_id, KEY_ITEM_COLOR) as Color
+
+
+static func get_goal_signature(goal: Dictionary) -> String:
+	# 요구 '목록'이 바뀌었는지만 보는 지문(수량은 뺀다). 카드는 이 값이 바뀔 때만
+	# 행을 새로 만든다 — 매 갱신마다 다시 만들면 진행 바를 트윈할 수 없다.
+	if goal.is_empty():
+		return "final"
+	var ids: Array[String] = []
+	for requirement in goal.get("requirements", []) as Array:
+		ids.append(str((requirement as Dictionary).get("id", "")))
+	return "%d|%s" % [int(goal.get("tier", 0)), ",".join(ids)]
 
 
 static func format_goal_line(goal: Dictionary, with_hints := true, only_missing := false) -> String:
@@ -442,34 +494,47 @@ static func format_zone_gear_goal_line(goal: Dictionary) -> String:
 	return "권장: %s · %s" % [set_part, weapon_part]
 
 
-static func attach_zone_gear_goal_line(anchor: Label, zone_id: String, font: Font) -> Label:
-	# 브리핑 존 카드의 장비 목표 줄. 호출부(shelter_interior)는 한 줄만 부른다 —
-	# 라벨은 anchor(다음 목표 줄) 바로 뒤에 형제로 만들어 두고 이후엔 갱신만 한다.
-	# 충족 초록 / 미충족 빨강.
-	if not is_instance_valid(anchor):
-		return null
-	var parent := anchor.get_parent()
-	if parent == null:
-		return null
-	var line := parent.get_node_or_null("RaidZoneGearGoalLine") as Label
-	if line == null:
-		line = Label.new()
-		line.name = "RaidZoneGearGoalLine"
-		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		if font != null:
-			line.add_theme_font_override("font", font)
-		line.add_theme_font_size_override("font_size", 13)
-		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		parent.add_child(line)
-		parent.move_child(line, anchor.get_index() + 1)
+static func build_zone_gear_chips(zone_id: String) -> Array[Dictionary]:
+	# 브리핑의 장비 목표 — 한 줄 문장("권장: T1 세트 제작 0/3 · AK +0/5") 대신
+	# 칩 두 개로 준다. 문장은 읽어야 알지만 칩은 색만 봐도 안다(유저 신고:
+	# "브리핑이 너무 텍스트 위주야"). 긴 설명은 tooltip으로 내린다.
+	#   [{id, icon, text, ok, tooltip}]
+	var chips: Array[Dictionary] = []
 	var goal := get_zone_gear_goal(zone_id)
-	var text := str(goal.get("text", ""))
-	line.text = text
-	line.add_theme_color_override(
-		"font_color", GEAR_GOAL_OK_COLOR if bool(goal.get("all_ok", false)) else GEAR_GOAL_MISSING_COLOR
-	)
-	line.visible = not text.is_empty()
-	return line
+	if goal.is_empty():
+		return chips
+	var set_total := (goal.get("set_ids", []) as Array).size()
+	chips.append({
+		"id": "set",
+		"icon": "armor",
+		"text": "%s 세트 %d/%d" % [str(goal.get("set_label", "T1")), int(goal.get("set_owned", 0)), set_total],
+		"ok": bool(goal.get("set_ok", false)),
+		"tooltip": "이 구역 권장 방어구 %d종 — 작업대에서 제작해 채운다(주워서는 안 채워진다)." % set_total,
+	})
+	var goal_weapon := str(goal.get("weapon_id", ""))
+	var goal_name := str(WEAPON_SHORT_NAMES.get(goal_weapon, goal_weapon))
+	var goal_level := int(goal.get("weapon_level", 0))
+	var equipped_id := str(goal.get("equipped_weapon_id", ""))
+	var equipped_name := str(WEAPON_SHORT_NAMES.get(equipped_id, equipped_id))
+	var weapon_text := ""
+	var weapon_tooltip := ""
+	if bool(goal.get("weapon_rung_ok", false)):
+		weapon_text = "%s +%d/%d" % [equipped_name, int(goal.get("equipped_level", 0)), goal_level]
+		weapon_tooltip = "이 구역 사수를 3발에 눕히는 기준은 %s +%d다." % [goal_name, goal_level]
+	else:
+		# 사다리 단이 모자라면 강화 수치가 아니라 '기종'이 문제다 — 그것부터 말한다.
+		weapon_text = "%s +%d 필요" % [goal_name, goal_level]
+		weapon_tooltip = "권장 %s +%d · 현재 %s. 사다리 단이 낮으면 강화로는 못 메운다." % [
+			goal_name, goal_level, ("%s +%d" % [equipped_name, int(goal.get("equipped_level", 0))]) if not equipped_id.is_empty() else "무기 없음",
+		]
+	chips.append({
+		"id": "weapon",
+		"icon": "weapon",
+		"text": weapon_text,
+		"ok": bool(goal.get("weapon_ok", false)),
+		"tooltip": weapon_tooltip,
+	})
+	return chips
 
 
 static func _ladder_rank(weapon_id: String) -> int:
