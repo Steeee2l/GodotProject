@@ -1727,9 +1727,11 @@ func _start_tutorial_extract() -> void:
 	for child in sewer_exit.get_children():
 		if child.has_meta("tutorial_extraction_visual"):
 			child.visible = true
+	# 신호는 여기서 죽는다 — 나비가 쉘터를 '발견'하는 게 아니라, 신호가 끊긴
+	# 자리에 쉘터가 있다. 사자의 "다들 그 소리를 듣고 왔다"로 이어지는 이음새.
 	_show_objective(
-		"불빛 쪽으로",
-		"신호가 오던 방향이다. 하수구로 내려간다.",
+		"신호가 끊겼다",
+		"다리를 건너자 목소리가 죽었다. 하수구 아래에서 불빛이 샌다.",
 		"하수구까지 %.0fm" % player.global_position.distance_to(sewer_exit.global_position)
 	)
 
