@@ -517,13 +517,13 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		],
 		"complete_dialogue": [
 			"원본과 대조했습니다. 좌표가 맞습니다.",
-			"작업대를 개방합니다. 주운 총은 버리지 마세요. 자산입니다.",
+			# 제작대는 이제 처음부터 열려 있다(2026-08-28) — 개방 선언 대신 정비 팁.
+			"정비 구역 부품 목록을 작업대에 걸어 두었습니다. 주운 총은 버리지 마세요. 자산입니다.",
 		],
 		"objective": "정비 기록 조사",
 		"metric": "lore",
 		"target": 2,
-		"reward": {"xp": 120, "canned_food": 3, "medkits": 1},
-		"facility_unlock": "workbench",
+		"reward": {"xp": 120, "canned_food": 3, "medkits": 1, "scrap": 300},
 		"lore_title": "사자의 기록 03 · 대조",
 		"lore": "사자는 무엇이든 원본과 대조한다. 대조할 수 있다는 건, 원본을 갖고 있다는 뜻이다.",
 	},
@@ -735,6 +735,13 @@ const TRAINING_NODE_DEFS := {
 	"sortie_supply": {
 		"title": "출정 보급", "description": "랭크마다 출정 시작 시 장착 구경 1탄창 지급", "icon": "raid",
 		"max_rank": 3, "base_cost": 50, "cost_step": 36, "requires": {"ammo_carry": 1},
+	},
+	# 가방 확장은 인벤토리의 고철 버튼에서 훈련 트리로 이사했다(2026-08-28 유저
+	# 지시: "가방 슬롯은 훈련에서 늘어나는 게 더 좋을듯"). 효과는
+	# get_raid_bag_capacity(단일 지점)가 랭크를 읽는다.
+	"bag_capacity": {
+		"title": "가방 확장", "description": "랭크마다 가방 +1칸", "icon": "backpack",
+		"max_rank": 12, "base_cost": 16, "cost_step": 12, "requires": {},
 	},
 }
 # 탄약 한 칸에 들어가는 발수(훈련 0랭크). 예전엔 "탄약 한 종류 = 무조건 1칸"이라
@@ -1686,6 +1693,10 @@ func sync_shelter_progression_milestones() -> Array[String]:
 	# 존재하지도 않는 상태로 전부 잃었다. 배우기 전의 실패는 학습이 아니라 벌이다.
 	if unlock_shelter_facility("storage"):
 		newly_unlocked.append("storage")
+	# 제작대는 처음부터 연다(2026-08-28 유저 지시). 장비가 제작 전용인 게임에서
+	# 제작대가 계약 뒤에 잠겨 있으면 첫 무기 강화·개조 루프를 배울 곳이 없다.
+	if unlock_shelter_facility("workbench"):
+		newly_unlocked.append("workbench")
 	# 훈련장은 철근이 등장하는 첫 복귀 이후 그대로 둔다.
 	if is_contract_agent_available():
 		if unlock_shelter_facility("training"):
@@ -2253,7 +2264,14 @@ func try_upgrade_secure_dog() -> bool:
 
 
 func get_raid_bag_capacity() -> int:
-	return RAID_BAG_CAPACITY + bag_capacity_level + get_churu_bag_bonus_slots()
+	# bag_capacity_level 은 폐지된 고철 구매분(옛 세이브 보존용), 신규 성장은
+	# 훈련 '가방 확장' 랭크로만 온다.
+	return (
+		RAID_BAG_CAPACITY
+		+ bag_capacity_level
+		+ get_training_rank("bag_capacity")
+		+ get_churu_bag_bonus_slots()
+	)
 
 
 func get_raid_item_stack_limit(item_type: String) -> int:

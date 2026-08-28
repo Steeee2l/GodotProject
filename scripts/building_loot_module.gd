@@ -11,8 +11,10 @@ const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
 const SFX := preload("res://scripts/sfx_bank.gd")
 const SHELTER_REQUISITION := preload("res://scripts/shelter/requisition.gd")
-const FLOOR_DROP_MAX_WIDTH := 0.9
-const FLOOR_DROP_MAX_HEIGHT := 0.72
+# 필드 드랍(통조림 ≈0.45m)과 같은 체급 — 0.9m는 고양이만 한 통조림을 만들었다
+# (유저: 건물 안 루팅 재화가 여전히 크다).
+const FLOOR_DROP_MAX_WIDTH := 0.5
+const FLOOR_DROP_MAX_HEIGHT := 0.56
 
 signal collected(loot_key: String, description: String)
 

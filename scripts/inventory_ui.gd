@@ -61,8 +61,6 @@ var weapon_panel: Control
 var equipped_grid: GridContainer
 var bag_grid: GridContainer
 var bag_scroll: ScrollContainer
-var bag_expand_button: Button
-var secure_expand_button: Button
 var scrap_label: Label
 var inventory_feedback: Label
 var weapon_title: Label
@@ -346,18 +344,8 @@ func _build_inventory_panel() -> Control:
 	bag_header.add_child(bag_slot_usage_label)
 	# 용량 표시 뒤 약한 글로우 — 만재가 되면 _refresh_contents가 빨강으로 바꾼다.
 	HudFx.attach_text_glow(bag_slot_usage_label, Color(HudFx.GOLD, 0.5))
-	# 인크리멘탈 사다리: 가방 확장(고철)과 시큐어 슬롯(츄르)이 항상 눈앞에 있다.
-	# "조금만 더 모으면 산다"가 파밍의 이유가 된다.
-	bag_expand_button = _icon_text_button("＋칸", "가방 영구 확장", "backpack")
-	bag_expand_button.name = "BagExpandButton"
-	bag_expand_button.custom_minimum_size = Vector2(76, 30)
-	bag_expand_button.pressed.connect(_on_bag_expand_pressed)
-	bag_header.add_child(bag_expand_button)
-	secure_expand_button = _icon_text_button("시큐어", "죽어도 지키는 칸 확장 (츄르)", "secure")
-	secure_expand_button.name = "SecureExpandButton"
-	secure_expand_button.custom_minimum_size = Vector2(86, 30)
-	secure_expand_button.pressed.connect(_on_secure_expand_pressed)
-	bag_header.add_child(secure_expand_button)
+	# 가방 확장·시큐어 구매 버튼은 폐지됐다(2026-08-28 유저 지시) — 가방 슬롯은
+	# 훈련장 '가방 확장' 트리에서 키운다. 시큐어 칸은 방어구 +90 돌파 특전만 남는다.
 
 	# 필터 바 — 완성된 채 배선이 빠져 한 번도 화면에 나온 적이 없던 UI.
 	# 필터 바는 폐지됐다(유저: "하나도 이해를 못 하겠다"). 가방은 12칸짜리라
@@ -1178,28 +1166,6 @@ func _refresh_contents() -> void:
 			bag_slot_usage_label,
 			Color("#ff6a5a", 0.9) if occupied_slots >= bag_capacity else Color(HudFx.GOLD, 0.5)
 		)
-	if bag_expand_button:
-		var bag_cost := int(game_state.get_bag_upgrade_cost())
-		if bag_cost <= 0:
-			bag_expand_button.visible = false
-		else:
-			bag_expand_button.visible = true
-			bag_expand_button.text = "＋1칸 %s" % game_state.format_compact_number(bag_cost)
-			bag_expand_button.disabled = int(game_state.scrap) < bag_cost
-			bag_expand_button.tooltip_text = "가방 영구 +1칸 · 고철 %s" % game_state.format_compact_number(bag_cost)
-	if secure_expand_button:
-		var secure_cost := int(game_state.get_secure_upgrade_cost())
-		if secure_cost <= 0:
-			secure_expand_button.visible = false
-		else:
-			secure_expand_button.visible = true
-			secure_expand_button.text = "시큐어 츄르%d" % secure_cost
-			secure_expand_button.disabled = int(game_state.churu) < secure_cost
-			# 실제 칸 수는 get_secure_slot_count()(츄르 칸 + 방어구 돌파 +90 보너스)가 단일 지점이다.
-			secure_expand_button.tooltip_text = "죽어도 지키는 칸 +1 · 현재 %s · 츄르 %d" % [
-				_secure_slot_summary(), secure_cost
-			]
-
 	if scrap_label:
 		scrap_label.text = "쉘터 고철 %d" % int(game_state.scrap if game_state else 0)
 	if weapon_detail_open and has_weapon_state:
@@ -1758,42 +1724,6 @@ func _equipment_slot_display_name(slot: String) -> String:
 		"head": "머리 방어구",
 		"feet": "신발",
 	}.get(slot, "장비"))
-
-
-func _on_bag_expand_pressed() -> void:
-	var cost := int(game_state.get_bag_upgrade_cost())
-	if game_state.try_upgrade_bag_capacity():
-		_show_inventory_feedback(
-			"가방 +1칸 · 고철 -%s (총 %d칸)" % [
-				game_state.format_compact_number(cost),
-				int(game_state.get_raid_bag_capacity()),
-			],
-			Color("#a3ff92")
-		)
-		_refresh_contents()
-	else:
-		_show_inventory_feedback("고철이 부족합니다", Color("#ee806c"))
-
-
-func _secure_slot_summary() -> String:
-	# "3칸 (츄르 2/3 + 방어구 돌파 1)" — 츄르로 산 칸과 방어구 +90 돌파 보너스를 갈라 읽힌다.
-	var total := int(game_state.get_secure_slot_count())
-	var bought := int(game_state.secure_dog_slots)
-	var bonus := total - bought
-	if bonus > 0:
-		return "%d칸 (츄르 %d/3 + 방어구 돌파 %d)" % [total, bought, bonus]
-	return "%d칸 (츄르 %d/3)" % [total, bought]
-
-
-func _on_secure_expand_pressed() -> void:
-	if game_state.try_upgrade_secure_dog():
-		_show_inventory_feedback(
-			"시큐어 슬롯 +1 · 죽어도 %d칸은 지킨다" % int(game_state.get_secure_slot_count()),
-			Color("#a3ff92")
-		)
-		_refresh_contents()
-	else:
-		_show_inventory_feedback("츄르가 부족합니다", Color("#ee806c"))
 
 
 func _request_weapon_unequip() -> void:

@@ -471,7 +471,7 @@ func _ready() -> void:
 			or extraction_transition_active
 			or loot_system.is_loot_swap_open()
 			or main_mission.is_cinematic_active()
-		), "종료 (판 포기 · 장비는 전부 남고 가방 재료만 잃는다)")
+		), "판 포기하고 종료", "장비는 전부 남는다 · 가방의 재료·탄약·귀중품만 잃는다")
 	raid_zone_data = GameState.get_raid_zone()
 	# 판 시작을 세이브에 새긴다 — 추출 없이 강제 종료하면 로드 시 포기 처리.
 	# 오프닝(튜토리얼)은 제외: 새 유저의 첫 이탈에 벌을 주지 않는다.

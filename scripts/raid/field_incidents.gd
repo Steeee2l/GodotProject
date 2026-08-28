@@ -232,7 +232,23 @@ func _update_dynamic_incident(delta: float) -> void:
 			else 0.0
 		)
 		var remaining := ceili(host.dynamic_incident_timer)
-		host.hud.dynamic_incident_detail.text = "수송품 쟁탈전 · %dm · %02d:%02d" % [
+		# 배너가 "지금 뭘 하면 되는지"를 말해야 한다 — 적을 다 잡고도 깬 건지
+		# 모르겠다는 신고. 사건의 완료는 처치가 아니라 '상자 회수'다.
+		var contenders := 0
+		for enemy in host.enemies:
+			if (
+				is_instance_valid(enemy)
+				and not bool(enemy.get("dying"))
+				and bool(enemy.get_meta("dynamic_incident", false))
+			):
+				contenders += 1
+		var phase_text := (
+			"수거 경쟁 %d마리 남음" % contenders
+			if contenders > 0
+			else "경쟁자 정리 — 수송품을 회수하라"
+		)
+		host.hud.dynamic_incident_detail.text = "%s · %dm · %02d:%02d" % [
+			phase_text,
 			roundi(distance),
 			remaining / 60,
 			remaining % 60,

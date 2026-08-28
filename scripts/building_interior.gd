@@ -957,7 +957,15 @@ func _build_interface() -> void:
 	_update_medkit_button()
 
 
+const ROLL_COOLDOWN_INDICATOR_SCRIPT := preload("res://scripts/roll_cooldown_indicator.gd")
+var roll_cooldown_indicator: Control
+
+
 func _build_shared_combat_hud(canvas: CanvasLayer) -> void:
+	# 필드와 같은 스태미나 링 — 건물에서만 대시 게이지가 없어 감으로 굴러야 했다.
+	roll_cooldown_indicator = ROLL_COOLDOWN_INDICATOR_SCRIPT.new() as Control
+	roll_cooldown_indicator.name = "BuildingRollCooldownIndicator"
+	canvas.add_child(roll_cooldown_indicator)
 	player_world_health_bar = Control.new()
 	player_world_health_bar.name = "PlayerWorldHealthBar"
 	player_world_health_bar.size = Vector2(48, 7)
@@ -1552,7 +1560,9 @@ func _spawn_floor_loot(random: RandomNumberGenerator) -> void:
 
 
 func _spawn_floor_enemies(random: RandomNumberGenerator) -> void:
-	var count: int = clampi(floor_cells.size() - 2 + int(BuildingRunState.current_floor), 4, 12)
+	# 층당 4~12마리는 방 수에 비해 휑했다(유저: 너무 단조로워) — 바닥을 6으로
+	# 올리고 층수 가중을 2배로. 좁은 실내라 필드보다 조우 밀도가 높아야 긴장이 산다.
+	var count: int = clampi(floor_cells.size() + 1 + int(BuildingRunState.current_floor) * 2, 6, 16)
 	for index in count:
 		var key := "f%02d_enemy_%02d" % [BuildingRunState.current_floor, index]
 		if BuildingRunState.is_enemy_defeated(BuildingRunState.current_floor, key):
@@ -1564,15 +1574,20 @@ func _spawn_floor_enemies(random: RandomNumberGenerator) -> void:
 		var room_center := _cell_to_world(floor_cells[room_index])
 		enemy.position = room_center + Vector3(random.randf_range(-5.5, 5.5), 0.78, random.randf_range(-3.8, 3.8))
 		var floor_number := int(BuildingRunState.current_floor)
-		var weapon_pool: Array[String] = ["m1911", "m1911", "mp5", "double_barrel"]
-		if floor_number >= 2:
-			weapon_pool.append("mp5")
-		if floor_number >= 3:
-			weapon_pool.append("ak47")
-		if floor_number >= 4:
-			weapon_pool.append("ak47")
-		var weapon := weapon_pool[random.randi_range(0, weapon_pool.size() - 1)]
-		enemy.call("configure", "ranged", player, {}, minf(1.0, 0.12 * floor_number), weapon)
+		# 전부 총잡이면 교전이 전부 같은 리듬이다 — 1/3은 근접 돌격조로 섞어
+		# 거리 관리(후퇴·구르기)를 강제한다.
+		if index % 3 == 2:
+			enemy.call("configure", "melee", player, {}, minf(1.0, 0.14 * floor_number), "")
+		else:
+			var weapon_pool: Array[String] = ["m1911", "m1911", "mp5", "double_barrel"]
+			if floor_number >= 2:
+				weapon_pool.append("mp5")
+			if floor_number >= 3:
+				weapon_pool.append("ak47")
+			if floor_number >= 4:
+				weapon_pool.append("ak47")
+			var weapon := weapon_pool[random.randi_range(0, weapon_pool.size() - 1)]
+			enemy.call("configure", "ranged", player, {}, minf(1.0, 0.12 * floor_number), weapon)
 		enemy.connect("died", _on_enemy_died.bind(key))
 		floor_root.add_child(enemy)
 		enemies.append(enemy)
@@ -2237,7 +2252,7 @@ func _finish_reload() -> void:
 	var loaded := mini(needed, reserve)
 	GameState.magazine_ammo = int(GameState.magazine_ammo) + loaded
 	_set_reserve_ammo(reserve - loaded)
-	_show_status("재장전 완료 · +%d" % loaded)
+	# 재장전 완료 토스트는 폐지(유저) — 탄창 수치·완료음이 이미 말한다.
 	_update_ammo_label()
 
 
@@ -2592,6 +2607,15 @@ func _update_player_world_health_bar() -> void:
 	var head_position := camera.unproject_position(player.global_position + Vector3(0, 2.15, 0))
 	player_world_health_bar.position = head_position - Vector2(24.0, 3.0)
 	player_world_health_bar.visible = not camera.is_position_behind(player.global_position)
+	if roll_cooldown_indicator != null:
+		# 필드(main.gd)와 같은 문법: 머리 오른쪽 스태미나 링, 가득 차면 숨김.
+		var stamina_ratio := clampf(roll_stamina / ROLL_STAMINA_MAX, 0.0, 1.0)
+		roll_cooldown_indicator.position = head_position + Vector2(28.0, -8.5)
+		roll_cooldown_indicator.call(
+			"set_cooldown_progress",
+			stamina_ratio,
+			roll_active or stamina_ratio < 0.999
+		)
 
 
 func _use_quick_medkit() -> void:

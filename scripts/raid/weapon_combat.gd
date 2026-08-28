@@ -278,16 +278,8 @@ func _finish_reload() -> void:
 	host.reserve_ammo -= loaded
 	GameState.magazine_ammo = host.magazine_ammo
 	GameState.set_ammo_count(GameState.equipped_ammo_id, host.reserve_ammo)
-	host.hud.ammo_notice.text = "%s 재장전 완료  +%d\n탄창 %d / %d   예비 %d   총 %d" % [
-		str(host.weapon_stats.get("display_name", "무기")),
-		loaded,
-		host.magazine_ammo,
-		magazine_size,
-		host.reserve_ammo,
-		host.magazine_ammo + host.reserve_ammo,
-	]
-	host.hud.ammo_notice.visible = true
-	host.ammo_notice_time = 1.4
+	# 재장전 완료 토스트는 폐지(유저: 전부 안 나오게) — 탄창 수치는 무기 카드가
+	# 이미 실시간으로 보여 주고, 소리(reload_end)가 완료를 말한다.
 	host._update_equipment_ui()
 
 

@@ -220,6 +220,8 @@ func _rebuild_ui() -> void:
 	_add_training_card(tree, "endurance")
 	_add_training_card(tree, "agility")
 	_add_training_card(tree, "fieldcraft")
+	# 가방 확장 — 인벤토리 고철 버튼에서 이사 왔다(가방 성장은 훈련으로만).
+	_add_training_card(tree, "bag_capacity")
 	# 탄약 운용 훈련 4종 — 정의는 GameState.TRAINING_NODE_DEFS가 쥔다.
 	_add_training_card(tree, "magazine_drill")
 	_add_training_card(tree, "quick_hands")

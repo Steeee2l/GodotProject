@@ -456,8 +456,6 @@ func _physics_process(delta: float) -> void:
 		)
 	if dash_button:
 		dash_button.disabled = roll_active or roll_stamina < ROLL_STAMINA_COST
-	if shelter_medkit_button:
-		shelter_medkit_button.visible = not _ui_blocks_player()
 	var input_vector := Vector2.ZERO
 	if not _ui_blocks_player():
 		input_vector = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
@@ -574,6 +572,61 @@ func _add_segmented_wall(prefix: String, position: Vector3, size: Vector3, along
 		_add_visual_box("%s%02d" % [prefix, index + 1], segment_position, segment_size, material, self)
 
 
+const SCRATCHER_MACHINE_TEXTURE_PATH := "res://assets/interiors/scratcher_bank_isometric_v6.png"
+const CATNIP_MACHINE_TEXTURE_PATH := "res://assets/interiors/catnip_scraper_isometric_v5.png"
+
+
+func _build_production_machine_sprites() -> void:
+	# 생산기 시각물 — 관리(배치·확장)는 여전히 운영 독 모달이 전담하고, 이 스프라이트는
+	# 상호작용 없는 배경 기물이다(유저: "주민이 그냥 서서 고철을 수집하네").
+	# 해금 전에는 안 보인다 — 해금 마일스톤 refresh가 이 함수를 다시 부른다.
+	_place_machine_sprite(
+		"ScratcherMachine",
+		SCRATCHER_MACHINE_TEXTURE_PATH,
+		_scratcher_bank_position(),
+		4.4,
+		GameState.is_shelter_facility_unlocked("scratcher_bank")
+	)
+	_place_machine_sprite(
+		"CatnipMachine",
+		CATNIP_MACHINE_TEXTURE_PATH,
+		_catnip_scraper_position(),
+		3.8,
+		GameState.is_shelter_facility_unlocked("catnip_scraper")
+	)
+
+
+func _place_machine_sprite(
+	sprite_name: String,
+	texture_path: String,
+	station: Vector3,
+	world_width: float,
+	unlocked: bool
+) -> void:
+	var existing := get_node_or_null(sprite_name) as Sprite3D
+	if existing != null:
+		existing.visible = unlocked
+		return
+	if not unlocked or not ResourceLoader.exists(texture_path):
+		return
+	var machine := Sprite3D.new()
+	machine.name = sprite_name
+	# 작업조는 기준점 남쪽(카메라 앞쪽)에 줄지어 앉는다 — 기계는 그 뒤(북쪽)에
+	# 세워 고양이들이 기계 "앞에서" 일하는 그림을 만든다.
+	machine.position = Vector3(station.x, 0.02, station.z - 1.9)
+	machine.texture = load(texture_path) as Texture2D
+	# 월드 폭 고정(텍스처 해상도 무관) — 웹 다이어트로 텍스처가 줄어도 크기 유지.
+	machine.pixel_size = world_width / float(maxi(1, machine.texture.get_width()))
+	# 실루엣 바닥이 원점에 오도록 화면 공간에서 올린다(접지).
+	machine.offset = Vector2(0.0, machine.texture.get_height() * 0.5)
+	machine.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	machine.shaded = false
+	machine.transparent = true
+	machine.no_depth_test = true
+	machine.render_priority = 8
+	add_child(machine)
+
+
 func _build_escape_pipe() -> void:
 	if not ResourceLoader.exists(ESCAPE_PIPE_TEXTURE_PATH):
 		return
@@ -621,6 +674,8 @@ func _refresh_unlocked_facilities(module_root: Node3D = null, animate: bool = tr
 		module_root = get_node_or_null("StageOneModules") as Node3D
 	if module_root == null:
 		return []
+	# 생산기 배경 기물도 해금 상태를 따라간다(세션 중 해금 포함).
+	_build_production_machine_sprites()
 	var created: Array[String] = []
 	# 기계는 방에 놓지 않는다. 시설은 운영 독(UI)에서 열리고,
 	# 여기서는 그 UI가 부릴 로직 노드만 기존 이름을 유지한 채 심는다.
@@ -2138,38 +2193,9 @@ func _build_interface() -> void:
 		dash_button.pressed.connect(_try_start_roll)
 	dash_button.visible = DisplayServer.is_touchscreen_available()
 	canvas.add_child(dash_button)
-	shelter_medkit_button = Button.new()
-	shelter_medkit_button.name = "ShelterMedkitButton"
-	shelter_medkit_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	var medkit_left := 174.0 if DisplayServer.is_touchscreen_available() else 24.0
-	shelter_medkit_button.offset_left = medkit_left
-	shelter_medkit_button.offset_top = -104.0
-	shelter_medkit_button.offset_right = medkit_left + 104.0
-	shelter_medkit_button.offset_bottom = -24.0
-	shelter_medkit_button.icon = UI_ICONS.get_icon("medkit", 36, Color("#f0eee4"))
-	shelter_medkit_button.expand_icon = true
-	shelter_medkit_button.add_theme_constant_override("icon_max_width", 36)
-	shelter_medkit_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	shelter_medkit_button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-	shelter_medkit_button.focus_mode = Control.FOCUS_NONE
-	shelter_medkit_button.add_theme_font_override("font", FONT)
-	shelter_medkit_button.add_theme_font_size_override("font_size", 13)
-	shelter_medkit_button.add_theme_stylebox_override(
-		"normal",
-		_rounded_panel_style(Color(0.018, 0.025, 0.025, 0.94), Color("#718a7e"), 7)
-	)
-	shelter_medkit_button.add_theme_stylebox_override(
-		"hover",
-		_rounded_panel_style(Color(0.055, 0.08, 0.07, 0.97), Color("#b9d1c4"), 7)
-	)
-	shelter_medkit_button.add_theme_stylebox_override(
-		"pressed",
-		_rounded_panel_style(Color(0.11, 0.17, 0.13, 0.98), Color("#dff0e5"), 7)
-	)
-	if not DisplayServer.is_touchscreen_available():
-		shelter_medkit_button.pressed.connect(_use_shelter_medkit)
-	canvas.add_child(shelter_medkit_button)
-	_update_shelter_medkit_button()
+	# 구급약 버튼은 쉘터에서 만들지 않는다(유저: 안 보이게). 복귀 = 완전 회복이라
+	# 쓸 일이 없고, "만피면 숨김" 로직도 매 프레임 visible 덮어쓰기에 밀려 늘 보였다.
+	# shelter_medkit_button 은 null 로 남고, 쓰는 곳 전부 null 가드가 있다.
 	inventory_ui = INVENTORY_UI_SCRIPT.new()
 	inventory_ui.name = "InventoryUI"
 	canvas.add_child(inventory_ui)

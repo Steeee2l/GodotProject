@@ -8,14 +8,18 @@ const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 
 var can_pause: Callable
 var quit_label := "저장 후 종료"
+var quit_caption := ""
 var layer: CanvasLayer
 
 
-static func install(host: Node, can_pause_check: Callable, quit_text: String) -> PauseMenu:
+static func install(
+	host: Node, can_pause_check: Callable, quit_text: String, quit_note := ""
+) -> PauseMenu:
 	var menu := PauseMenu.new()
 	menu.name = "PauseMenu"
 	menu.can_pause = can_pause_check
 	menu.quit_label = quit_text
+	menu.quit_caption = quit_note
 	menu.process_mode = Node.PROCESS_MODE_ALWAYS
 	host.add_child(menu)
 	return menu
@@ -50,13 +54,15 @@ func _open() -> void:
 	get_tree().paused = true
 	layer = CanvasLayer.new()
 	layer.name = "PauseMenuLayer"
-	layer.layer = 96
+	# 96에서는 필드 HUD(장전 바·조준선 등 높은 레이어)가 창 위로 뚫고 나왔다
+	# (유저 스크린샷). 일시정지는 화면의 최상단이어야 한다.
+	layer.layer = 120
 	layer.process_mode = Node.PROCESS_MODE_ALWAYS
 	add_child(layer)
 
 	var dim := ColorRect.new()
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dim.color = Color(0.004, 0.007, 0.009, 0.78)
+	dim.color = Color(0.004, 0.007, 0.009, 0.82)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	layer.add_child(dim)
 	dim.gui_input.connect(func(dim_event: InputEvent) -> void:
@@ -68,36 +74,50 @@ func _open() -> void:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	layer.add_child(center)
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(320, 0)
-	panel.add_theme_stylebox_override("panel", HudStyle.panel(HudStyle.INK, HudStyle.LINE))
+	panel.custom_minimum_size = Vector2(
+		minf(340.0, get_viewport().get_visible_rect().size.x - 40.0), 0
+	)
+	var panel_style := HudStyle.panel(HudStyle.INK, HudStyle.LINE_GOLD, HudStyle.RADIUS_CARD)
+	panel_style.content_margin_left = 22.0
+	panel_style.content_margin_right = 22.0
+	panel_style.content_margin_top = 18.0
+	panel_style.content_margin_bottom = 18.0
+	panel_style.shadow_color = Color(0, 0, 0, 0.6)
+	panel_style.shadow_size = 12
+	panel.add_theme_stylebox_override("panel", panel_style)
 	center.add_child(panel)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 12)
+	box.add_theme_constant_override("separation", 10)
 	panel.add_child(box)
 
-	var title := HudStyle.label("일시 정지", HudStyle.TYPE_HEADING, HudStyle.TEXT)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var title := HudStyle.label("일시 정지", HudStyle.TYPE_CAPTION, HudStyle.GOLD_TEXT)
 	box.add_child(title)
+	var divider := ColorRect.new()
+	divider.color = Color(HudStyle.LINE_GOLD, 0.5)
+	divider.custom_minimum_size = Vector2(0, 1)
+	box.add_child(divider)
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, 4)
+	box.add_child(spacer)
 
-	var resume := _button("계속하기")
+	var resume := _button("계속하기", true)
 	resume.pressed.connect(_close)
 	box.add_child(resume)
 
-	var quit := _button(quit_label)
+	var quit := _button(quit_label, false)
 	quit.pressed.connect(func() -> void:
 		GameState.save_persistent_state()
 		get_tree().quit()
 	)
 	box.add_child(quit)
+	if not quit_caption.is_empty():
+		var caption := HudStyle.label(quit_caption, HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
+		caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		box.add_child(caption)
 
 	# 등장 모션 — 띡 나오지 않는다.
-	panel.pivot_offset = Vector2(160, 60)
-	panel.scale = Vector2(0.94, 0.94)
-	panel.modulate.a = 0.0
-	var tween := panel.create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(panel, "modulate:a", 1.0, 0.16)
-	tween.tween_property(panel, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	HudStyle.enter_modal(panel)
 
 
 func _close() -> void:
@@ -108,11 +128,12 @@ func _close() -> void:
 	layer = null
 
 
-func _button(text: String) -> Button:
+func _button(text: String, primary: bool) -> Button:
 	var button := Button.new()
 	button.text = text
-	button.custom_minimum_size = Vector2(0, 50)
+	button.custom_minimum_size = Vector2(0, 48)
 	button.add_theme_font_override("font", FONT)
 	button.add_theme_font_size_override("font_size", 16)
-	HudStyle.style_button(button, HudStyle.TEXT_DIM)
+	button.focus_mode = Control.FOCUS_NONE
+	HudStyle.style_button(button, HudStyle.GOLD if primary else HudStyle.TEXT_DIM, primary)
 	return button

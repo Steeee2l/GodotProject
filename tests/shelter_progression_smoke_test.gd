@@ -97,9 +97,9 @@ func _run() -> void:
 	var training_tree := training_layer.find_child("TrainingTreeGrid", true, false) as GridContainer
 	if training_scroll == null or training_scroll.size.y < 240.0:
 		_fail("training card viewport has insufficient height")
-	# 탄약 운용 훈련 4종(탄창 숙련·신속 장전·탄약 휴대·출정 보급)이 더해져 9장이다.
-	if training_tree == null or training_tree.get_child_count() != 9:
-		_fail("training tree must show all nine upgrade cards")
+	# 탄약 운용 4종 + 가방 확장(인벤토리에서 이사, 2026-08-28)이 더해져 10장이다.
+	if training_tree == null or training_tree.get_child_count() != 10:
+		_fail("training tree must show all ten upgrade cards")
 	for node_id in [
 		"vitality", "recovery", "endurance", "agility", "fieldcraft",
 		"magazine_drill", "quick_hands", "ammo_carry", "sortie_supply",

@@ -19,10 +19,11 @@ func _run() -> void:
 	# 침대는 폐지 — 복귀 자체가 완전 회복이다.
 	assert(initial_modules.get_node_or_null("PlayerBed") == null)
 	assert(str(first_shelter.call("_build_offline_status_text", {})).is_empty())
-	# 창고는 시작부터 열려 있다(전리품 보관 학습). 나머지는 계약/복귀로 해금.
+	# 창고·제작대는 시작부터 열려 있다(창고=전리품 보관 학습, 제작대=제작 전용
+	# 장비 게임의 입구, 2026-08-28). 나머지는 계약/복귀로 해금.
 	assert(initial_modules.get_node_or_null("ShelterStorage") != null)
+	assert(initial_modules.get_node_or_null("WeaponWorkbench") != null)
 	for locked_node_name in [
-		"WeaponWorkbench",
 		"ScratcherBank",
 		"CatnipScraper",
 		"SurvivalTrainingFacility",
@@ -41,14 +42,11 @@ func _run() -> void:
 	# 스토리 모달이 닫혀야(다음 프레임 그룹 해제) 하단 액션 버튼이 다시 보인다.
 	await process_frame
 	await process_frame
-	var shelter_medkit_button := root.find_child("ShelterMedkitButton", true, false) as Button
-	assert(shelter_medkit_button != null)
-	assert(shelter_medkit_button.text.contains("SHIFT"))
+	# 쉘터 구급약 버튼은 폐지됐다(유저: 안 보이게 — 복귀가 곧 완전 회복).
+	assert(root.find_child("ShelterMedkitButton", true, false) == null)
+	# SHIFT 사용 경로는 남아 있다 — 버튼 없이도 동작해야 한다.
 	game_state.set("player_health", 50)
 	game_state.set("medkits", 1)
-	first_shelter.call("_update_shelter_medkit_button")
-	# 만피가 아닐 때만 보인다 — 복귀 완충 이후 쉘터 구급약은 예외 상황 전용.
-	assert(shelter_medkit_button.visible)
 	first_shelter.call("_use_shelter_medkit")
 	assert(int(game_state.get("player_health")) == 88)
 	assert(int(game_state.get("medkits")) == 0)
