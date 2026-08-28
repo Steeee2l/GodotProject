@@ -16,9 +16,10 @@ func _ready() -> void:
 	# 디버그 버튼(초기화·쉘터 해금)은 layer 4090에 떠 있어 가로 화면에서 메인 임무
 	# 카드를 가렸다. 출시 빌드에는 아예 만들지 않는다 — 숨기는 게 아니라 없앤다.
 	if not OS.is_debug_build():
-		# 버튼이 없으면 그 버튼을 노리던 터치 라우팅·단축키도 남길 이유가 없다.
+		# 떠 있는 버튼을 노리던 터치 라우팅만 끈다. 0번 초기화 단축키는 유저가
+		# 테스트용으로 릴리스에서도 원한다("PC에서 0 눌렀는데 초기화가 안 됨") —
+		# 확인 다이얼로그를 거치므로 실수로 지워질 일은 없다.
 		set_process_input(false)
-		set_process_unhandled_key_input(false)
 		return
 	_build_mobile_reset_ui()
 
@@ -46,6 +47,9 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		# 확인 다이얼로그를 거친다.
 		get_viewport().set_input_as_handled()
 		_show_reset_confirmation()
+		return
+	# 1번(쉘터 즉시 이동)은 치트라 디버그 빌드 전용 — 릴리스에서 0번만 살린다.
+	if not OS.is_debug_build():
 		return
 	if not is_shelter_shortcut(key_event):
 		return
@@ -245,8 +249,16 @@ func _tap(button: Button, screen_position: Vector2) -> bool:
 
 
 func _show_reset_confirmation() -> void:
+	# 릴리스 빌드는 떠 있는 디버그 버튼을 만들지 않으므로(_ready 조기 반환)
+	# 확인 다이얼로그가 없다 — 0번 키로 처음 부를 때 여기서 지연 생성한다.
 	if reset_confirmation == null:
-		return
+		if reset_layer == null:
+			reset_layer = CanvasLayer.new()
+			reset_layer.name = "MobileResetLayer"
+			reset_layer.layer = 4090
+			add_child(reset_layer)
+		reset_confirmation = _create_reset_confirmation()
+		reset_layer.add_child(reset_confirmation)
 	reset_confirmation.visible = true
 
 
