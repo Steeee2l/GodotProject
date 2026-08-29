@@ -44,6 +44,9 @@ static func get_action_label(interaction_type: String) -> String:
 			return "부품 분해"
 		"rescue":
 			return "주민 구조"
+		"companion_revive":
+			# 주홍 동행 — 쓰러진 주홍 [F] 홀드 소생(main._complete_field_interaction).
+			return "주홍 소생"
 		"corpse_recovery":
 			return "분실 장비 회수"
 		"mission_start":

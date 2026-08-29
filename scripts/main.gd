@@ -379,6 +379,10 @@ var bgm := BgmDirector.new()
 var stealth := StealthSystem.new()
 var weapon_combat := WeaponCombat.new()
 var cover_system := CoverSystem.new()
+# 주홍 동행 — 소환·AI·쌍방 소생은 전부 모듈이 맡는다(main은 배선·사망 분기 한 곳).
+# class_name 대신 preload: 새 파일의 전역 클래스 캐시가 없는 --script 콜드 스타트에서도
+# main.gd가 컴파일돼야 한다(헤드리스 프로브 규약).
+var companion_system := preload("res://scripts/raid/companion.gd").new()
 # 전투 숙련도 — 이번 판 헤드샷 수·1회성 레슨(판 안에서 예고 종류별 1회).
 var run_headshots := 0
 var mastery_lessons_shown: Dictionary = {}
@@ -575,6 +579,7 @@ func _ready() -> void:
 	stealth.attach(self)
 	weapon_combat.attach(self)
 	cover_system.attach(self)
+	companion_system.attach(self)
 	can_throw.attach(self)
 	deployables.attach(self)
 	active_tutorial.attach(self)
@@ -668,6 +673,8 @@ func _ready() -> void:
 	add_to_group("raid_host")
 	_refresh_stealth_visibility_meta()
 	raid_entry_grace_until_msec = Time.get_ticks_msec() + 40000
+	# 주홍 소환 — 해금+동행 토글이 켜져 있을 때만, 스폰 직후(오프닝·건물 내부 제외).
+	companion_system.spawn_if_active()
 
 
 func _snap_camera_to_player() -> void:
@@ -777,6 +784,16 @@ func _deactivate_companion() -> void:
 
 func _physics_process(delta: float) -> void:
 	if player_death_sequence_active:
+		_update_building_overlays()
+		stealth._update_visibility_fog()
+		stealth._update_enemy_visibility(delta)
+		return
+	# 플레이어 다운(주홍 소생 대기) — 기어가기만 허용, 전투·상호작용·탈출은 잠근다.
+	# 30s 만료·주홍 부재 시 companion_system이 기존 사망 시퀀스로 넘긴다.
+	if companion_system.is_player_downed():
+		companion_system.update(delta)
+		_update_player_downed_crawl(delta)
+		_update_camera_follow(delta)
 		_update_building_overlays()
 		stealth._update_visibility_fog()
 		stealth._update_enemy_visibility(delta)
@@ -941,6 +958,7 @@ func _physics_process(delta: float) -> void:
 	stealth._update_stealth_takedown_prompt()
 	can_throw.update(delta)
 	deployables.update(delta)
+	companion_system.update(delta)
 	_update_fire_button_context()
 	_update_combat_feedback_overlay()
 	if perception_system:
@@ -962,6 +980,38 @@ func _physics_process(delta: float) -> void:
 		sector_label,
 		nearest_exit_distance if nearest_exit_distance < INF else 0.0,
 	]
+
+
+func _update_player_downed_crawl(delta: float) -> void:
+	# 다운 중 기어가기 — 이동 불가 대신 소속도(32%)만 허용한다. 사격·구르기·근접·
+	# 상호작용·인벤토리는 전부 잠긴 상태(입력 훅에 개별 가드).
+	fire_button_held = false
+	mouse_fire_held = false
+	laser_aim_held = false
+	var input_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
+	if Input.is_key_pressed(KEY_A): input_vector.x -= 1.0
+	if Input.is_key_pressed(KEY_D): input_vector.x += 1.0
+	if Input.is_key_pressed(KEY_W): input_vector.y -= 1.0
+	if Input.is_key_pressed(KEY_S): input_vector.y += 1.0
+	input_vector = input_vector.limit_length(1.0)
+	if touch_vector.length_squared() > input_vector.length_squared():
+		input_vector = touch_vector
+	var world_direction := Vector3(input_vector.x + input_vector.y, 0, -input_vector.x + input_vector.y)
+	if world_direction.length_squared() > 0.01:
+		world_direction = world_direction.normalized()
+		player.velocity = world_direction * MOVE_SPEED * 0.32
+		_update_facing(input_vector)
+		_set_motion_state("walk")
+	else:
+		player.velocity = Vector3.ZERO
+		_set_motion_state("idle")
+	player.move_and_slide()
+	state_label.text = "다운 — 주홍을 기다려라 (%.0f초)" % maxf(
+		0.0, companion_system.player_down_remaining
+	)
+	var map_limit := ($World as ProceduralCityMap).get_map_limit()
+	player.position.x = clampf(player.position.x, -map_limit, map_limit)
+	player.position.z = clampf(player.position.z, -map_limit, map_limit)
 
 
 func _update_facing(screen_direction: Vector2) -> void:
@@ -3613,6 +3663,9 @@ func _refresh_top_status_label() -> void:
 
 
 func _use_quick_medkit() -> void:
+	# 다운 상태는 구급약으로 못 일어난다 — 소생은 주홍의 채널(또는 사망)뿐이다.
+	if companion_system.is_player_downed():
+		return
 	var maximum_health := GameState.get_max_health()
 	if GameState.medkits <= 0 or player_health >= maximum_health:
 		_show_action_notice("구급약이 없습니다.")
@@ -3646,6 +3699,8 @@ func _is_inventory_open() -> bool:
 
 
 func _toggle_inventory() -> void:
+	if companion_system.is_player_downed():
+		return
 	if hud.inventory_ui:
 		_update_equipment_ui()
 		hud.inventory_ui.call("toggle")
@@ -4238,8 +4293,13 @@ func take_damage(amount: int) -> void:
 		ammo_notice_time = 1.1
 	if player_health <= 0:
 		fire_button_held = false
-		_begin_player_death_sequence()
 		player.velocity = Vector3.ZERO
+		# 사망 진입 지점의 유일한 분기 — 주홍이 살아 있고 이번 판 소생을 안 받았으면
+		# 사망 시퀀스 대신 다운 상태(30s)로 들어간다. 실패·만료 시 companion_system이
+		# 기존 사망 흐름(_begin_player_death_sequence)을 그대로 부른다.
+		if companion_system.try_begin_player_down():
+			return
+		_begin_player_death_sequence()
 		state_label.text = "행동 불능"
 
 
@@ -6812,6 +6872,9 @@ func _complete_field_interaction(point: Node3D) -> void:
 			_add_fatigue(FATIGUE_RESCUE_GAIN)
 			_add_rescued_follower(point.global_position)
 			_show_field_notice("생존자 구조 · 호송 중 이동 속도가 감소합니다.")
+		"companion_revive":
+			# 주홍 소생 — [F] 홀드 3s 완료. HP 40%·판당 1회는 companion_system이 안다.
+			companion_system.finish_juhong_revive()
 		"corpse_recovery":
 			_recover_previous_corpse()
 	field_loot_containers.erase(point)

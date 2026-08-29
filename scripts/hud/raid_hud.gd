@@ -90,6 +90,14 @@ var cover_chip: PanelContainer
 var cover_chip_label: Label
 var cover_chip_icon: TextureRect
 var cover_chip_state := ""
+# 주홍 동행 칩(우상단) — 초상 + 체력 미니바 + 상태(교전/대기/다운 카운트다운).
+var companion_chip: PanelContainer
+var companion_chip_status: Label
+var companion_chip_health_fill: Panel
+var companion_chip_portrait: TextureRect
+# 플레이어 다운 중 주홍 소생 채널 게이지(머리 위 링 + 캡션).
+var companion_revive_gauge: RingGauge
+var companion_revive_caption: Label
 var ammo_pickup_button: Button
 var ammo_prompt_panel: PanelContainer
 var dash_button: Button
@@ -1564,6 +1572,111 @@ func update_cover_chip(state: String, anchor: Vector2, visible_now: bool = true)
 		cover_chip.position = anchor - Vector2(cover_chip.size.x * 0.5, 0.0)
 
 
+
+
+const COMPANION_ACCENT := Color("#41e0c9")
+
+
+func build_companion_chip(portrait: Texture2D) -> void:
+	# 주홍 동행 칩 — 우상단(TopRight VBox 맨 아래). 초상 28px + 이름 + 체력 미니바 + 상태.
+	if companion_chip != null and is_instance_valid(companion_chip):
+		return
+	var top_right := host.get_node_or_null("HUD/TopRight") as Control
+	if top_right == null:
+		return
+	companion_chip = PanelContainer.new()
+	companion_chip.name = "CompanionChip"
+	companion_chip.size_flags_horizontal = Control.SIZE_SHRINK_END
+	companion_chip.add_theme_stylebox_override("panel", HudStyle.chip(Color(COMPANION_ACCENT, 0.55)))
+	companion_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top_right.add_child(companion_chip)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 7)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	companion_chip.add_child(row)
+	companion_chip_portrait = TextureRect.new()
+	companion_chip_portrait.texture = portrait
+	companion_chip_portrait.custom_minimum_size = Vector2(28, 28)
+	companion_chip_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	companion_chip_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	companion_chip_portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(companion_chip_portrait)
+	var text_box := VBoxContainer.new()
+	text_box.add_theme_constant_override("separation", 2)
+	text_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(text_box)
+	var name_row := HBoxContainer.new()
+	name_row.add_theme_constant_override("separation", 6)
+	name_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	text_box.add_child(name_row)
+	var name_label := HudStyle.label("주홍", HudStyle.TYPE_CAPTION, COMPANION_ACCENT)
+	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name_row.add_child(name_label)
+	companion_chip_status = HudStyle.label("대기", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_DIM)
+	companion_chip_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name_row.add_child(companion_chip_status)
+	# 체력 미니바 — 플레이어 머리 위 바와 같은 문법(배경 + 채움), 색만 청록.
+	var bar_holder := Control.new()
+	bar_holder.custom_minimum_size = Vector2(64, 5)
+	bar_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	text_box.add_child(bar_holder)
+	var bar_background := Panel.new()
+	bar_background.size = Vector2(64, 5)
+	bar_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var background_style := StyleBoxFlat.new()
+	background_style.bg_color = Color(0.02, 0.03, 0.03, 0.9)
+	background_style.set_corner_radius_all(2)
+	bar_background.add_theme_stylebox_override("panel", background_style)
+	bar_holder.add_child(bar_background)
+	companion_chip_health_fill = Panel.new()
+	companion_chip_health_fill.position = Vector2(1, 1)
+	companion_chip_health_fill.size = Vector2(62, 3)
+	companion_chip_health_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fill_style := StyleBoxFlat.new()
+	fill_style.bg_color = COMPANION_ACCENT
+	fill_style.set_corner_radius_all(2)
+	companion_chip_health_fill.add_theme_stylebox_override("panel", fill_style)
+	bar_holder.add_child(companion_chip_health_fill)
+	HudStyle.enter(companion_chip)
+
+
+func update_companion_chip(shown: bool, health_ratio: float, status: String, accent: Color) -> void:
+	if companion_chip == null or not is_instance_valid(companion_chip):
+		return
+	companion_chip.visible = shown
+	if not shown:
+		return
+	companion_chip_status.text = status
+	companion_chip_status.add_theme_color_override("font_color", accent)
+	companion_chip_health_fill.size.x = maxf(1.0, 62.0 * clampf(health_ratio, 0.0, 1.0))
+	companion_chip_portrait.modulate = (
+		Color(0.55, 0.55, 0.55, 0.9) if health_ratio <= 0.0 else Color.WHITE
+	)
+
+
+func update_companion_revive_gauge(shown: bool, anchor: Vector2, ratio: float, caption: String) -> void:
+	# 플레이어 다운 중 주홍의 4s 채널 — 다운된 나비 머리 위 링 게이지 + 캡션.
+	if companion_revive_gauge == null or not is_instance_valid(companion_revive_gauge):
+		if aim_canvas == null:
+			return
+		companion_revive_gauge = RingGauge.new()
+		companion_revive_gauge.name = "CompanionReviveGauge"
+		companion_revive_gauge.size = Vector2(46, 46)
+		companion_revive_gauge.ring_color = COMPANION_ACCENT
+		companion_revive_gauge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		aim_canvas.add_child(companion_revive_gauge)
+		companion_revive_caption = HudStyle.label("", HudStyle.TYPE_CAPTION, COMPANION_ACCENT)
+		companion_revive_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		aim_canvas.add_child(companion_revive_caption)
+	companion_revive_gauge.visible = shown
+	companion_revive_caption.visible = shown
+	if not shown:
+		return
+	companion_revive_gauge.max_value = 1.0
+	companion_revive_gauge.value = clampf(ratio, 0.0, 1.0)
+	companion_revive_gauge.position = anchor - Vector2(23, 23)
+	companion_revive_caption.text = caption
+	companion_revive_caption.position = anchor + Vector2(-companion_revive_caption.size.x * 0.5, 28)
 
 
 func build_controls_lesson() -> void:

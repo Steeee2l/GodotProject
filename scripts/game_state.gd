@@ -416,6 +416,16 @@ var shelter_facility_unlocks: Dictionary = {
 }
 var contract_agent_intro_seen: bool = false
 var saja_intro_seen: bool = false
+# ── 주홍 동행(2026-08-30) — 생환 3회째에 쉘터로 찾아와 합류한다. ──
+# unlocked = 동행 시스템 해금(주홍 등장 이벤트 확인 시), enabled = 브리핑 토글
+# (잠입 판은 끄고 갈 수 있다 — 기본 켬).
+var juhong_intro_seen: bool = false
+var companion_unlocked: bool = false
+var companion_enabled: bool = true
+
+
+func is_companion_raid_active() -> bool:
+	return companion_unlocked and companion_enabled
 # 행상인 최초 입장 자기소개(게임 전체 1회) 노출 여부.
 var merchant_intro_seen: bool = false
 var saja_second_run_intro_seen: bool = false
@@ -1797,6 +1807,23 @@ func get_pending_shelter_story_event() -> Dictionary:
 				"우선 쉬세요. 종로는 내일도 그 자리에 있을 테니까.",
 			],
 		}
+	# 주홍 합류 — 생환 3회째. 사자를 의심하는 인물이 내 출정에 붙는 순간이라
+	# 사자 이벤트들보다 먼저 잡는다(같은 복귀에 겹치면 주홍이 우선).
+	if survived_return_count >= 3 and not juhong_intro_seen:
+		return {
+			"id": "juhong_intro",
+			"speaker": "주홍",
+			"title": "하수구에서 온 손님",
+			# 거칠고 정직, 반말. 방송국(종로 2단계)에서 이미 만났든 아니든 성립하는
+			# 문장만 쓴다. 사자 의심(용산 반전)을 한 겹 심고, 동행 규칙을 끝에 박는다.
+			"lines": [
+				"주홍이야. 사자가 내 얘기 하던가? '걸러 들으라'고.",
+				"걸러 들어. 대신 이것도 걸러 봐 — 그 방송, 나도 들었어. 강 건너까지 쫓아왔고.",
+				"사자는 송신기를 쓴 적 없다고 말하지. 나는 그 대답이 왜 그렇게 빠른지가 궁금해.",
+				"혼자 다니는 고양이는 오래 못 가. 다음 출정부터 나도 간다.",
+				"네 뒤는 내가 본다. 내 몫은 내가 챙긴다. 그게 조건의 전부야.",
+			],
+		}
 	if survived_return_count >= 1 and not saja_second_run_intro_seen:
 		return {
 			"id": "saja_second_run",
@@ -1909,7 +1936,10 @@ func get_pending_shelter_story_event() -> Dictionary:
 
 
 func mark_shelter_story_event_seen(event_id: String) -> void:
-	if event_id == "saja_intro":
+	if event_id == "juhong_intro":
+		juhong_intro_seen = true
+		companion_unlocked = true
+	elif event_id == "saja_intro":
 		saja_intro_seen = true
 	elif event_id == "saja_second_run":
 		saja_second_run_intro_seen = true
@@ -5591,6 +5621,9 @@ func save_persistent_state() -> bool:
 		"shelter_facility_unlocks": shelter_facility_unlocks,
 		"contract_agent_intro_seen": contract_agent_intro_seen,
 		"saja_intro_seen": saja_intro_seen,
+		"juhong_intro_seen": juhong_intro_seen,
+		"companion_unlocked": companion_unlocked,
+		"companion_enabled": companion_enabled,
 		"merchant_intro_seen": merchant_intro_seen,
 		"saja_second_run_intro_seen": saja_second_run_intro_seen,
 		"saja_seen_resident_count": saja_seen_resident_count,
@@ -5856,6 +5889,9 @@ func load_persistent_state() -> bool:
 		}
 	contract_agent_intro_seen = bool(data.get("contract_agent_intro_seen", shelter_return_serial >= CONTRACT_AGENT_UNLOCK_RETURN))
 	saja_intro_seen = bool(data.get("saja_intro_seen", false))
+	juhong_intro_seen = bool(data.get("juhong_intro_seen", false))
+	companion_unlocked = bool(data.get("companion_unlocked", false))
+	companion_enabled = bool(data.get("companion_enabled", true))
 	merchant_intro_seen = bool(data.get("merchant_intro_seen", false))
 	saja_second_run_intro_seen = bool(data.get("saja_second_run_intro_seen", false))
 	saja_seen_resident_count = maxi(0, int(data.get("saja_seen_resident_count", 0)))

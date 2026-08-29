@@ -978,11 +978,17 @@ func _open_pending_shelter_story() -> void:
 	var event: Dictionary = GameState.get_pending_shelter_story_event()
 	if event.is_empty():
 		return
+	# 스토리 이벤트 초상은 사자 고정이었다 — speaker가 "주홍"인 이벤트(juhong_intro)는
+	# 주홍 초상으로 분기한다(같은 대화 레이어를 그대로 쓰되 얼굴만 바꾼다).
+	var speaker := str(event.get("speaker", "사자"))
+	var portrait := _character_portrait(contract_agent)
+	if speaker == "주홍":
+		portrait = load("res://assets/characters/juhong/down_idle-frame-0.png") as Texture2D
 	_open_contract_story(
 		str(event.get("title", "사자의 이야기")),
 		_string_array(event.get("lines", [])),
-		str(event.get("speaker", "사자")),
-		_character_portrait(contract_agent),
+		speaker,
+		portrait,
 		"saja",
 		str(event.get("id", ""))
 	)
@@ -1509,6 +1515,10 @@ func _advance_contract_story() -> void:
 	_archive_contract_story()
 	if contract_story_completion_owner == "saja":
 		GameState.mark_shelter_story_event_seen(contract_story_completion_id)
+		# 주홍 합류 이벤트 확인 → companion_unlocked가 켜진다(game_state).
+		# 어디서 켜는지 안내가 없으면 죽은 기능이다 — 상태 패널 토스트로 짚어 준다.
+		if contract_story_completion_id == "juhong_intro" and GameState.companion_unlocked:
+			_show_status("주홍 합류 — 출정 브리핑에서 '주홍과 동행'을 켤 수 있다")
 	elif contract_story_completion_owner == "juhong":
 		GameState.mark_juhong_event_seen(contract_story_completion_id)
 		_play_juhong_exit()
@@ -5000,6 +5010,10 @@ func _refresh_raid_zone_loadout_chips(manifest: Dictionary) -> void:
 		"%d개" % medkit_count,
 		BRIEFING_CHIP_OK_COLOR if medkit_count > 0 else BRIEFING_CHIP_WARN_COLOR
 	))
+	# 주홍 동행 토글 — 해금(companion_unlocked)돼야 보인다. 같은 칩 문법에
+	# 초상만 얹고, 누르면 GameState.companion_enabled를 뒤집어 저장한다.
+	if GameState.companion_unlocked:
+		raid_zone_loadout_chips.add_child(_build_companion_toggle_chip())
 	# 가방이 넘치면 출정 버튼이 거부한다 — 누르기 전에 여기서 먼저 말한다.
 	raid_zone_loadout_warning.visible = bag_overflow
 	if bag_overflow:
@@ -5007,6 +5021,63 @@ func _refresh_raid_zone_loadout_chips(manifest: Dictionary) -> void:
 			used_slots - bag_capacity
 		)
 	HudStyle.pop_in(raid_zone_loadout_chips, 0.18)
+
+
+const JUHONG_CHIP_ACCENT := Color("#41e0c9")
+
+
+func _build_companion_toggle_chip() -> PanelContainer:
+	# "주홍 · 동행/대기" — 로드아웃 칩 줄의 유일한 누르는 칩. 초상 18px + 상태 텍스트.
+	var enabled := GameState.companion_enabled
+	var accent := JUHONG_CHIP_ACCENT if enabled else BRIEFING_CHIP_OK_COLOR
+	var chip := PanelContainer.new()
+	chip.name = "CompanionToggleChip"
+	var style := HudStyle.chip(Color(accent.r, accent.g, accent.b, 0.5))
+	if enabled:
+		style.set_border_width_all(1)
+		style.border_color = Color(JUHONG_CHIP_ACCENT, 0.85)
+	chip.add_theme_stylebox_override("panel", style)
+	chip.mouse_filter = Control.MOUSE_FILTER_STOP
+	chip.tooltip_text = (
+		"주홍과 동행 중 — 누르면 대기로 바꾼다"
+		if enabled
+		else "주홍 대기 중 — 누르면 다음 출정부터 동행한다"
+	)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chip.add_child(row)
+	var portrait := TextureRect.new()
+	portrait.custom_minimum_size = Vector2(BRIEFING_CHIP_ICON_SIZE + 2, BRIEFING_CHIP_ICON_SIZE + 2)
+	portrait.texture = load("res://assets/characters/juhong/down_idle-frame-0.png") as Texture2D
+	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	portrait.modulate = Color.WHITE if enabled else Color(0.62, 0.62, 0.62, 0.9)
+	row.add_child(portrait)
+	var label := Label.new()
+	label.text = "주홍 · 동행" if enabled else "주홍 · 대기"
+	label.add_theme_font_override("font", FONT)
+	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_color_override("font_color", accent)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(label)
+	chip.gui_input.connect(func(event: InputEvent) -> void:
+		var mouse := event as InputEventMouseButton
+		if mouse == null or not mouse.pressed or mouse.button_index != MOUSE_BUTTON_LEFT:
+			return
+		GameState.companion_enabled = not GameState.companion_enabled
+		GameState.save_persistent_state()
+		_show_status(
+			"주홍 동행 — 다음 출정에 같이 나간다"
+			if GameState.companion_enabled
+			else "주홍 대기 — 이번엔 혼자 나간다"
+		)
+		# 칩 줄을 다시 그려 상태를 반영한다.
+		var manifest := GameState.build_raid_loadout_manifest(raid_zone_selected_id)
+		_refresh_raid_zone_loadout_chips(manifest)
+	)
+	return chip
 
 
 func _build_raid_zone_bag_chip(used_slots: int, capacity: int, overflow: bool) -> PanelContainer:

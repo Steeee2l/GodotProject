@@ -277,6 +277,18 @@ func _apply_hit(body: Object, trajectory_origin: Vector3 = Vector3.INF) -> bool:
 		return false
 	if _shares_source_faction(body):
 		return true
+	# 주홍 동행 — 아군 오사 방지(양방향 통과). 아군 탄은 동행을 통과하고,
+	# 동행(그룹 "companion")이 쏜 탄은 플레이어를 통과한다. 적탄(hostile)은 그대로.
+	if not hostile and body is Node:
+		var hit_node := body as Node
+		if hit_node.is_in_group("companion"):
+			return true
+		if (
+			hit_node.is_in_group("player")
+			and is_instance_valid(source_body)
+			and source_body.is_in_group("companion")
+		):
+			return true
 	var body_id := body.get_instance_id()
 	if processed_body_ids.has(body_id):
 		return true
@@ -345,7 +357,9 @@ func _apply_hit(body: Object, trajectory_origin: Vector3 = Vector3.INF) -> bool:
 	if not damaged and body is Node and (body as Node).is_in_group("projectile_blocker"):
 		_notify_cover_block()
 	_spawn_impact_flash()
-	if damaged and not hostile:
+	# 동행(주홍) 탄의 명중은 플레이어 히트마커·셰이크를 울리지 않는다 — 내 사격만.
+	var companion_shot := is_instance_valid(source_body) and source_body.is_in_group("companion")
+	if damaged and not hostile and not companion_shot:
 		_report_player_hit(body, adjusted_damage)
 	if damaged and not hostile and penetrations_remaining > 0:
 		penetrations_remaining -= 1
