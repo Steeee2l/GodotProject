@@ -17,6 +17,7 @@ const RAID_STACK_LIMITS := {
 	"component": 3,
 	"mod": 1,
 	"progression": 1,
+	"heavy": 3,
 }
 
 var map_seed: int = 47291
@@ -91,6 +92,43 @@ var mod_component_inventory: Dictionary = {
 	"precision_gear": 0,
 	"military_alloy": 0,
 }
+# ── 중장비(소모성 화력, 2026-08-29) ──────────────────────────────
+# 부품의 소비처: 만들고 → 들고 나가고 → 쓰면 부서진다(재제작 = 영구 소모 루프).
+# 사다리: 지뢰(하) → 감시포탑(중, 정밀 기어) → 로켓 발사기(상, 군용 합금) → 드론(2차).
+# 영구 귀속 장비가 아니라 탄약과 같은 소모품 계급 — 가방 칸을 먹고 사망 시 잃는다
+# (시체 회수 대상). 강화·돌파에는 얽히지 않는다.
+const HEAVY_GEAR_DEFS := {
+	"field_mine": {
+		"name": "대인 지뢰", "stack_per_slot": 3,
+		"description": "밟은 적 주변에 폭발. 설치 1초 후 무장.",
+	},
+	"salvage_turret": {
+		"name": "재생 감시포탑", "stack_per_slot": 1,
+		"description": "배치하면 45초간 범위 내 적을 자동 사격. 파괴되면 소멸.",
+	},
+	"rocket_launcher": {
+		"name": "로켓 발사기", "stack_per_slot": 1, "charges": 3,
+		"description": "로켓 3발. 다 쏘면 버려진다. 보스 잡는 물건.",
+	},
+}
+var heavy_gear_inventory: Dictionary = {}
+
+
+func get_heavy_gear_count(gear_id: String) -> int:
+	return maxi(0, int(heavy_gear_inventory.get(gear_id, 0)))
+
+
+func add_heavy_gear(gear_id: String, amount: int) -> void:
+	if not HEAVY_GEAR_DEFS.has(gear_id) or amount <= 0:
+		return
+	heavy_gear_inventory[gear_id] = get_heavy_gear_count(gear_id) + amount
+
+
+func consume_heavy_gear(gear_id: String, amount: int = 1) -> bool:
+	if get_heavy_gear_count(gear_id) < amount:
+		return false
+	heavy_gear_inventory[gear_id] = get_heavy_gear_count(gear_id) - amount
+	return true
 # 진행 아이템(0칸 쉘터 자산). 설계도 조각은 "blueprint_shard_<레시피>" 키로 동적으로
 # 쌓인다(레시피당 3조각 = 제작 해금, 소모되지 않음). 레거시 통짜 청사진
 # (rifle/shotgun/akm/pump_blueprint)은 로드 시 조각 3개로 환산된다.
@@ -1360,6 +1398,7 @@ func build_carried_raid_loot() -> Dictionary:
 		"canned_food": get_backpack_storage_count("food", "canned_food"),
 		"churu": maxi(0, churu),
 		"mod_component_inventory": mod_component_inventory.duplicate(true),
+		"heavy_gear_inventory": heavy_gear_inventory.duplicate(true),
 		"progression_item_inventory": {},
 		"weapon_mod_inventory": {},
 		"weapon_inventory": {},
@@ -1398,6 +1437,8 @@ func clear_carried_raid_inventory_after_death() -> void:
 	# (shelter_canned_food)는 필드에 나온 적이 없으므로 손대지 않는다.
 	canned_food = 0
 	churu = 0
+	# 중장비도 가방의 소모품이다 — 시체에 실렸으니 여기서는 비운다.
+	heavy_gear_inventory.clear()
 	valuable_inventory.clear()
 	valuable_value_ledger.clear()
 	clear_churu_buffs()
@@ -2302,6 +2343,10 @@ func get_raid_item_slot_cost(item_type: String, _item_id: String, amount: int) -
 	# 실제로 차야 '무엇을 두고 갈까'라는 이 게임의 심장이 재료에도 뛴다.
 	if item_type == "component":
 		return amount
+	# 중장비: 지뢰는 3개 1칸, 포탑·로켓은 개당 1칸(부피 큰 물건).
+	if item_type == "heavy":
+		var stack := int((HEAVY_GEAR_DEFS.get(_item_id, {}) as Dictionary).get("stack_per_slot", 1))
+		return ceili(float(amount) / float(maxi(1, stack)))
 	# 탄약은 칸당 발수 상한(탄약 휴대 훈련으로 늘어난다)을 넘는 만큼 칸을 더 먹는다.
 	if item_type == "ammo":
 		return ceili(float(amount) / float(get_ammo_rounds_per_slot()))
@@ -2316,6 +2361,8 @@ func _get_raid_bag_count(item_type: String, item_id: String) -> int:
 			return maxi(0, churu)
 		"valuable":
 			return maxi(0, int(valuable_inventory.get(item_id, 0)))
+		"heavy":
+			return get_heavy_gear_count(item_id)
 		"special_cargo":
 			return 0 if raid_special_cargo.is_empty() else 1
 	return 0
@@ -2342,6 +2389,8 @@ func get_raid_bag_used_slots() -> int:
 			str(component_id),
 			get_mod_component_count(str(component_id))
 		)
+	for heavy_id in heavy_gear_inventory.keys():
+		used += get_raid_item_slot_cost("heavy", str(heavy_id), get_heavy_gear_count(str(heavy_id)))
 	for progression_id in progression_item_inventory.keys():
 		used += get_raid_item_slot_cost(
 			"progression",
@@ -2492,6 +2541,8 @@ func remove_raid_bag_item(item_type: String, item_id: String, amount: int) -> in
 			canned_food = maxi(0, canned_food - removable)
 		"churu":
 			churu = maxi(0, churu - removable)
+		"heavy":
+			consume_heavy_gear(item_id, removable)
 		"valuable":
 			var count_before := maxi(0, int(valuable_inventory.get(item_id, 0)))
 			valuable_inventory[item_id] = maxi(0, count_before - removable)
@@ -5450,6 +5501,7 @@ func save_persistent_state() -> bool:
 		"assigned_catnip_worker_ids": assigned_catnip_worker_ids,
 		"resident_traits": resident_traits,
 		"mod_component_inventory": mod_component_inventory,
+		"heavy_gear_inventory": heavy_gear_inventory,
 		"progression_item_inventory": progression_item_inventory,
 		"weapon_mod_inventory": weapon_mod_inventory,
 		"weapon_inventory": weapon_inventory,
@@ -5636,6 +5688,7 @@ func load_persistent_state() -> bool:
 	assigned_catnip_worker_ids = _to_string_array(data.get("assigned_catnip_worker_ids", []))
 	resident_traits = (data.get("resident_traits", {}) as Dictionary).duplicate(true)
 	mod_component_inventory = (data.get("mod_component_inventory", mod_component_inventory) as Dictionary).duplicate(true)
+	heavy_gear_inventory = (data.get("heavy_gear_inventory", {}) as Dictionary).duplicate(true)
 	for component_id in BASIC_COMPONENT_IDS + RARE_COMPONENT_IDS:
 		if not mod_component_inventory.has(component_id):
 			mod_component_inventory[component_id] = 0

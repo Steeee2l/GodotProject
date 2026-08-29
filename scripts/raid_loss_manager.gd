@@ -8,6 +8,9 @@ const SCALAR_LOOT_KEYS := ["medkits", "canned_food", "churu"]
 const INVENTORY_LOOT_KEYS := [
 	"ammo_inventory",
 	"mod_component_inventory",
+	# 중장비(지뢰·포탑·로켓)는 탄약과 같은 소모품 계급 — 시체에 실리고 회수된다.
+	# 시체에 중장비만 남아도 "회수할 것 없음"이 나오면 안 된다(get_item_count 합산).
+	"heavy_gear_inventory",
 	"progression_item_inventory",
 	"weapon_mod_inventory",
 	"weapon_inventory",
@@ -29,6 +32,7 @@ static func build_death_corpse_loot() -> Dictionary:
 		"canned_food": GameState.get_backpack_storage_count("food", "canned_food"),
 		"churu": maxi(0, GameState.churu),
 		"mod_component_inventory": GameState.mod_component_inventory.duplicate(true),
+		"heavy_gear_inventory": GameState.heavy_gear_inventory.duplicate(true),
 		"progression_item_inventory": {},
 		"weapon_mod_inventory": {},
 		"weapon_inventory": {},
@@ -84,6 +88,7 @@ static func get_total_value(loot: Dictionary) -> int:
 		["weapon_mod_inventory", "mod"],
 		["weapon_inventory", "weapon"],
 		["equipment_inventory", "equipment"],
+		["heavy_gear_inventory", "heavy"],
 	]
 	for spec in inventory_specs:
 		var inventory := loot.get(spec[0], {}) as Dictionary
@@ -202,6 +207,9 @@ static func format_loss_summary(loot: Dictionary) -> String:
 			supply_entries.append("%s %d개" % [scalar[1], amount])
 	if component_count + mod_count > 0:
 		supply_entries.append("부품 %d개" % (component_count + mod_count))
+	var heavy_count := _dictionary_count(loot.get("heavy_gear_inventory", {}) as Dictionary)
+	if heavy_count > 0:
+		supply_entries.append("중장비 %d개" % heavy_count)
 	if progression_count > 0:
 		supply_entries.append("청사진·키카드 %d개" % progression_count)
 	var cargo := loot.get("raid_special_cargo", {}) as Dictionary

@@ -250,7 +250,7 @@ func _run() -> void:
 	await _sleep(0.5)
 	layer = root.find_child("WorkbenchUILayer", true, false) as CanvasLayer
 	var recipe_rows := layer.find_children("WorkbenchRecipeRow_*", "Button", true, false)
-	_check(recipe_rows.size() == 19, "제작 탭 19행(장비 16 + 보급품 3) (실제: %d)" % recipe_rows.size())
+	_check(recipe_rows.size() == 22, "제작 탭 22행(장비 16 + 중장비 3 + 보급품 3) (실제: %d)" % recipe_rows.size())
 	var ak_row := layer.find_child("WorkbenchRecipeRow_ak47", true, false) as Button
 	_check(ak_row != null and ak_row.text.contains("제작됨 · 영구 보유"), "보유 장비 '제작됨 · 영구 보유'")
 	var k2_recipe_row := layer.find_child("WorkbenchRecipeRow_k2", true, false) as Button
@@ -259,6 +259,10 @@ func _run() -> void:
 	_check(layer.find_child("WorkbenchResourceStrip", true, false) != null, "재료 띠 존재")
 	_check(layer.find_child("WorkbenchSupplySection", true, false) != null, "하단 '보급품' 섹션 라벨")
 	_check(layer.find_child("WorkbenchRecipeRow_workbench_upgrade", true, false) != null, "보급품 섹션에 작업대 확장 행")
+	# 중장비(2026-08-29) — 보급품 위 섹션 + 지뢰/포탑/로켓 3행.
+	_check(layer.find_child("WorkbenchHeavySection", true, false) != null, "'중장비' 섹션 라벨(보급품 위)")
+	_check(layer.find_child("WorkbenchRecipeRow_craft_field_mine", true, false) != null, "중장비 섹션에 대인 지뢰 행")
+	_check(layer.find_child("WorkbenchRecipeRow_craft_rocket_launcher", true, false) != null, "중장비 섹션에 로켓 발사기 행")
 	# 개조(mods) 레시피는 어떤 탭에도 안 나온다(폐지 · 별도 재설계 예정).
 	_check(layer.find_child("WorkbenchRecipeRow_scope_2x", true, false) == null, "개조품 행 없음(mods 폐지)")
 	_log_modal_rect("landscape-craft")

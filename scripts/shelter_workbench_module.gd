@@ -232,6 +232,33 @@ const RECIPES := {
 			"required_workbench": 4,
 		},
 	],
+	# ── 중장비(소모성 화력, 2026-08-29) — 부품의 소비처 ──
+	# 만들고 → 들고 나가고 → 쓰면 부서진다. 설계도 조각 불필요(소모품이라 처음부터
+	# 제작 가능). 이름·설명은 GameState.HEAVY_GEAR_DEFS가 단일 진실 —
+	# _recipes_for_category가 desc를 거기서 채워 넣는다.
+	"heavy": [
+		{
+			"id": "craft_field_mine",
+			"name": "대인 지뢰 x3",
+			"desc": "",
+			"cost": {"scrap": 600, "magazine_spring": 1, "rubber_gasket": 1},
+			"result": {"heavy_gear": "field_mine", "amount": 3},
+		},
+		{
+			"id": "craft_salvage_turret",
+			"name": "재생 감시포탑",
+			"desc": "",
+			"cost": {"scrap": 6000, "magazine_spring": 2, "rubber_gasket": 2, "scope_lens": 1, "precision_gear": 1},
+			"result": {"heavy_gear": "salvage_turret", "amount": 1},
+		},
+		{
+			"id": "craft_rocket_launcher",
+			"name": "로켓 발사기 (3발)",
+			"desc": "",
+			"cost": {"scrap": 20000, "rubber_gasket": 2, "magazine_spring": 2, "military_alloy": 1},
+			"result": {"heavy_gear": "rocket_launcher", "amount": 1},
+		},
+	],
 	"supplies": [
 		{
 			"id": "repair_kit",
@@ -276,12 +303,12 @@ const TAB_NAMES := {"enhance": "강화", "craft": "제작"}
 # 탭 하나가 RECIPES의 어떤 카테고리들을 합치는가.
 # 제작 = 무기+방어구 16종 + 하단 '보급품'(수리·확장 — 소모품 제작 경로는 못 없앤다).
 # "mods"는 어느 탭에도 없다 — 개조 기능 폐지(별도 재설계 예정), 데이터만 유지.
-const TAB_CATEGORIES := {"craft": ["weapons", "armor", "supplies"], "enhance": []}
+const TAB_CATEGORIES := {"craft": ["weapons", "armor", "heavy", "supplies"], "enhance": []}
 # 옛 카테고리 이름으로 selected_category를 잡는 코드(테스트·프로브·구세이브)는 그대로
 # 탭으로 접힌다 — 저장값이 "supply"/"mods"여도 크래시 없이 제작 탭으로 열린다.
 const LEGACY_CATEGORY_TAB := {
 	"armor": "craft", "weapons": "craft", "craft": "craft",
-	"mods": "craft", "supplies": "craft", "supply": "craft",
+	"mods": "craft", "supplies": "craft", "supply": "craft", "heavy": "craft",
 	"artisan": "enhance", "enhance": "enhance",
 }
 # 레시피 행 상태 색 — 초록=지금 만들 수 있음, 주황=재료만 모자람, 회색=아직 잠김.
@@ -1894,7 +1921,7 @@ func _build_recipe_list() -> Control:
 	margin.add_child(column)
 	if not stacked:
 		# 강화 보드의 목록 제목("보유 장비 · 평생 귀속")과 같은 문법.
-		var list_title := _label("설계도 · 장비 16종 + 보급품", 11, DIM)
+		var list_title := _label("설계도 · 장비 16종 + 중장비 + 보급품", 11, DIM)
 		list_title.autowrap_mode = TextServer.AUTOWRAP_OFF
 		list_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		column.add_child(list_title)
@@ -1955,13 +1982,24 @@ func _refresh_recipe_list() -> void:
 		return
 	_clear(recipe_list)
 	var recipes: Array = _recipes_for_category(selected_category)
+	# 섹션 구분선 — 중장비(소모성 화력)는 보급품 위에, 강화 보드와 같은 11px DIM 문법.
 	# 보급품(수리·확장·소모품 제작)은 제작 탭 하단 섹션으로 합류(개조·보급 탭 폐지).
+	var heavy_ids := {}
+	for heavy_raw in RECIPES["heavy"]:
+		heavy_ids[str((heavy_raw as Dictionary).get("id", ""))] = true
 	var supply_ids := {}
 	for supply_raw in RECIPES["supplies"]:
 		supply_ids[str((supply_raw as Dictionary).get("id", ""))] = true
+	var heavy_divider_added := false
 	var supply_divider_added := false
 	for recipe_raw in recipes:
 		var recipe: Dictionary = recipe_raw
+		if not heavy_divider_added and heavy_ids.has(str(recipe.get("id", ""))):
+			heavy_divider_added = true
+			var heavy_divider := _label("중장비 · 쓰면 부서진다", 11, DIM)
+			heavy_divider.name = "WorkbenchHeavySection"
+			heavy_divider.autowrap_mode = TextServer.AUTOWRAP_OFF
+			recipe_list.add_child(heavy_divider)
 		if not supply_divider_added and supply_ids.has(str(recipe.get("id", ""))):
 			supply_divider_added = true
 			var divider := _label("보급품", 11, DIM)
@@ -2155,6 +2193,15 @@ func _recipes_for_category(category: String) -> Array:
 			merged.append_array(_recipes_for_category(str(sub_category)))
 		return merged
 	var recipes: Array = (RECIPES.get(category, []) as Array).duplicate(true)
+	if category == "heavy":
+		# 설명의 단일 진실은 GameState.HEAVY_GEAR_DEFS.description — 여기서 채운다.
+		for heavy_recipe_raw in recipes:
+			var heavy_recipe: Dictionary = heavy_recipe_raw
+			var gear_id := str((heavy_recipe.get("result", {}) as Dictionary).get("heavy_gear", ""))
+			var definition := GameState.HEAVY_GEAR_DEFS.get(gear_id, {}) as Dictionary
+			if str(heavy_recipe.get("desc", "")).is_empty():
+				heavy_recipe["desc"] = "%s\n쓰면 부서지는 소모품 — 부품으로 다시 만든다. 필드에서 T로 선택해 사용." % str(definition.get("description", ""))
+		return recipes
 	if category == "artisan":
 		# 돌파 행 — 장착 무기 + 장착 방어구 3슬롯. 데이터만(2단계 UI가 재구성).
 		if bool(GameState.has_ak) and not str(GameState.equipped_weapon_id).is_empty():
@@ -2355,6 +2402,9 @@ func _craft(recipe: Dictionary) -> void:
 	elif result.has("equipment"):
 		# 제작품은 항상 기본 레벨(접미사 없음 = Lv.1)이다. 성장은 +99 강화가 맡는다.
 		GameState.add_equipment(str(result["equipment"]), int(result.get("amount", 1)))
+	elif result.has("heavy_gear"):
+		# 중장비 — 소모성 화력. 지급은 GameState.add_heavy_gear(가방 원장).
+		GameState.add_heavy_gear(str(result["heavy_gear"]), int(result.get("amount", 1)))
 	elif result.has("canned_food"):
 		GameState.canned_food += int(result["canned_food"])
 	elif result.has("repair"):
@@ -2714,6 +2764,10 @@ func _result_text(recipe: Dictionary) -> String:
 			_equipment_display_name(str(result["equipment"])),
 			int(result.get("amount", 1)),
 		]
+	if result.has("heavy_gear"):
+		var heavy_id := str(result["heavy_gear"])
+		var heavy_definition := GameState.HEAVY_GEAR_DEFS.get(heavy_id, {}) as Dictionary
+		return "%s x%d" % [str(heavy_definition.get("name", heavy_id)), int(result.get("amount", 1))]
 	if result.has("canned_food"):
 		return "통조림 x%d" % int(result["canned_food"])
 	if result.has("repair"):
@@ -2761,6 +2815,14 @@ func _recipe_icon(recipe: Dictionary) -> Texture2D:
 		return UI_ICONS.get_icon("armor", 72, Color("#a8c6bb"))
 	if result.has("weapon_mod"):
 		return UI_ICONS.get_icon("mod", 72, Color("#e2a962"))
+	if result.has("heavy_gear"):
+		# ui_icon_factory 실제 키: 지뢰=alert(경보 삼각), 포탑=parts(부품), 로켓=raid(출격 화살).
+		var heavy_icon: String = str({
+			"field_mine": "alert",
+			"salvage_turret": "parts",
+			"rocket_launcher": "raid",
+		}.get(str(result["heavy_gear"]), "parts"))
+		return UI_ICONS.get_icon(heavy_icon, 72, Color("#7fd8c8"))
 	if result.has("canned_food"):
 		return UI_ICONS.get_icon("food", 72, Color("#e6b65c"))
 	if result.has("repair"):
@@ -3014,6 +3076,15 @@ func _result_stat_line(recipe: Dictionary) -> String:
 	if result.has("weapon_mod"):
 		var mod := WeaponSystem.get_mod(str(result["weapon_mod"])) as Dictionary
 		return str(mod.get("slot", "")).to_upper() if not mod.is_empty() else ""
+	if result.has("heavy_gear"):
+		var heavy_id := str(result["heavy_gear"])
+		var stack := int((GameState.HEAVY_GEAR_DEFS.get(heavy_id, {}) as Dictionary).get("stack_per_slot", 1))
+		var line := "가방 %d개 1칸 · 현재 보유 x%d" % [stack, GameState.get_heavy_gear_count(heavy_id)] \
+			if stack > 1 \
+			else "가방 1칸 · 현재 보유 x%d" % GameState.get_heavy_gear_count(heavy_id)
+		if heavy_id == "rocket_launcher":
+			line += " · 3발 쏘면 소멸"
+		return line
 	return ""
 
 

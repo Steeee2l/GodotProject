@@ -34,7 +34,14 @@ const BAG_FILTER_ORDER := ["all", "resource", "gear"]
 # 자원 = 쉘터로 가져가는 것, 장비 = 지금 이 출정에서 쓰는 것.
 const BAG_FILTER_RESOURCE_TYPES := ["resource", "progression", "special_cargo", "valuable"]
 const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
-const BAG_FILTER_GEAR_TYPES := ["weapon", "equipment", "mod", "component", "ammo"]
+const BAG_FILTER_GEAR_TYPES := ["weapon", "equipment", "mod", "component", "ammo", "heavy"]
+
+# 중장비 타일 아이콘 — ui_icon_factory의 실제 키(지뢰=경보 삼각·포탑=부품·로켓=출격 화살).
+const HEAVY_GEAR_ICONS := {
+	"field_mine": "alert",
+	"salvage_turret": "parts",
+	"rocket_launcher": "raid",
+}
 
 const BAG_FILTER_TITLES := {
 	"all": "전체",
@@ -907,6 +914,10 @@ func _count_bag_items_for_filter(filter_id: String) -> int:
 		for mod_id_variant in MOD_COMPONENTS:
 			if int(game_state.get_weapon_mod_count(str(mod_id_variant))) > 0:
 				count += 1
+	if _bag_filter_matches_item(filter_id, "heavy"):
+		for heavy_id_variant in game_state.heavy_gear_inventory:
+			if int(game_state.get_heavy_gear_count(str(heavy_id_variant))) > 0:
+				count += 1
 	return count
 
 
@@ -1066,6 +1077,26 @@ func _refresh_contents() -> void:
 			"description": _component_description(component_id),
 			"quantity": component_count,
 			"texture": component_textures.get(component_id) as Texture2D,
+		})
+
+	# 중장비(지뢰·포탑·로켓) — 소모성 화력. 사용은 필드의 T(투척/배치 선택기)가 쥔다.
+	var heavy_gear_ids: Array = game_state.heavy_gear_inventory.keys()
+	heavy_gear_ids.sort()
+	for heavy_id_value in heavy_gear_ids:
+		var heavy_id := str(heavy_id_value)
+		var heavy_count := int(game_state.get_heavy_gear_count(heavy_id))
+		if heavy_count <= 0:
+			continue
+		var heavy_definition := game_state.HEAVY_GEAR_DEFS.get(heavy_id, {}) as Dictionary
+		_add_bag_item({
+			"id": heavy_id,
+			"type": "heavy",
+			"title": str(heavy_definition.get("name", heavy_id)),
+			"description": str(heavy_definition.get("description", "소모성 중장비입니다.")),
+			"quantity": heavy_count,
+			"texture": UI_ICONS.get_icon(
+				str(HEAVY_GEAR_ICONS.get(heavy_id, "parts")), 64, Color("#7fd8c8")
+			),
 		})
 
 	var progression_item_ids: Array = game_state.progression_item_inventory.keys()
@@ -1461,6 +1492,12 @@ func _refresh_item_detail() -> void:
 	elif item_type == "progression":
 		item_detail_description.text = "%s\n보유 수량 %d개" % [
 			str(selected_item.get("description", "진행에 필요한 중요 아이템입니다.")),
+			int(selected_item.get("quantity", 0)),
+		]
+	elif item_type == "heavy":
+		# 사용 버튼은 없다 — 필드에서 T(투척/배치 선택기)로 쓰고, 여기선 버리기만 된다.
+		item_detail_description.text = "%s\n\n필드에서 T(투척 버튼)로 선택해 사용합니다. 소모품 — 사망 시 시체로 갑니다.\n보유 수량 %d개" % [
+			str(selected_item.get("description", "소모성 중장비입니다.")),
 			int(selected_item.get("quantity", 0)),
 		]
 	elif item_type == "equipment":

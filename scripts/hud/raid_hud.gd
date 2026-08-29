@@ -1527,7 +1527,7 @@ func build_controls_lesson() -> void:
 	var font := HudStyle.FONT
 	for pair in [
 		["TAB", "지도"], ["R", "장전"], ["SHIFT", "구급약"],
-		["E", "가방"], ["SPACE", "구르기"], ["T", "통조림 투척"], ["우클릭", "정조준"],
+		["E", "가방"], ["SPACE", "구르기"], ["T", "투척·배치 (짧게 또 = 품목)"], ["우클릭", "정조준"],
 	]:
 		var item := HBoxContainer.new()
 		item.add_theme_constant_override("separation", 6)

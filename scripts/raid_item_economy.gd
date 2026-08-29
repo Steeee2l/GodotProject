@@ -9,6 +9,13 @@ const FALLBACK_VALUES := {
 	"special_cargo": {"base_value": 5000, "slot_size": 6},
 }
 
+# 중장비(소모성 화력) — 시체·손실 가치 합산용. 제작비(고철+부품) 근사치.
+const HEAVY_VALUES := {
+	"field_mine": 250,
+	"salvage_turret": 2400,
+	"rocket_launcher": 7000,
+}
+
 
 static func get_definition(
 	item_type: String,
@@ -20,6 +27,8 @@ static func get_definition(
 			"base_value": maxi(1, int(special_data.get("base_value", 5000))),
 			"slot_size": maxi(1, int(special_data.get("slot_size", 6))),
 		}
+	if item_type == "heavy":
+		return {"base_value": int(HEAVY_VALUES.get(item_id, 500)), "slot_size": 1}
 	var catalog_id := _catalog_id(item_type, item_id)
 	if LOOT_ECONOMY.ITEM_CATALOG.has(catalog_id):
 		return (LOOT_ECONOMY.ITEM_CATALOG[catalog_id] as Dictionary).duplicate(true)

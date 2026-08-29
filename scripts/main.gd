@@ -382,6 +382,9 @@ var cover_system := CoverSystem.new()
 var run_headshots := 0
 var mastery_lessons_shown: Dictionary = {}
 var can_throw := CanThrowSystem.new()
+# 중장비(지뢰·감시포탑·로켓) 필드 로직 — 선택·조준은 can_throw가, 폭발은 이 모듈이.
+# class_name 캐시(.godot)가 갱신되기 전에도 헤드리스 테스트가 돌도록 preload로 만든다.
+var deployables := preload("res://scripts/raid/deployables.gd").new()
 var monologue := FieldMonologue.new()
 var raid_zone_data: Dictionary = {}
 var active_zone_rule := ""
@@ -572,6 +575,7 @@ func _ready() -> void:
 	weapon_combat.attach(self)
 	cover_system.attach(self)
 	can_throw.attach(self)
+	deployables.attach(self)
 	active_tutorial.attach(self)
 	raid_tutorial.attach(self)
 	# 발각 방향 인디케이터 — 화면 밖(또는 안개에 가려진) 경계 상태 적의 방향을
@@ -933,6 +937,7 @@ func _physics_process(delta: float) -> void:
 	stealth._update_enemy_visibility(delta)
 	stealth._update_stealth_takedown_prompt()
 	can_throw.update(delta)
+	deployables.update(delta)
 	_update_fire_button_context()
 	_update_combat_feedback_overlay()
 	if perception_system:
@@ -3067,10 +3072,13 @@ func _update_medkit_button() -> void:
 	else:
 		mobile_medkit_button.tooltip_text = "구급약 사용 (Shift)"
 	if mobile_can_button != null:
-		mobile_can_button.text = "T\n통조림 x%d" % GameState.canned_food
-		mobile_can_button.disabled = GameState.canned_food <= 0
+		# 배지: 현재 선택 품목 + 잔량(통조림/지뢰/포탑/로켓 — T 짧게 = 품목 전환).
+		mobile_can_button.text = "T\n%s x%d" % [can_throw.get_selected_label(), can_throw.get_selected_count()]
+		mobile_can_button.disabled = not can_throw.has_any_throwable()
 		mobile_can_button.tooltip_text = (
-			"통조림이 없습니다" if GameState.canned_food <= 0 else "통조림 투척 조준 (T) — 적을 유인합니다"
+			"던질 것이 없습니다"
+			if not can_throw.has_any_throwable()
+			else "투척/배치 조준 (T) — 조준 중 T 짧게 = 품목 전환"
 		)
 
 
@@ -3149,6 +3157,21 @@ func _on_inventory_item_discard_requested(item_type: String, item_id: String, am
 		if str(GameState.get_equipped_equipment(slot)) == item_id:
 			hud.inventory_ui.call("apply_discard_result", false, "장착을 해제한 뒤 버릴 수 있습니다.")
 			return
+	if item_type == "heavy":
+		# 중장비는 GameState의 가방 원장(remove_raid_bag_item)이 모른다 —
+		# 소모품 전용 API(consume_heavy_gear)로 버린다. 되줍기 없음(현장 해체).
+		var heavy_removed := mini(maxi(0, amount), GameState.get_heavy_gear_count(item_id))
+		if heavy_removed <= 0 or not GameState.consume_heavy_gear(item_id, heavy_removed):
+			hud.inventory_ui.call("apply_discard_result", false, "버릴 수 없는 아이템입니다.")
+			return
+		var heavy_name := str(
+			(GameState.HEAVY_GEAR_DEFS.get(item_id, {}) as Dictionary).get("name", item_id)
+		)
+		hud.inventory_ui.call(
+			"apply_discard_result", true, "%s x%d을 현장에서 해체해 버렸습니다." % [heavy_name, heavy_removed]
+		)
+		_update_medkit_button()
+		return
 	var removed: int = GameState.remove_raid_bag_item(item_type, item_id, amount)
 	if removed <= 0:
 		hud.inventory_ui.call("apply_discard_result", false, "버릴 수 없는 아이템입니다.")
@@ -6821,6 +6844,10 @@ func _recover_previous_corpse() -> void:
 		loot.get("mod_component_inventory", {}) as Dictionary
 	)
 	_add_dictionary_loot(
+		GameState.heavy_gear_inventory,
+		loot.get("heavy_gear_inventory", {}) as Dictionary
+	)
+	_add_dictionary_loot(
 		GameState.progression_item_inventory,
 		loot.get("progression_item_inventory", {}) as Dictionary
 	)
@@ -7092,6 +7119,9 @@ func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
 			context_touch_id = -1
 			_on_mobile_context_button_up()
 			released_action = true
+		# 투척 버튼 — 짧게 = 조준 토글(놓는 순간), 길게 = 품목 순환(누른 채 0.45s).
+		if can_throw.handle_touch_release(touch.index):
+			released_action = true
 		return released_action
 	if _is_inventory_button_at(touch.position):
 		_toggle_inventory()
@@ -7102,7 +7132,7 @@ func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
 	if _is_inventory_open() or _is_tactical_map_open() or lore_reader.is_open() or extraction_transition_active:
 		return false
 	# 투척 조준 중엔 화면 전체가 착탄 지점이다 — 버튼보다 먼저 처리한다.
-	if can_throw.handle_touch(touch.position):
+	if can_throw.handle_touch(touch.position, touch.index):
 		return true
 	if _mobile_button_contains(hud.fire_button, touch.position):
 		if fire_touch_id != -1:
@@ -7253,7 +7283,8 @@ func _input(event: InputEvent) -> void:
 		elif key == KEY_R and key_event.pressed and has_ak:
 			weapon_combat._reload_ak47()
 		elif key == KEY_T and key_event.pressed:
-			can_throw.toggle_aim()
+			# T = 조준 열기, 조준 중 짧게 다시 = 다음 품목(통조림→지뢰→포탑→로켓).
+			can_throw.on_throw_key()
 		elif key == KEY_N and key_event.pressed and OS.is_debug_build():
 			_save_run_state()
 			GameState.randomize_map()

@@ -1,12 +1,19 @@
 class_name CanThrowSystem
 extends RefCounted
 
-# 통조림 투척 — 소리로 적을 유인하는 잠입 도구.
-# 버튼을 누르면 사거리 링이 보이고, 링 안을 탭하면 그 지점으로 던진다.
-# 착지 소리를 들은 비경계 적이 달려와 먹는 동안(게이지) 지나가거나 암살한다.
+# 투척/배치 선택기 — 통조림(유인)과 중장비(지뢰·포탑·로켓)를 한 조준 UI로.
+# 버튼을 누르면 사거리 링이 보이고, 링 안을 탭하면 그 지점으로 던진다/설치한다.
+# 통조림: 착지 소리를 들은 비경계 적이 달려와 먹는 동안 지나가거나 암살한다.
 #
-# 규칙: 이 파일은 투척의 "무엇"만 안다. 적 AI는 enemy.gd의 lure_point가,
-# 버튼 배치는 main._apply_hud_layout이 맡는다.
+# 조작(2026-08-29 중장비 1차):
+#   데스크톱 — T로 조준을 열고, 조준 중 T를 짧게 다시 누르면 다음 품목으로 순환.
+#             (보유 품목이 하나뿐이면 T는 예전처럼 취소로 동작한다.)
+#   모바일  — 투척 버튼 탭 = 조준 토글, 길게(0.45s) 누르면 품목 순환.
+#   발사    — 기존 그대로 링 안 클릭/탭. 포탑은 '배치'(사거리 5m), 로켓은 사거리 18m.
+#
+# 규칙: 이 파일은 "무엇을 어디로"만 안다. 통조림 유인은 enemy.gd의 lure_point가,
+# 중장비의 전투 로직은 scripts/raid/deployables.gd가, 버튼 배치는
+# main._apply_hud_layout이 맡는다.
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
@@ -15,6 +22,29 @@ const THROW_RANGE := 17.0
 const NOISE_RADIUS := 13.0
 const EAT_DURATION := 6.5
 const AIM_TIMEOUT := 6.0
+# 모바일 투척 버튼 길게 누름 = 품목 순환(기존 style_mobile_action 버튼 규약 유지).
+const CYCLE_HOLD_SECONDS := 0.45
+
+# 순환 순서 — 보유한 것만 돈다. 통조림 → 지뢰 → 포탑 → 로켓.
+const THROW_KINDS := ["canned_food", "field_mine", "salvage_turret", "rocket_launcher"]
+const KIND_INFO := {
+	"canned_food": {
+		"label": "던지기", "toast": "통조림", "icon": "food",
+		"color": Color("#79b98d"), "range": THROW_RANGE,
+	},
+	"field_mine": {
+		"label": "지뢰", "toast": "지뢰", "icon": "alert",
+		"color": Color("#57d9c4"), "range": THROW_RANGE,
+	},
+	"salvage_turret": {
+		"label": "포탑", "toast": "감시포탑", "icon": "parts",
+		"color": Color("#57d9c4"), "range": 5.0,
+	},
+	"rocket_launcher": {
+		"label": "로켓", "toast": "로켓 발사기", "icon": "raid",
+		"color": Color("#e8b46a"), "range": 18.0,
+	},
+}
 const EATER_LINES := [
 	"이게 웬 횡재냐",
 	"아직 안 뜯었잖아?",
@@ -48,6 +78,14 @@ var eat_time_left := 0.0
 var eating_started := false
 var spoken_enemies: Array = []
 var clank_player: AudioStreamPlayer3D
+
+# ── 투척/배치 선택기 상태 ──
+var selected_kind := "canned_food"
+var button_icon_kind := ""
+# 모바일 길게 누름 순환 추적 — 놓기 전까지는 토글하지 않는다.
+var hold_touch_index := -1
+var hold_elapsed := 0.0
+var hold_cycled := false
 
 
 func attach(owner_node: Node) -> void:
@@ -94,11 +132,77 @@ func _build_range_ring() -> void:
 	host.add_child(range_ring)
 
 
+func get_kind_count(kind: String) -> int:
+	if kind == "canned_food":
+		return maxi(0, int(GameState.canned_food))
+	return GameState.get_heavy_gear_count(kind)
+
+
+func get_available_kinds() -> Array:
+	var available: Array = []
+	for kind in THROW_KINDS:
+		if get_kind_count(str(kind)) > 0:
+			available.append(str(kind))
+	return available
+
+
+func has_any_throwable() -> bool:
+	return not get_available_kinds().is_empty()
+
+
+func get_selected_label() -> String:
+	return str((KIND_INFO[selected_kind] as Dictionary).get("toast", "투척"))
+
+
+func get_selected_count() -> int:
+	return get_kind_count(selected_kind)
+
+
+func _ensure_valid_selection() -> void:
+	if get_kind_count(selected_kind) > 0:
+		return
+	var available := get_available_kinds()
+	selected_kind = str(available[0]) if not available.is_empty() else "canned_food"
+	_apply_ring_style()
+
+
+func cycle_selection() -> void:
+	# 보유한 것만 순환 — 다음 품목으로 넘어가며 토스트로 알린다.
+	var available := get_available_kinds()
+	if available.is_empty():
+		return
+	var index := available.find(selected_kind)
+	selected_kind = str(available[(index + 1) % available.size()])
+	_apply_ring_style()
+	aim_timeout_left = AIM_TIMEOUT
+	var info := KIND_INFO[selected_kind] as Dictionary
+	host.hud.push_toast(
+		"%s x%d 선택" % [str(info.get("toast", "")), get_kind_count(selected_kind)],
+		info.get("color", Color("#79b98d")) as Color,
+		1.4
+	)
+	if host.has_method("_update_medkit_button"):
+		host.call("_update_medkit_button")
+
+
+func on_throw_key() -> void:
+	# 데스크톱 T — 닫혀 있으면 조준을 열고, 조준 중 짧게 다시 누르면 다음 품목.
+	# 품목이 하나뿐이면 순환할 곳이 없으니 예전처럼 취소로 동작한다.
+	if not aiming:
+		toggle_aim()
+		return
+	if get_available_kinds().size() > 1:
+		cycle_selection()
+	else:
+		_set_aiming(false)
+
+
 func toggle_aim() -> void:
 	if aiming:
 		_set_aiming(false)
 		return
-	if GameState.canned_food <= 0:
+	_ensure_valid_selection()
+	if not has_any_throwable():
 		return
 	_set_aiming(true)
 	# 모드에 들어왔음을 문장으로 말한다 — 링만으로는 "지금 탭하면 던진다"를
@@ -106,12 +210,32 @@ func toggle_aim() -> void:
 	var hint_count := int(host.get_meta("can_throw_hint_count", 0))
 	if hint_count < 2:
 		host.set_meta("can_throw_hint_count", hint_count + 1)
-		host.hud.push_toast("링 안을 탭하면 투척 · 던지기 버튼 = 취소", Color("#79b98d"), 2.6)
+		host.hud.push_toast("링 안을 탭하면 투척·배치 · T 짧게 = 품목 전환", Color("#79b98d"), 2.6)
+
+
+func _selected_range() -> float:
+	return float((KIND_INFO[selected_kind] as Dictionary).get("range", THROW_RANGE))
+
+
+func _apply_ring_style() -> void:
+	if range_ring == null:
+		return
+	# 링 반경은 품목 사거리(포탑 5m·로켓 18m), 색은 품목 식별색.
+	range_ring.scale = Vector3.ONE * (_selected_range() / THROW_RANGE)
+	var info := KIND_INFO[selected_kind] as Dictionary
+	var accent := info.get("color", Color("#79b98d")) as Color
+	var torus := range_ring.mesh as TorusMesh
+	var material := torus.material as StandardMaterial3D if torus != null else null
+	if material != null:
+		material.albedo_color = Color(accent.r, accent.g, accent.b, 0.28)
+		material.emission = accent
 
 
 func _set_aiming(value: bool) -> void:
 	aiming = value
 	aim_timeout_left = AIM_TIMEOUT
+	if value:
+		_apply_ring_style()
 	if range_ring != null:
 		range_ring.visible = value
 
@@ -121,10 +245,14 @@ func is_aiming() -> bool:
 
 
 func update(delta: float) -> void:
+	_update_cycle_hold(delta)
 	_refresh_button()
 	if aiming:
 		aim_timeout_left -= delta
-		if aim_timeout_left <= 0.0 or GameState.canned_food <= 0:
+		if get_selected_count() <= 0:
+			# 마지막 하나를 쓴 품목 — 남은 게 있으면 자동으로 넘어간다.
+			_ensure_valid_selection()
+		if aim_timeout_left <= 0.0 or not has_any_throwable():
 			_set_aiming(false)
 		elif range_ring != null and is_instance_valid(player):
 			range_ring.global_position = Vector3(
@@ -133,30 +261,56 @@ func update(delta: float) -> void:
 	_update_active_can(delta)
 
 
+func _update_cycle_hold(delta: float) -> void:
+	if hold_touch_index == -1 or hold_cycled:
+		return
+	hold_elapsed += delta
+	if hold_elapsed >= CYCLE_HOLD_SECONDS:
+		hold_cycled = true
+		if get_available_kinds().size() > 1:
+			cycle_selection()
+			if DisplayServer.is_touchscreen_available() and bool(AccessibilitySettings.vibration_enabled):
+				Input.vibrate_handheld(18)
+
+
 func _refresh_button() -> void:
 	if throw_button == null:
 		return
-	var count := int(GameState.canned_food)
+	_ensure_valid_selection()
+	var info := KIND_INFO[selected_kind] as Dictionary
+	var count := get_selected_count()
 	# 조준 중엔 버튼이 취소+남은 시간 카운트다운으로 바뀐다.
 	var next_text := (
 		"취소 %d" % ceili(aim_timeout_left)
 		if aiming
-		else "던지기\nx%d" % count
+		else "%s\nx%d" % [str(info.get("label", "던지기")), count]
 	)
 	if throw_button.text != next_text:
 		throw_button.text = next_text
-	throw_button.disabled = count <= 0 and not aiming
+	# 배지: 현재 품목 아이콘 — 품목이 바뀔 때만 다시 만든다.
+	if button_icon_kind != selected_kind:
+		button_icon_kind = selected_kind
+		throw_button.icon = UI_ICONS.get_icon(
+			str(info.get("icon", "food")), 34, info.get("color", Color("#a8d8b4")) as Color
+		)
+		throw_button.tooltip_text = (
+			"%s 투척/배치 — 길게 누르면 품목 전환" % str(info.get("toast", ""))
+		)
+	throw_button.disabled = not has_any_throwable() and not aiming
 	# 조준 중엔 버튼이 '취소'로 읽히도록 눌린 상태를 유지한다.
 	throw_button.toggle_mode = true
 	if throw_button.button_pressed != aiming:
 		throw_button.set_pressed_no_signal(aiming)
 
 
-func handle_touch(touch_position: Vector2) -> bool:
+func handle_touch(touch_position: Vector2, touch_index: int = -1) -> bool:
 	# main의 터치 라우터가 부른다. true를 돌려주면 이벤트를 소비한 것.
 	if throw_button != null and throw_button.visible and not throw_button.disabled \
 		and throw_button.get_global_rect().has_point(touch_position):
-		toggle_aim()
+		# 짧게 = 토글(놓을 때), 길게 = 품목 순환 — 판정은 release/update가 한다.
+		hold_touch_index = touch_index
+		hold_elapsed = 0.0
+		hold_cycled = false
 		return true
 	if aiming:
 		# 조준 모드가 화면 전체를 삼키면 안 된다: 조이스틱 영역과 다른 버튼
@@ -174,6 +328,19 @@ func handle_touch(touch_position: Vector2) -> bool:
 	return false
 
 
+func handle_touch_release(touch_index: int) -> bool:
+	# 투척 버튼 위에서 시작한 터치의 release — 길게 눌러 순환했다면 토글하지 않는다.
+	if hold_touch_index == -1 or touch_index != hold_touch_index:
+		return false
+	var cycled := hold_cycled
+	hold_touch_index = -1
+	hold_elapsed = 0.0
+	hold_cycled = false
+	if not cycled:
+		toggle_aim()
+	return true
+
+
 func _touch_on_other_button(touch_position: Vector2) -> bool:
 	for button_value in [
 		host.hud.fire_button, host.hud.dash_button,
@@ -187,7 +354,8 @@ func _touch_on_other_button(touch_position: Vector2) -> bool:
 
 
 func throw_at_screen(screen_position: Vector2) -> void:
-	if GameState.canned_food <= 0:
+	_ensure_valid_selection()
+	if get_selected_count() <= 0:
 		_set_aiming(false)
 		return
 	var ray_origin := camera.project_ray_origin(screen_position)
@@ -198,11 +366,36 @@ func throw_at_screen(screen_position: Vector2) -> void:
 	var target := ray_origin + ray_direction * distance_to_plane
 	var offset := target - player.global_position
 	offset.y = 0.0
-	if offset.length() > THROW_RANGE:
-		target = player.global_position + offset.normalized() * THROW_RANGE
+	var kind_range := _selected_range()
+	if offset.length() > kind_range:
+		target = player.global_position + offset.normalized() * kind_range
 	target.y = 0.1
-	_set_aiming(false)
-	_throw_to(target)
+	_dispatch_selected(target)
+
+
+func _dispatch_selected(target: Vector3) -> void:
+	# 품목별 실행 — 통조림은 이 파일이, 중장비는 deployables가 맡는다.
+	var deployables = host.get("deployables")
+	match selected_kind:
+		"canned_food":
+			_set_aiming(false)
+			_throw_to(target)
+		"field_mine":
+			if deployables != null and GameState.consume_heavy_gear("field_mine", 1):
+				_set_aiming(false)
+				deployables.call("throw_mine", target)
+		"salvage_turret":
+			if deployables != null and GameState.consume_heavy_gear("salvage_turret", 1):
+				_set_aiming(false)
+				deployables.call("place_turret", target)
+		"rocket_launcher":
+			# 발사기는 발수(판 로컬)로 소모된다 — 쿨다운 1.2s, 조준은 유지해
+			# 연사 리듬을 지킨다. 3발 소진 시 deployables가 아이템을 버린다.
+			if deployables != null and bool(deployables.call("fire_rocket", target)):
+				if get_kind_count("rocket_launcher") <= 0:
+					_set_aiming(false)
+	if host.has_method("_update_medkit_button"):
+		host.call("_update_medkit_button")
 
 
 func _throw_to(landing: Vector3) -> void:
