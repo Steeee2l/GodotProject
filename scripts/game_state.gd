@@ -3472,11 +3472,13 @@ func unassign_all_workers_from_catnip() -> int:
 
 
 func get_scratcher_worker_slots() -> int:
-	return int(KNEADING_SLOTS_BY_TIER.get(shelter_tier, 3))
+	# 티어 기본 + 생산기 레벨(확장 버튼이 "좌석 +1"을 약속하는데 티어만 보던
+	# 버그 — 12K를 내고도 좌석 4 그대로였다, 2026-08-30 유저 신고).
+	return int(KNEADING_SLOTS_BY_TIER.get(shelter_tier, 3)) + maxi(0, scratcher_bank_level - 1)
 
 
 func get_catnip_worker_slots() -> int:
-	return int(CATNIP_SLOTS_BY_TIER.get(shelter_tier, 1))
+	return int(CATNIP_SLOTS_BY_TIER.get(shelter_tier, 1)) + maxi(0, catnip_scraper_level - 1)
 
 
 func get_line_effective_workers(

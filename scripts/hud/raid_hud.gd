@@ -1052,10 +1052,13 @@ func build_extraction_progress_ui() -> void:
 	# 빈 여백이었다. 세로 화면에서는 폭이 자동으로 더 줄어든다.
 	var result_viewport := host.get_viewport().get_visible_rect().size
 	var result_half_w := minf(390.0, (result_viewport.x - 24.0) * 0.5)
+	# 높이는 뷰포트에 맞춰 클램프 — 내용(레벨업 카드까지)이 창을 밀어 화면 밖으로
+	# 자라던 모바일 넘침(유저 신고)은 안쪽 스크롤이 받는다.
+	var result_half_h := minf(320.0, (result_viewport.y - 20.0) * 0.5)
 	extraction_result_panel.offset_left = -result_half_w
-	extraction_result_panel.offset_top = -196
+	extraction_result_panel.offset_top = -result_half_h
 	extraction_result_panel.offset_right = result_half_w
-	extraction_result_panel.offset_bottom = 196
+	extraction_result_panel.offset_bottom = result_half_h
 	extraction_result_panel.add_theme_stylebox_override(
 		"panel",
 		HudStyle.panel(HudStyle.INK_SOLID, Color("#d0b35d"), 7)
@@ -1070,9 +1073,18 @@ func build_extraction_progress_ui() -> void:
 	margin.add_theme_constant_override("margin_right", 34)
 	margin.add_theme_constant_override("margin_bottom", 28)
 	extraction_result_panel.add_child(margin)
+	# 내용이 창보다 길면(짧은 모바일 화면 + 레벨업 카드) 안에서 스크롤한다 —
+	# 패널 최소 크기로 전파돼 화면을 넘던 경로를 끊는 지점.
+	var result_scroll := HudStyle.make_scroll()
+	result_scroll.name = "ExtractionResultScroll"
+	result_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	result_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	result_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	margin.add_child(result_scroll)
 	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_theme_constant_override("separation", 14)
-	margin.add_child(content)
+	result_scroll.add_child(content)
 	extraction_result_title = Label.new()
 	extraction_result_title.text = "탈출 성공"
 	extraction_result_title.add_theme_font_override("font", FONT)

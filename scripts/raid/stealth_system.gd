@@ -201,10 +201,10 @@ func _install_scent_system() -> void:
 	host.objective_scent_guidance.call("setup", host.scent_system, player, host.get_node("World"))
 	host.scent_system.connect("focus_changed", func(active: bool) -> void:
 		host.scent_focus_active = active
-		# 자동 후각은 정지할 때마다 발동한다 — 학습용 안내는 판당 3회면 충분하고,
-		# 그 뒤로는 조용히 흔적만 떠오른다.
+		# 자동 후각은 정지할 때마다 발동한다 — 학습용 안내는 판당 1회로 족하고,
+		# 그 뒤로는 조용히 흔적만 떠오른다(3회는 출정 초반 중앙 스팸이었다).
 		var hint_count := int(host.get_meta("scent_hint_count", 0))
-		if active and hint_count < 3:
+		if active and hint_count < 1:
 			host.set_meta("scent_hint_count", hint_count + 1)
 			host.hud.push_toast(
 				"킁킁 — 붉은 냄새는 적이 지나간 길, 진할수록 방금이다 · 초록=생존자",

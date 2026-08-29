@@ -2945,7 +2945,9 @@ func _apply_hud_layout() -> void:
 		var toast_w := minf(viewport_size.x * 0.9, 500.0)
 		hud.toast_stack.offset_left = -toast_w * 0.5
 		hud.toast_stack.offset_right = toast_w * 0.5
-		hud.toast_stack.offset_bottom = -maxf(330.0, viewport_size.y * 0.34)
+		# 화면 34% 위는 사실상 정중앙이었다(유저: 가운데에 메시지가 너무 많다) —
+		# 하단 소모품 버튼 바로 위, 아래쪽 1/4 지점으로 내린다.
+		hud.toast_stack.offset_bottom = -maxf(176.0, viewport_size.y * 0.245)
 		hud.toast_stack.offset_top = hud.toast_stack.offset_bottom - 250.0
 	if hud.ammo_notice:
 		hud.ammo_notice.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -4275,10 +4277,18 @@ func take_hostile_hit(
 		last_damage_source_name = str(identity.get("source_name", last_damage_source_name))
 		last_damage_weapon_name = str(identity.get("weapon_name", last_damage_weapon_name))
 	take_hit(amount, hit_direction, impact_kind)
+	# 방어·엄폐 경감 토스트는 판당 2회까지만 — 시스템을 가르친 뒤엔 조용히
+	# (매 피격마다 뜨면 전투 내내 스팸이다. 수치는 피해 숫자가 이미 말한다).
 	if last_damage_blocked > 0 and player_health > 0 and hud.ammo_notice:
-		hud.push_toast("방어구가 피해 %d을 막았다" % last_damage_blocked, Color("#8ed9ff"), 1.1)
+		var armor_hints := int(get_meta("armor_block_hint_count", 0))
+		if armor_hints < 2:
+			set_meta("armor_block_hint_count", armor_hints + 1)
+			hud.push_toast("방어구가 피해 %d을 막았다" % last_damage_blocked, Color("#8ed9ff"), 1.1)
 	if last_cover_blocked > 0 and player_health > 0 and hud.ammo_notice:
-		hud.push_toast("엄폐가 피해 %d을 막았다" % last_cover_blocked, HudStyle.GREEN, 1.1)
+		var cover_hints := int(get_meta("cover_block_hint_count", 0))
+		if cover_hints < 2:
+			set_meta("cover_block_hint_count", cover_hints + 1)
+			hud.push_toast("엄폐가 피해 %d을 막았다" % last_cover_blocked, HudStyle.GREEN, 1.1)
 
 
 var last_cover_blocked := 0
@@ -4972,10 +4982,16 @@ func _apply_zone_rule_on_start() -> void:
 			if world != null:
 				incidents._spawn_high_value_hotspots(world)
 		"toxic":
-			_show_field_notice("오염 지대 진입 · 머무는 동안 체력이 깎인다. 빠르게 움직여라.")
+			if not GameState.is_tutorial_step_done("zone_rule_toxic_notice"):
+				GameState.mark_tutorial_step_done("zone_rule_toxic_notice")
+				_show_field_notice("오염 지대 진입 · 머무는 동안 체력이 깎인다. 빠르게 움직여라.")
+	# 존 규칙 안내는 그 존 첫 진입에만 — 브리핑 패널이 이미 같은 문장을 보여 주고,
+	# 매 판 반복되면 출정 직후 중앙이 공지로 도배된다(유저 신고).
 	if not active_zone_rule.is_empty() and active_zone_rule != "darkness":
 		var brief := str(raid_zone_data.get("rule_brief", ""))
-		if not brief.is_empty():
+		var brief_step := "zone_rule_brief_%s" % active_zone_rule
+		if not brief.is_empty() and not GameState.is_tutorial_step_done(brief_step):
+			GameState.mark_tutorial_step_done(brief_step)
 			_show_field_notice(brief)
 
 
