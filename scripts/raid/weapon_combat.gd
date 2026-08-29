@@ -153,11 +153,13 @@ func _fire_ak47() -> void:
 	if host.has_method("break_raid_entry_grace"):
 		host.break_raid_entry_grace()
 	_apply_weapon_recoil(aim_direction)
-	# 엄폐 중 사격 = 0.4s 노출(쏘고 숨기의 리듬).
+	# 엄폐 중 사격 = 0.5s 노출(내밀고 쏘고 다시 숨는 리듬 — 엄폐 v2).
 	if host.get("cover_system") != null:
 		host.cover_system.notify_player_fired()
-	# 발사 반동을 화면에도 아주 약하게 싣는다. 산탄(다연발)은 조금 더 묵직하게.
-	var recoil_kick := 0.032 if pellet_count <= 1 else 0.062
+	# 발사 반동을 화면에도 싣는다(화면 킥). 산탄(다연발)은 더 묵직하게.
+	# 0.032/0.062 → 0.05/0.09 상향(전투 코어 2차 타격감) — 조준 흔들림이 아니라
+	# 발사 순간의 짧은 킥이다. 상한 로직(maxf)은 그대로.
+	var recoil_kick := 0.05 if pellet_count <= 1 else 0.09
 	host.camera_shake_time = maxf(host.camera_shake_time, 0.05)
 	host.camera_shake_strength = maxf(host.camera_shake_strength, recoil_kick)
 	# 총성은 도시가 듣는다. 소음기를 달면 그만큼 덜 들린다.

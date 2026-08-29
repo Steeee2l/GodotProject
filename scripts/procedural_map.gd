@@ -137,7 +137,9 @@ var district_signature_road_cells := {}
 var cell_risk_bands := {}
 var enterable_building_count := 0
 var region_profile := {}
-var collision_debug_enabled := true
+# 기본 OFF(2026-08-30) — true로 켜 둔 채 배포돼 차량·엄폐물 밑 빨간 풋프린트가
+# 실게임에 항상 떠 있었다(엄폐 호·적 스프라이트까지 덮음). 검증 때만 켠다.
+var collision_debug_enabled := false
 var generated_obstacle_footprints: Array[Dictionary] = []
 var generated_overlap_report: Array[Dictionary] = []
 

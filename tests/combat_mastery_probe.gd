@@ -6,9 +6,10 @@ extends SceneTree
 #   ② 사수 첫 발 0.35s 전 조준선 노드(엘리트 0.25s), 고위협 와인드업 연장분만큼 쿨다운 차감
 #      (탄창을 다 비우는 점사는 쿨다운 분기를 안 타므로 장전 선행으로 갚는지도 본다)
 #   ②' 근접 돌진 예고 — 와인드업 0.5s 동안 바닥 화살표, 쿨다운은 그만큼 짧아짐
-#   ③ 헤드샷 판정 y 경계(상단 28%) · 피해 ×1.6(엘리트 ×1.35) · 팝 색(주황) · 보스 포이즈 ×1.5
+#   ③ 헤드샷 판정 y 경계(상단 28%) · 피해 ×2.2(비엘리트 경무장)/×1.6(상위 무장)/×1.35(엘리트) · 팝 색(주황) · 보스 포이즈 ×1.5
 #   ④ 모바일 정조준 상승 — 정지 0.5s 후 조준 높이 0.5→0.86, 브래킷이 머리로(화면 y 감소)
-#   ⑤ 엄폐 판정(커버 뒤 vs 노출) · 피해 ×0.55 · 사격 시 0.4s 노출
+#   ⑤ 엄폐 v2 — 3상태(open/covered/peeking): covered는 총알 완전 차단(×0.55 폐지),
+#      조준=내밈(피해 정상), 사격 후 0.5s 노출, 폭발은 차단 안 됨, HUD 칩 3단
 #   ⑥ 적 DPS 총량 불변 — 예고 전(legacy) / 후 타이밍을 같은 시드로 60s(게임 시간) 병렬 시뮬, ±10%
 #
 # 실행: godot --headless --path . --script tests/combat_mastery_probe.gd
@@ -389,7 +390,8 @@ func _probe_headshot(arena: Node3D) -> void:
 	_assert(hit_a, "③(a) 프로브 탄이 적을 맞혀야 합니다.")
 	var damage_a := health_before - int(enemy.get("health"))
 	_assert(bool(enemy.get("last_hit_was_headshot")), "③(a) 조준 높이 0.80은 헤드샷이어야 합니다.")
-	_assert(damage_a == roundi(roundi(50 * 1.3) * 1.6), "③(a) 헤드샷 피해는 65×1.6=104여야 합니다: %d" % damage_a)
+	# 정밀 헤드샷(전투 코어 2차) — 비엘리트 근접(배트)은 ×2.2.
+	_assert(damage_a == roundi(roundi(50 * 1.3) * 2.2), "③(a) 헤드샷 피해는 65×2.2=143이어야 합니다: %d" % damage_a)
 	var pop := _latest_damage_number(arena)
 	_assert(pop != null, "③(a) 데미지 팝이 떠야 합니다.")
 	if pop != null:
@@ -406,7 +408,7 @@ func _probe_headshot(arena: Node3D) -> void:
 	_fire_probe_bullet(arena, shooter, enemy, 50, {"aim_height_ratio": 0.72})
 	await _wait_until(func() -> bool: return int(enemy.get("health")) < health_before, 1.0)
 	var damage_c := health_before - int(enemy.get("health"))
-	_assert(bool(enemy.get("last_hit_was_headshot")) and damage_c == 104, "③(b) 조준 높이 0.72(경계)는 머리(104)여야 합니다: head=%s dmg=%d" % [str(enemy.get("last_hit_was_headshot")), damage_c])
+	_assert(bool(enemy.get("last_hit_was_headshot")) and damage_c == 143, "③(b) 조준 높이 0.72(경계)는 머리(143)여야 합니다: head=%s dmg=%d" % [str(enemy.get("last_hit_was_headshot")), damage_c])
 	# (c) 마우스 경로: 화면 레이가 적 수직축을 머리 높이(0.8)에서 지나면 머리, 실루엣 밖이면 몸.
 	var ray_direction := Vector3(-1.0, -1.0, -1.0).normalized()
 	var head_point := Vector3(enemy.global_position.x, feet_y + height * 0.8, enemy.global_position.z)
@@ -414,7 +416,7 @@ func _probe_headshot(arena: Node3D) -> void:
 	_fire_probe_bullet(arena, shooter, enemy, 50, {"aim_ray_origin": head_point - ray_direction * 20.0, "aim_ray_direction": ray_direction})
 	await _wait_until(func() -> bool: return int(enemy.get("health")) < health_before, 1.0)
 	var damage_d := health_before - int(enemy.get("health"))
-	_assert(bool(enemy.get("last_hit_was_headshot")) and damage_d == 104, "③(c) 마우스 레이가 머리 높이를 지나면 헤드샷이어야 합니다: head=%s dmg=%d" % [str(enemy.get("last_hit_was_headshot")), damage_d])
+	_assert(bool(enemy.get("last_hit_was_headshot")) and damage_d == 143, "③(c) 마우스 레이가 머리 높이를 지나면 헤드샷이어야 합니다: head=%s dmg=%d" % [str(enemy.get("last_hit_was_headshot")), damage_d])
 	var side := Vector3(1.0, 0.0, -1.0).normalized() * 0.9
 	health_before = int(enemy.get("health"))
 	_fire_probe_bullet(arena, shooter, enemy, 50, {"aim_ray_origin": head_point + side - ray_direction * 20.0, "aim_ray_direction": ray_direction})
@@ -676,31 +678,53 @@ func _probe_main_scene() -> void:
 		player.force_update_transform()
 		await physics_frame
 		_assert(bool(cover_system.call("is_covered_from", source_position)), "⑤ 커버 뒤 0.7u로 돌아오면 다시 엄폐여야 합니다.")
-		# 피해 ×0.55.
-		var reduced := int(cover_system.call("apply_to_damage", 40, source_position))
-		_assert(reduced == 22, "⑤ 엄폐 중 원거리 피해 40 → 22(×0.55): %d" % reduced)
-		# 사격 시 0.4s 노출.
+		# ── 엄폐 v2: ×0.55 배율은 폐지 — covered 상태의 총알은 '완전 차단'이다. ──
+		# (이유: 유저 진단 "수치 경감은 경험이 안 된다" → 덕코프식 상태 기계로 교체.)
+		main_scene.set("laser_aim_held", false)
+		main_scene.set("fire_button_held", false)
+		main_scene.set("mouse_fire_held", false)
+		cover_system.set("in_cover", true)
+		cover_system.set("exposed_time", 0.0)
+		_assert(str(cover_system.call("get_state")) == "covered", "⑤ 조준·사격이 없으면 covered: %s" % str(cover_system.call("get_state")))
+		main_scene.set("player_health", 9999)
+		var blocked_before := int(cover_system.get("shots_blocked_total"))
+		main_scene.call("take_hostile_hit", 40, Vector3.RIGHT, null, source_position)
+		_assert(int(main_scene.get("player_health")) == 9999, "⑤ covered 중 엄폐물 방향 총알은 피해 0이어야 합니다: %d" % int(main_scene.get("player_health")))
+		_assert(int(cover_system.get("shots_blocked_total")) == blocked_before + 1, "⑤ 차단 카운트가 늘어야 합니다.")
+		_assert(int(main_scene.get("last_cover_blocked")) == 40, "⑤ 차단량 전액(40)이 기록돼야 합니다: %d" % int(main_scene.get("last_cover_blocked")))
+		# 조준(우클릭) 유지 = peeking — 피해 정상.
+		main_scene.set("laser_aim_held", true)
+		_assert(str(cover_system.call("get_state")) == "peeking", "⑤ 조준 중엔 peeking: %s" % str(cover_system.call("get_state")))
+		main_scene.call("take_hostile_hit", 40, Vector3.RIGHT, null, source_position)
+		_assert(int(main_scene.get("player_health")) < 9999, "⑤ peeking 중엔 피해가 정상이어야 합니다.")
+		main_scene.set("laser_aim_held", false)
+		# 사격 시 0.5s 노출(0.4→0.5) — 타이머가 끝나면 다시 covered.
 		cover_system.set("in_cover", true)
 		cover_system.call("notify_player_fired")
 		_assert(bool(cover_system.call("is_exposed")), "⑤ 사격 직후 노출 상태여야 합니다.")
-		var exposed_damage := int(cover_system.call("apply_to_damage", 40, source_position))
-		_assert(exposed_damage == 40, "⑤ 노출 중엔 배율이 없어야 합니다: %d" % exposed_damage)
-		await create_timer(0.5).timeout
-		cover_system.set("in_cover", true)
-		_assert(not bool(cover_system.call("is_exposed")), "⑤ 0.4s 뒤 노출이 끝나야 합니다(%.2f)" % float(cover_system.get("exposed_time")))
-		var reduced_again := int(cover_system.call("apply_to_damage", 40, source_position))
-		_assert(reduced_again == 22, "⑤ 노출이 끝나면 다시 ×0.55: %d" % reduced_again)
-		# take_hostile_hit 경로(공격원 위치 전달) — last_cover_blocked에 차감량이 남는다.
+		_assert(absf(float(cover_system.get("exposed_time")) - 0.5) < 0.001, "⑤ 사격 노출은 0.5s여야 합니다: %.2f" % float(cover_system.get("exposed_time")))
 		main_scene.set("player_health", 9999)
 		main_scene.call("take_hostile_hit", 40, Vector3.RIGHT, null, source_position)
-		_assert(int(main_scene.get("last_cover_blocked")) == 18, "⑤ take_hostile_hit에서 엄폐 차감 18이 기록돼야 합니다: %d" % int(main_scene.get("last_cover_blocked")))
-		# HUD 칩 — in_cover 상태에서 갱신하면 보인다.
+		_assert(int(main_scene.get("player_health")) < 9999, "⑤ 사격 노출 중엔 피해가 정상이어야 합니다.")
+		await create_timer(0.6).timeout
+		cover_system.set("in_cover", true)
+		_assert(not bool(cover_system.call("is_exposed")), "⑤ 0.5s 뒤 노출이 끝나야 합니다(%.2f)" % float(cover_system.get("exposed_time")))
+		main_scene.set("player_health", 9999)
+		main_scene.call("take_hostile_hit", 40, Vector3.RIGHT, null, source_position)
+		_assert(int(main_scene.get("player_health")) == 9999, "⑤ 노출이 끝나면 다시 완전 차단이어야 합니다.")
+		# 폭발(blast)은 차단하지 않는다 — 엄폐 캠핑의 카운터.
+		main_scene.call("take_hostile_hit", 40, Vector3.RIGHT, null, source_position, "blast")
+		_assert(int(main_scene.get("player_health")) < 9999, "⑤ 폭발 피해는 엄폐로 막히면 안 됩니다.")
+		# HUD 칩 3단 — covered(방패 채움) / peeking(테두리+화살표) / 없음.
+		cover_system.set("in_cover", true)
+		cover_system.set("exposed_time", 0.0)
 		main_scene.call("_update_cover_feedback")
 		_assert(bool((hud.get("cover_chip") as Control).visible), "⑤ 엄폐 중 HUD 칩이 보여야 합니다.")
 		_assert(str(hud.get("cover_chip_state")) == "covered", "⑤ 칩 상태 covered: %s" % str(hud.get("cover_chip_state")))
 		cover_system.call("notify_player_fired")
 		main_scene.call("_update_cover_feedback")
-		_assert(str(hud.get("cover_chip_state")) == "exposed", "⑤ 사격 직후 칩은 '노출': %s" % str(hud.get("cover_chip_state")))
+		_assert(str(hud.get("cover_chip_state")) == "peeking", "⑤ 사격 직후 칩은 '내밈': %s" % str(hud.get("cover_chip_state")))
+		cover_system.set("exposed_time", 0.0)
 		cover_report = "cover=%s depth=%.2f" % [str(cover.get_meta("cover_type", "")), depth]
 		break
 	_assert(found_cover, "⑤ 도로 커버 중 하나는 '낮은 레이 막힘 + 머리 레이 통과' 엄폐 기하를 만족해야 합니다.")

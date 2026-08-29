@@ -339,9 +339,14 @@ func _apply_hit(body: Object, trajectory_origin: Vector3 = Vector3.INF) -> bool:
 			parent.call("take_damage", adjusted_damage)
 			damaged = true
 	processed_body_ids[body_id] = true
+	# 엄폐 v2 — 탄이 낮은 엄폐물의 탄막 상자에 '물리적으로' 막힌 경우에도, 그 뒤에
+	# 웅크린 대상이 있으면 같은 차단 피드백(스파크+"막힘")을 띄운다. 판정 경로
+	# (take_hostile_hit/take_projectile_hit의 차단)와 물리 경로의 언어를 통일한다.
+	if not damaged and body is Node and (body as Node).is_in_group("projectile_blocker"):
+		_notify_cover_block()
 	_spawn_impact_flash()
 	if damaged and not hostile:
-		_report_player_hit(body)
+		_report_player_hit(body, adjusted_damage)
 	if damaged and not hostile and penetrations_remaining > 0:
 		penetrations_remaining -= 1
 		return true
@@ -349,8 +354,36 @@ func _apply_hit(body: Object, trajectory_origin: Vector3 = Vector3.INF) -> bool:
 	return false
 
 
-func _report_player_hit(body: Object) -> void:
+func _notify_cover_block() -> void:
+	# 스파크·라벨은 CoverSystem이 0.25s 스로틀로 관리한다 — 여기선 후보만 거른다.
+	if not is_inside_tree():
+		return
+	if hostile:
+		var host := get_tree().get_first_node_in_group("raid_host")
+		if host == null:
+			return
+		var cover_system = host.get("cover_system")
+		if cover_system == null:
+			return
+		if str(cover_system.call("get_state")) != "covered":
+			return
+		if not bool(cover_system.call("is_covered_from", spawn_position)):
+			return
+		CoverSystem.spawn_block_fx(self, global_position)
+		return
+	for enemy in get_tree().get_nodes_in_group("raid_enemy"):
+		if not enemy is Node3D or not enemy.has_method("_cover_blocks_shot_from"):
+			continue
+		if (enemy as Node3D).global_position.distance_to(global_position) > 2.6:
+			continue
+		if bool(enemy.call("_cover_blocks_shot_from", source_body, direction)):
+			CoverSystem.spawn_block_fx(self, global_position)
+			return
+
+
+func _report_player_hit(body: Object, applied_damage: int = 0) -> void:
 	# 히트마커: 내 탄이 무언가를 맞힌 순간을 HUD에 알린다. 처치면 X로 커진다.
+	# 피해량·약점·크리티컬도 함께 넘긴다 — 명중 마이크로 셰이크가 피해에 비례한다.
 	var scene := get_tree().get_first_node_in_group("raid_host")
 	if scene == null:
 		scene = get_tree().current_scene
@@ -360,7 +393,10 @@ func _report_player_hit(body: Object) -> void:
 		scene.call(
 			"notify_player_projectile_hit",
 			(body as Node3D).global_position,
-			bool(body.get("dying"))
+			bool(body.get("dying")),
+			applied_damage,
+			last_hit_zone,
+			last_hit_was_critical
 		)
 
 

@@ -78,6 +78,19 @@ const REINFORCEMENT_HIDDEN_TRIGGER_TIME := 14.0
 # (유저: "싸우다 보면 적이 너무 많아져 감당이 안 된다") 판의 총 배치 수
 # (BASE_ENEMY_COUNT)와 기존 쿨다운은 그대로다 — 문제는 '전투 중 유입'이다.
 const MAX_CONCURRENT_ALERTED := 6
+# 종로(stage_tier 1) 전용 정적 완화 — 첫 존의 "착지하자마자 난전"을 끊는다.
+# 존 데이터(stage_tier)만 본다: 플레이어 장비·전적에 반응하는 러버밴딩이 아니다.
+const FIRST_STAGE_MAX_CONCURRENT_ALERTED := 3
+const FIRST_STAGE_REINFORCEMENT_FIRST_WAVE_DELAY := 20.0
+const FIRST_STAGE_SQUAD_SIZE_CAP := 3
+# ── 소탕 = 안전 ────────────────────────────────────────────────
+# 같은 squad_id의 마지막 생존자가 죽는 순간: 긴장도 즉시 완화 + 보너스 드랍 1회
+# + 그 스쿼드 앵커 반경은 이 판 동안 증원·재스폰 목적지에서 제외. "도망"의
+# 반대급부로 "정리했다"가 실제 안전으로 돌아온다.
+# 완화량 18 = 비소음 총성(2.2) 약 8방 분량, 킬 1건 축적(22)보다 약간 작게 —
+# 스쿼드 전멸(킬 2~3건 = +44~66)을 완전히 상쇄하지는 않는다.
+const SQUAD_CLEAR_PRESSURE_RELIEF := 18.0
+const SQUAD_CLEAR_ANCHOR_RADIUS := 18.0
 const ROCKET_BOSS_SCRIPT := preload("res://scripts/rocket_boss.gd")
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
 const SCENT_TRAIL_MANAGER_SCRIPT := preload("res://scripts/scent_trail_manager.gd")
@@ -113,12 +126,37 @@ var reinforcement_call_banner_active := false
 var run_boss_kills := 0
 var run_elite_kills := 0
 var fatigue_boss_event_triggered := false
+# 소탕된 스쿼드 앵커들 — 이 판 동안 증원·보충 목적지 선정에서 회피한다.
+var cleared_squad_anchors: Array[Vector3] = []
+var run_squads_cleared := 0
 
 
 func attach(owner_node: Node) -> void:
 	host = owner_node
 	spawn_random = owner_node.spawn_random
 	player = owner_node.player
+	# 종로 랜딩 완화 — 첫 증원 웨이브를 20초 늦춘다(무전 호출 쿨다운 + 상시
+	# 밀도 보충 타이머 둘 다). 다른 존은 기존 리듬 그대로.
+	if _zone_stage_tier() <= 1:
+		reinforcement_call_cooldown = maxf(
+			reinforcement_call_cooldown, FIRST_STAGE_REINFORCEMENT_FIRST_WAVE_DELAY
+		)
+		host.reinforcement_timer += FIRST_STAGE_REINFORCEMENT_FIRST_WAVE_DELAY
+
+
+func _zone_stage_tier() -> int:
+	if host == null:
+		return 3
+	return LOOT_ECONOMY.get_stage_for_zone(host.raid_zone_data)
+
+
+func get_max_concurrent_alerted() -> int:
+	# 동시 교전 상한 — 존 stage_tier 기반 정적 튜닝(종로 3, 그 외 6).
+	return (
+		FIRST_STAGE_MAX_CONCURRENT_ALERTED
+		if _zone_stage_tier() <= 1
+		else MAX_CONCURRENT_ALERTED
+	)
 
 
 func _find_distributed_enemy_position(
@@ -258,17 +296,27 @@ func _spawn_enemy_squad(
 	metadata: Dictionary = {}
 ) -> Array[CharacterBody3D]:
 	var spawned: Array[CharacterBody3D] = []
+	# 종로 랜딩 완화 — 모든 스쿼드 스폰(초기 배치·상시 보충·무전 증원·긴장도
+	# 대응·이벤트)이 이 함수를 지나므로 여기가 단일 관문이다: 수류탄병은 권총병
+	# 으로 대체하고 무리 크기를 3으로 자른다. 존 stage_tier만 본다(정적).
+	var spawn_kinds: Array[String] = kinds
+	if _zone_stage_tier() <= 1:
+		spawn_kinds = []
+		for kind in kinds:
+			if spawn_kinds.size() >= FIRST_STAGE_SQUAD_SIZE_CAP:
+				break
+			spawn_kinds.append("pistol" if kind == "grenadier" else kind)
 	var assigned_squad_id := enemy_squad_serial
 	enemy_squad_serial += 1
-	for member_index in kinds.size():
+	for member_index in spawn_kinds.size():
 		var spawn_position: Vector3 = host._find_squad_member_position(
 			world,
 			squad_anchor,
 			member_index,
-			kinds.size()
+			spawn_kinds.size()
 		)
 		var enemy := _spawn_enemy(
-			kinds[member_index],
+			spawn_kinds[member_index],
 			spawn_position,
 			threat,
 			assigned_squad_id,
@@ -525,10 +573,102 @@ func _on_enemy_died(enemy: CharacterBody3D) -> void:
 	if enemy == active_reinforcement_caller:
 		_resolve_reinforcement_block()
 	_spawn_enemy_loot(enemy)
+	_check_squad_cleared(enemy)
 	host.enemies.erase(enemy)
 	# 예전엔 킬마다 보충 타이머를 2.5초로 당겼다 — 죽일수록 빨리 채워지는
 	# 구조라 "소탕"이라는 행위 자체가 성립하지 않았다(유저 신고). 밀도 보충은
 	# 킬과 무관하게 자기 주기로만 돈다.
+
+
+func _check_squad_cleared(dead_enemy: CharacterBody3D) -> void:
+	# 소탕 판정 — 같은 squad_id의 마지막 생존자가 죽는 순간 한 번만 발동한다.
+	# 무리 없이 단독 스폰된 적(squad_id < 0: 엘리트·보스·테스트 스폰)은 제외.
+	if bool(dead_enemy.get_meta("raid_boss", false)):
+		return
+	var dead_squad_raw = dead_enemy.get("squad_id")
+	if dead_squad_raw == null:
+		return
+	var dead_squad_id := int(dead_squad_raw)
+	if dead_squad_id < 0:
+		return
+	for enemy in host.enemies:
+		if enemy == dead_enemy or not is_instance_valid(enemy):
+			continue
+		if bool(enemy.get("dying")):
+			continue
+		var member_squad_raw = enemy.get("squad_id")
+		if member_squad_raw != null and int(member_squad_raw) == dead_squad_id:
+			return
+	_on_squad_cleared(dead_squad_id, dead_enemy)
+
+
+func _on_squad_cleared(cleared_squad_id: int, last_enemy: CharacterBody3D) -> void:
+	# 소탕 = 안전. 네 가지가 한 프레임에 함께 온다:
+	# ① 배너(토스트)+골드 펄스 ② 긴장도 즉시 완화 ③ 보너스 드랍 1회
+	# ④ 이 판 동안 그 앵커 반경(18m)은 증원·보충 목적지에서 제외 + 지도 청록 원.
+	run_squads_cleared += 1
+	var corpse_position := last_enemy.global_position
+	var anchor: Vector3 = corpse_position
+	var anchor_raw = last_enemy.get("squad_anchor")
+	if anchor_raw is Vector3 and (anchor_raw as Vector3) != Vector3.ZERO:
+		anchor = anchor_raw as Vector3
+	cleared_squad_anchors.append(anchor)
+	if host.hud != null and host.hud.has_method("push_toast"):
+		host.hud.push_toast("구역 소탕 — 일대가 조용해진다", Color("#f0c860"), 2.8)
+	if host.hud != null and host.hud.has_method("pulse_squad_clear"):
+		host.hud.pulse_squad_clear()
+	host._add_raid_pressure(-SQUAD_CLEAR_PRESSURE_RELIEF)
+	_spawn_squad_clear_bonus(corpse_position)
+	if is_instance_valid(host.tactical_map) and host.tactical_map.has_method("register_raid_marker"):
+		host.tactical_map.call(
+			"register_raid_marker",
+			"squad_cleared_%d" % cleared_squad_id,
+			anchor,
+			"cleared",
+			"소탕 구역",
+			true,
+			SQUAD_CLEAR_ANCHOR_RADIUS
+		)
+
+
+func _spawn_squad_clear_bonus(drop_position: Vector3) -> void:
+	# 소탕 보너스 1회 — 마지막 시체 위치에 탄약(70%) 또는 부품 1개. 확정 경로
+	# (roll_matched_ammo_recovery / mod_component)를 재활용하고, 캡(try_register_loot)에
+	# 막히면 조용히 접는다 — 과보상 금지.
+	var stage_tier := LOOT_ECONOMY.get_stage_for_zone(host.raid_zone_data)
+	if spawn_random.randf() < 0.7:
+		var ammo_bonus: Dictionary = LOOT_ECONOMY.roll_matched_ammo_recovery(
+			stage_tier, spawn_random
+		)
+		if (
+			not ammo_bonus.is_empty()
+			and LOOT_ECONOMY.try_register_loot(GameState, ammo_bonus, "enemy", stage_tier)
+		):
+			var ammo_data := (ammo_bonus.get("data", {}) as Dictionary).duplicate(true)
+			ammo_data["loot_source"] = "enemy"
+			host._create_loot_pickup(
+				str(ammo_bonus.get("type", "ammo")),
+				drop_position + Vector3(0.6, 0.0, -0.5),
+				ammo_data
+			)
+			return
+	var component_ids := ["rubber_gasket", "scope_lens", "magazine_spring"]
+	var component_names := {
+		"rubber_gasket": "소음기용 고무 패킹",
+		"scope_lens": "스코프 렌즈",
+		"magazine_spring": "탄창 스프링",
+	}
+	var component_id: String = component_ids[spawn_random.randi_range(0, component_ids.size() - 1)]
+	host._create_loot_pickup(
+		"mod_component",
+		drop_position + Vector3(0.6, 0.0, -0.5),
+		{
+			"amount": 1,
+			"component_id": component_id,
+			"display_name": component_names[component_id],
+			"loot_source": "enemy",
+		}
+	)
 
 
 func _on_enemy_damaged(_enemy: CharacterBody3D, amount: int) -> void:
@@ -778,7 +918,7 @@ func _update_reinforcement_call(delta: float, effective_threat: float) -> void:
 		return
 	# 이미 상한까지 교전 중이면 증원 호출 자체를 미룬다(타이머는 유지되므로,
 	# 수가 줄면 그때 호출이 성립한다).
-	if alerted_count >= MAX_CONCURRENT_ALERTED:
+	if alerted_count >= get_max_concurrent_alerted():
 		return
 	# 엘리트가 교전 중이면 호출 시도가 30% 빨라진다 — "저 녀석을 빨리 잡아야
 	# 한다"는 위협 정체성. 동시 교전 상한(MAX_CONCURRENT_ALERTED)·쿨다운·
@@ -836,7 +976,7 @@ func _spawn_called_reinforcements() -> void:
 	var effective_threat := clampf(maxf(0.58, host.night_intensity), 0.0, 1.0)
 	# 증원 규모는 교전 상한의 남은 자리만큼만 — 예전 6~10명 고정 유입이
 	# "무한 누적" 체감의 최대 원인이었다.
-	var reinforcement_budget := MAX_CONCURRENT_ALERTED - count_alerted_enemies()
+	var reinforcement_budget := get_max_concurrent_alerted() - count_alerted_enemies()
 	if reinforcement_budget <= 0:
 		return
 	var reinforcement_count := mini(
@@ -893,6 +1033,10 @@ func _find_reinforcement_position(minimum_distance: float = 0.0) -> Vector3:
 			continue
 		if world.is_position_in_safe_zone(candidate):
 			continue
+		# 소탕 = 안전 — 전멸시킨 스쿼드의 앵커 반경은 이 판 동안 조용해야 한다.
+		# 무전 증원·상시 보충·피로 보스 전부 이 함수로 자리를 잡으므로 여기 하나면 된다.
+		if _is_near_cleared_squad_anchor(candidate):
+			continue
 		var overlaps_enemy := false
 		for enemy in host.enemies:
 			if is_instance_valid(enemy) and enemy.global_position.distance_to(candidate) < 2.2:
@@ -901,6 +1045,13 @@ func _find_reinforcement_position(minimum_distance: float = 0.0) -> Vector3:
 		if not overlaps_enemy:
 			return candidate
 	return Vector3.INF
+
+
+func _is_near_cleared_squad_anchor(candidate: Vector3) -> bool:
+	for cleared_anchor in cleared_squad_anchors:
+		if candidate.distance_to(cleared_anchor) < SQUAD_CLEAR_ANCHOR_RADIUS:
+			return true
+	return false
 
 
 func _spawn_rocket_boss_at(

@@ -107,7 +107,8 @@ func _run() -> void:
 	# 예전 고정 +6 기대치는 상한 도입 뒤로 성립하지 않는다 — 이미 교전 중인
 	# 적 수만큼 깎여서 온다.
 	var spawned := (main.get("enemies") as Array).size() - enemy_count_before
-	var expected := int(main.get("enemy_director").MAX_CONCURRENT_ALERTED) - alerted_before
+	# 상한은 존 stage_tier 기반 함수가 됐다(종로 3, 그 외 6) — 상수 대신 함수를 묻는다.
+	var expected := int(main.get("enemy_director").call("get_max_concurrent_alerted")) - alerted_before
 	if spawned <= 0 or spawned != expected:
 		_fail("completed enemy call spawned %d reinforcements (expected %d)" % [spawned, expected])
 		return

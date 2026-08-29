@@ -58,6 +58,11 @@ var jackpot_progress: ProgressBar
 var damage_feedback_canvas: CanvasLayer
 var damage_vignette: ColorRect
 var damage_vignette_material: ShaderMaterial
+# 소탕 골드 펄스 — 스쿼드 전멸 순간 화면 가장자리를 금빛으로 한 번 스친다.
+# 피격 비네트(붉은색)와 같은 셰이더 구조, 색과 수명만 다르다. 지연 생성.
+var squad_clear_pulse_rect: ColorRect
+var squad_clear_pulse_material: ShaderMaterial
+var squad_clear_pulse_tween: Tween
 var damage_direction_indicator: TextureRect
 var player_world_health_bar: Control
 var player_world_health_fill: Panel
@@ -1322,6 +1327,52 @@ func build_jackpot_hud() -> void:
 
 
 
+func _build_squad_clear_pulse() -> void:
+	# 붉은 피격 비네트와 같은 가장자리 마스크에 금색을 얹는다. 알파를 낮게 잡아
+	# "보상"으로 읽히되 시야를 가리지는 않게 한다.
+	squad_clear_pulse_rect = ColorRect.new()
+	squad_clear_pulse_rect.name = "SquadClearPulse"
+	squad_clear_pulse_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	squad_clear_pulse_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var pulse_shader := Shader.new()
+	pulse_shader.code = """
+shader_type canvas_item;
+uniform float intensity : hint_range(0.0, 1.0) = 0.0;
+void fragment() {
+	vec2 centered = (UV - vec2(0.5)) * 2.0;
+	float radial = smoothstep(0.34, 1.14, length(centered));
+	float edge = max(radial, smoothstep(0.76, 1.0, max(abs(centered.x), abs(centered.y))));
+	float pulse = edge * intensity;
+	COLOR = vec4(0.94, 0.78, 0.34, pulse * 0.42);
+}
+"""
+	squad_clear_pulse_material = ShaderMaterial.new()
+	squad_clear_pulse_material.shader = pulse_shader
+	squad_clear_pulse_material.set_shader_parameter("intensity", 0.0)
+	squad_clear_pulse_rect.material = squad_clear_pulse_material
+	damage_feedback_canvas.add_child(squad_clear_pulse_rect)
+
+
+func pulse_squad_clear() -> void:
+	# 짧은 골드 펄스(0.1s 상승 → 0.5s 감쇠). 연속 소탕이면 재시작만 한다.
+	if squad_clear_pulse_material == null:
+		return
+	if squad_clear_pulse_tween != null:
+		squad_clear_pulse_tween.kill()
+	squad_clear_pulse_material.set_shader_parameter("intensity", 0.0)
+	squad_clear_pulse_tween = host.create_tween()
+	squad_clear_pulse_tween.tween_method(
+		func(value: float) -> void:
+			squad_clear_pulse_material.set_shader_parameter("intensity", value),
+		0.0, 0.85, 0.1
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	squad_clear_pulse_tween.tween_method(
+		func(value: float) -> void:
+			squad_clear_pulse_material.set_shader_parameter("intensity", value),
+		0.85, 0.0, 0.5
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+
+
 func setup_player_combat_feedback() -> void:
 	damage_feedback_canvas = CanvasLayer.new()
 	damage_feedback_canvas.name = "PlayerDamageFeedback"
@@ -1349,6 +1400,7 @@ void fragment() {
 	damage_vignette_material.set_shader_parameter("intensity", 0.0)
 	damage_vignette.material = damage_vignette_material
 	damage_feedback_canvas.add_child(damage_vignette)
+	_build_squad_clear_pulse()
 	# 문자 "▲"는 웹 기본 폰트에 글리프가 없어 깨진 네모로 떴다.
 	# 폰트에 기대지 말고 직접 그린 화살표 텍스처를 쓴다.
 	damage_direction_indicator = TextureRect.new()
@@ -1484,10 +1536,12 @@ func build_cover_chip() -> void:
 	aim_canvas.add_child(cover_chip)
 
 
-func update_cover_chip(in_cover: bool, exposed: bool, anchor: Vector2, visible_now: bool = true) -> void:
+func update_cover_chip(state: String, anchor: Vector2, visible_now: bool = true) -> void:
+	# 엄폐 v2 3상태 — "covered"(방패 채움: 총알이 막히는 중) / "peeking"(테두리+화살표:
+	# 내밀어 쏘는 중, 피해 정상) / "open"(칩 없음).
 	if cover_chip == null:
 		return
-	var next_state := "" if not in_cover else ("exposed" if exposed else "covered")
+	var next_state := state if state in ["covered", "peeking"] else ""
 	if next_state != cover_chip_state:
 		cover_chip_state = next_state
 		match next_state:
@@ -1496,11 +1550,15 @@ func update_cover_chip(in_cover: bool, exposed: bool, anchor: Vector2, visible_n
 				cover_chip_label.add_theme_color_override("font_color", HudStyle.TEXT)
 				cover_chip_icon.texture = UI_ICONS.get_icon("armor", 14, HudStyle.GREEN)
 				cover_chip.add_theme_stylebox_override("panel", HudStyle.chip(HudStyle.GREEN))
-			"exposed":
-				cover_chip_label.text = "노출"
+			"peeking":
+				cover_chip_label.text = "내밈 ▸"
 				cover_chip_label.add_theme_color_override("font_color", HudStyle.WARN)
 				cover_chip_icon.texture = UI_ICONS.get_icon("armor", 14, HudStyle.WARN)
-				cover_chip.add_theme_stylebox_override("panel", HudStyle.chip(HudStyle.WARN))
+				var outline := HudStyle.chip(HudStyle.WARN)
+				outline.bg_color = Color(outline.bg_color, 0.25)
+				outline.set_border_width_all(1)
+				outline.border_color = HudStyle.WARN
+				cover_chip.add_theme_stylebox_override("panel", outline)
 	cover_chip.visible = visible_now and not next_state.is_empty()
 	if cover_chip.visible:
 		cover_chip.position = anchor - Vector2(cover_chip.size.x * 0.5, 0.0)

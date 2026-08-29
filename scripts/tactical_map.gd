@@ -490,9 +490,15 @@ func _draw() -> void:
 			marker_color = Color("#ef7252")
 		elif marker_type == "jackpot":
 			marker_color = Color("#f0ad4f")
+		elif marker_type == "cleared":
+			# 소탕 구역 — 옅은 청록. 위협 마커들과 달리 '조용해진 곳'이라
+			# 채도를 낮추고 맥동도 거의 없앤다(아래 pulse 감쇠).
+			marker_color = Color("#9fe8d9")
 		var marker_pulse := 0.5 + 0.5 * sin(
 			Time.get_ticks_msec() * (0.011 if marker_type == "incident" else 0.006)
 		)
+		if marker_type == "cleared":
+			marker_pulse *= 0.25
 		# 사수 반경 같은 '구역' 마커는 월드 반경을 그대로 깐다. 이 지도는 아이소메트릭
 		# 이라 화면 원을 그리면 실제 구역과 어긋난다 — 월드에서 원을 샘플링해 투영한다.
 		var world_radius := float(marker.get("radius", 0.0))

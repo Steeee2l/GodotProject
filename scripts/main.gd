@@ -3319,13 +3319,57 @@ func _on_fire_button_down() -> void:
 		Input.vibrate_handheld(18)
 
 
-func notify_player_projectile_hit(world_position: Vector3, killed: bool) -> void:
+# ── 명중 마이크로 셰이크(전투 코어 2차) ────────────────────────────
+# 내 총알이 '박히는' 프레임에 화면이 미세하게 반응한다 — 히트마커와 같은 지점.
+# 피해 비례 0.02~0.05, 헤드샷/크리티컬 ×1.6. 연사 멀미 방지 장치 둘:
+# 스로틀 90ms + 총 상한 0.2(처치 셰이크 0.26보다 항상 작게).
+const HIT_SHAKE_MIN_KICK := 0.02
+const HIT_SHAKE_MAX_KICK := 0.05
+const HIT_SHAKE_FULL_KICK_DAMAGE := 60.0
+const HIT_SHAKE_EMPHASIS_SCALE := 1.6
+const HIT_SHAKE_STRENGTH_CAP := 0.2
+const HIT_SHAKE_THROTTLE_MSEC := 90
+var last_hit_shake_msec := 0
+
+
+func notify_player_projectile_hit(
+	world_position: Vector3,
+	killed: bool,
+	applied_damage: int = 0,
+	hit_zone: String = "body",
+	critical: bool = false
+) -> void:
+	# 명중 마이크로 셰이크 — 히트마커보다 먼저(화면 뒤 명중도 손맛은 남긴다).
+	_apply_projectile_hit_shake(applied_damage, hit_zone == "head" or critical)
 	# 히트마커 — 시야 안개로 적이 흐릿해도 "맞았다"는 확답을 준다.
 	if hud.combat_feedback == null or camera.is_position_behind(world_position):
 		return
 	hud.combat_feedback.add_hit_marker(
 		camera.unproject_position(world_position + Vector3(0, 0.45, 0)),
 		killed
+	)
+
+
+func _apply_projectile_hit_shake(applied_damage: int, emphasized: bool) -> void:
+	if applied_damage <= 0:
+		return
+	var now := Time.get_ticks_msec()
+	if now - last_hit_shake_msec < HIT_SHAKE_THROTTLE_MSEC:
+		return
+	last_hit_shake_msec = now
+	var kick := lerpf(
+		HIT_SHAKE_MIN_KICK,
+		HIT_SHAKE_MAX_KICK,
+		clampf(float(applied_damage) / HIT_SHAKE_FULL_KICK_DAMAGE, 0.0, 1.0)
+	)
+	if emphasized:
+		kick *= HIT_SHAKE_EMPHASIS_SCALE
+	camera_shake_time = maxf(camera_shake_time, 0.09)
+	# 가산이되 상한을 넘지 않는다. 이미 더 큰 셰이크(처치·피격)가 도는 중이면
+	# 그쪽을 줄이지도 않는다(maxf).
+	camera_shake_strength = maxf(
+		camera_shake_strength,
+		minf(HIT_SHAKE_STRENGTH_CAP, camera_shake_strength + kick)
 	)
 
 
@@ -3991,7 +4035,7 @@ func _update_enemy_pressure(delta: float) -> void:
 	# 이미 교전 상한까지 붙어 있거나 근처가 붐비면 보충을 아예 굴리지 않는다.
 	# 타이머도 그대로 두므로, 정리한 뒤에야 다음 보충이 성립한다.
 	var alerted_count := enemy_director.count_alerted_enemies()
-	if alerted_count >= EnemyDirector.MAX_CONCURRENT_ALERTED:
+	if alerted_count >= enemy_director.get_max_concurrent_alerted():
 		return
 	if _count_enemies_near_player(REINFORCEMENT_NEARBY_RADIUS) >= REINFORCEMENT_NEARBY_LIMIT:
 		return
@@ -4261,13 +4305,21 @@ func take_hostile_hit(
 ) -> void:
 	# impact_kind는 넉백 세기만 고른다("bullet"/"melee"/"blast"). 인자를 안 주는
 	# 옛 호출부(총알)는 기본값 그대로 총알 취급 — 거의 밀리지 않는다.
-	# 엄폐 — 공격원(또는 폭심) 기준으로 엄폐물 건너편이면 ×0.55. 사격 노출 중엔 없음.
+	# 엄폐 v2 — covered 상태면 그 엄폐물을 지나오는 총알(bullet)은 완전 차단.
+	# 폭발(blast)·근접(melee)은 차단하지 않는다(엄폐 캠핑의 카운터 — 수류탄병의 존재 이유).
 	var cover_source := source_position
 	if cover_source == Vector3.INF and is_instance_valid(attacker) and attacker is Node3D:
 		cover_source = (attacker as Node3D).global_position
-	var covered_amount := cover_system.apply_to_damage(amount, cover_source)
-	last_cover_blocked = maxi(0, amount - covered_amount)
-	amount = covered_amount
+	if impact_kind == "bullet" and cover_system.try_block_ranged(cover_source):
+		last_cover_blocked = amount
+		CoverSystem.spawn_block_fx(self, cover_system.last_block_point)
+		if player_health > 0 and hud.ammo_notice:
+			var cover_hints := int(get_meta("cover_block_hint_count", 0))
+			if cover_hints < 2:
+				set_meta("cover_block_hint_count", cover_hints + 1)
+				hud.push_toast("엄폐가 총알을 막았다 — 폭발·근접은 못 막는다", HudStyle.GREEN, 1.1)
+		return
+	last_cover_blocked = 0
 	var multiplier := GameState.get_damage_taken_multiplier()
 	last_damage_blocked = maxi(0, amount - maxi(1, roundi(float(amount) * multiplier)))
 	last_damage_source_name = "적대 생존자"
@@ -4277,18 +4329,13 @@ func take_hostile_hit(
 		last_damage_source_name = str(identity.get("source_name", last_damage_source_name))
 		last_damage_weapon_name = str(identity.get("weapon_name", last_damage_weapon_name))
 	take_hit(amount, hit_direction, impact_kind)
-	# 방어·엄폐 경감 토스트는 판당 2회까지만 — 시스템을 가르친 뒤엔 조용히
+	# 방어 경감 토스트는 판당 2회까지만 — 시스템을 가르친 뒤엔 조용히
 	# (매 피격마다 뜨면 전투 내내 스팸이다. 수치는 피해 숫자가 이미 말한다).
 	if last_damage_blocked > 0 and player_health > 0 and hud.ammo_notice:
 		var armor_hints := int(get_meta("armor_block_hint_count", 0))
 		if armor_hints < 2:
 			set_meta("armor_block_hint_count", armor_hints + 1)
 			hud.push_toast("방어구가 피해 %d을 막았다" % last_damage_blocked, Color("#8ed9ff"), 1.1)
-	if last_cover_blocked > 0 and player_health > 0 and hud.ammo_notice:
-		var cover_hints := int(get_meta("cover_block_hint_count", 0))
-		if cover_hints < 2:
-			set_meta("cover_block_hint_count", cover_hints + 1)
-			hud.push_toast("엄폐가 피해 %d을 막았다" % last_cover_blocked, HudStyle.GREEN, 1.1)
 
 
 var last_cover_blocked := 0
@@ -4299,8 +4346,7 @@ func _update_cover_feedback() -> void:
 		return
 	var anchor := camera.unproject_position(player.global_position + Vector3(0, 2.15, 0)) + Vector2(0.0, 9.0)
 	hud.update_cover_chip(
-		cover_system.in_cover,
-		cover_system.is_exposed(),
+		cover_system.get_state(),
 		anchor,
 		not camera.is_position_behind(player.global_position)
 	)
@@ -4310,7 +4356,8 @@ func notify_player_headshot(_enemy: Node, _damage: int) -> void:
 	# 적(enemy.take_projectile_hit)이 헤드샷을 확정하면 부른다 — 통계 + 첫 레슨.
 	run_headshots += 1
 	GameState.raid_headshots += 1
-	_show_mastery_lesson("headshot", "헤드샷! 머리를 노리면 피해 1.6배")
+	# 배율이 대상별로 갈라졌다(경무장 ×2.2 / 상위 무장 ×1.6) — 숫자 대신 규칙을 말한다.
+	_show_mastery_lesson("headshot", "헤드샷! 경무장 적은 머리 두 발이면 정리된다")
 
 
 func notify_enemy_telegraph(kind: String, _enemy: Node) -> void:
@@ -4937,7 +4984,7 @@ func _spawn_raid_event_squad(level: int) -> void:
 		return
 	# 전투 중 추가 유입 상한 — 이미 상한까지 교전 중이면 압박 스쿼드는 건너뛴다.
 	# (이벤트 쿨다운은 소모된 채 넘어가므로 '나중에 몰아서' 오지도 않는다.)
-	if enemy_director.count_alerted_enemies() >= EnemyDirector.MAX_CONCURRENT_ALERTED:
+	if enemy_director.count_alerted_enemies() >= enemy_director.get_max_concurrent_alerted():
 		return
 	var spawn_position := enemy_director._find_event_position_near_player(world, 26.0, 38.0)
 	# 삼항으로 고른 배열 리터럴은 무타입 Array가 돼 Array[String] 대입에서 런타임

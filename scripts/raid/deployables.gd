@@ -888,8 +888,8 @@ class SalvageTurret extends Node3D:
 # 포탑 탄 — 플레이어 탄과 같은 팀 판정(bullet_projectile 파생)이되,
 # ① 히트마커를 울리지 않고 ② 플레이어에게는 절대 피해를 주지 않는다.
 class TurretBullet extends "res://scripts/bullet_projectile.gd":
-	func _report_player_hit(_body: Object) -> void:
-		# 포탑의 명중은 내 손맛이 아니다 — HUD 히트마커 없음.
+	func _report_player_hit(_body: Object, _applied_damage: int = 0) -> void:
+		# 포탑의 명중은 내 손맛이 아니다 — HUD 히트마커도 명중 셰이크도 없음.
 		pass
 
 	func _apply_hit(body: Object, trajectory_origin: Vector3 = Vector3.INF) -> bool:

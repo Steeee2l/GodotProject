@@ -135,12 +135,30 @@ const ENEMY_WORLD_HEIGHT := 1.62
 const HEAD_ZONE_RATIO_BY_KIND := {"melee": 0.28, "ranged": 0.28, "grenadier": 0.28}
 const HEADSHOT_DAMAGE_MULTIPLIER := 1.6
 const ELITE_HEADSHOT_DAMAGE_MULTIPLIER := 1.35
+# 정밀 헤드샷 — 비엘리트 경무장(권총병 m1911·근접 배트)은 머리가 진짜 약점이다.
+# 엄폐 v2의 "내민 순간을 쏜다"와 결합해 초반 적을 한두 발에 정리하는 실력 표현.
+# 상위 무장 사수·척탄병·엘리트·보스는 기존 배율 유지 — 존이 오를수록 헤드샷은
+# '보너스'로, 초반 존에서는 '해법'으로 읽힌다. 정적 규칙(스폰 시 무장·종류)만 본다.
+const LIGHT_TARGET_HEADSHOT_DAMAGE_MULTIPLIER := 2.2
 const HEADSHOT_POISE_MULTIPLIER := 1.5
 const STEERING_LOCK_MSEC := 220
 const FACING_STABILITY_MSEC := 120
 const SENTRY_LOOK_INTERVAL_MIN := 0.75
 const SENTRY_LOOK_INTERVAL_MAX := 1.25
 const FACTION_COMBAT_DAMAGE_MULTIPLIER := 0.42
+# ── 엄폐 v2(적) — "각 잡기"의 탄생 ────────────────────────────────
+# 플레이어와 같은 규칙(CoverSystem.evaluate_cover_for): 낮은 엄폐물 1.2u 이내 +
+# 표적→적 낮은 레이 막힘 + 머리 레이 통과 = 엄폐. 웅크린 동안(내밈 제외) 그
+# 엄폐물을 지나오는 플레이어 탄을 완전 차단한다. 소극 규칙 — 이동 AI는 손대지
+# 않고 이미 엄폐물 근처에 있을 때 상태만 붙는다(자리 찾는 내비 신설 금지).
+# 6~16m 교전 중인 ranged만 시도 — 근접 돌격조·척탄병은 안 한다(수류탄이 곧
+# 엄폐 캠핑의 카운터다). 내밈 = ranged_windup~점사(조준선 예고 구간과 일치).
+const COVER_SYSTEM := preload("res://scripts/raid/cover_system.gd")
+const COVER_ENGAGE_MIN_DISTANCE := 6.0
+const COVER_ENGAGE_MAX_DISTANCE := 16.0
+const COVER_SCAN_INTERVAL := 0.25
+const COVER_CROUCH_SCALE_Y := 0.8
+const COVER_CROUCH_SINK := 0.1
 
 var enemy_kind := "melee"
 var target: CharacterBody3D
@@ -271,6 +289,15 @@ var legacy_attack_timing := false
 var last_hit_poise_multiplier := 1.0
 var last_hit_was_headshot := false
 var headshots_taken := 0
+# 엄폐 v2 상태 — cover_active(기하 성립)와 내밈(is_cover_peeking)의 조합이 웅크림이다.
+var cover_active := false
+var cover_point := Vector3.INF
+var cover_scan_timer := 0.0
+var cover_crouch_shown := false
+var cover_crouch_tween: Tween
+var cover_arc: Node3D
+var cover_shots_blocked := 0
+var last_cover_block_point := Vector3.INF
 static var weapon_texture_cache: Dictionary = {}
 static var health_bar_texture_cache: Dictionary = {}
 static var reload_texture_cache: Dictionary = {}
@@ -646,6 +673,7 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector3.ZERO
 		move_and_slide()
 		return
+	_update_enemy_cover(delta)
 	if combat_state == "stagger":
 		has_current_line_of_sight = alerted and is_instance_valid(target) and _has_line_of_sight()
 		_update_stagger(delta)
@@ -2733,11 +2761,129 @@ func _start_recoil_pose() -> void:
 func _reset_sprite_pose() -> void:
 	if sprite == null or dying:
 		return
-	sprite.position = SPRITE_BASE_POSITION
-	sprite.scale = Vector3.ONE
+	# 기준 자세는 엄폐 웅크림을 안다 — 점사·경직이 끝난 뒤에도 웅크린 채로 복귀한다.
+	# (엘리트 배율도 여기서 복원 — 예전 Vector3.ONE 강제는 엘리트를 원래 크기로 되돌렸다.)
+	sprite.position = SPRITE_BASE_POSITION + _get_cover_pose_offset()
+	sprite.scale = _get_sprite_rest_scale()
 	sprite.rotation = Vector3.ZERO
 	# Color.WHITE 강제 복귀는 기본 틴트와 가시성 알파(스텔스 페이드)를 지웠다.
 	_apply_sprite_base_modulate()
+
+
+# ── 엄폐 v2(적) — 상태·차단·웅크림 ────────────────────────────────
+
+func _update_enemy_cover(delta: float) -> void:
+	cover_scan_timer -= delta
+	if cover_scan_timer <= 0.0:
+		cover_scan_timer = COVER_SCAN_INTERVAL
+		refresh_cover_state()
+	_update_cover_visuals()
+
+
+func refresh_cover_state() -> void:
+	# 프로브가 스캔 주기를 기다리지 않고 즉시 갱신할 수 있게 공개 메서드로 둔다.
+	var next := _evaluate_cover_now()
+	if next == cover_active:
+		return
+	cover_active = next
+	if not next:
+		cover_point = Vector3.INF
+
+
+func _evaluate_cover_now() -> bool:
+	if enemy_kind != "ranged" or dying or not alerted or not is_instance_valid(target):
+		return false
+	var offset := target.global_position - global_position
+	offset.y = 0.0
+	var distance := offset.length()
+	if distance < COVER_ENGAGE_MIN_DISTANCE or distance > COVER_ENGAGE_MAX_DISTANCE:
+		return false
+	var result: Dictionary = COVER_SYSTEM.evaluate_cover_for(
+		self, target.global_position, global_position.y - 0.7
+	)
+	if not bool(result.get("covered", false)):
+		return false
+	cover_point = result.get("point", Vector3.INF)
+	return true
+
+
+func is_cover_peeking() -> bool:
+	# 사수의 내밈 = windup~점사. 조준선 예고가 뜨는 구간과 일치 — 예고선이 뜨는
+	# 순간이 곧 쏠 타이밍이라는 기존 텔레그래프 문법과 자연 결합한다.
+	return combat_state in ["ranged_windup", "pistol_burst"]
+
+
+func _is_cover_crouching() -> bool:
+	return cover_active and not is_cover_peeking() and not dying
+
+
+func _cover_blocks_shot_from(attacker, hit_direction: Vector3) -> bool:
+	if not _is_cover_crouching():
+		return false
+	var source := Vector3.INF
+	if is_instance_valid(attacker) and attacker is Node3D:
+		source = (attacker as Node3D).global_position
+	elif hit_direction.length_squared() > 0.01:
+		# 공격자를 모르면 탄 진행 방향을 거슬러 공격원을 근사한다(포탑 등 3인자 경로).
+		var back := hit_direction
+		back.y = 0.0
+		if back.length_squared() > 0.01:
+			source = global_position - back.normalized() * 10.0
+	var result: Dictionary = COVER_SYSTEM.evaluate_cover_for(
+		self, source, global_position.y - 0.7
+	)
+	if not bool(result.get("covered", false)):
+		return false
+	last_cover_block_point = result.get("point", global_position)
+	return true
+
+
+func _update_cover_visuals() -> void:
+	var crouching := _is_cover_crouching()
+	if cover_arc == null or not is_instance_valid(cover_arc):
+		if not crouching:
+			return
+		# 붉은 호 — "쟤는 지금 막혀 있다, 돌아가라"가 한눈에 읽힌다.
+		cover_arc = COVER_SYSTEM.build_cover_arc_indicator(self, -0.62)
+	cover_arc.visible = crouching
+	if crouching:
+		var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.004) * 0.05
+		cover_arc.scale = Vector3.ONE * pulse
+		if cover_point != Vector3.INF:
+			var toward := cover_point - global_position
+			toward.y = 0.0
+			if toward.length_squared() > 0.01:
+				toward = toward.normalized()
+				cover_arc.rotation.y = atan2(-toward.z, toward.x)
+	if crouching != cover_crouch_shown:
+		cover_crouch_shown = crouching
+		_start_cover_crouch_tween()
+
+
+func _start_cover_crouch_tween() -> void:
+	if sprite == null or dying:
+		return
+	if cover_crouch_tween != null and cover_crouch_tween.is_valid():
+		cover_crouch_tween.kill()
+	# 자세 트윈(visual_tween)과 소유권을 다투지 않는다 — 점사·경직 뒤의
+	# _reset_sprite_pose가 어차피 웅크림 기준값(_get_sprite_rest_scale)으로 복귀시킨다.
+	cover_crouch_tween = create_tween()
+	cover_crouch_tween.set_parallel(true)
+	cover_crouch_tween.tween_property(sprite, "scale", _get_sprite_rest_scale(), 0.12)
+	cover_crouch_tween.tween_property(
+		sprite, "position", SPRITE_BASE_POSITION + _get_cover_pose_offset(), 0.12
+	)
+
+
+func _get_sprite_rest_scale() -> Vector3:
+	var rest := Vector3.ONE * (ELITE_SPRITE_SCALE if elite else 1.0)
+	if _is_cover_crouching():
+		rest.y *= COVER_CROUCH_SCALE_Y
+	return rest
+
+
+func _get_cover_pose_offset() -> Vector3:
+	return Vector3(0.0, -COVER_CROUCH_SINK, 0.0) if _is_cover_crouching() else Vector3.ZERO
 	_update_weapon_visual()
 	_apply_weapon_base_modulate()
 
@@ -2927,17 +3073,28 @@ func take_projectile_hit(
 	attacker = null
 ) -> void:
 	_alert_to_projectile_attacker(attacker)
+	# 엄폐 v2 — 웅크린 동안(내밈 제외) 엄폐물을 지나오는 탄은 완전 차단.
+	# 차단은 각도 문제일 뿐이다: 측면으로 세 걸음이면 각이 나온다(HP 러버밴딩 없음).
+	# 경보(_alert)는 차단돼도 울린다 — 맞고도 모르는 적은 이상하다.
+	if _cover_blocks_shot_from(attacker, hit_direction):
+		cover_shots_blocked += 1
+		COVER_SYSTEM.spawn_block_fx(self, last_cover_block_point)
+		return
+	# 웅크린 적은 상단 히트존 자체가 낮아진다 — 헤드샷 존은 내밈 동안만 유효.
+	if hit_zone == "head" and _is_cover_crouching():
+		hit_zone = "body"
 	# hit_zone은 탄도의 명중 등급("center"/"normal"/"graze") 또는 약점 "head"다.
-	# 헤드샷(bullet_projectile이 조준 높이로 판정): 피해 ×1.6, 엘리트·보스 ×1.35
+	# 헤드샷(bullet_projectile이 조준 높이로 판정): 배율은 get_headshot_damage_multiplier —
+	# 비엘리트 경무장(권총·배트) ×2.2, 상위 무장·척탄병 ×1.6, 엘리트·보스 ×1.35
 	# (대신 포이즈 누적 ×1.5로 보상). 적 체력·피해는 플레이어 상태를 보지 않는다.
 	var final_damage := roundi(float(amount) * critical_multiplier) if is_critical else amount
 	last_hit_was_headshot = hit_zone == "head"
 	last_hit_poise_multiplier = 1.0
 	if last_hit_was_headshot:
 		var boss_or_elite := elite or bool(get_meta("raid_boss", false))
-		final_damage = maxi(1, roundi(float(final_damage) * (
-			ELITE_HEADSHOT_DAMAGE_MULTIPLIER if boss_or_elite else HEADSHOT_DAMAGE_MULTIPLIER
-		)))
+		final_damage = maxi(1, roundi(
+			float(final_damage) * get_headshot_damage_multiplier()
+		))
 		if boss_or_elite:
 			last_hit_poise_multiplier = HEADSHOT_POISE_MULTIPLIER
 		headshots_taken += 1
@@ -2962,6 +3119,21 @@ func take_projectile_hit(
 				final_damage = maxi(1, roundi(float(final_damage) * elite_multiplier))
 	take_hit(final_damage, hit_direction, is_critical, hit_zone)
 	last_hit_poise_multiplier = 1.0
+
+
+func get_headshot_damage_multiplier() -> float:
+	# 정밀 헤드샷 배율표(정적 — 플레이어 장비·전적 무관):
+	#   엘리트·보스              ×1.35 (포이즈 ×1.5로 보상)
+	#   비엘리트 근접(배트)       ×2.2
+	#   비엘리트 사수 + m1911     ×2.2  (척탄병 제외 — 수류탄 위협은 몸값을 유지)
+	#   그 외(MP5/AK/산탄 사수·척탄병) ×1.6
+	if elite or bool(get_meta("raid_boss", false)):
+		return ELITE_HEADSHOT_DAMAGE_MULTIPLIER
+	if enemy_kind == "melee":
+		return LIGHT_TARGET_HEADSHOT_DAMAGE_MULTIPLIER
+	if enemy_kind != "grenadier" and weapon_id == "m1911":
+		return LIGHT_TARGET_HEADSHOT_DAMAGE_MULTIPLIER
+	return HEADSHOT_DAMAGE_MULTIPLIER
 
 
 func _alert_to_projectile_attacker(attacker = null) -> void:

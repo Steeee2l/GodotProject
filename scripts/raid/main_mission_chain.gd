@@ -472,7 +472,8 @@ func update(delta: float) -> void:
 	if alarm_wave_timer > 0.0:
 		return
 	# 전투 중 추가 유입 상한 — 교전 중인 적이 이미 상한이면 웨이브를 미룬다.
-	if host.enemy_director.count_alerted_enemies() >= EnemyDirector.MAX_CONCURRENT_ALERTED:
+	# 상한은 존 stage_tier 기반 함수(종로 3, 그 외 6)로 통일됐다.
+	if host.enemy_director.count_alerted_enemies() >= host.enemy_director.get_max_concurrent_alerted():
 		alarm_wave_timer = 2.0
 		return
 	_spawn_alarm_wave()
