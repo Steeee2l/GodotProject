@@ -258,6 +258,21 @@ const RECIPES := {
 			"cost": {"scrap": 20000, "rubber_gasket": 2, "magazine_spring": 2, "military_alloy": 1},
 			"result": {"heavy_gear": "rocket_launcher", "amount": 1},
 		},
+		# ── 2차(2026-08-29): 호위 드론 + 보급 카트 — 정밀 기어 사다리.
+		{
+			"id": "craft_escort_drone",
+			"name": "호위 드론",
+			"desc": "",
+			"cost": {"scrap": 12000, "scope_lens": 2, "magazine_spring": 1, "precision_gear": 1},
+			"result": {"heavy_gear": "escort_drone", "amount": 1},
+		},
+		{
+			"id": "craft_supply_cart",
+			"name": "보급 카트",
+			"desc": "",
+			"cost": {"scrap": 10000, "magazine_spring": 2, "rubber_gasket": 2, "precision_gear": 1},
+			"result": {"heavy_gear": "supply_cart", "amount": 1},
+		},
 	],
 	"supplies": [
 		{
@@ -2816,11 +2831,14 @@ func _recipe_icon(recipe: Dictionary) -> Texture2D:
 	if result.has("weapon_mod"):
 		return UI_ICONS.get_icon("mod", 72, Color("#e2a962"))
 	if result.has("heavy_gear"):
-		# ui_icon_factory 실제 키: 지뢰=alert(경보 삼각), 포탑=parts(부품), 로켓=raid(출격 화살).
+		# ui_icon_factory 실제 키: 지뢰=alert(경보 삼각), 포탑=parts(부품), 로켓=raid(출격
+		# 화살), 드론=dash(기동), 카트=backpack(가방 확장이 본질).
 		var heavy_icon: String = str({
 			"field_mine": "alert",
 			"salvage_turret": "parts",
 			"rocket_launcher": "raid",
+			"escort_drone": "dash",
+			"supply_cart": "backpack",
 		}.get(str(result["heavy_gear"]), "parts"))
 		return UI_ICONS.get_icon(heavy_icon, 72, Color("#7fd8c8"))
 	if result.has("canned_food"):

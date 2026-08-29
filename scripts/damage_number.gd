@@ -87,6 +87,10 @@ func setup(
 		# 헤드샷 — 주황. 정조준(호박색)보다 붉고 크리티컬(노랑)과도 구분된다.
 		grade_size = 70
 		base_color = Color("#ff8a2a")
+	elif hit_grade == "hostile":
+		# 내가 맞은 피해 — 붉은색. 적에게 주는 숫자와 색으로 즉시 구분된다.
+		grade_size = 60
+		base_color = Color("#ff5348")
 	# 엘리트 표적은 금색 — 정예 토스트·확정 전리품과 같은 색으로
 	# "가치 있는 표적을 때리고 있다"가 숫자만 봐도 읽히게 한다.
 	if elite_target:

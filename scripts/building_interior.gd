@@ -475,6 +475,17 @@ func take_damage(amount: int) -> void:
 	GameState.player_health = maxi(0, GameState.player_health - applied_damage)
 	_update_health()
 	SFX.play("hit_player")
+	# 내가 받은 피해 숫자 — 필드(main)와 같은 연출, 붉은색.
+	if is_instance_valid(player):
+		var number: Label3D = DAMAGE_NUMBER_SCRIPT_RUNTIME.acquire(self)
+		if number == null:
+			number = DAMAGE_NUMBER_SCRIPT_RUNTIME.new() as Label3D
+			add_child(number)
+		number.call(
+			"setup", applied_damage, false, FONT,
+			player.global_position + Vector3(0, 2.05, 0),
+			Vector3.RIGHT, randf_range(-0.3, 0.3), "hostile"
+		)
 	# 필드(main.take_damage)와 같은 규칙 — 경직·히트스톱은 없고, 화면 흔들림과
 	# 진동으로만 알린다. 흔들림 상한도 필드와 같은 0.24(조준이 죽지 않게).
 	camera_shake_time = maxf(camera_shake_time, 0.2)
@@ -958,6 +969,8 @@ func _build_interface() -> void:
 
 
 const ROLL_COOLDOWN_INDICATOR_SCRIPT := preload("res://scripts/roll_cooldown_indicator.gd")
+# damage_number는 오토로드 식별자를 안 쓰므로(런타임 조회) preload가 콜드스타트 안전.
+const DAMAGE_NUMBER_SCRIPT_RUNTIME := preload("res://scripts/damage_number.gd")
 var roll_cooldown_indicator: Control
 
 

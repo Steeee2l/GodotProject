@@ -2,6 +2,7 @@ extends Node3D
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const SFX := preload("res://scripts/sfx_bank.gd")
+const DAMAGE_NUMBER_SCRIPT := preload("res://scripts/damage_number.gd")
 const MOVE_SPEED := 5.2
 const BASE_CAMERA_SIZE := 28.0
 const CAMERA_DIAGONAL_OFFSET := 13.5
@@ -888,6 +889,8 @@ func _physics_process(delta: float) -> void:
 		var movement_speed := MOVE_SPEED * GameState.get_move_speed_multiplier() * (LOAF_MOVE_MULTIPLIER if loafing else 1.0)
 		movement_speed *= _get_fatigue_speed_multiplier()
 		movement_speed *= _get_escort_speed_multiplier()
+		# 보급 카트를 끄는 동안 걸음 x0.88 — 판정·상태는 deployables가 안다.
+		movement_speed *= deployables.get_cart_speed_multiplier()
 		if scent_focus_active:
 			movement_speed *= 0.78
 		if weapon_reloading:
@@ -4173,6 +4176,7 @@ func take_damage(amount: int) -> void:
 	player_hit_react_time = maxf(player_hit_react_time, 0.18)
 	# 붉은 비네트 펄스 — 모든 피해가 지나는 단일 지점이라 여기서 올린다.
 	_pulse_hit_vignette(applied_damage)
+	_spawn_player_damage_number(applied_damage)
 	# 플레이어 피격음 — 비네트·플래시와 같은 프레임.
 	SFX.play("hit_player")
 	var health_bar := get_node_or_null("HUD/TopLeft/Margin/VBox/Health") as ProgressBar
@@ -4224,6 +4228,26 @@ func take_hit(amount: int, hit_direction: Vector3, impact_kind: String = "bullet
 		)
 		# 피격 히트스톱(0.045s 시간 정지)은 제거했다 — 연사에 맞으면 프레임이
 		# 계속 끊겨 조작이 이상해진다. 히트스톱은 '처치'에만 남긴다.
+
+
+func _spawn_player_damage_number(applied_damage: int) -> void:
+	# 내가 받은 피해도 숫자로 뜬다(유저 요청) — 적 피해 팝과 같은 풀·연출, 색만 붉게.
+	if not is_instance_valid(player):
+		return
+	var number: Label3D = DAMAGE_NUMBER_SCRIPT.acquire(self)
+	if number == null:
+		number = DAMAGE_NUMBER_SCRIPT.new() as Label3D
+		add_child(number)
+	number.call(
+		"setup",
+		applied_damage,
+		false,
+		FONT,
+		player.global_position + Vector3(0, 2.05, 0),
+		Vector3.RIGHT,
+		randf_range(-0.3, 0.3),
+		"hostile"
+	)
 
 
 func take_hostile_hit(

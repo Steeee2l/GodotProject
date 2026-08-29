@@ -1,15 +1,17 @@
 extends SceneTree
 
-# 중장비(소모성 화력) 1차 프로브 — 지뢰 → 감시포탑 → 로켓 발사기.
+# 중장비(소모성 화력) 프로브 — 1차(지뢰·포탑·로켓) + 2차(호위 드론·보급 카트).
 #   헤드리스(검증만):  godot --headless --path . --script res://tests/heavy_gear_probe.gd
 #   창 모드(스크린샷): godot --path . --script res://tests/heavy_gear_probe.gd
 #
 # ① 작업대 제작 — 재료(고철+부품) 소모 / GameState.add_heavy_gear 지급 / 지뢰 3개 1칸
-# ② T 순환 목록 — 보유한 것만(통조림→지뢰→포탑→로켓), on_throw_key로 순환
+# ② T 순환 목록 — 보유한 것만(통조림→지뢰→포탑→로켓→드론→카트), on_throw_key로 순환
 # ③ 지뢰 — 투척→무장(1s)→적 진입→폭발, 적 피해·플레이어 무피해
 # ④ 포탑 — 배치·발사(적 조준 사격 수)·동시 1기 제한·만료 파괴
 # ⑤ 로켓 — 발사 쿨다운·3발 소진 시 아이템 소멸
-# ⑥ 시체 왕복 — 사망 시 heavy가 시체로, get_item_count 합산, 회수로 복귀
+# ⑥ 드론 — 소환·머리 위 추종·자동 사격·교체 추락·배터리 소진 추락
+# ⑦ 카트 — 소환·가방 +6·이동 페널티·파괴 시 보너스 0·아이템 유지
+# ⑧ 시체 왕복 — 사망 시 heavy가 시체로, get_item_count 합산, 회수로 복귀
 #
 # 시간 의존 검증(비행·무장·만료)은 전부 create_timer 실시간 대기.
 
@@ -73,17 +75,17 @@ func _run() -> void:
 	# ── ① 작업대 제작: 소모/지급 ──────────────────────────────
 	print("[1] 작업대 중장비 제작 — 재료 소모·지급")
 	game_state.set("scrap", 100000)
-	game_state.call("add_mod_component", "magazine_spring", 6)
-	game_state.call("add_mod_component", "rubber_gasket", 6)
-	game_state.call("add_mod_component", "scope_lens", 2)
-	game_state.call("add_mod_component", "precision_gear", 1)
+	game_state.call("add_mod_component", "magazine_spring", 8)
+	game_state.call("add_mod_component", "rubber_gasket", 8)
+	game_state.call("add_mod_component", "scope_lens", 4)
+	game_state.call("add_mod_component", "precision_gear", 3)
 	game_state.call("add_mod_component", "military_alloy", 1)
 	var workbench: Node3D = load("res://scripts/shelter_workbench_module.gd").new()
 	workbench.name = "ProbeWorkbench"
 	root.add_child(workbench)
 	await process_frame
 	var heavy_recipes: Array = workbench.call("_recipes_for_category", "heavy")
-	_check(heavy_recipes.size() == 3, "중장비 레시피 3종 (실제: %d)" % heavy_recipes.size())
+	_check(heavy_recipes.size() == 5, "중장비 레시피 5종 (실제: %d)" % heavy_recipes.size())
 	var recipe_by_id := {}
 	for recipe_raw in heavy_recipes:
 		recipe_by_id[str((recipe_raw as Dictionary).get("id", ""))] = recipe_raw
@@ -99,10 +101,25 @@ func _run() -> void:
 	_check(int(game_state.call("get_mod_component_count", "magazine_spring")) == spring_before - 1, "탄창 스프링 1 소모")
 	workbench.call("_craft", recipe_by_id["craft_salvage_turret"])
 	_check(int(game_state.call("get_heavy_gear_count", "salvage_turret")) == 1, "포탑 x1 지급")
-	_check(int(game_state.call("get_mod_component_count", "precision_gear")) == 0, "정밀 기어 1 소모")
+	_check(int(game_state.call("get_mod_component_count", "precision_gear")) == 2, "정밀 기어 1 소모")
 	workbench.call("_craft", recipe_by_id["craft_rocket_launcher"])
 	_check(int(game_state.call("get_heavy_gear_count", "rocket_launcher")) == 1, "로켓 발사기 x1 지급")
 	_check(int(game_state.call("get_mod_component_count", "military_alloy")) == 0, "군용 합금 1 소모")
+	# ── 2차: 호위 드론 + 보급 카트 ──
+	var lens_before_drone := int(game_state.call("get_mod_component_count", "scope_lens"))
+	var scrap_before_drone := int(game_state.get("scrap"))
+	workbench.call("_craft", recipe_by_id["craft_escort_drone"])
+	_check(int(game_state.call("get_heavy_gear_count", "escort_drone")) == 1, "호위 드론 x1 지급")
+	_check(int(game_state.get("scrap")) == scrap_before_drone - 12000, "드론 제작 고철 12K 소모")
+	_check(int(game_state.call("get_mod_component_count", "scope_lens")) == lens_before_drone - 2, "스코프 렌즈 2 소모")
+	_check(int(game_state.call("get_mod_component_count", "precision_gear")) == 1, "드론이 정밀 기어 1 소모")
+	var gasket_before_cart := int(game_state.call("get_mod_component_count", "rubber_gasket"))
+	var scrap_before_cart := int(game_state.get("scrap"))
+	workbench.call("_craft", recipe_by_id["craft_supply_cart"])
+	_check(int(game_state.call("get_heavy_gear_count", "supply_cart")) == 1, "보급 카트 x1 지급")
+	_check(int(game_state.get("scrap")) == scrap_before_cart - 10000, "카트 제작 고철 10K 소모")
+	_check(int(game_state.call("get_mod_component_count", "rubber_gasket")) == gasket_before_cart - 2, "고무 패킹 2 소모")
+	_check(int(game_state.call("get_mod_component_count", "precision_gear")) == 0, "카트가 정밀 기어 1 소모")
 	# 재료 부족이면 거절 — 합금이 0이 됐으니 로켓은 더 못 만든다.
 	workbench.call("_craft", recipe_by_id["craft_rocket_launcher"])
 	_check(int(game_state.call("get_heavy_gear_count", "rocket_launcher")) == 1, "재료 부족 시 제작 거절")
@@ -129,8 +146,11 @@ func _run() -> void:
 	var can_throw = main_scene.get("can_throw")
 	var available: Array = can_throw.call("get_available_kinds")
 	_check(
-		available == ["canned_food", "field_mine", "salvage_turret", "rocket_launcher"],
-		"순환 목록 = 통조림→지뢰→포탑→로켓 (실제: %s)" % str(available)
+		available == [
+			"canned_food", "field_mine", "salvage_turret", "rocket_launcher",
+			"escort_drone", "supply_cart",
+		],
+		"순환 목록 = 통조림→지뢰→포탑→로켓→드론→카트 (실제: %s)" % str(available)
 	)
 	can_throw.call("on_throw_key")
 	_check(bool(can_throw.call("is_aiming")), "T 1회 = 조준 열림")
@@ -142,6 +162,10 @@ func _run() -> void:
 	can_throw.call("on_throw_key")
 	_check(str(can_throw.get("selected_kind")) == "rocket_launcher", "다음 = 로켓")
 	can_throw.call("on_throw_key")
+	_check(str(can_throw.get("selected_kind")) == "escort_drone", "다음 = 드론")
+	can_throw.call("on_throw_key")
+	_check(str(can_throw.get("selected_kind")) == "supply_cart", "다음 = 카트")
+	can_throw.call("on_throw_key")
 	_check(str(can_throw.get("selected_kind")) == "canned_food", "한 바퀴 돌아 통조림")
 	# 통조림만 남기면 T는 취소로 동작한다.
 	game_state.set("canned_food", 2)
@@ -151,11 +175,17 @@ func _run() -> void:
 	game_state.call("consume_heavy_gear", "salvage_turret", turret_backup)
 	var rocket_backup := int(game_state.call("get_heavy_gear_count", "rocket_launcher"))
 	game_state.call("consume_heavy_gear", "rocket_launcher", rocket_backup)
+	var drone_backup := int(game_state.call("get_heavy_gear_count", "escort_drone"))
+	game_state.call("consume_heavy_gear", "escort_drone", drone_backup)
+	var cart_backup := int(game_state.call("get_heavy_gear_count", "supply_cart"))
+	game_state.call("consume_heavy_gear", "supply_cart", cart_backup)
 	can_throw.call("on_throw_key")
 	_check(not bool(can_throw.call("is_aiming")), "품목 하나뿐이면 T 재입력 = 취소")
 	game_state.call("add_heavy_gear", "field_mine", mines_backup)
 	game_state.call("add_heavy_gear", "salvage_turret", turret_backup)
 	game_state.call("add_heavy_gear", "rocket_launcher", rocket_backup)
+	game_state.call("add_heavy_gear", "escort_drone", drone_backup)
+	game_state.call("add_heavy_gear", "supply_cart", cart_backup)
 
 	# ── ③ 지뢰 ──────────────────────────────────────────────
 	print("[3] 지뢰 — 무장 → 적 진입 → 폭발")
@@ -246,8 +276,115 @@ func _run() -> void:
 	_check(not bool(deployables.call("fire_rocket", rocket_target)), "발사기 없음 → 발사 거절")
 	await _sleep(1.2)
 
-	# ── ⑥ 시체 왕복 ─────────────────────────────────────────
-	print("[6] 사망 소실 → 시체 회수 왕복")
+	# ── ⑥ 호위 드론 ─────────────────────────────────────────
+	print("[6] 호위 드론 — 소환·추종·사격·교체·배터리 소진")
+	game_state.call("consume_heavy_gear", "escort_drone", 1)
+	deployables.call("deploy_drone")
+	var drone := deployables.get("active_drone") as Node3D
+	_check(is_instance_valid(drone), "드론 소환(active_drone)")
+	_check(drone.get_node_or_null("DroneSprite") != null, "드론 스프라이트(코드 합성) 존재")
+	_check(int(game_state.call("get_heavy_gear_count", "escort_drone")) == 0, "드론 1개 소모")
+	# 표적: 포탑 실험에서 이미 고정(set_physics_process(false)+체력 500)한 적을
+	# 재사용 — 지뢰 실험 피해자를 피하는 1차 프로브의 교훈 그대로.
+	if turret_enemy != null and is_instance_valid(turret_enemy):
+		turret_enemy.global_position = player.global_position + Vector3(5.0, 0.0, 0.0)
+		turret_enemy.set("health", 500)
+	var drone_shots_before := int(deployables.get("drone_shots_fired"))
+	await _sleep(2.2)
+	var drone_shots_after := int(deployables.get("drone_shots_fired"))
+	_check(
+		drone_shots_after >= drone_shots_before + 2,
+		"2.2s 동안 2발 이상 사격(1.5발/s) (실제: %d발)" % (drone_shots_after - drone_shots_before)
+	)
+	var drone_offset: Vector3 = drone.global_position - player.global_position
+	_check(
+		drone_offset.y > 1.6 and drone_offset.y < 3.2,
+		"머리 위 호버(높이 %.2f)" % drone_offset.y
+	)
+	_check(
+		Vector2(drone_offset.x, drone_offset.z).length() < 2.5,
+		"플레이어 곁 기동(수평 %.2f m)" % Vector2(drone_offset.x, drone_offset.z).length()
+	)
+	# 동시 1기 — 새로 띄우면 기존 드론은 추락한다.
+	game_state.call("add_heavy_gear", "escort_drone", 1)
+	game_state.call("consume_heavy_gear", "escort_drone", 1)
+	deployables.call("deploy_drone")
+	var second_drone := deployables.get("active_drone") as Node3D
+	_check(is_instance_valid(second_drone) and second_drone != drone, "재소환 시 새 드론으로 교체")
+	_check(not is_instance_valid(drone) or bool(drone.get("crashed")), "기존 드론은 추락")
+	# 배터리 소진 — 60초 대신 잔량을 줄여 실시간으로 관찰한다.
+	second_drone.set("battery_left", 0.3)
+	await _sleep(1.2)
+	_check(
+		not is_instance_valid(second_drone) or bool(second_drone.get("crashed")),
+		"배터리 소진 → 추락"
+	)
+	_check(
+		deployables.get("active_drone") == null or not is_instance_valid(deployables.get("active_drone")),
+		"추락 후 active_drone 해제"
+	)
+
+	# ── ⑦ 보급 카트 ─────────────────────────────────────────
+	print("[7] 보급 카트 — 가방 +6·이동 페널티·파괴 시 보너스 0·아이템 유지")
+	var capacity_before_cart := int(game_state.call("get_raid_bag_capacity"))
+	_check(absf(float(deployables.call("get_cart_speed_multiplier")) - 1.0) < 0.001, "카트 없음 → 이동 배율 1.0")
+	game_state.call("consume_heavy_gear", "supply_cart", 1)
+	deployables.call("deploy_cart")
+	var cart := deployables.get("active_cart") as Node3D
+	_check(is_instance_valid(cart), "카트 소환(active_cart)")
+	_check(cart.get_node_or_null("CartSprite") != null, "카트 스프라이트(handcart 재활용) 존재")
+	_check(bool(deployables.call("is_cart_active")), "is_cart_active = true")
+	_check(int(game_state.get("active_cart_bag_bonus")) == 6, "active_cart_bag_bonus = 6")
+	_check(
+		int(game_state.call("get_raid_bag_capacity")) == capacity_before_cart + 6,
+		"가방 용량 +6 (%d → %d)" % [capacity_before_cart, int(game_state.call("get_raid_bag_capacity"))]
+	)
+	_check(
+		absf(float(deployables.call("get_cart_speed_multiplier")) - 0.88) < 0.001,
+		"카트 활성 → 이동 배율 0.88"
+	)
+	# 지면 추종 — 잠시 굴린 뒤에도 y=0(지면)이어야 한다.
+	await _sleep(0.8)
+	_check(absf(cart.global_position.y) < 0.05, "카트 지면 추종(y=%.3f)" % cart.global_position.y)
+	# 보너스 칸까지 가득 채운다 — 파괴 후 '아이템 유지 + 새 획득만 차단'을 본다.
+	var used_slots := int(game_state.call("get_raid_bag_used_slots"))
+	var free_slots := int(game_state.call("get_raid_bag_capacity")) - used_slots
+	if free_slots > 0:
+		game_state.call("add_mod_component", "rubber_gasket", free_slots)
+	_check(
+		not bool(game_state.call("can_add_raid_item", "component", "rubber_gasket", 1)),
+		"만재 상태 — 새 획득 거절"
+	)
+	var gasket_before_destroy := int(game_state.call("get_mod_component_count", "rubber_gasket"))
+	var used_before_destroy := int(game_state.call("get_raid_bag_used_slots"))
+	cart.call("force_destroy", "destroyed")
+	await _sleep(0.2)
+	_check(int(game_state.get("active_cart_bag_bonus")) == 0, "파괴 → 보너스 0(즉시)")
+	_check(
+		int(game_state.call("get_raid_bag_capacity")) == capacity_before_cart,
+		"가방 용량 원복(%d)" % int(game_state.call("get_raid_bag_capacity"))
+	)
+	_check(not bool(deployables.call("is_cart_active")), "파괴 후 is_cart_active = false")
+	_check(
+		absf(float(deployables.call("get_cart_speed_multiplier")) - 1.0) < 0.001,
+		"파괴 후 이동 배율 1.0 복귀"
+	)
+	# 초과 적재 — 아이템은 사라지지 않고, 새 획득만 막힌다(기존 검사 로직).
+	_check(
+		int(game_state.call("get_mod_component_count", "rubber_gasket")) == gasket_before_destroy,
+		"초과 적재 아이템 유지(고무 패킹 %d)" % gasket_before_destroy
+	)
+	_check(
+		int(game_state.call("get_raid_bag_used_slots")) == used_before_destroy,
+		"사용 칸 수 유지(용량 초과 상태)"
+	)
+	_check(
+		not bool(game_state.call("can_add_raid_item", "component", "rubber_gasket", 1)),
+		"초과 상태 — 새 획득만 차단"
+	)
+
+	# ── ⑧ 시체 왕복 ─────────────────────────────────────────
+	print("[8] 사망 소실 → 시체 회수 왕복")
 	game_state.get("heavy_gear_inventory").clear()
 	game_state.set("canned_food", 0)
 	game_state.set("medkits", 0)

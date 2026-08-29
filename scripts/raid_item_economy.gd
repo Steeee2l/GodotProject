@@ -14,6 +14,8 @@ const HEAVY_VALUES := {
 	"field_mine": 250,
 	"salvage_turret": 2400,
 	"rocket_launcher": 7000,
+	"escort_drone": 4000,
+	"supply_cart": 3500,
 }
 
 

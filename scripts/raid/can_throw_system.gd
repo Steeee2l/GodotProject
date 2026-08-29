@@ -25,8 +25,11 @@ const AIM_TIMEOUT := 6.0
 # 모바일 투척 버튼 길게 누름 = 품목 순환(기존 style_mobile_action 버튼 규약 유지).
 const CYCLE_HOLD_SECONDS := 0.45
 
-# 순환 순서 — 보유한 것만 돈다. 통조림 → 지뢰 → 포탑 → 로켓.
-const THROW_KINDS := ["canned_food", "field_mine", "salvage_turret", "rocket_launcher"]
+# 순환 순서 — 보유한 것만 돈다. 통조림 → 지뢰 → 포탑 → 로켓 → 드론 → 카트.
+const THROW_KINDS := [
+	"canned_food", "field_mine", "salvage_turret", "rocket_launcher",
+	"escort_drone", "supply_cart",
+]
 const KIND_INFO := {
 	"canned_food": {
 		"label": "던지기", "toast": "통조림", "icon": "food",
@@ -43,6 +46,16 @@ const KIND_INFO := {
 	"rocket_launcher": {
 		"label": "로켓", "toast": "로켓 발사기", "icon": "raid",
 		"color": Color("#e8b46a"), "range": 18.0,
+	},
+	# 드론·카트는 조준점이 필요 없다 — 링 안 아무 데나 탭하면 확정(소환 위치는
+	# 드론=머리 위, 카트=플레이어 뒤). 링을 작게 줘서 "위치를 고르는 게 아니다"를 말한다.
+	"escort_drone": {
+		"label": "드론", "toast": "호위 드론", "icon": "dash",
+		"color": Color("#57d9c4"), "range": 3.0,
+	},
+	"supply_cart": {
+		"label": "카트", "toast": "보급 카트", "icon": "backpack",
+		"color": Color("#d8b56a"), "range": 3.0,
 	},
 }
 const EATER_LINES := [
@@ -394,6 +407,16 @@ func _dispatch_selected(target: Vector3) -> void:
 			if deployables != null and bool(deployables.call("fire_rocket", target)):
 				if get_kind_count("rocket_launcher") <= 0:
 					_set_aiming(false)
+		"escort_drone":
+			# 조준점 불필요 — 확정하면 플레이어 머리 위에서 소환된다(target 무시).
+			if deployables != null and GameState.consume_heavy_gear("escort_drone", 1):
+				_set_aiming(false)
+				deployables.call("deploy_drone")
+		"supply_cart":
+			# 조준점 불필요 — 확정하면 플레이어 뒤에 소환돼 끌려온다(target 무시).
+			if deployables != null and GameState.consume_heavy_gear("supply_cart", 1):
+				_set_aiming(false)
+				deployables.call("deploy_cart")
 	if host.has_method("_update_medkit_button"):
 		host.call("_update_medkit_button")
 

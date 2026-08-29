@@ -110,7 +110,18 @@ const HEAVY_GEAR_DEFS := {
 		"name": "로켓 발사기", "stack_per_slot": 1, "charges": 3,
 		"description": "로켓 3발. 다 쏘면 버려진다. 보스 잡는 물건.",
 	},
+	"escort_drone": {
+		"name": "호위 드론", "stack_per_slot": 1,
+		"description": "60초간 따라다니며 가까운 적을 자동 사격. 배터리가 다하면 추락한다.",
+	},
+	"supply_cart": {
+		"name": "보급 카트", "stack_per_slot": 1,
+		"description": "끌고 다니면 이 판 가방 +6칸, 대신 걸음이 느려진다. 파괴되면 끝 — 탈출하면 해체된다.",
+	},
 }
+# 보급 카트가 살아 있는 동안의 가방 보너스(판 한정 런타임 상태 — 저장 안 함).
+# deployables가 켜고 끄며, 사망·포기·복귀 정산에서 0으로 돌아간다.
+var active_cart_bag_bonus := 0
 var heavy_gear_inventory: Dictionary = {}
 
 
@@ -1439,6 +1450,7 @@ func clear_carried_raid_inventory_after_death() -> void:
 	churu = 0
 	# 중장비도 가방의 소모품이다 — 시체에 실렸으니 여기서는 비운다.
 	heavy_gear_inventory.clear()
+	active_cart_bag_bonus = 0
 	valuable_inventory.clear()
 	valuable_value_ledger.clear()
 	clear_churu_buffs()
@@ -1489,6 +1501,8 @@ func register_shelter_return(survived: bool = true) -> void:
 	shelter_return_serial += 1
 	# 정상 경로(추출·사망 정산)로 돌아왔다 — 판 포기 감시 해제.
 	raid_in_progress = false
+	# 보급 카트는 판 한정 — 탈출하면 해체된다(가방 보너스도 함께).
+	active_cart_bag_bonus = 0
 	# 쉘터 복귀 = 완전 회복. 침대·수면 절차는 폐지됐다.
 	player_health = get_max_health()
 	if survived:
@@ -2312,6 +2326,7 @@ func get_raid_bag_capacity() -> int:
 		+ bag_capacity_level
 		+ get_training_rank("bag_capacity")
 		+ get_churu_bag_bonus_slots()
+		+ maxi(0, active_cart_bag_bonus)
 	)
 
 

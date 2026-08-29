@@ -5,6 +5,7 @@ extends SceneTree
 #
 # ① heavy_gear_workbench   작업대 제작 탭 — '중장비' 섹션 + 지뢰 레시피 상세
 # ② heavy_gear_field       필드 — 감시포탑 배치 + 무장된 지뢰(청록 링)
+#                          + 2차: 호위 드론(머리 위) + 보급 카트(플레이어 뒤)
 
 const OUTPUT_DIR := "res://test-output"
 
@@ -109,6 +110,8 @@ func _run() -> void:
 	game_state.call("add_heavy_gear", "field_mine", 3)
 	game_state.call("add_heavy_gear", "salvage_turret", 1)
 	game_state.call("add_heavy_gear", "rocket_launcher", 1)
+	game_state.call("add_heavy_gear", "escort_drone", 1)
+	game_state.call("add_heavy_gear", "supply_cart", 1)
 	var main_scene: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main_scene)
 	await process_frame
@@ -131,6 +134,11 @@ func _run() -> void:
 	deployables.call("place_turret", player.global_position + Vector3(2.6, 0.0, 1.2))
 	game_state.call("consume_heavy_gear", "field_mine", 1)
 	deployables.call("throw_mine", player.global_position + Vector3(-2.2, 0.0, 2.0))
+	# 2차 — 호위 드론(머리 위) + 보급 카트(플레이어 뒤, 끌려온다).
+	game_state.call("consume_heavy_gear", "escort_drone", 1)
+	deployables.call("deploy_drone")
+	game_state.call("consume_heavy_gear", "supply_cart", 1)
+	deployables.call("deploy_cart")
 	# 조준 링 배지도 함께 — T 조준을 연 상태(지뢰 선택)를 담는다.
 	var can_throw = main_scene.get("can_throw")
 	can_throw.set("selected_kind", "field_mine")
@@ -142,6 +150,11 @@ func _run() -> void:
 		if chain != null and chain.get("cinematic") != null:
 			(chain.get("cinematic") as Object).call("skip")
 		await _sleep(0.25)
+	# 카트는 카메라 시선축(등각 대각선)을 따라 플레이어 '바로 뒤'에 붙으면
+	# 고양이 스프라이트에 완전히 가려진다 — 화면 가로 방향으로 한 발 옆걸음해
+	# 카트가 끌려오는 장면을 프레임에 넣는다(드론도 따라온다).
+	player.global_position += Vector3(2.6, 0.0, -2.6)
+	await _sleep(1.1)
 	await _capture("heavy_gear_field")
 	main_scene.queue_free()
 	await _wait(2)
