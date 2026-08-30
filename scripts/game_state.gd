@@ -49,7 +49,9 @@ var training_levels: Dictionary = {
 	"sortie_supply": 0,
 }
 var magazine_ammo: int = 30
-var reserve_ammo: int = 90
+# 시작 예비탄 90→240(8탄창) — 탄약 압박은 '아껴 쏘기'가 아니라 '싸움을 고르기'에서
+# 나와야 한다(2026-08-30 탄약 넉넉화, 유저 확정).
+var reserve_ammo: int = 240
 var has_ak: bool = true
 var scrap: int = 80
 var weapon_level: int = 1
@@ -187,7 +189,7 @@ var equipped_ammo_id: String = "762_fmj"
 # 시작 탄약은 장착 무기(AK) 것만. 예전엔 권총/샷건 탄까지 들려 줘서, 쓸 무기도
 # 없는 탄약이 가방 15칸 중 3칸을 처음부터 좀먹었다(탄종당 1칸).
 var ammo_inventory: Dictionary = {
-	"762_fmj": 90,
+	"762_fmj": 240,
 }
 var secure_dog_slots: int = 1
 var secure_dog_items: Array[Dictionary] = []
@@ -422,6 +424,8 @@ var saja_intro_seen: bool = false
 var juhong_intro_seen: bool = false
 var companion_unlocked: bool = false
 var companion_enabled: bool = true
+# 첫 동행 필드 인트로(걸어와 붙기 + 소생 규칙 토스트) 1회 노출 여부.
+var juhong_field_intro_seen: bool = false
 
 
 func is_companion_raid_active() -> bool:
@@ -3790,6 +3794,10 @@ func get_base_catnip_per_second() -> float:
 
 func tick_shelter_live(delta: float) -> int:
 	var safe_delta := maxf(delta, 0.0)
+	# 실시간으로 지급한 시간은 오프라인 정산 스탬프도 함께 민다 — 안 그러면
+	# 쉘터에 앉아 있던 시간이 모달을 여는 순간(process_shelter_progress 호출처
+	# 7곳) 오프라인분으로 한 번 더 지급된다.
+	shelter_last_progress_time = int(Time.get_unix_time_from_system())
 	var scrap_rate := get_scrap_per_second()
 	var catnip_rate := get_catnip_per_second()
 	# 연료 게이트는 없다 — 주민이 배치돼 있으면 두 라인은 늘 함께 돈다.
@@ -5624,6 +5632,7 @@ func save_persistent_state() -> bool:
 		"juhong_intro_seen": juhong_intro_seen,
 		"companion_unlocked": companion_unlocked,
 		"companion_enabled": companion_enabled,
+		"juhong_field_intro_seen": juhong_field_intro_seen,
 		"merchant_intro_seen": merchant_intro_seen,
 		"saja_second_run_intro_seen": saja_second_run_intro_seen,
 		"saja_seen_resident_count": saja_seen_resident_count,
@@ -5892,6 +5901,7 @@ func load_persistent_state() -> bool:
 	juhong_intro_seen = bool(data.get("juhong_intro_seen", false))
 	companion_unlocked = bool(data.get("companion_unlocked", false))
 	companion_enabled = bool(data.get("companion_enabled", true))
+	juhong_field_intro_seen = bool(data.get("juhong_field_intro_seen", false))
 	merchant_intro_seen = bool(data.get("merchant_intro_seen", false))
 	saja_second_run_intro_seen = bool(data.get("saja_second_run_intro_seen", false))
 	saja_seen_resident_count = maxi(0, int(data.get("saja_seen_resident_count", 0)))
@@ -5991,7 +6001,7 @@ func reset_run() -> void:
 	raid_serial = 0
 	reset_raid_supply_counters()
 	magazine_ammo = 30
-	reserve_ammo = 90
+	reserve_ammo = 240
 	has_ak = true
 	scrap = 80
 	weapon_level = 1
@@ -6069,7 +6079,7 @@ func reset_run() -> void:
 	equipped_magazine_id = "ak_30rnd"
 	equipped_ammo_id = "762_fmj"
 	ammo_inventory = {
-		"762_fmj": 90,
+		"762_fmj": 240,
 	}
 	secure_dog_slots = 1
 	bag_capacity_level = 0

@@ -238,7 +238,7 @@ var fire_button_held := false
 var mouse_fire_held := false
 var has_ak := false
 var magazine_ammo := 30
-var reserve_ammo := 90
+var reserve_ammo := 240
 var roll_audio_player: AudioStreamPlayer3D
 var building_canvas: CanvasLayer
 var building_overlays := {}
@@ -982,36 +982,19 @@ func _physics_process(delta: float) -> void:
 	]
 
 
-func _update_player_downed_crawl(delta: float) -> void:
-	# 다운 중 기어가기 — 이동 불가 대신 소속도(32%)만 허용한다. 사격·구르기·근접·
-	# 상호작용·인벤토리는 전부 잠긴 상태(입력 훅에 개별 가드).
+func _update_player_downed_crawl(_delta: float) -> void:
+	# 다운 = 완전 행동 불능. 예전엔 32% 속도 '기어가기'를 허용했는데, 서서 걷는
+	# 스프라이트 그대로 돌아다녀서 "죽었는데 막 움직인다"로 읽혔다(실플레이 신고).
+	# 이동까지 잠근다 — 쓰러진 자세는 companion_system._apply_down_visuals가 잡는다.
 	fire_button_held = false
 	mouse_fire_held = false
 	laser_aim_held = false
-	var input_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
-	if Input.is_key_pressed(KEY_A): input_vector.x -= 1.0
-	if Input.is_key_pressed(KEY_D): input_vector.x += 1.0
-	if Input.is_key_pressed(KEY_W): input_vector.y -= 1.0
-	if Input.is_key_pressed(KEY_S): input_vector.y += 1.0
-	input_vector = input_vector.limit_length(1.0)
-	if touch_vector.length_squared() > input_vector.length_squared():
-		input_vector = touch_vector
-	var world_direction := Vector3(input_vector.x + input_vector.y, 0, -input_vector.x + input_vector.y)
-	if world_direction.length_squared() > 0.01:
-		world_direction = world_direction.normalized()
-		player.velocity = world_direction * MOVE_SPEED * 0.32
-		_update_facing(input_vector)
-		_set_motion_state("walk")
-	else:
-		player.velocity = Vector3.ZERO
-		_set_motion_state("idle")
+	player.velocity = Vector3.ZERO
 	player.move_and_slide()
+	_set_motion_state("idle")
 	state_label.text = "다운 — 주홍을 기다려라 (%.0f초)" % maxf(
 		0.0, companion_system.player_down_remaining
 	)
-	var map_limit := ($World as ProceduralCityMap).get_map_limit()
-	player.position.x = clampf(player.position.x, -map_limit, map_limit)
-	player.position.z = clampf(player.position.z, -map_limit, map_limit)
 
 
 func _update_facing(screen_direction: Vector2) -> void:
@@ -4995,6 +4978,9 @@ func _event_spawn_overwatch() -> void:
 	var world := $World as ProceduralCityMap
 	if world == null:
 		return
+	# 국소 교전 — 이미 상한만큼 싸우는 중이면 머리 위로 새 스쿼드를 얹지 않는다.
+	if enemy_director.count_alerted_enemies() >= enemy_director.get_max_concurrent_alerted():
+		return
 	var post := enemy_director._find_event_position_near_player(world, 22.0, 34.0)
 	enemy_director._spawn_enemy_squad(
 		world,
@@ -5174,6 +5160,10 @@ func _apply_raid_pressure_level(new_level: int) -> void:
 		raid_pressure_reveal_time = RAID_PRESSURE_REVEAL_SECONDS
 		_show_pressure_change_notice(previous_multiplier, raid_reward_multiplier)
 	if raid_pressure_level <= 0:
+		return
+	# 국소 교전 — 단계 상승 응답 스쿼드도 동시 교전 상한을 존중한다(스폰부터
+	# alerted로 들어오는 경로라, 게이트가 없으면 상한을 그대로 우회한다).
+	if enemy_director.count_alerted_enemies() >= enemy_director.get_max_concurrent_alerted():
 		return
 	var world := $World as ProceduralCityMap
 	var response_position := enemy_director._find_event_position_near_player(

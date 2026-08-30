@@ -422,6 +422,18 @@ func _show_catnip_fever_lesson_once() -> void:
 
 func _open_shelter_return_followups() -> void:
 	_show_catnip_fever_lesson_once()
+	var pending_story: Dictionary = GameState.get_pending_shelter_story_event()
+	if str(pending_story.get("id", "")) == "juhong_intro":
+		# 주홍 합류는 텍스트 모달로 소비하지 않는다 — 하수관 입구에서 직접 걸어
+		# 들어와 플레이어 앞에 서서 말한다(왜 붙는지가 '이벤트'로 보여야 한다는
+		# 유저 지적). 대사가 끝나면 온 길로 돌아가고, 다음 출정부터 필드에 선다.
+		_spawn_juhong_character()
+		if is_instance_valid(juhong_character):
+			_queue_juhong_entrance_cinematic(40, true)
+		else:
+			# 스폰 실패 폴백 — 연출은 포기해도 합류 이벤트 자체를 잃으면 안 된다.
+			_open_pending_shelter_story()
+		return
 	_open_pending_shelter_story()
 	# 주홍은 복귀하면 스스로 찾아온다 — 플레이어가 구석까지 걸어가 말을 걸어야
 	# 했던 예전 흐름은 "왜 저기 서 있지?"로 읽혔다. 사자와의 대화가 걸려 있으면
@@ -888,6 +900,13 @@ func _setup_juhong_story_character() -> void:
 	var event: Dictionary = GameState.get_pending_juhong_event()
 	if event.is_empty():
 		return
+	_spawn_juhong_character()
+
+
+func _spawn_juhong_character() -> void:
+	# 방문 이벤트와 합류 이벤트(juhong_intro)가 같은 물리 등장을 공유한다.
+	if is_instance_valid(juhong_character):
+		return
 	juhong_character = SHELTER_STORY_CHARACTER_SCRIPT.new() as Node3D
 	juhong_character.call(
 		"configure",
@@ -1016,25 +1035,27 @@ func _apply_portrait_camera_aspect(target_camera: Camera3D) -> void:
 	target_camera.keep_aspect = Camera3D.KEEP_WIDTH if portrait else Camera3D.KEEP_HEIGHT
 
 
-func _queue_juhong_entrance_cinematic(remaining_tries: int = 40) -> void:
+func _queue_juhong_entrance_cinematic(remaining_tries: int = 40, intro_story: bool = false) -> void:
 	# 사자의 이야기가 열려 있으면 그게 끝날 때까지 기다렸다가 등장한다 —
 	# "쉘터 주인과 이야기하고 있는데 전령이 들어온다"가 유저가 기대한 그림이다.
 	# 대기는 유한하다. 사자 이벤트가 어떤 이유로든 안 열리고 남아 있으면
 	# 전령이 영영 안 들어오는 게 더 나쁘다 — 12초 뒤엔 그냥 들어온다.
+	# intro_story(주홍 합류): 걸려 있는 이야기가 바로 주홍 자신의 것이므로
+	# pending 대기를 타면 12초를 헛기다린다 — 열린 대화만 피해서 바로 들어온다.
 	if not is_instance_valid(juhong_character) or not is_instance_valid(player):
 		return
-	if (
-		remaining_tries > 0
-		and (contract_story_open or not GameState.get_pending_shelter_story_event().is_empty())
-	):
+	var stage_busy := contract_story_open or (
+		not intro_story and not GameState.get_pending_shelter_story_event().is_empty()
+	)
+	if remaining_tries > 0 and stage_busy:
 		get_tree().create_timer(0.3).timeout.connect(
-			_queue_juhong_entrance_cinematic.bind(remaining_tries - 1)
+			_queue_juhong_entrance_cinematic.bind(remaining_tries - 1, intro_story)
 		)
 		return
-	_play_juhong_entrance_cinematic()
+	_play_juhong_entrance_cinematic(true, intro_story)
 
 
-func _play_juhong_entrance_cinematic(entrance := true) -> void:
+func _play_juhong_entrance_cinematic(entrance := true, intro_story := false) -> void:
 	# 주홍의 모든 대화를 내러티브 이벤트로 연출한다. entrance=true(복귀 직후)는
 	# 레터박스가 내려오는 사이 입구(하수관)에서 걸어 들어와 플레이어 앞에 서고,
 	# false(직접 말 걸기)는 지금 자리에서 반걸음만 다가와 말을 시작한다.
@@ -1123,7 +1144,12 @@ func _play_juhong_entrance_cinematic(entrance := true) -> void:
 					player.global_position - juhong_character.global_position
 				)
 			_spawn_story_emote(juhong_character, "…", Color("#93a89d"))
-		_open_juhong_story()
+		if intro_story:
+			# 합류 이벤트 — 걸어 들어온 주홍이 직접 말한다(쉘터 스토리 레이어,
+			# 초상은 speaker 분기로 이미 주홍).
+			_open_pending_shelter_story()
+		else:
+			_open_juhong_story()
 		_finish_juhong_cinematic(cine)
 	)
 
@@ -1519,6 +1545,11 @@ func _advance_contract_story() -> void:
 		# 어디서 켜는지 안내가 없으면 죽은 기능이다 — 상태 패널 토스트로 짚어 준다.
 		if contract_story_completion_id == "juhong_intro" and GameState.companion_unlocked:
 			_show_status("주홍 합류 — 출정 브리핑에서 '주홍과 동행'을 켤 수 있다")
+			# 말을 마친 주홍은 온 길(하수관)로 돌아간다 — 서 있던 자리에서
+			# 증발하지 않고, 다음 출정 필드에서 다시 만난다.
+			if is_instance_valid(juhong_character):
+				_play_juhong_exit()
+				juhong_character = null
 	elif contract_story_completion_owner == "juhong":
 		GameState.mark_juhong_event_seen(contract_story_completion_id)
 		_play_juhong_exit()

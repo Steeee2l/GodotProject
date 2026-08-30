@@ -63,21 +63,27 @@ const RAID_ENTRY_ENEMY_SAFE_RADIUS := 30.0
 const RAID_EVENT_DIRECTOR := preload("res://scripts/raid_event_director.gd")
 const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
 const RAID_LOSS_MANAGER := preload("res://scripts/raid_loss_manager.gd")
-const REINFORCEMENT_CALL_COOLDOWN := 38.0
+# 2026-08-30 국소 교전 개편 — 무전 증원을 더 드물게(트리거 30→45s·잠복 14→24s·
+# 쿨다운 38→60s). 탄약이 유한한 익스트랙션에서 "싸움을 골랐으면 그 싸움만"이
+# 원칙이고, 증원은 예고 배너+저지 카운터플레이가 있는 명시적 예외로만 남는다.
+const REINFORCEMENT_CALL_COOLDOWN := 60.0
 # 4.6초 → 8.0초. 예고 배너가 뜨는 순간부터 호출자를 찾아 접근하고 쏘아 죽이기까지
 # 4.6초는 "보기도 전에 끝나는" 시간이었다 — 저지가 실력이 아니라 운이었다.
 # 유저 요구: "게이지바로 충분한 시간을 주고, 그 안에 다 죽이면 증원이 안 오게".
 const REINFORCEMENT_CALL_DURATION := 8.0
-const REINFORCEMENT_CALL_TRIGGER_TIME := 30.0
+const REINFORCEMENT_CALL_TRIGGER_TIME := 45.0
 # 저지 성공 보상 — 킬 하나(22 XP)보다 살짝 위. "안 싸우고 도망치는 것보다
 # 지금 저 녀석을 잡는 게 이득"이라는 신호를 준다.
 const REINFORCEMENT_BLOCK_XP := 25
-const REINFORCEMENT_HIDDEN_TRIGGER_TIME := 14.0
+const REINFORCEMENT_HIDDEN_TRIGGER_TIME := 24.0
 # 전투 중 추가 유입 상한 — 동시에 교전(alerted) 중인 적이 이 수 이상이면
 # 증원 호출·긴장도 대응 스쿼드·잭팟 웨이브의 추가 스폰을 건너뛰거나 미룬다.
 # (유저: "싸우다 보면 적이 너무 많아져 감당이 안 된다") 판의 총 배치 수
 # (BASE_ENEMY_COUNT)와 기존 쿨다운은 그대로다 — 문제는 '전투 중 유입'이다.
-const MAX_CONCURRENT_ALERTED := 6
+# 6→4(2026-08-30): 이 상한이 enemy.gd의 시야 합류 게이트에도 걸리게 되면서
+# 이제 '실제' 동시 교전 상한이 됐다. 4 = 한 분대(2~3) + 낙오자 하나 — 교전이
+# 분대 단위로 끝나는 그림. 미션 웨이브(방어·잭팟)는 명시적 목표라 게이트 제외.
+const MAX_CONCURRENT_ALERTED := 4
 # 종로(stage_tier 1) 전용 정적 완화 — 첫 존의 "착지하자마자 난전"을 끊는다.
 # 존 데이터(stage_tier)만 본다: 플레이어 장비·전적에 반응하는 러버밴딩이 아니다.
 const FIRST_STAGE_MAX_CONCURRENT_ALERTED := 3
@@ -328,11 +334,13 @@ func _spawn_enemy_squad(
 		if order_position != Vector3.INF and enemy.has_method("receive_reinforcement_order"):
 			enemy.call("receive_reinforcement_order", order_position)
 		elif enemy.has_method("configure_patrol"):
+			# road_route 비중 50%→25% — 맵을 가로지르는 장거리 순찰이 교전지를
+			# 관통하며 합류하던 주된 공급선이었다(국소 교전 개편).
 			var patrol_selector := posmod(assigned_squad_id, 4)
 			var patrol_mode := (
-				"sentry"
-				if patrol_selector == 0
-				else ("route" if patrol_selector == 1 else "road_route")
+				"road_route"
+				if patrol_selector == 3
+				else ("route" if patrol_selector == 1 else "sentry")
 			)
 			enemy.call(
 				"configure_patrol",
@@ -749,11 +757,11 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 	if bool(enemy.get_meta("elite", false)):
 		# 엘리트는 굴림이 아니라 확정 — 위험을 알고 골라 싸운 대가.
 		return _spawn_elite_loot(enemy_weapon_id, stage_tier, drop_position)
-	# 호환탄 회수 — 사수 시체는 60% 확률로 장착 구경 탄약을 별도로 남긴다.
+	# 호환탄 회수 — 사수 시체는 85% 확률로 장착 구경 탄약을 별도로 남긴다.
 	# 일반 드랍(방어구·식량·부품) 테이블과 독립이라 그쪽 비중은 안 건드린다.
-	# 45%에서 올렸다: 킬당 회수량이 탄창 하나에도 못 미쳐 "쏠수록 가난해진다"는
-	# 체감이 남았다(유저 신고). 탄약 제작이 폐지돼 필드 회수가 유일한 보급선이다.
-	if str(enemy.get("enemy_kind")) != "melee" and spawn_random.randf() < 0.60:
+	# 45→60→85% 이력: "어지간하면 적을 죽이면 내 총 탄약이 나와야 한다"(유저 확정).
+	# 국소 교전 개편과 세트 — 교전 횟수가 줄어든 만큼 한 번의 교전이 남아야 한다.
+	if str(enemy.get("enemy_kind")) != "melee" and spawn_random.randf() < 0.85:
 		var ammo_recovery: Dictionary = LOOT_ECONOMY.roll_matched_ammo_recovery(
 			stage_tier, spawn_random
 		)

@@ -10,9 +10,11 @@ extends RefCounted
 #                              스트레이프·엄폐 v2 편승·더블배럴 사격·바크·다운/소생.
 #
 # 규칙(스펙 고정):
-#   이동   — 전투 밖 2.2m 뒤따름 / 전투 중 리시 8m 안에서 표적과 4~9m 유지, 스트레이프.
-#            플레이어와 12m 이상 벌어지면 교전 포기·복귀. 2.5s 끼임이면 연막 재배치.
-#   전투   — 더블배럴: 사거리 7m, 2연발 후 재장전 2.2s, 발당 26. LOS 필수.
+#   이동   — 전투 밖 2.2m 뒤따름 / 전투 중 리시 11m 안에서 표적과 4~9m 유지, 스트레이프.
+#            플레이어와 16m 이상 벌어지면 교전 포기·복귀. 2.5s 끼임이면 연막 재배치.
+#   전투   — 더블배럴: 사거리 12m(유지 밴드 4~9m를 전부 덮는다 — 예전엔 사거리 7m가
+#            밴드보다 짧아 7~9m '못 쏘는 구간'에 갇혔다), 2연발 후 재장전 2.2s, 발당 26.
+#            LOS 필수 — 몸높이 레이가 막히면 엄폐 중일 때 머리 높이로 내밀어 쏜다.
 #            표적 우선순위 ①플레이어를 공격 중인 적 ②자신을 공격하는 적 ③최근접.
 #            아군 오사 없음(bullet_projectile이 동행 탄↔플레이어를 통과시킨다).
 #   엄폐   — CoverSystem.evaluate_cover_for 공유. 엄폐물 1.2u 이내 covered(웅크림+
@@ -69,6 +71,8 @@ var player_revive_channel_seconds := PLAYER_REVIVE_CHANNEL_SECONDS
 var aggro_timer := 0.0
 var extraction_bark_done := false
 var had_alerted_combat := false
+# 전투 후 회수 — 최근 처치 지점(스쿼드 하나 분량만 기억한다).
+var loot_spots: Array[Vector3] = []
 var revive_point: Node3D
 # 다운 연출 원복용 — WorldEnvironment 리소스는 캐시가 공유되므로 반드시 되돌린다.
 var _saved_adjustment_enabled := false
@@ -92,7 +96,10 @@ func spawn_if_active() -> void:
 	juhong.system = self
 	juhong.host = host
 	host.add_child(juhong)
-	var spawn_origin: Vector3 = host.player.global_position + Vector3(-1.4, 0.0, 1.1)
+	# 첫 동행 판이면 옆이 아니라 조금 떨어진 곳에서 걸어와 붙는다(합류 서사 연결).
+	var first_field_run: bool = not GameState.juhong_field_intro_seen
+	var spawn_offset := Vector3(-5.5, 0.0, 4.5) if first_field_run else Vector3(-1.4, 0.0, 1.1)
+	var spawn_origin: Vector3 = host.player.global_position + spawn_offset
 	var world: Node = host.get_node("World")
 	if world != null and world.has_method("find_nearest_physically_open_position"):
 		spawn_origin = world.call(
@@ -101,6 +108,29 @@ func spawn_if_active() -> void:
 	juhong.global_position = Vector3(spawn_origin.x, 0.78, spawn_origin.z)
 	if host.get("hud") != null and host.hud.has_method("build_companion_chip"):
 		host.hud.build_companion_chip(load(JUHONG_PORTRAIT_PATH) as Texture2D)
+	if first_field_run:
+		GameState.juhong_field_intro_seen = true
+		_play_field_intro()
+
+
+func _play_field_intro() -> void:
+	# 쉘터 합류("다음 출정부터 나도 간다")를 필드에서 받아 주는 첫 마디 —
+	# 이게 없으면 아무 설명 없이 옆에 서 있는 낯선 아군이 된다(유저 지적).
+	if not is_juhong_alive():
+		return
+	juhong.bark("나야. 말했잖아 — 다음 출정부터라고.")
+	if host.get("hud") != null and host.hud.has_method("push_toast"):
+		host.hud.push_toast(
+			"주홍 동행 — 어느 쪽이 쓰러지면 서로 일으킬 수 있다 (판당 각 1회)",
+			JUHONG_ACCENT,
+			4.4
+		)
+	var tree: SceneTree = host.get_tree()
+	if tree != null:
+		tree.create_timer(4.6).timeout.connect(func() -> void:
+			if is_juhong_alive():
+				juhong.bark("앞장 서. 네 뒤는 내가 본다.")
+		)
 
 
 func is_active() -> bool:
@@ -126,9 +156,23 @@ func update(delta: float) -> void:
 	if aggro_timer <= 0.0:
 		aggro_timer = AGGRO_ROLL_INTERVAL
 		_roll_enemy_aggro()
+	_track_kill_spots()
 	_update_squad_clear_bark()
 	_update_extraction_bark()
 	_refresh_hud_chip()
+
+
+func _track_kill_spots() -> void:
+	# 죽는 적의 자리를 기억해 둔다 — 전투가 끝나면 주홍이 돌며 회수한다.
+	var enemies: Array = host.get("enemies") if host.get("enemies") != null else []
+	for enemy in enemies:
+		if not is_instance_valid(enemy) or not bool(enemy.get("dying")):
+			continue
+		if enemy.has_meta("juhong_loot_scanned"):
+			continue
+		enemy.set_meta("juhong_loot_scanned", true)
+		if loot_spots.size() < 3:
+			loot_spots.append((enemy as Node3D).global_position)
 
 
 # ── 적 어그로 배분(플레이어 60% / 주홍 40%) ─────────────────────────
@@ -358,6 +402,10 @@ func _apply_down_visuals() -> void:
 	var survivor: AnimatedSprite3D = host.get("survivor")
 	if survivor != null:
 		survivor.modulate = Color(0.72, 0.6, 0.58, 0.95)
+		# 쓰러진 자세 — 주홍 다운과 같은 문법(눕힘+하강). 서 있는 스프라이트로
+		# 다운을 보내면 "죽었는데 서 있다"가 된다.
+		survivor.rotation.z = deg_to_rad(78.0)
+		survivor.position.y = 0.12
 	if host.get("state_label") != null:
 		host.state_label.text = "행동 불능 — 주홍이 온다"
 
@@ -376,6 +424,9 @@ func _restore_down_visuals() -> void:
 	var survivor: AnimatedSprite3D = host.get("survivor")
 	if survivor != null:
 		survivor.modulate = Color.WHITE
+		survivor.rotation.z = 0.0
+		survivor.position.y = 0.3
+		survivor.scale = Vector3.ONE
 
 
 # ── HUD 칩(우상단) ──────────────────────────────────────────────────
@@ -396,6 +447,8 @@ func _refresh_hud_chip() -> void:
 		host.hud.update_companion_chip(true, ratio, "구조 중", HudStyle.WARN)
 	elif juhong.state == "combat":
 		host.hud.update_companion_chip(true, ratio, "교전", HudStyle.WARN)
+	elif juhong.state == "loot":
+		host.hud.update_companion_chip(true, ratio, "회수", JUHONG_ACCENT)
 	else:
 		host.hud.update_companion_chip(true, ratio, "대기", JUHONG_ACCENT)
 
@@ -417,11 +470,13 @@ class JuhongBody:
 	const RESCUE_SPEED := 6.3
 	const FOLLOW_STOP := 2.2
 	const FOLLOW_RESUME := 2.8
-	const COMBAT_LEASH := 8.0
-	const BREAK_OFF_DISTANCE := 12.0
+	const COMBAT_LEASH := 11.0
+	const BREAK_OFF_DISTANCE := 16.0
 	const ENGAGE_MIN := 4.0
 	const ENGAGE_MAX := 9.0
-	const FIRE_RANGE := 7.0
+	# 사거리는 반드시 ENGAGE_MAX보다 넉넉해야 한다 — 짧으면 유지 밴드 바깥
+	# 구간(7~9m)에서 스트레이프만 하며 영영 못 쏜다(실플레이 "총을 안 쏜다" 원인).
+	const FIRE_RANGE := 12.0
 	const SHOT_DAMAGE := 26
 	const SHOT_INTERVAL := 0.42
 	const RELOAD_SECONDS := 2.2
@@ -433,6 +488,8 @@ class JuhongBody:
 	const PEEK_SECONDS := 0.6
 	const CROUCH_SCALE_Y := 0.8
 	const STEERING_LOCK_MSEC := 220
+	const LOOT_SECONDS := 1.2
+	const LOOT_AMMO_CHANCE := 0.65
 
 	var system  # CompanionSystem
 	var host: Node
@@ -443,7 +500,8 @@ class JuhongBody:
 	var health_bar_fill: Sprite3D
 	var facing := "s"
 	var motion_state := "idle"
-	var state := "follow"  # follow / combat / rescue / down / retreated
+	var state := "follow"  # follow / combat / rescue / loot / down / retreated
+	var loot_timer := 0.0
 	var health := MAX_HEALTH
 	var max_health := MAX_HEALTH
 	var downed := false
@@ -587,6 +645,9 @@ class JuhongBody:
 			# 은신 존중 — 경보 전엔 표적을 버리고 사격 금지. 식빵 자세는 따라 웅크린다.
 			combat_target = null
 			engage_barked = false
+			# 전투가 끝났으면 근처 시체부터 회수한다(탄약은 플레이어 몫).
+			if _update_looting(delta):
+				return
 			state = "follow"
 			_update_follow(delta, bool(host.get("loafing")))
 			return
@@ -706,6 +767,86 @@ class JuhongBody:
 		_apply_crouch_visual(channeling_revive)
 
 
+	# ── 전투 후 회수 — 시체를 돌며 장착 구경 탄약을 챙겨 준다 ────────
+
+	func _update_looting(delta: float) -> bool:
+		# 처치 지점이 남아 있고 전투가 끝났을 때만. 플레이어가 식빵 자세(은신)면
+		# 돌아다니지 않고, 플레이어가 멀어지면 지점을 버리고 따라간다.
+		while not system.loot_spots.is_empty():
+			var stale: Vector3 = system.loot_spots[0]
+			if host.player.global_position.distance_to(stale) > 20.0:
+				system.loot_spots.pop_front()
+				continue
+			break
+		if system.loot_spots.is_empty() or bool(host.get("loafing")):
+			return false
+		if state != "loot":
+			state = "loot"
+			bark("잠깐 — 챙길 게 있어.")
+		var spot: Vector3 = system.loot_spots[0]
+		var offset := spot - global_position
+		offset.y = 0.0
+		var distance := offset.length()
+		if distance > 1.0:
+			loot_timer = 0.0
+			var direction := _steer_around_obstacles(offset / maxf(distance, 0.01))
+			velocity = direction * WALK_SPEED
+			if direction.length_squared() > 0.01:
+				_set_facing_from_world_direction(direction)
+			_set_motion_state("walk")
+			_apply_crouch_visual(false)
+			return true
+		velocity = Vector3.ZERO
+		_set_motion_state("idle")
+		_apply_crouch_visual(true)
+		loot_timer += delta
+		if loot_timer >= LOOT_SECONDS:
+			loot_timer = 0.0
+			system.loot_spots.pop_front()
+			_finish_loot_roll()
+		return true
+
+
+	func _finish_loot_roll() -> void:
+		# 65%: 장착 무기 구경 탄약을 플레이어 몫으로 — "내 몫은 내가 챙긴다"지만
+		# 탄은 네 총 것이니까. 획득은 머리 위 금색 팝업으로 보인다.
+		if randf() >= LOOT_AMMO_CHANCE or not bool(GameState.has_ak):
+			return
+		var ammo_id := str(GameState.equipped_ammo_id)
+		if ammo_id.is_empty():
+			return
+		var amount := randi_range(5, 10)
+		GameState.set_ammo_count(ammo_id, GameState.get_ammo_count(ammo_id) + amount)
+		if host.get("reserve_ammo") != null:
+			host.reserve_ammo = GameState.get_ammo_count(ammo_id)
+		if host.has_method("_update_equipment_ui"):
+			host.call("_update_equipment_ui")
+		show_loot_popup("탄약 +%d" % amount)
+
+
+	func show_loot_popup(text: String) -> void:
+		# 바크와 다른 층위 — 금색·짧게 떠오르고 사라지는 획득 팝업.
+		var popup := Label3D.new()
+		popup.name = "JuhongLootPopup"
+		popup.text = text
+		popup.font = BARK_FONT
+		popup.font_size = 44
+		popup.pixel_size = 0.0042
+		popup.modulate = Color("#ffd45e")
+		popup.outline_size = 12
+		popup.outline_modulate = Color(0.09, 0.06, 0.01, 0.92)
+		popup.position = Vector3(0, 1.55, 0)
+		popup.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		popup.no_depth_test = true
+		popup.render_priority = 121
+		add_child(popup)
+		var tween := create_tween()
+		tween.set_parallel(true)
+		tween.tween_property(popup, "position:y", 2.25, 0.9).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tween.tween_property(popup, "modulate:a", 0.0, 0.55).set_delay(0.45)
+		tween.chain().tween_callback(popup.queue_free)
+
+
 	# ── 표적 선택(스펙 고정 우선순위) ────────────────────────────────
 
 	func select_combat_target() -> CharacterBody3D:
@@ -755,8 +896,13 @@ class JuhongBody:
 			return
 		if target_distance > FIRE_RANGE:
 			return
-		if not _has_line_of_sight_to(target):
-			return
+		# 몸높이 레이가 막혀도 낮은 엄폐물 뒤라면 머리 높이(엄폐 머리 레이 0.84)로
+		# 내밀어 쏜다 — 안 그러면 자기 엄폐물에 시야가 막혀 엄폐 중 영영 침묵한다.
+		var muzzle_height := 0.62
+		if not _has_line_of_sight_to(target, muzzle_height):
+			muzzle_height = 0.84
+			if not (cover_active and _has_line_of_sight_to(target, muzzle_height)):
+				return
 		var aim := target.global_position - global_position
 		aim.y = 0.0
 		if aim.length_squared() < 0.0001:
@@ -775,10 +921,10 @@ class JuhongBody:
 		projectile.set("hostile", false)
 		projectile.set("critical_chance", 0.0)
 		projectile.set("effective_range", FIRE_RANGE)
-		projectile.set("maximum_range", 14.0)
+		projectile.set("maximum_range", 18.0)
 		projectile.set("minimum_damage_multiplier", 0.3)
 		get_parent().add_child(projectile)
-		projectile.global_position = global_position + Vector3(0, 0.62, 0) + direction * 0.5
+		projectile.global_position = global_position + Vector3(0, muzzle_height, 0) + direction * 0.5
 		SFX.play_weapon_shot("double_barrel", global_position, -3.0)
 		last_shot_target = target
 		last_shot_msec = Time.get_ticks_msec()
@@ -787,9 +933,9 @@ class JuhongBody:
 			bark("장전한다!")
 
 
-	func _has_line_of_sight_to(target: Node3D) -> bool:
+	func _has_line_of_sight_to(target: Node3D, eye_height: float = 0.62) -> bool:
 		var query := PhysicsRayQueryParameters3D.create(
-			global_position + Vector3(0, 0.62, 0),
+			global_position + Vector3(0, eye_height, 0),
 			target.global_position + Vector3(0, 0.45, 0),
 			COLLISION_PROFILES.WORLD_ONLY_SIGHT_MASK
 		)

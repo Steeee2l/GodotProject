@@ -21,6 +21,8 @@ const PISTOL_SPEED := 3.15
 const PATROL_SPEED := 1.35
 const PATROL_RADIUS := 6.5
 const SQUAD_PATROL_RADIUS := 4.2
+# 분대 경보 전파 반경 — 이 밖의 분대원은 못 듣는다(국소 교전).
+const SQUAD_ALERT_RADIUS := 20.0
 const ENEMY_MAGAZINE_CAPACITY := {
 	"m1911": 6,
 	"mp5": 14,
@@ -729,6 +731,15 @@ func _physics_process(delta: float) -> void:
 			has_line_of_sight,
 			vision_range
 		)
+		# 국소 교전 게이트 — 이미 동시 교전 상한만큼이 싸우는 중이면 '시야로
+		# 끼어드는 합류'는 의심에서 멈춘다(다가와서 살피기는 한다). 총에 맞으면
+		# (take_hit) 이 게이트를 안 타고 즉시 반격한다 — 플레이어가 먼저 건 싸움까지
+		# 막으면 그건 국소화가 아니라 무적이다. 자리가 나면 다음 프레임에 합류한다.
+		if detection_completed and _vision_join_capacity_reached():
+			detection_completed = false
+			detection_awareness = minf(detection_awareness, 0.92)
+			perception_state = "suspicious"
+			suspicion_hold_time = SUSPICION_HOLD_SECONDS
 		if detection_completed:
 			_become_alerted()
 		else:
@@ -1746,8 +1757,36 @@ func _become_alerted() -> void:
 				or not squad_member.has_method("receive_squad_alert")
 			):
 				continue
-			if int(squad_member.get("squad_id")) == squad_id:
-				squad_member.call("receive_squad_alert", shared_position)
+			if int(squad_member.get("squad_id")) != squad_id:
+				continue
+			# 국소 교전 — 분대 전파는 발신자 기준 SQUAD_ALERT_RADIUS 이내만.
+			# 예전엔 거리 무제한이라 도로 순찰로 맵 반대편에 가 있던 분대원까지
+			# 즉시 combat으로 꽂혀 "계속 다른 적이 끼어드는" 주범이었다.
+			if (
+				(squad_member as Node3D).global_position.distance_to(global_position)
+				> SQUAD_ALERT_RADIUS
+			):
+				continue
+			squad_member.call("receive_squad_alert", shared_position)
+
+
+func _vision_join_capacity_reached() -> bool:
+	# 동시 교전 상한(enemy_director)을 '시야 합류'에도 적용하기 위한 조회.
+	# 디렉터가 없는 환경(테스트·시뮬)에선 게이트를 끈다.
+	var scene := _raid_host()
+	if scene == null:
+		return false
+	var director = scene.get("enemy_director")
+	if (
+		director == null
+		or not director.has_method("count_alerted_enemies")
+		or not director.has_method("get_max_concurrent_alerted")
+	):
+		return false
+	return (
+		int(director.call("count_alerted_enemies"))
+		>= int(director.call("get_max_concurrent_alerted"))
+	)
 
 
 func receive_squad_alert(world_position: Vector3) -> void:

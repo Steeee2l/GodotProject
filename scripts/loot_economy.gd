@@ -954,7 +954,7 @@ static func roll_container(
 			# 일반 상자는 55% → 75%로 올렸다. 제작대의 탄약 레시피가 폐지되면서
 			# 탄약 수급선이 필드 루팅과 상인 구매만 남았다. 상자에서 나온 탄이
 			# 절반은 못 쓰는 구경이면 "주웠는데 못 쏜다"가 반복돼 압박만 커진다.
-			var matched_chance := 0.85 if container_type == "ammo_case" else 0.75
+			var matched_chance := 0.92 if container_type == "ammo_case" else 0.85
 			if item_id.begins_with("ammo_") and random.randf() < matched_chance:
 				var matched_ammo_id := _equipped_ammo_item_id(stage)
 				if not matched_ammo_id.is_empty():
@@ -1008,10 +1008,10 @@ static func roll_enemy_drop(
 	var roll := random.randf()
 	if not is_melee:
 		if roll < 0.26:
-			# 70%는 장착 무기 탄약으로 기울인다. 매칭 탄은 낱개(3~8발)가
-			# 아니라 정상 스택으로 떨어져 "죽이면 계속 쏠 수 있다"가 성립.
+			# 90%는 장착 무기 탄약으로 기울인다(70→90, "어지간하면 내 탄" 유저 요청).
+			# 매칭 탄은 낱개가 아니라 정상 스택으로 떨어져 "죽이면 계속 쏠 수 있다"가 성립.
 			var matched_ammo_id := ""
-			if random.randf() < 0.7:
+			if random.randf() < 0.9:
 				matched_ammo_id = _equipped_ammo_item_id(stage)
 			if not matched_ammo_id.is_empty():
 				return _materialize_item(matched_ammo_id, stage, random, false)
@@ -1471,19 +1471,21 @@ static func _roll_ammo_amount(
 	random: RandomNumberGenerator,
 	enemy_stack: bool
 ) -> int:
+	# 2026-08-30 전면 상향(~2.2배) — 탄약이 짜서 교전 자체가 손해라는 체감(유저).
+	# 국소 교전 개편과 세트: 싸움은 판당 몇 번, 대신 한 번 싸우면 확실히 남는다.
 	if enemy_stack:
-		return random.randi_range(3, 8)
+		return random.randi_range(8, 16)
 	if ammo_tier >= 3:
-		return random.randi_range(2, 5) if stage_tier == 3 else random.randi_range(3, 6)
+		return random.randi_range(4, 9) if stage_tier == 3 else random.randi_range(5, 11)
 	match clampi(stage_tier, 1, 5):
 		1:
-			return random.randi_range(4, 7)
+			return random.randi_range(10, 16)
 		2:
-			return random.randi_range(4, 8)
+			return random.randi_range(11, 18)
 		3:
-			return random.randi_range(5, 10)
+			return random.randi_range(13, 22)
 		_:
-			return random.randi_range(6, 12)
+			return random.randi_range(15, 26)
 
 
 static func _equipped_ammo_item_id(stage: int) -> String:
@@ -1524,14 +1526,10 @@ static func roll_matched_ammo_recovery(
 	if definition.is_empty():
 		return {}
 	var data := definition.get("data", {}) as Dictionary
-	# 회수량 상향: 기존 (4~7)+스테이지는 킬당 회수가 탄창 하나에도 못 미쳐
-	# "쏠수록 가난해진다"는 체감이 남았다(유저 신고). 탄약 제작 레시피가
-	# 폐지돼 필드 회수가 사실상 유일한 보급선이 된 것도 이유다.
-	# 하한은 6으로 고정하고 상한만 스테이지를 따라 늘리되 3스테이지에서 멈춘다 —
-	# 초반에도 한 킬이 탄창 값을 하고, 후반에는 다른 수급선(고티어 탄·무기 동반
-	# 탄약)이 이미 두꺼워서 여기까지 계속 늘리면 탄약 압박 자체가 사라진다.
-	# 실측 기준 킬당 장착 구경 회수 4.2~5.9발(목표 4~6발) 곡선.
-	data["amount"] = random.randi_range(6, 10 + mini(stage, 3))
+	# 회수량 2차 상향(2026-08-30): 국소 교전 개편으로 판당 교전 횟수가 줄었으니
+	# 한 번의 교전이 확실히 남아야 한다. 하한 12발(반 탄창), 상한은 스테이지를
+	# 따라 20~26발 — 사수 하나를 정리하면 최소한 쏜 만큼은 돌아온다.
+	data["amount"] = random.randi_range(12, 20 + 2 * mini(stage, 3))
 	return definition
 
 
