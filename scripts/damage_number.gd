@@ -64,7 +64,7 @@ func setup(
 ) -> void:
 	name = "DamageNumber"
 	elapsed = 0.0
-	text = str(maxi(0, damage))
+	text = _format_damage(maxi(0, damage))
 	font = damage_font
 	# 오토로드 식별자 직접 참조는 --script 콜드 스타트에서 컴파일이 깨질 수
 	# 있어(정적 멤버가 있는 스크립트) 트리 루트에서 노드로 찾는다.
@@ -126,6 +126,18 @@ func setup(
 		side_direction = Vector3.RIGHT
 	target_position = start_position + Vector3(0, 1.15 if is_critical else 0.88, 0)
 	target_position += side_direction.normalized() * side_amount
+
+
+static func _format_damage(damage: int) -> String:
+	# 강화가 복리로 열리면서 피해가 다섯 자리까지 간다. "24065"를 그대로 찍으면
+	# 글자가 화면을 가로지르고 한눈에 읽히지도 않는다 — 만 단위부터 압축한다.
+	# (GameState.format_compact_number를 쓰지 않는 이유: 이 스크립트는 정적
+	#  멤버가 있어 --script 콜드 스타트에서 오토로드 참조가 컴파일을 깬다.)
+	if damage < 10000:
+		return str(damage)
+	if damage < 1000000:
+		return "%.1fK" % (float(damage) / 1000.0)
+	return "%.2fM" % (float(damage) / 1000000.0)
 
 
 func _process(delta: float) -> void:

@@ -77,10 +77,15 @@ func configure_rocket_boss(target_body: CharacterBody3D, initial_threat: float) 
 				"get_raid_zone", str(game_state.get("selected_raid_zone"))
 			) as Dictionary
 			zone_tier = clampi(int(zone.get("stage_tier", 1)), 1, 5)
-	# 티어당 +30% → +62%(2026-08-30). 플레이어 강화 천장을 걷어내(+25 이후 복리)
-	# K2 +55가 한 발 345까지 오르면서, 옛 곡선(남산 ×2.2 ≈ 4,400)은 열 몇 발이면
-	# 끝나 보스가 보스로 안 읽혔다. 종로(티어 1)는 ×1.0 그대로다.
-	var tier_multiplier := 1.0 + float(zone_tier - 1) * 0.62
+	# 보스 체력 곡선(2026-08-30 2차). 앞 세 티어는 완만한 선형(+62%/티어),
+	# 티어 4·5는 일반 적과 같은 단계 배율(×4.66/단계)을 그 위에 곱한다 —
+	# 기준이 갈리면 "잡몹보다 무른 보스"가 나온다.
+	#   t1 ×1.0(1,235~1,820 불변) · t2 ×1.62 · t3 ×2.24
+	#   t4 ×10.4(≈20,800) · t5 ×48.6(≈97,200)
+	# 존별 기대 강화(존4 +45 · 존5 +65)에서 둘 다 약 56발 — 두 탄창짜리 싸움이다.
+	var linear_multiplier := 1.0 + float(mini(zone_tier, 3) - 1) * 0.62
+	var stage_multiplier := pow(4.66, float(maxi(0, zone_tier - 3)))
+	var tier_multiplier := linear_multiplier * stage_multiplier
 	# 기준: 유저 신고 "아무리 때려도 안 줄어든다". 예전 (2400+위협×1400)×(1+0.45×(티어-1))은
 	# 종로 2,610 / 남산 ~7,900 — AK+0 30dmg·실명중 50%면 첫 보스에만 3탄창 넘게 들었다.
 	# 지금은 종로 ~1,235(AK+0 약 41발·1.4탄창), 남산 ~4,400. 포이즈(16%)·격노(40%)는 그대로라

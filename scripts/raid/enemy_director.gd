@@ -36,12 +36,18 @@ const DANGER_BOSS_NAME := "폐허의 포격수 묘르"
 # 위험도 절반부터 사냥꾼 보스가 온다(피로도 폐지로 트리거 이관).
 const DANGER_BOSS_TRIGGER := 0.5
 # ── 적 스탯 배율 손잡이(2026-08-30) ───────────────────────────────
-# 존 4부터 단계마다 ×2.1. 존 1~3은 킬 타이밍 튜닝 구간이라 건드리지 않는다.
-const ENEMY_STAGE_POWER_GROWTH := 2.1
+# 존 4부터 단계마다 ×4.66. 존 1~3은 킬 타이밍 튜닝 구간이라 건드리지 않는다.
+#
+# 4.66은 임의의 숫자가 아니다 — 존별 기대 강화 단계(존4 ≈ +45, 존5 ≈ +65)에서
+# 플레이어 피해가 존3(+25) 대비 각각 ×4.7, ×21.7이 된다. 적 체력을 같은 폭으로
+# 올려야 "3~4발에 하나"라는 교전 리듬이 존이 깊어져도 유지된다.
+#   존4 ×4.66(체력 941) · 존5 ×21.7(체력 4,383) · 엘리트는 여기에 ×2.6
+const ENEMY_STAGE_POWER_GROWTH := 4.66
 const ENEMY_STAGE_POWER_FLOOR := 3
-# 엔드게임: 위험도 100% 초과 체류 90초마다 +100%, 최대 +300%.
-const ENEMY_ENDGAME_RAMP_SECONDS := 90.0
-const ENEMY_ENDGAME_MAX_BONUS := 3.0
+# 엔드게임: 위험도 100% 초과 체류 60초마다 +100%, 최대 +900%(×10).
+# 존5 최대치면 체력 43,830 — +99(피해 24,065) 플레이어의 종착 사냥터가 된다.
+const ENEMY_ENDGAME_RAMP_SECONDS := 60.0
+const ENEMY_ENDGAME_MAX_BONUS := 9.0
 const FIELD_LOOT_CACHE_TEXTURE := preload("res://assets/interiors/office_dungeon/modules/office_salvage_loot_v1.png")
 const FIRST_STAGE_SOLO_SQUAD_CHANCE := 0.62
 # 초반 존 밖 일반 배치의 분대 크기 분포 — 1인 48% / 2인 37% / 3인 15%.

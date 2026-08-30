@@ -284,6 +284,9 @@ var elite_damage_multiplier := 1.0
 # 같이 부풀리면 심층에서 한 방에 죽어 '어려운 게 아니라 불공평한' 판이 된다.
 var power_scale := 1.0
 const POWER_SCALE_DAMAGE_EXPONENT := 0.42
+# 피해 배율 상한. 체력은 수만까지 가도 되지만 적 한 발이 플레이어를 두 방에
+# 보내기 시작하면 그건 난이도가 아니라 사고다(방어구 감산 70%를 감안한 값).
+const POWER_SCALE_DAMAGE_MAX := 6.0
 var elite_speed_multiplier := 1.0
 var elite_icon: Sprite3D
 var elite_name_label: Label3D
@@ -378,7 +381,7 @@ func set_power_scale(value: float) -> void:
 func get_power_damage_multiplier() -> float:
 	if is_equal_approx(power_scale, 1.0):
 		return 1.0
-	return pow(power_scale, POWER_SCALE_DAMAGE_EXPONENT)
+	return minf(POWER_SCALE_DAMAGE_MAX, pow(power_scale, POWER_SCALE_DAMAGE_EXPONENT))
 
 
 func promote_to_elite(elite_display_name: String) -> void:

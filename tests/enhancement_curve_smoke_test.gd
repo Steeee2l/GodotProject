@@ -408,10 +408,15 @@ func _check_damage_curve() -> void:
 	# 곡선 그대로, 그 뒤부터 복리(+5%/단계)로 끝없이 오른다.
 	var tuned25 := 1.30 + 0.60 * (1.0 - pow(0.94, 15.0))
 	_check(absf(d25 - tuned25) < 0.001, "⑧ +25까지 튜닝 곡선 불변 (×%.3f)" % d25)
-	_check(absf(d55 - tuned25 * pow(1.05, 30.0)) < 0.01, "⑧ +55 복리 (×%.2f)" % d55)
-	_check(absf(d99 - tuned25 * pow(1.05, 74.0)) < 0.5, "⑧ +99 복리 (×%.2f)" % d99)
+	_check(absf(d55 - tuned25 * pow(1.08, 30.0)) < 0.05, "⑧ +55 복리 (×%.2f)" % d55)
+	_check(absf(d99 - tuned25 * pow(1.08, 74.0)) < 5.0, "⑧ +99 복리 (×%.1f)" % d99)
 	# 예전의 수렴 천장(×2.1)으로 돌아가면 여기서 잡힌다.
-	_check(d55 > 6.0, "⑧ +55는 최소 6배 (예전 ×1.9 천장 회귀 방지, ×%.2f)" % d55)
-	_check(d99 / d70 > 3.0, "⑧ +70 → +99 구간도 계속 불어난다")
+	_check(d55 > 12.0, "⑧ +55는 최소 12배 (천장 회귀 방지, ×%.2f)" % d55)
+	_check(d99 / d70 > 5.0, "⑧ +70 → +99 구간도 계속 불어난다")
+	# 인크리멘탈다운 자릿수 — K2(기본 48) 기준 +70에 네 자리, +99에 다섯 자리.
+	var k2_70 := float(WEAPON_SYSTEM.build_stats("k2", no_mods, 70).get("damage", 0))
+	var k2_99 := float(WEAPON_SYSTEM.build_stats("k2", no_mods, 99).get("damage", 0))
+	_check(k2_70 >= 1000.0, "⑧ K2 +70 피해 네 자리 (%d)" % roundi(k2_70))
+	_check(k2_99 >= 10000.0, "⑧ K2 +99 피해 다섯 자리 (%d)" % roundi(k2_99))
 	_check(roundi(float(WEAPON_SYSTEM.build_stats("ak47", no_mods).get("damage", 0))) == 30, "⑧ AK 기본 피해 30 불변")
 	sections_done.append("⑧")
