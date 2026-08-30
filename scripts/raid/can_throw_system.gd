@@ -16,6 +16,7 @@ extends RefCounted
 # main._apply_hud_layout이 맡는다.
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
+const SPEECH_BUBBLE := preload("res://scripts/raid/speech_bubble.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 
 const THROW_RANGE := 17.0
@@ -580,31 +581,12 @@ func _flash_reaction_marker(enemy: Node3D) -> void:
 
 
 func _spawn_speech(enemy: Node3D, lines: Array = EATER_LINES) -> void:
-	# 반응 대사가 남아 있을 때 먹기 대사가 겹치지 않게 이전 말풍선은 지운다.
-	var previous := enemy.get_node_or_null("LureSpeech")
-	if previous != null:
-		previous.queue_free()
-	var label := Label3D.new()
-	label.name = "LureSpeech"
-	label.text = lines[randi() % lines.size()]
-	label.font = FONT
-	# 26pt는 직교 카메라 거리에서 읽히지 않았다(유저 신고) — 두 배로.
-	label.font_size = 56
-	label.pixel_size = 0.0038
-	label.modulate = Color("#efe3c0")
-	label.outline_size = 16
-	label.outline_modulate = Color(0.02, 0.03, 0.03, 0.92)
-	label.position = Vector3(0, 1.86, 0)
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	label.render_priority = 120
-	enemy.add_child(label)
-	var tween := host.create_tween()
-	tween.tween_interval(2.4)
-	tween.tween_property(label, "modulate:a", 0.0, 0.5)
-	tween.tween_callback(func() -> void:
-		if is_instance_valid(label):
-			label.queue_free()
+	# 말풍선은 전부 공용 모듈이 그린다(배경 판 + 큰 글자) — 예전 맨 글자
+	# 라벨은 밝은 바닥 위에서 안 읽혔다(유저 신고).
+	SPEECH_BUBBLE.show_line(
+		enemy,
+		str(lines[randi() % lines.size()]),
+		SPEECH_BUBBLE.TONE_ENEMY
 	)
 
 

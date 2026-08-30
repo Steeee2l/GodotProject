@@ -31,6 +31,7 @@ const COVER_SYSTEM := preload("res://scripts/raid/cover_system.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const SFX := preload("res://scripts/sfx_bank.gd")
 const BARK_FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
+const SPEECH_BUBBLE := preload("res://scripts/raid/speech_bubble.gd")
 
 const JUHONG_ANIMATION_ROOT := "res://assets/characters/juhong"
 const JUHONG_PORTRAIT_PATH := "res://assets/characters/juhong/down_idle-frame-0.png"
@@ -1274,28 +1275,10 @@ class JuhongBody:
 		if bark_cooldown > 0.0 or retreated:
 			return
 		bark_cooldown = BARK_THROTTLE_SECONDS
-		if bark_label != null and is_instance_valid(bark_label):
-			bark_label.queue_free()
-		bark_label = Label3D.new()
-		bark_label.name = "JuhongBark"
-		bark_label.text = line
-		bark_label.font = BARK_FONT
-		bark_label.font_size = 56
-		bark_label.pixel_size = 0.0038
-		bark_label.modulate = Color("#d9f3ec")
-		bark_label.outline_size = 16
-		bark_label.outline_modulate = Color(0.02, 0.05, 0.05, 0.92)
-		bark_label.position = Vector3(0, 2.2, 0)
-		bark_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		bark_label.no_depth_test = true
-		bark_label.render_priority = 120
-		add_child(bark_label)
-		var tween := create_tween()
-		tween.tween_interval(2.4)
-		tween.tween_property(bark_label, "modulate:a", 0.0, 0.5)
-		tween.tween_callback(func() -> void:
-			if is_instance_valid(bark_label):
-				bark_label.queue_free()
+		# 말풍선 그리기는 공용 모듈(speech_bubble)이 한다 — 적·동료가 같은
+		# 크기·같은 배경 판을 쓰게 해 화면에서 대사가 일관되게 읽힌다.
+		bark_label = SPEECH_BUBBLE.show_line(
+			self, line, SPEECH_BUBBLE.TONE_ALLY, 2.6, 2.2
 		)
 
 

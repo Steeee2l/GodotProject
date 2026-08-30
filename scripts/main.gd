@@ -406,6 +406,12 @@ var can_throw := CanThrowSystem.new()
 # 중장비(지뢰·감시포탑·로켓) 필드 로직 — 선택·조준은 can_throw가, 폭발은 이 모듈이.
 # class_name 캐시(.godot)가 갱신되기 전에도 헤드리스 테스트가 돌도록 preload로 만든다.
 var deployables := preload("res://scripts/raid/deployables.gd").new()
+# 적 잡담 — 평소엔 서로 떠들고, 혼자면 혼잣말, 싸울 땐 가끔 소리친다.
+var enemy_chatter := preload("res://scripts/raid/enemy_chatter.gd").new()
+# 개발자 디버그 메뉴 — 9키(PC) / 좌하단 DEV 버튼(모바일).
+# class_name 캐시(.godot)에 기대지 않도록 Node로 두고 call()로 부른다
+# (deployables·tactical_map과 같은 규약 — 헤드리스 콜드 스타트 안전).
+var debug_menu: Node
 var monologue := FieldMonologue.new()
 var raid_zone_data: Dictionary = {}
 var active_zone_rule := ""
@@ -603,6 +609,11 @@ func _ready() -> void:
 	companion_system.attach(self)
 	can_throw.attach(self)
 	deployables.attach(self)
+	enemy_chatter.attach(self)
+	debug_menu = preload("res://scripts/hud/debug_menu.gd").new()
+	debug_menu.name = "DebugMenu"
+	add_child(debug_menu)
+	debug_menu.call("setup", self)
 	active_tutorial.attach(self)
 	raid_tutorial.attach(self)
 	# 발각 방향 인디케이터 — 화면 밖(또는 안개에 가려진) 경계 상태 적의 방향을
@@ -986,6 +997,7 @@ func _physics_process(delta: float) -> void:
 	stealth._update_stealth_takedown_prompt()
 	can_throw.update(delta)
 	deployables.update(delta)
+	enemy_chatter.update(delta)
 	companion_system.update(delta)
 	_update_fire_button_context()
 	_update_combat_feedback_overlay()
@@ -7416,6 +7428,13 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and not event.echo:
 		var key_event := event as InputEventKey
 		var key := key_event.keycode if key_event.keycode != 0 else key_event.physical_keycode
+		# 9 = 개발자 메뉴. 다른 어떤 게이트보다 먼저 본다 — 죽었든 창이 떠
+		# 있든 열려야 디버깅 도구로 쓸모가 있다(모바일은 좌하단 DEV 버튼).
+		if key == KEY_9 and key_event.pressed:
+			if debug_menu != null and is_instance_valid(debug_menu):
+				debug_menu.call("toggle")
+			get_viewport().set_input_as_handled()
+			return
 		if key == KEY_ESCAPE and key_event.pressed and lore_reader.is_open():
 			lore_reader.close()
 			get_viewport().set_input_as_handled()

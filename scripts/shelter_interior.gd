@@ -236,6 +236,9 @@ var contract_story_skip_button: Button
 var contract_story_lines: Array[String] = []
 var contract_story_index := 0
 var contract_story_open := false
+# 개발자 디버그 메뉴 — 9키(PC) / 좌하단 DEV 버튼(모바일).
+# class_name 캐시에 기대지 않도록 Node + call() 규약을 따른다.
+var debug_menu: Node
 var contract_story_speaker_name := "사자"
 var contract_story_portrait: Texture2D
 var contract_story_typewriter: Typewriter
@@ -361,6 +364,11 @@ func _ready() -> void:
 	shelter_bgm.attach(self)
 	shelter_bgm.set_state("shelter")
 	_build_interface()
+	# 개발자 메뉴 — 필드와 같은 모듈을 쉘터에도 붙인다(9키 / 좌하단 DEV).
+	debug_menu = preload("res://scripts/hud/debug_menu.gd").new()
+	debug_menu.name = "DebugMenu"
+	add_child(debug_menu)
+	debug_menu.call("setup", self)
 	if not get_viewport().size_changed.is_connected(_apply_shelter_safe_layout):
 		get_viewport().size_changed.connect(_apply_shelter_safe_layout)
 	_apply_shelter_safe_layout()
@@ -5798,6 +5806,13 @@ func _create_cat_frames() -> SpriteFrames:
 
 
 func _input(event: InputEvent) -> void:
+	# 9 = 개발자 메뉴. 어떤 모달보다 먼저 본다.
+	if event is InputEventKey and event.pressed and not event.echo:
+		var debug_key := (event as InputEventKey).keycode
+		if debug_key == KEY_9 and debug_menu != null and is_instance_valid(debug_menu):
+			debug_menu.call("toggle")
+			get_viewport().set_input_as_handled()
+			return
 	if contract_story_open:
 		if (
 			event is InputEventKey
