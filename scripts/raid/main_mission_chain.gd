@@ -416,6 +416,12 @@ func _finish_point(index: int, point: Dictionary) -> void:
 	if point_index < points.size():
 		_spawn_point(point_index)
 		_apply_step_presentation(point_index)
+		# 다음 지점 방향 핑 — 지도를 안 열어도 어느 쪽인지 8초간 알려 준다.
+		if host.has_method("show_objective_ping") and point_index < point_positions.size():
+			host.show_objective_ping(
+				point_positions[point_index],
+				str((points[point_index] as Dictionary).get("map_label", "다음 지점"))
+			)
 		if bool((points[point_index] as Dictionary).get("alarm", false)):
 			_begin_alarm()
 	_play_stage_cinematic("point_%d" % index)

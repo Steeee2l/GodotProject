@@ -20,11 +20,12 @@ extends RefCounted
 #   엄폐   — CoverSystem.evaluate_cover_for 공유. 엄폐물 1.2u 이내 covered(웅크림+
 #            청록 호), 사격 시 내밈. covered 중 그 엄폐물을 지나오는 총알 차단.
 #   은신   — 경보 전(alerted 적 없음)엔 사격 금지, 플레이어 식빵 자세를 따라 웅크림.
-#   소생   — 주홍 다운: 45s 출혈, [F] 홀드 3s → HP 40%. 넘기면 그 판 이탈(영구사망 없음).
-#            플레이어 다운: 30s, 주홍이 달려와 4s 채널 → HP 40%. 판당 각 1회.
+#   소생   — 주홍 다운: 45s 출혈, [F] 홀드 3s → HP 40%. 횟수 제한 없음(제한을 두면
+#            칩은 "일으켜라"인데 실제론 안 살려지는 모순이 생겼다 — 유저 신고).
+#            45s를 넘기면 이탈 → 무전기 루프. 플레이어 다운: 30s, 주홍이 달려와
+#            4s 채널 → HP 40% — 이쪽만 판당 1회(안전망은 한 번).
 
 const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
-const ACTIVE_TUTORIAL := preload("res://scripts/shelter/active_tutorial.gd")
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const COVER_SYSTEM := preload("res://scripts/raid/cover_system.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
@@ -58,9 +59,8 @@ const DOWN_SATURATION := 0.26
 var host: Node
 var juhong: JuhongBody
 
-# 판당 소생 각 1회 — 플레이어 1·주홍 1.
+# 플레이어 소생만 판당 1회 — 주홍 소생은 무제한(45s 안에 [F]만 하면 된다).
 var player_revive_used := false
-var juhong_revive_used := false
 
 # 플레이어 다운 상태(사망 시퀀스 대신 들어오는 30초의 기회).
 var player_downed := false
@@ -78,9 +78,7 @@ var loot_spots: Array[Vector3] = []
 var revive_point: Node3D
 var radio_point: Node3D
 var radio_grave: Node3D
-var radio_indicator_layer: CanvasLayer
-var radio_arrow: Control
-var radio_chip_label: Label
+var radio_indicator: EdgeIndicator
 var player_rip_marker: Node3D
 # 다운 연출 원복용 — WorldEnvironment 리소스는 캐시가 공유되므로 반드시 되돌린다.
 var _saved_adjustment_enabled := false
@@ -265,8 +263,6 @@ func on_juhong_down() -> void:
 	_release_enemy_aggro_from_juhong()
 	if host.get("hud") != null and host.hud.has_method("push_toast"):
 		host.hud.push_toast("주홍 다운 — %.0f초 안에 [F]로 소생" % juhong.down_remaining, HudStyle.DANGER, 3.2)
-	if juhong_revive_used:
-		return
 	# 기존 상호작용 캡슐+링 게이지 문법을 그대로 태운다(main이 홀드·완료를 처리).
 	revive_point = host._create_field_interaction(
 		"companion_revive",
@@ -281,7 +277,6 @@ func finish_juhong_revive() -> void:
 	# main._complete_field_interaction("companion_revive")가 부른다.
 	if not is_active() or not juhong.downed:
 		return
-	juhong_revive_used = true
 	_clear_revive_point()
 	juhong.revive()
 
@@ -580,79 +575,22 @@ func _set_player_rip(active: bool) -> void:
 		player_rip_marker = null
 
 
-# ── 무전기 방향 인디케이터 — 화면 밖이면 가장자리에서 방향을 가리킨다 ──
-
-func _ensure_radio_indicator() -> void:
-	if radio_indicator_layer != null and is_instance_valid(radio_indicator_layer):
-		return
-	radio_indicator_layer = CanvasLayer.new()
-	radio_indicator_layer.name = "JuhongRadioIndicator"
-	radio_indicator_layer.layer = 88
-	host.add_child(radio_indicator_layer)
-	radio_arrow = ACTIVE_TUTORIAL.TutorialArrow.new()
-	radio_arrow.name = "RadioArrow"
-	radio_arrow.custom_minimum_size = Vector2(26, 26)
-	radio_arrow.size = Vector2(26, 26)
-	radio_arrow.modulate = JUHONG_ACCENT
-	radio_arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	radio_indicator_layer.add_child(radio_arrow)
-	radio_chip_label = Label.new()
-	radio_chip_label.name = "RadioChip"
-	radio_chip_label.add_theme_font_override("font", BARK_FONT)
-	radio_chip_label.add_theme_font_size_override("font_size", 13)
-	radio_chip_label.add_theme_color_override("font_color", JUHONG_ACCENT)
-	radio_chip_label.add_theme_color_override("font_outline_color", Color(0.02, 0.06, 0.05, 0.95))
-	radio_chip_label.add_theme_constant_override("outline_size", 7)
-	radio_chip_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	radio_indicator_layer.add_child(radio_chip_label)
-
+# ── 무전기 방향 인디케이터 — 공용 EdgeIndicator(안전 여백 포함) ──
 
 func _update_radio_indicator() -> void:
 	var radio_active := radio_point != null and is_instance_valid(radio_point)
 	if not radio_active:
-		if radio_indicator_layer != null and is_instance_valid(radio_indicator_layer):
-			radio_indicator_layer.visible = false
+		if radio_indicator != null:
+			radio_indicator.hide()
 		return
-	_ensure_radio_indicator()
-	var camera: Camera3D = host.get_viewport().get_camera_3d()
-	if camera == null:
-		radio_indicator_layer.visible = false
-		return
-	radio_indicator_layer.visible = true
-	var viewport_size: Vector2 = host.get_viewport().get_visible_rect().size
-	var anchor: Vector3 = radio_point.global_position + Vector3(0, 1.2, 0)
-	var behind := camera.is_position_behind(anchor)
-	var screen_point := camera.unproject_position(anchor)
-	var center := viewport_size * 0.5
-	if behind:
-		screen_point = center + (center - screen_point)
-	var margin := 46.0
-	var margin_rect := Rect2(
-		Vector2(margin, margin), viewport_size - Vector2(margin * 2.0, margin * 2.0)
-	)
-	var on_screen := not behind and margin_rect.has_point(screen_point)
-	var direction := Vector2.DOWN
-	var arrow_center := screen_point + Vector2(0.0, -34.0)
-	if not on_screen:
-		var to_target := screen_point - center
-		if to_target.length_squared() < 1.0:
-			to_target = Vector2.DOWN
-		direction = to_target.normalized()
-		arrow_center = Vector2(
-			clampf(screen_point.x, margin_rect.position.x, margin_rect.end.x),
-			clampf(screen_point.y, margin_rect.position.y, margin_rect.end.y)
+	if radio_indicator == null or not radio_indicator.is_valid():
+		radio_indicator = EdgeIndicator.create(host, JUHONG_ACCENT, 88)
+	radio_indicator.point_at(
+		radio_point.global_position,
+		"무전기 %dm" % int(
+			round(host.player.global_position.distance_to(radio_point.global_position))
 		)
-	radio_arrow.set("direction", direction)
-	radio_arrow.position = arrow_center - Vector2(13, 13)
-	radio_arrow.queue_redraw()
-	radio_chip_label.text = "무전기 %dm" % int(
-		round(host.player.global_position.distance_to(radio_point.global_position))
 	)
-	radio_chip_label.reset_size()
-	var chip_position: Vector2 = arrow_center + Vector2(-radio_chip_label.size.x * 0.5, 18.0)
-	chip_position.x = clampf(chip_position.x, 4.0, viewport_size.x - radio_chip_label.size.x - 4.0)
-	chip_position.y = clampf(chip_position.y, 4.0, viewport_size.y - 30.0)
-	radio_chip_label.position = chip_position
 
 
 # ── HUD 칩(우상단) ──────────────────────────────────────────────────

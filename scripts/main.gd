@@ -419,6 +419,11 @@ var boss_alert_panel: PanelContainer
 var boss_alert_title: Label
 var boss_alert_subtitle: Label
 var boss_alert_tween: Tween
+# 다음 임무 지점 핑 — 지점 하나를 끝내면 다음 지점 방향을 잠깐 가리킨다(유저 요청).
+var objective_ping: EdgeIndicator
+var objective_ping_until_msec := 0
+var objective_ping_position := Vector3.INF
+var objective_ping_label := ""
 # 배너 스택이 자리를 양보시킬 수 있으므로, "떠 있어야 하는가"를 패널의
 # visible과 분리해서 들고 있어야 한다. visible을 입력이자 출력으로 쓰면
 # 한 번 접힌 배너가 다시 뜨지 못한다.
@@ -806,6 +811,7 @@ func _physics_process(delta: float) -> void:
 	incidents._update_faction_conflicts(delta)
 	_update_raid_opportunities(delta)
 	main_mission.update(delta)
+	_update_objective_ping()
 	melee_attack_cooldown = maxf(0.0, melee_attack_cooldown - delta)
 	combat_hit_stop_cooldown = maxf(0.0, combat_hit_stop_cooldown - delta)
 	hit_stop_damage_accumulator = 0
@@ -3727,6 +3733,34 @@ func _update_combat_overlay_visibility() -> void:
 			and not player_death_sequence_active
 			and not boss_defeat_sequence_active
 		)
+
+
+func show_objective_ping(world_position: Vector3, label_text: String, seconds: float = 8.0) -> void:
+	# 미션 지점 완료 직후 다음 지점 방향을 잠깐 보여 준다 — 지도를 안 열어도
+	# 몸을 어느 쪽으로 돌릴지 바로 알게(가장자리 화살표 + 거리).
+	objective_ping_position = world_position
+	objective_ping_label = label_text
+	objective_ping_until_msec = Time.get_ticks_msec() + int(seconds * 1000.0)
+
+
+func _update_objective_ping() -> void:
+	var ping_active := (
+		objective_ping_position != Vector3.INF
+		and Time.get_ticks_msec() < objective_ping_until_msec
+	)
+	if not ping_active:
+		if objective_ping != null:
+			objective_ping.hide()
+		return
+	if objective_ping == null or not objective_ping.is_valid():
+		objective_ping = EdgeIndicator.create(self, Color("#e7c26e"), 87)
+	objective_ping.point_at(
+		objective_ping_position,
+		"%s %dm" % [
+			objective_ping_label,
+			int(round(player.global_position.distance_to(objective_ping_position))),
+		]
+	)
 
 
 func _is_pointer_ui_active() -> bool:
