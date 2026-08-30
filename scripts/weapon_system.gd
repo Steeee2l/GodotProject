@@ -211,6 +211,10 @@ const WEAPON_FAMILY_LADDER := {
 	"shotgun": ["double_barrel", "pump_shotgun"],
 }
 const ENHANCEMENT_TRANSFER_RATIO := 0.6
+# 강화 피해 곡선의 두 손잡이. 초반(+25까지)은 존별 킬 타이밍이 튜닝돼 있어
+# 옛 곡선을 그대로 두고, 그 뒤부터 복리로 간다. 세기를 바꾸려면 여기만 만진다.
+const ENHANCEMENT_TUNED_LEVELS := 25
+const WEAPON_DAMAGE_GROWTH_LATE := 1.05
 
 const MAGAZINES := {
 	"m1911_7rnd": {"caliber": "45_acp", "capacity": 7, "weapons": ["m1911"]},
@@ -357,17 +361,28 @@ static func build_stats(
 			stats[stat_name] = overrides[stat_name]
 	var level := clampi(enhancement_level, 0, 99)
 	if level > 0:
-		# 피해 보너스: +10까지는 +3%/Lv(기존과 비슷), 그 뒤는 수렴 곡선 —
-		# +20 +58%, +30 +73%, +50 +87%, 극한 +90%. 예전 선형(+3.5%/Lv)은 +50이면
-		# ×2.75라 강화가 싱크가 아니라 전투를 지우는 경로였다.
-		var damage_bonus := 0.03 * float(level)
-		if level > 10:
-			damage_bonus = 0.30 + 0.60 * (1.0 - pow(0.94, float(level - 10)))
-		# 대개편 3단계 — 수렴 곡선 위에 +51부터 선형 꼬리(+0.4%/Lv)를 얹는다. +50까지는 그대로,
-		# +70 ×1.97, +99 ≈ ×2.09. 3구간 비용 곡선으로 +60 이후가 실제로 닿는 구간이 됐으니,
-		# 그 구간에도 체감되는 파워가 있어야 한다(여전히 예전 선형 +3.5%/Lv의 ×2.75보다 낮다).
-		damage_bonus += 0.004 * float(maxi(0, level - 50))
-		stats["damage"] = float(stats.get("damage", 1.0)) * (1.0 + damage_bonus)
+		# ── 피해 곡선(2026-08-30 천장 철거) ───────────────────────────
+		# 예전에는 전 구간이 수렴 곡선이라 아무리 부어도 ×2.1이 천장이었다.
+		# MP5를 +55까지 올려도 18 × 1.88 = 33이 나왔고, 유저 판정은 "인크리멘탈
+		# 게임에서 있을 수 없는 일". 맞는 말이다 — 강화가 이 게임의 주 성장선인데
+		# 55단계를 부어 두 배가 안 되면 올릴 이유가 없다.
+		#
+		# 초반 +25까지는 존별 킬 타이밍(종로 AK+5·을지로 AKM+15·남산 K2+25가
+		# 각각 3발)이 맞춰져 있어 옛 곡선을 그대로 둔다. 천장은 그 뒤부터
+		# 걷어내고 복리(+5%/단계)로 간다 — 여기서부터가 '쌓는 재미' 구간이다.
+		#   +25 ×1.66(불변) · +40 ×3.45 · +55 ×7.19 · +70 ×14.9 · +99 ×62
+		# 비용은 3구간 지수라 여전히 비용이 파워보다 가파르다 — "한 단계 더"가
+		# 계속 목표로 남는 이유다.
+		var tuned_level := mini(level, ENHANCEMENT_TUNED_LEVELS)
+		var damage_bonus := 0.03 * float(tuned_level)
+		if tuned_level > 10:
+			damage_bonus = 0.30 + 0.60 * (1.0 - pow(0.94, float(tuned_level - 10)))
+		var damage_multiplier := 1.0 + damage_bonus
+		if level > ENHANCEMENT_TUNED_LEVELS:
+			damage_multiplier *= pow(
+				WEAPON_DAMAGE_GROWTH_LATE, float(level - ENHANCEMENT_TUNED_LEVELS)
+			)
+		stats["damage"] = float(stats.get("damage", 1.0)) * damage_multiplier
 		stats["base_spread_deg"] = float(stats.get("base_spread_deg", 2.0)) * maxf(0.72, 1.0 - float(level) * 0.003)
 		stats["recoil"] = float(stats.get("recoil", 1.0)) * maxf(0.76, 1.0 - float(level) * 0.0025)
 		stats["durability_loss"] = float(stats.get("durability_loss", 1.0)) * maxf(0.55, 1.0 - float(level) * 0.0045)

@@ -399,9 +399,19 @@ func _check_damage_curve() -> void:
 	var d50 := float(WEAPON_SYSTEM.build_stats("k2", no_mods, 50).get("damage", 0)) / base
 	var d70 := float(WEAPON_SYSTEM.build_stats("k2", no_mods, 70).get("damage", 0)) / base
 	var d99 := float(WEAPON_SYSTEM.build_stats("k2", no_mods, 99).get("damage", 0)) / base
-	print("  damage multiplier +50 ×%.3f · +70 ×%.3f · +99 ×%.3f" % [d50, d70, d99])
-	_check(absf(d50 - (1.30 + 0.60 * (1.0 - pow(0.94, 40.0)))) < 0.001, "⑧ +50까지 기존 곡선 그대로")
-	_check(d99 > 2.05 and d99 < 2.15, "⑧ +99 ≈ ×2.1 (got ×%.3f)" % d99)
-	_check(d70 > d50 + 0.07, "⑧ +70은 +50보다 체감되게 높다")
+	var d25 := float(WEAPON_SYSTEM.build_stats("k2", no_mods, 25).get("damage", 0)) / base
+	var d55 := float(WEAPON_SYSTEM.build_stats("k2", no_mods, 55).get("damage", 0)) / base
+	print("  damage multiplier +25 ×%.2f · +50 ×%.2f · +55 ×%.2f · +70 ×%.2f · +99 ×%.2f" % [
+		d25, d50, d55, d70, d99
+	])
+	# 천장 철거(2026-08-30) — +25까지는 존별 킬 타이밍 튜닝이 걸려 있어 옛
+	# 곡선 그대로, 그 뒤부터 복리(+5%/단계)로 끝없이 오른다.
+	var tuned25 := 1.30 + 0.60 * (1.0 - pow(0.94, 15.0))
+	_check(absf(d25 - tuned25) < 0.001, "⑧ +25까지 튜닝 곡선 불변 (×%.3f)" % d25)
+	_check(absf(d55 - tuned25 * pow(1.05, 30.0)) < 0.01, "⑧ +55 복리 (×%.2f)" % d55)
+	_check(absf(d99 - tuned25 * pow(1.05, 74.0)) < 0.5, "⑧ +99 복리 (×%.2f)" % d99)
+	# 예전의 수렴 천장(×2.1)으로 돌아가면 여기서 잡힌다.
+	_check(d55 > 6.0, "⑧ +55는 최소 6배 (예전 ×1.9 천장 회귀 방지, ×%.2f)" % d55)
+	_check(d99 / d70 > 3.0, "⑧ +70 → +99 구간도 계속 불어난다")
 	_check(roundi(float(WEAPON_SYSTEM.build_stats("ak47", no_mods).get("damage", 0))) == 30, "⑧ AK 기본 피해 30 불변")
 	sections_done.append("⑧")
