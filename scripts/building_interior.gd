@@ -566,11 +566,12 @@ func _format_building_survival_time() -> String:
 
 
 func _build_building_death_lesson() -> String:
+	# 나비 독백 톤(짧은 현재형) — main의 사망 교훈과 같은 세트.
 	if GameState.medkits > 0:
-		return "치료 키트가 %d개 남아 있었습니다. 다음엔 더 일찍 쓰세요." % GameState.medkits
+		return "구급약이 %d개 남아 있었다. 다음엔 더 일찍 쓴다." % GameState.medkits
 	if _get_reserve_ammo() <= 0:
-		return "탄약이 바닥난 상태였습니다. 건물 안에서는 물러설 자리가 좁습니다."
-	return "건물 안은 사방이 막혀 있습니다. 1층 출구까지의 거리를 항상 세어 두세요."
+		return "탄이 바닥났다. 건물 안에선 물러설 자리도 좁다."
+	return "건물 안은 사방이 막혀 있다. 1층 출구까지의 거리를 늘 세어 둔다."
 
 
 func _continue_after_death() -> void:
@@ -1670,7 +1671,7 @@ func _handle_floor_cleared() -> void:
 	var detail := (
 		"모든 층 제압 완료. 전리품을 챙기고 도시로 돌아간다."
 		if full_clear
-		else "현재 층의 위협을 모두 제거했습니다. 남은 층을 계속 수색할 수 있습니다."
+		else "이 층은 정리됐다. 남은 층을 마저 뒤져도 된다."
 	)
 	_show_floor_clear_banner(title, detail)
 	if building_objective_label != null:

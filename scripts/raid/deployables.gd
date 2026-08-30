@@ -54,6 +54,17 @@ const DRONE_BULLET_DAMAGE := 14
 const DRONE_SIDE_OFFSET := 1.3
 const DRONE_HOVER_HEIGHT := 2.3
 
+# 타격 드론(3차) — "지정하고, 지운다". 발동하면 10초간 커서 근처 적이 자동
+# 락온(청록 표적)되고, 클릭하면 머리 위 드론이 그 표적을 일제 사격한다.
+const STRIKE_DRONE_DURATION := 10.0
+const STRIKE_LOCK_RADIUS := 2.6
+const STRIKE_RANGE := 22.0
+const STRIKE_BURST_COUNT := 4
+const STRIKE_BURST_DAMAGE := 55
+const STRIKE_BURST_INTERVAL := 0.09
+const STRIKE_MAX_BURSTS := 5
+const LOCK_FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
+
 # 보급 카트(2차) — 살아 있는 동안 가방 +6칸, 대신 걸음 x0.88.
 const CART_HP := 180
 const CART_BAG_BONUS := 6
@@ -80,6 +91,16 @@ var rockets_fired := 0
 var drones_deployed := 0
 var drone_shots_fired := 0
 var carts_deployed := 0
+var strike_drones_used := 0
+var strike_shots_fired := 0
+
+# 타격 드론 런타임 상태.
+var strike_mode_left := 0.0
+var strike_bursts_left := 0
+var strike_drone_node: Node3D
+var strike_lock_target: CharacterBody3D
+var strike_lock_bracket: Node3D
+var strike_burst_queue: Array = []
 
 func attach(owner_node: Node) -> void:
 	host = owner_node
@@ -88,6 +109,9 @@ func attach(owner_node: Node) -> void:
 
 func update(delta: float) -> void:
 	rocket_cooldown_left = maxf(0.0, rocket_cooldown_left - delta)
+	if strike_mode_left > 0.0 or is_instance_valid(strike_drone_node):
+		_update_strike_mode(delta)
+	_update_strike_bursts(delta)
 
 
 func is_rocket_ready() -> bool:
@@ -194,6 +218,259 @@ func notify_drone_gone(reason: String) -> void:
 		"destroyed":
 			host.hud.push_toast("호위 드론 격추", Color("#e2724e"), 2.0)
 		# "replaced"는 새 드론 토스트가 대신 말한다.
+
+
+# ── 타격 드론(3차) — 락온 일제 사격 ──────────────────────────────
+
+
+func begin_strike_mode() -> bool:
+	# 확정하는 순간 소모. 10초 동안: 커서 근처 적 자동 락온 + 클릭 = 일제 사격.
+	if strike_mode_left > 0.0:
+		return false
+	if not GameState.consume_heavy_gear("strike_drone", 1):
+		return false
+	strike_mode_left = STRIKE_DRONE_DURATION
+	strike_bursts_left = STRIKE_MAX_BURSTS
+	strike_drones_used += 1
+	_ensure_strike_drone_node()
+	if host.hud != null and host.hud.has_method("push_toast"):
+		host.hud.push_toast(
+			"타격 드론 — 적을 클릭하면 일제 사격 (%d초 · %d회)"
+			% [int(STRIKE_DRONE_DURATION), STRIKE_MAX_BURSTS],
+			TEAL,
+			3.0
+		)
+	SFX.play("cover_enter")
+	return true
+
+
+func is_strike_mode_active() -> bool:
+	return strike_mode_left > 0.0
+
+
+func _ensure_strike_drone_node() -> void:
+	if is_instance_valid(strike_drone_node):
+		return
+	strike_drone_node = Node3D.new()
+	strike_drone_node.name = "StrikeDrone"
+	host.add_child(strike_drone_node)
+	strike_drone_node.global_position = player.global_position + Vector3(0.6, 2.9, -0.4)
+	var body := MeshInstance3D.new()
+	body.name = "StrikeDroneBody"
+	var body_mesh := BoxMesh.new()
+	body_mesh.size = Vector3(0.42, 0.1, 0.42)
+	var body_material := StandardMaterial3D.new()
+	body_material.albedo_color = Color(0.12, 0.16, 0.16)
+	body_material.emission_enabled = true
+	body_material.emission = TEAL
+	body_material.emission_energy_multiplier = 1.4
+	body_mesh.material = body_material
+	body.mesh = body_mesh
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	strike_drone_node.add_child(body)
+	var light := OmniLight3D.new()
+	light.name = "StrikeDroneLight"
+	light.light_color = TEAL
+	light.light_energy = 2.4
+	light.omni_range = 3.4
+	strike_drone_node.add_child(light)
+
+
+func _update_strike_mode(delta: float) -> void:
+	strike_mode_left = maxf(0.0, strike_mode_left - delta)
+	var mode_over := (
+		strike_mode_left <= 0.0
+		or strike_bursts_left <= 0
+		or bool(host.get("player_death_sequence_active"))
+		or bool(host.get("extraction_transition_active"))
+	)
+	if mode_over:
+		# 진행 중인 일제 사격은 마저 끝내고 접는다.
+		if strike_burst_queue.is_empty():
+			_end_strike_mode()
+		return
+	if is_instance_valid(strike_drone_node):
+		var hover := player.global_position + Vector3(
+			0.6, 2.9 + sin(Time.get_ticks_msec() * 0.004) * 0.12, -0.4
+		)
+		strike_drone_node.global_position = strike_drone_node.global_position.lerp(
+			hover, 1.0 - exp(-6.0 * delta)
+		)
+	# 호버 락온(데스크톱) — 커서 근처 적에게 표적 브래킷. 클릭 판정도 같은 해석을 쓴다.
+	_set_strike_lock(_resolve_strike_target(host.get_viewport().get_mouse_position()))
+
+
+func _end_strike_mode() -> void:
+	strike_mode_left = 0.0
+	_set_strike_lock(null)
+	if is_instance_valid(strike_drone_node):
+		var drone := strike_drone_node
+		strike_drone_node = null
+		var tween := host.create_tween()
+		tween.tween_property(
+			drone, "global_position", drone.global_position + Vector3(0, 7.0, 0), 0.8
+		).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tween.parallel().tween_property(drone, "scale", Vector3.ONE * 0.2, 0.8)
+		tween.tween_callback(drone.queue_free)
+		if host.hud != null and host.hud.has_method("push_toast"):
+			host.hud.push_toast("타격 드론 귀환", TEAL_DIM, 1.6)
+
+
+func _resolve_strike_target(screen_position: Vector2) -> CharacterBody3D:
+	var camera: Camera3D = host.get("camera")
+	if camera == null:
+		return null
+	var origin := camera.project_ray_origin(screen_position)
+	var direction := camera.project_ray_normal(screen_position)
+	if absf(direction.y) < 0.0001:
+		return null
+	var t := (0.78 - origin.y) / direction.y
+	if t <= 0.0:
+		return null
+	var ground_point := origin + direction * t
+	var enemies: Array = host.get("enemies") if host.get("enemies") != null else []
+	var best: CharacterBody3D = null
+	var best_distance := STRIKE_LOCK_RADIUS
+	for enemy_value in enemies:
+		var enemy := enemy_value as CharacterBody3D
+		if enemy == null or not is_instance_valid(enemy) or bool(enemy.get("dying")):
+			continue
+		if enemy.global_position.distance_to(player.global_position) > STRIKE_RANGE:
+			continue
+		var offset := enemy.global_position - ground_point
+		offset.y = 0.0
+		if offset.length() < best_distance:
+			best_distance = offset.length()
+			best = enemy
+	return best
+
+
+func _set_strike_lock(target: CharacterBody3D) -> void:
+	if target == strike_lock_target and is_instance_valid(strike_lock_bracket):
+		return
+	strike_lock_target = target
+	if is_instance_valid(strike_lock_bracket):
+		strike_lock_bracket.queue_free()
+	strike_lock_bracket = null
+	if target == null:
+		return
+	# 표적 브래킷 — 머리 위 청록 글로우 + "표적" 라벨(시각적으로 확실하게).
+	strike_lock_bracket = Node3D.new()
+	strike_lock_bracket.name = "StrikeLockBracket"
+	target.add_child(strike_lock_bracket)
+	strike_lock_bracket.position = Vector3(0, 2.15, 0)
+	var glow := Sprite3D.new()
+	glow.name = "LockGlow"
+	glow.texture = host._get_loot_glow_texture()
+	glow.pixel_size = 0.008
+	glow.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	glow.shaded = false
+	glow.transparent = true
+	glow.no_depth_test = true
+	glow.render_priority = 124
+	glow.modulate = TEAL
+	strike_lock_bracket.add_child(glow)
+	var label := Label3D.new()
+	label.name = "LockLabel"
+	label.text = "표적"
+	label.font = LOCK_FONT
+	label.font_size = 30
+	label.pixel_size = 0.0046
+	label.position = Vector3(0, 0.42, 0)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.render_priority = 125
+	label.modulate = TEAL
+	label.outline_modulate = Color(0.02, 0.06, 0.05, 0.95)
+	label.outline_size = 9
+	strike_lock_bracket.add_child(label)
+	var pulse := strike_lock_bracket.create_tween().set_loops()
+	pulse.tween_property(glow, "scale", Vector3.ONE * 1.25, 0.28)
+	pulse.tween_property(glow, "scale", Vector3.ONE, 0.28)
+
+
+func strike_at_screen(screen_position: Vector2) -> bool:
+	# main의 입력 라우터가 클릭/탭을 넘긴다 — 표적이 있으면 일제 사격 예약.
+	if strike_mode_left <= 0.0 or strike_bursts_left <= 0:
+		return false
+	var target := _resolve_strike_target(screen_position)
+	if target == null:
+		target = strike_lock_target
+	if target == null or not is_instance_valid(target):
+		if host.hud != null and host.hud.has_method("push_toast"):
+			host.hud.push_toast("표적 없음 — 적 위에서 클릭", TEAL_DIM, 1.0)
+		return true
+	strike_bursts_left -= 1
+	strike_burst_queue.append({
+		"target": target, "shots_left": STRIKE_BURST_COUNT, "timer": 0.0,
+	})
+	_raise_noise(0.8)
+	return true
+
+
+func _update_strike_bursts(delta: float) -> void:
+	if strike_burst_queue.is_empty():
+		return
+	for burst_index in range(strike_burst_queue.size() - 1, -1, -1):
+		var burst: Dictionary = strike_burst_queue[burst_index]
+		burst["timer"] = float(burst["timer"]) - delta
+		if float(burst["timer"]) > 0.0:
+			strike_burst_queue[burst_index] = burst
+			continue
+		var target := burst.get("target") as CharacterBody3D
+		if target == null or not is_instance_valid(target) or bool(target.get("dying")):
+			strike_burst_queue.remove_at(burst_index)
+			continue
+		_fire_strike_shot(target)
+		burst["shots_left"] = int(burst["shots_left"]) - 1
+		burst["timer"] = STRIKE_BURST_INTERVAL
+		if int(burst["shots_left"]) <= 0:
+			strike_burst_queue.remove_at(burst_index)
+		else:
+			strike_burst_queue[burst_index] = burst
+
+
+func _fire_strike_shot(target: CharacterBody3D) -> void:
+	strike_shots_fired += 1
+	var from: Vector3 = (
+		strike_drone_node.global_position
+		if is_instance_valid(strike_drone_node)
+		else player.global_position + Vector3(0, 2.9, 0)
+	)
+	var to: Vector3 = target.global_position + Vector3(0, 0.6, 0)
+	if from.distance_to(to) < 0.2:
+		return
+	_spawn_strike_tracer(from, to)
+	SFX.play_weapon_shot("ak47", from, -8.0)
+	var direction := (to - from).normalized()
+	if target.has_method("take_projectile_hit"):
+		target.call("take_projectile_hit", STRIKE_BURST_DAMAGE, direction, false, 1.65, "normal", player)
+	elif target.has_method("take_hit"):
+		target.call("take_hit", STRIKE_BURST_DAMAGE, direction)
+
+
+func _spawn_strike_tracer(from: Vector3, to: Vector3) -> void:
+	var beam := MeshInstance3D.new()
+	beam.name = "StrikeTracer"
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(0.05, 0.05, maxf(0.1, from.distance_to(to)))
+	var material := StandardMaterial3D.new()
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(TEAL, 0.9)
+	material.emission_enabled = true
+	material.emission = TEAL
+	material.emission_energy_multiplier = 6.0
+	material.no_depth_test = true
+	mesh.material = material
+	beam.mesh = mesh
+	beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	host.add_child(beam)
+	beam.global_position = (from + to) * 0.5
+	beam.look_at(to, Vector3.UP)
+	var tween := host.create_tween()
+	tween.tween_property(beam, "transparency", 1.0, 0.14)
+	tween.tween_callback(beam.queue_free)
 
 
 # ── 보급 카트 ────────────────────────────────────────────────────

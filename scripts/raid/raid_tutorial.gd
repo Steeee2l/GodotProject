@@ -63,6 +63,9 @@ const STEPS := [
 		"text": "가방에 담은 것은 탈출해야 내 것이 됩니다. 화살표 방향의 탈출 지점으로 가세요.",
 		"text_touch": "가방에 담은 것은 탈출해야 내 것이 됩니다. 화살표 방향의 탈출 지점으로 가세요.",
 		"keys": ["TAB"],
+		# 탈출 지점까지는 한참 걷는다 — 카드가 10초 보였으면 할 말은 다 했다.
+		# 화살표·거리 칩은 도착할 때까지 남는다(유저: "계속 떠 있으니까").
+		"auto_hide_seconds": 10.0,
 	},
 ]
 
@@ -82,6 +85,9 @@ var check_label: Label
 
 var active_step_id := ""
 var poll_timer := 0.0
+# 카드 자동 숨김 — 0이면 계속 표시. 노출된 시간만 센다(가려진 시간 제외).
+var card_auto_hide := 0.0
+var card_shown_time := 0.0
 var arrow_phase := 0.0
 var completing_cooldown := 0.0
 var move_time := 0.0
@@ -245,6 +251,10 @@ func update(delta: float) -> void:
 		return
 	_resolve_pointer()
 	_set_ui_visible(true)
+	if card_auto_hide > 0.0:
+		card_shown_time += delta
+		if card_shown_time >= card_auto_hide:
+			card.visible = false
 	_layout()
 
 
@@ -311,6 +321,8 @@ func _activate(step: Dictionary) -> void:
 	move_time = 0.0
 	aim_time = 0.0
 	var touch := DisplayServer.is_touchscreen_available()
+	card_auto_hide = float(step.get("auto_hide_seconds", 0.0))
+	card_shown_time = 0.0
 	card_title.text = str(step.get("title", ""))
 	card_text.text = str(step.get("text_touch" if touch else "text", ""))
 	_fill_key_row(step.get("keys", []) as Array, touch)

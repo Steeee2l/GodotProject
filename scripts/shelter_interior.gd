@@ -121,9 +121,9 @@ const PIPE_EXIT_LABEL := "파이프를 타고 도시로 올라가기"
 # 행상인 입장 첫마디 — 수다스럽고, 무슨 얘기를 하든 결국 물건 얘기로 돌아간다.
 # 떠도는 소문만 안다. 그 이상은 모른다.
 const MERCHANT_ENTRY_LINES := [
-	"“이거? 남산 쪽에서 주웠어. 아, 거긴 묻지 마. 값이나 쳐.”",
-	"“땅 밑에서 신호가 돈다더라. 소문은 공짜야. 물건은 아니고.”",
-	"“살아 있는 쉘터는 냄새부터 달라. 자, 물건부터 봐.”",
+	"“이거? 남산 쪽에서 주웠다냥. 어디서 났는진 묻지 마라냥. 값이나 쳐 보라냥.”",
+	"“땅 밑에서 신호가 돈다더라냥. 소문은 공짜다냥. 물건은 아니다냥.”",
+	"“살아 있는 쉘터는 냄새부터 다르다냥. 자, 물건부터 보라냥.”",
 ]
 var player: CharacterBody3D
 var survivor: AnimatedSprite3D
@@ -1292,7 +1292,7 @@ func _open_iron_mission_dialog() -> void:
 			lines.append(str(definition.get("accept_dialogue", "몸부터 단련하고 다시 와.")))
 			lines.append("시험 목표 · %s" % str(definition.get("brief", "생존 시험을 완수하세요.")))
 		"active":
-			lines.append("아직 끝난 게 아니다. 숫자가 아니라 끝까지 살아 돌아오는 걸 보여 줘.")
+			lines.append("아직 안 끝났다. 숫자 말고, 살아 돌아오는 걸 보여.")
 			lines.append("현재 진행 · %d / %d\n%s" % [
 				int(state.get("progress", 0)),
 				int(state.get("target", 1)),
@@ -1308,7 +1308,7 @@ func _open_iron_mission_dialog() -> void:
 			_update_stats()
 		_:
 			title = "철근의 생존 훈련"
-			lines.append("가르칠 건 다 가르쳤다. 이제 살아 돌아오는 건 네 몫이야.")
+			lines.append("가르칠 건 다 가르쳤다. 살아 돌아오는 건 네 몫이다.")
 	_open_contract_story(title, lines, "철근", _character_portrait(iron_trainer))
 
 
@@ -2448,13 +2448,13 @@ func _refresh_contract_ui() -> void:
 		# 막다른 벽이 아니라 다음 목표 게시판이 된다.
 		var commission: Dictionary = GameState.get_city_commission()
 		if not commission.is_empty() and not bool(commission.get("completed", false)):
-			finished_body.text = "생산망은 완성됐다. 이제 도시를 되찾을 차례.\n\n이번 의뢰 · %s → 고철 %s%s" % [
+			finished_body.text = "생산망은 완성됐습니다. 다음 장부는 도시입니다.\n\n이번 의뢰 · %s → 고철 %s%s" % [
 				GameState.get_city_commission_summary(),
 				GameState.format_compact_number(int(commission.get("reward_scrap", 0))),
 				" + 츄르 %d" % int(commission.get("reward_churu", 0)) if int(commission.get("reward_churu", 0)) > 0 else "",
 			]
 		elif not commission.is_empty():
-			finished_body.text = "이번 의뢰는 완수했다. 다음 복귀 때 새 의뢰를 준비해 두지."
+			finished_body.text = "이번 의뢰는 기록했습니다. 다음 복귀까지 새 의뢰를 준비해 두겠습니다."
 		else:
 			finished_body.text = "계약한 시설은 전부 가동 중입니다.\n이제 주민 배치와 업그레이드로 쉘터를 키우세요."
 		finished_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -2628,7 +2628,7 @@ func _accept_current_contract() -> void:
 		var story_lines: Array[String] = []
 		for line in definition.get("accept_dialogue", []) as Array:
 			story_lines.append(str(line))
-		story_lines.append("목표는 %s. 살아서 돌아와 보고해." % str(
+		story_lines.append("목표는 %s. 살아서 돌아와 보고하세요. 숫자는 내가 세고 있겠습니다." % str(
 			definition.get("objective", "현장 목표 완수")
 		))
 		_show_status("사자에게서 시설 건설 계약을 받았습니다.")
@@ -2774,7 +2774,7 @@ func _open_merchant_arrival_dialog() -> void:
 	location.add_theme_color_override("font_color", Color("#a8bcb1"))
 	dialogue_box.add_child(location)
 	var line := Label.new()
-	line.text = "“문 좀 열어 줘. 물건 무겁다.”\n행상인이 입장을 기다립니다."
+	line.text = "“문 좀 열어 달라냥. 물건 무겁다냥.”\n행상인이 입장을 기다립니다."
 	line.add_theme_font_override("font", FONT)
 	line.add_theme_font_size_override("font_size", 16)
 	line.add_theme_color_override("font_color", Color("#ebe5d4"))
@@ -2817,9 +2817,9 @@ func _open_merchant_intro_story() -> void:
 	# 사자 계약 대화 패널(타자기)을 재사용한다. 떠돌이 소문 장사꾼의 자기소개 —
 	# 세계관 비밀은 소문 수준까지만.
 	var intro_lines: Array[String] = [
-		"처음 보는 얼굴이네. 봉쇄선 밖을 도는 행상인이야. 이름은 묻지 마.",
-		"고철이면 뭐든 구해 와. 탄이든 부품이든. 어디서 났는지도 묻지 마.",
-		"소문도 팔아. 첫 거래니까 하나 얹어 줄게 — 땅 밑에서 신호가 돈대. 자, 물건부터 봐.",
+		"처음 보는 얼굴이다냥. 봉쇄선 밖을 도는 행상인이다냥. 이름은 묻지 마라냥.",
+		"고철만 주면 뭐든 구해 온다냥. 탄이든 부품이든 다 된다냥. 출처는 묻지 마라냥.",
+		"소문도 판다냥. 첫 거래니까 하나 얹어 준다냥 — 땅 밑에서 신호가 돈다더라냥. 자, 물건부터 보라냥.",
 	]
 	_open_contract_story(
 		"떠돌이 행상인의 첫 인사",
@@ -3835,16 +3835,16 @@ const RESIDENT_CHAT_LINES := [
 # 안 들어간다. 피버는 리듬게임·파칭코가 30년간 다듬은 "지금이 그 순간이다"라는
 # 관용어라, 처음 보는 유저도 게이지와 함께 즉시 읽는다.
 const CATNIP_FEVER_LINES := [
-	"머리가 핑 도는데 기분은 최고다냥!",
+	"머리가 핑 도는데 기분은 최고야!",
 	"오늘은 발톱이 저절로 움직여!",
-	"세상이 초록색으로 보인다냥…",
+	"세상이 초록색으로 보여…",
 	"고철이 스스로 걸어오는 것 같아!",
 	"이 냄새… 이 냄새를 평생 기억할 거야!",
 	"손이 안 멈춰! 아무도 날 못 막아!",
-	"꾹꾹, 꾹꾹, 꾹꾹— 아 좋다냥!",
+	"꾹꾹, 꾹꾹, 꾹꾹— 아, 좋다!",
 	"나비야, 우리 오늘 밤은 부자다!",
 	"이게 행복이구나. 이게 행복이야.",
-	"조금만 더… 조금만 더 주라냥!",
+	"조금만 더… 조금만 더 줘!",
 ]
 
 var catnip_fever_speed_applied := false

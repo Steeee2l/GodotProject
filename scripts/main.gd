@@ -2232,15 +2232,16 @@ func _build_death_lesson() -> String:
 	# "누가 나를 죽였나"는 이미 보여준다. 정작 필요한 건 "그래서 무엇이
 	# 문제였나"다. 죽는 순간의 상태에서 가장 큰 원인 하나만 짚어 준다.
 	# 사망이 처벌로만 끝나면 배우는 게 없다.
+	# 나비 독백 톤(짧은 현재형) — building_interior의 사망 교훈과 같은 세트.
 	if fatigue >= 65.0:
-		return "피로 %d%% · 이동이 느려지고 탄이 퍼진 상태였습니다. 더 일찍 빠져나올 수 있었습니다." % roundi(fatigue)
+		return "피로 %d%%. 발이 느렸고 탄이 퍼졌다. 더 일찍 나왔어야 했다." % roundi(fatigue)
 	if magazine_ammo <= 0 and reserve_ammo <= 0:
-		return "탄약이 바닥난 상태였습니다. 탄이 떨어지면 그 자리가 곧 한계선입니다."
+		return "탄이 바닥났다. 탄이 떨어진 자리가 곧 한계선이다."
 	if raid_pressure_level >= 2:
-		return "도시 긴장도가 높아 증원이 계속 도착하고 있었습니다. 추출 비콘이 가까웠다면 그쪽이 답이었습니다."
+		return "긴장도가 높았다. 증원은 계속 온다 — 그럴 땐 탈출구가 답이다."
 	if GameState.medkits > 0:
-		return "치료 키트가 %d개 남아 있었습니다. 다음엔 더 일찍 쓰세요." % GameState.medkits
-	return "무리한 교전 하나가 판 전체를 가져갑니다. 다음엔 한 발 물러서는 것도 선택입니다."
+		return "구급약이 %d개 남아 있었다. 다음엔 더 일찍 쓴다." % GameState.medkits
+	return "무리한 교전 하나가 판 전체를 가져간다. 물러서는 것도 선택이다."
 
 
 func _begin_player_death_sequence() -> void:
@@ -2834,6 +2835,14 @@ func _apply_hud_layout() -> void:
 		objective_height,
 		maxf(44.0, left_column_limit - objective_panel.offset_top)
 	)
+	# 주홍 동행 칩 — 메인 임무 카드 바로 아래, 같은 폭의 가로형 바(우상단에선
+	# 가방 버튼과 겹쳤다). 초상+이름 왼쪽 / 상태 오른쪽 / 체력바 전체 폭.
+	if hud.companion_chip != null and is_instance_valid(hud.companion_chip):
+		hud.companion_chip.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		hud.companion_chip.offset_left = side_margin
+		hud.companion_chip.offset_right = side_margin + objective_width
+		hud.companion_chip.offset_top = objective_panel.offset_bottom + 6.0
+		hud.companion_chip.offset_bottom = hud.companion_chip.offset_top + 44.0
 
 	var right_column_top := top_margin
 	var top_right_panel := get_node_or_null("HUD/TopRight") as VBoxContainer
@@ -3703,6 +3712,12 @@ func _on_inventory_open_state_changed(is_open: bool) -> void:
 		laser_aim_held = false
 		field_interaction_keyboard_held = false
 		touch_vector = Vector2.ZERO
+	else:
+		# 우클릭을 물리적으로 유지한 채 가방을 열었다 닫으면 조준이 끊겼다(유저
+		# 신고) — 닫힐 때 실제 버튼 상태로 되살린다. 지도(TAB)와 같은 규칙.
+		# 발사는 오발 위험이 있어 복원하지 않는다.
+		if not DisplayServer.is_touchscreen_available():
+			laser_aim_held = Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
 	_refresh_pointer_mode()
 	_apply_hud_layout()
 	_update_combat_overlay_visibility()
@@ -3727,6 +3742,10 @@ func _is_pointer_ui_active() -> bool:
 		or lore_reader.is_open()
 		or extraction_transition_active
 		or player_death_sequence_active
+		# 전리품 교체·시네마틱 선택지도 포인터 UI다 — 조준 레티클만 남고 OS 커서가
+		# 사라져 "커서 없이 버튼을 누르는" 상태였다(유저 신고).
+		or loot_system.is_loot_swap_open()
+		or main_mission.is_cinematic_active()
 	)
 
 
@@ -5755,7 +5774,19 @@ func _setup_basic_raid_missions(world: ProceduralCityMap) -> void:
 	basic_subway_mission_site.add_to_group("field_interaction")
 	field_interactions.append(basic_subway_mission_site)
 	_build_basic_subway_marker(basic_subway_mission_site)
+	# 지도에도 나와야 찾아간다 — 트래커 체크 행("지하철역 입구 조사 0/1")의 실체
+	# 위치가 지도에 없었다(유저 지적). 완료 시 상호작용 핸들러가 지운다.
+	_register_basic_subway_map_marker(subway_display_name, mission_position)
 	_refresh_objective_panel()
+
+
+func _register_basic_subway_map_marker(label: String, position: Vector3, retries: int = 30) -> void:
+	if not is_instance_valid(tactical_map):
+		if retries > 0:
+			call_deferred("_register_basic_subway_map_marker", label, position, retries - 1)
+		return
+	if tactical_map.has_method("register_raid_marker"):
+		tactical_map.call("register_raid_marker", "basic_mission_subway", position, "jackpot", label, true)
 
 
 func _find_basic_subway_survey_position(
@@ -6853,6 +6884,8 @@ func _complete_field_interaction(point: Node3D) -> void:
 		"basic_mission_subway":
 			var subway_mission_id := str(point.get_meta("basic_mission_id", "subway"))
 			_advance_basic_mission(subway_mission_id)
+			if is_instance_valid(tactical_map) and tactical_map.has_method("remove_raid_marker"):
+				tactical_map.call("remove_raid_marker", "basic_mission_subway")
 			_show_field_notice(
 				"지하 보급로 확인 완료 · 종로 지하선을 확보했습니다."
 				if subway_mission_id == "subway_return"
@@ -6865,6 +6898,9 @@ func _complete_field_interaction(point: Node3D) -> void:
 		"companion_revive":
 			# 주홍 소생 — [F] 홀드 3s 완료. HP 40%·판당 1회는 companion_system이 안다.
 			companion_system.finish_juhong_revive()
+		"companion_radio":
+			# 주홍의 무전기 — 이탈한 주홍을 이 판에 즉시 복귀시킨다.
+			companion_system.finish_radio_recall()
 		"corpse_recovery":
 			_recover_previous_corpse()
 	field_loot_containers.erase(point)
@@ -7445,6 +7481,15 @@ func _input(event: InputEvent) -> void:
 		if _is_emulated_touch_mouse_event(mouse_event):
 			get_viewport().set_input_as_handled()
 			return
+		# 튜토리얼 카드의 '건너뛰기'는 데스크톱 클릭도 받아야 한다 — 아래에서
+		# set_input_as_handled로 GUI보다 먼저 클릭을 삼키기 때문(터치와 같은 결).
+		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			if (
+				active_tutorial.handle_touch(mouse_event.position)
+				or raid_tutorial.handle_touch(mouse_event.position)
+			):
+				get_viewport().set_input_as_handled()
+				return
 		if _is_inventory_button_at(mouse_event.position):
 			return
 		if hud.fire_button and hud.fire_button.visible and hud.fire_button.get_global_rect().has_point(mouse_event.position):
@@ -7458,6 +7503,13 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 		if touch.pressed and raid_tutorial.handle_touch(touch.position):
+			get_viewport().set_input_as_handled()
+			return
+		if (
+			touch.pressed
+			and deployables.is_strike_mode_active()
+			and deployables.strike_at_screen(touch.position)
+		):
 			get_viewport().set_input_as_handled()
 			return
 		if (
@@ -7532,7 +7584,10 @@ func _input(event: InputEvent) -> void:
 func _handle_combat_mouse_button(mouse_event: InputEventMouseButton) -> void:
 	if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 		if mouse_event.pressed:
-			if can_throw.is_aiming():
+			if deployables.is_strike_mode_active() and deployables.strike_at_screen(mouse_event.position):
+				# 타격 드론 모드 — 클릭은 락온 표적 일제 사격으로 소비된다.
+				mouse_fire_held = false
+			elif can_throw.is_aiming():
 				can_throw.throw_at_screen(mouse_event.position)
 				mouse_fire_held = false
 			elif stealth._try_stealth_takedown():

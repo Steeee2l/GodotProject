@@ -753,6 +753,10 @@ func attempt_take_recovery(point_node: Node3D) -> void:
 	var notice := str(stage.get("carry_notice", ""))
 	if not notice.is_empty():
 		host._show_field_notice(notice)
+	# 존 클라이맥스 — 이 구역 체인의 '마지막' 회수물을 드는 순간 구역 보스가
+	# 되찾으러 온다(유저 확정: 스테이지 보스는 메인 임무 막바지의 확정 전투).
+	if MAIN_MISSION_CATALOG.get_stage(zone_id, stage_index + 1).is_empty():
+		host.enemy_director.spawn_chain_climax_boss()
 	var lines := stage.get("carry_monologue", []) as Array
 	if not lines.is_empty():
 		host.monologue.play(lines)

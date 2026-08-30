@@ -52,6 +52,9 @@ func _open() -> void:
 	if is_open():
 		return
 	get_tree().paused = true
+	# 필드에선 조준 레티클이 OS 커서를 숨기고 있다 — 메뉴 버튼을 눌러야 하니 되살린다.
+	if not DisplayServer.is_touchscreen_available():
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	layer = CanvasLayer.new()
 	layer.name = "PauseMenuLayer"
 	# 96에서는 필드 HUD(장전 바·조준선 등 높은 레이어)가 창 위로 뚫고 나왔다
@@ -126,6 +129,10 @@ func _close() -> void:
 	get_tree().paused = false
 	layer.queue_free()
 	layer = null
+	# 닫히면 호스트의 포인터 규칙(필드=레티클/쉘터=커서)으로 되돌린다.
+	var host := get_parent()
+	if host != null and host.has_method("_refresh_pointer_mode"):
+		host.call("_refresh_pointer_mode")
 
 
 func _button(text: String, primary: bool) -> Button:

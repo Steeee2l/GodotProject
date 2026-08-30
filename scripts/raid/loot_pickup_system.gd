@@ -496,6 +496,13 @@ func _ensure_loot_swap_ui() -> void:
 	loot_swap.visible = false
 	loot_swap.discard_requested.connect(_on_loot_swap_discard)
 	loot_swap.claim_requested.connect(_on_loot_swap_claim)
+	# 모달이 뜨고 닫힐 때 OS 커서를 되살린다/숨긴다 — 조준 레티클만 남으면
+	# "커서 없이 버튼을 누르는" 상태가 된다(유저 신고). 닫힘 경로가 여러 갈래
+	# (X·교체·ModalDismiss)라 visibility 시그널 하나로 전부 받는다.
+	loot_swap.visibility_changed.connect(func() -> void:
+		if host != null and host.has_method("_refresh_pointer_mode"):
+			host.call("_refresh_pointer_mode")
+	)
 
 
 func is_loot_swap_open() -> bool:

@@ -159,7 +159,7 @@ const CHAINS := {
 					{
 						"type": "choice",
 						"id": "jongno_stage1_runner",
-						"prompt": "쓰러진 고양이를 어떻게 할 것인가.",
+						"prompt": "쓰러진 고양이를 어떻게 하지.",
 						"options": [
 							{
 								"id": "take",
@@ -328,7 +328,7 @@ const CHAINS := {
 					{
 						"type": "choice",
 						"id": "jongno_stage2_valve",
-						"prompt": "물길을 어떻게 두고 나갈 것인가.",
+						"prompt": "물길을 열어 둘까, 잠글까.",
 						"options": [
 							{
 								"id": "shut",
@@ -637,7 +637,7 @@ const CHAINS := {
 					{
 						"type": "choice",
 						"id": "namdaemun_stage1_ration",
-						"prompt": "이 배급을 어떻게 할 것인가.",
+						"prompt": "이 배급을 어떻게 하지.",
 						"options": [
 							{
 								"id": "take_all",
@@ -906,7 +906,7 @@ const CHAINS := {
 					{
 						"type": "choice",
 						"id": "namdaemun_stage3_ledger",
-						"prompt": "장부를 어떻게 할 것인가.",
+						"prompt": "이 장부를 어떻게 하지.",
 						"options": [
 							{
 								"id": "carry",
@@ -1370,7 +1370,7 @@ const CHAINS := {
 						"lines": [
 							"군이 사람을 안으로 몰았다면, 총은 어디를 보고 있었나.",
 							"탄약고 안에 명령서가 있다. 봉인부터 뜯어야 한다.",
-							"뜯는 데 십팔 초. 그 십팔 초는 시끄럽다.",
+							"뜯는 데 18초. 그 18초 동안은 시끄럽다.",
 						],
 					},
 					{"type": "focus_player", "hold": 0.3},
@@ -1669,8 +1669,8 @@ const CHAINS := {
 						"portrait": PORTRAIT_NABI_PATH,
 						"lines": [
 							"관제탑 문을 열려면 아래 기계를 먼저 돌려야 한다.",
-							"제어반을 누르면 라인이 돈다. 이십 초.",
-							"이십 초 동안 여기 서 있는다.",
+							"제어반을 누르면 라인이 돈다. 20초.",
+							"20초 동안 여기 서 있는다.",
 						],
 					},
 					{"type": "focus_player", "hold": 0.3},

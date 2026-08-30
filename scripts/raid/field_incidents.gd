@@ -191,7 +191,7 @@ func _update_dynamic_incident_winner_guard() -> void:
 			for route_offset in route.size():
 				assigned_route.append(route[(route_offset + survivor_index) % route.size()])
 			survivor.call("configure_patrol", "route", assigned_route)
-	host._show_field_notice("수송품 교전 종료 · 승리 세력이 보급품 주변을 경계합니다.")
+	host._show_field_notice("수송품 교전 종료 · 이긴 쪽이 상자 주변에 눌러앉았다")
 
 
 func _build_dynamic_incident_guard_route(center: Vector3) -> Array[Vector3]:
@@ -268,7 +268,7 @@ func _expire_dynamic_incident() -> void:
 		host.field_loot_containers.erase(host.dynamic_incident_site)
 		host.dynamic_incident_site.queue_free()
 	host.dynamic_incident_site = null
-	host._show_field_notice("돌발 사건 종료 · 수송품이 다른 세력에게 넘어갔습니다.")
+	host._show_field_notice("돌발 사건 종료 · 한발 늦었다, 수송품은 딴 놈들 차지다")
 
 
 func _spawn_dynamic_incident_rewards(origin: Vector3) -> int:

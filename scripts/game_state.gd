@@ -120,6 +120,10 @@ const HEAVY_GEAR_DEFS := {
 		"name": "보급 카트", "stack_per_slot": 1,
 		"description": "끌고 다니면 이 판 가방 +6칸, 대신 걸음이 느려진다. 파괴되면 끝 — 탈출하면 해체된다.",
 	},
+	"strike_drone": {
+		"name": "타격 드론", "stack_per_slot": 1,
+		"description": "10초간 커서로 적을 지정해 클릭하면 드론이 일제 사격한다. 5회 쏘면 귀환·소멸.",
+	},
 }
 # 보급 카트가 살아 있는 동안의 가방 보너스(판 한정 런타임 상태 — 저장 안 함).
 # deployables가 켜고 끄며, 사망·포기·복귀 정산에서 0으로 돌아간다.
@@ -426,6 +430,12 @@ var companion_unlocked: bool = false
 var companion_enabled: bool = true
 # 첫 동행 필드 인트로(걸어와 붙기 + 소생 규칙 토스트) 1회 노출 여부.
 var juhong_field_intro_seen: bool = false
+# ── 무전기 루프(2026-08-30) — 주홍이 출혈사(이탈)하면 그 자리에 무전기가 남는다.
+# 판 안에서 회수하면 즉시 복귀. 못 찾고 판이 끝나면 이 수만큼의 출정 동안 부재,
+# 0이 되면 쉘터로 스스로 찾아와(radio_return 방문 이벤트) 한마디 하고 복귀한다.
+var juhong_absent_runs: int = 0
+var juhong_radio_return_pending: bool = false
+var juhong_radio_loss_count: int = 0
 
 
 func is_companion_raid_active() -> bool:
@@ -535,7 +545,7 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"title": "부품 세 개",
 		"brief": "도시에서 기초 부품 3개를 확보해 사자에게 전달하세요.",
 		"accept_dialogue": [
-			"이 쉘터는 벽만 남았습니다. 설비가 없으면 장부에 올릴 게 없어요.",
+			"이 쉘터는 벽만 남았습니다. 설비가 없으면 장부에 올릴 게 없습니다.",
 			"부품 세 개. 가져오면 생산기를 세웁니다. 계산은 정확하게 합시다.",
 		],
 		"complete_dialogue": [
@@ -555,7 +565,7 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"title": "운반로 정리",
 		"brief": "주변 위협 4명을 정리해 캣닢 재배 장비를 옮길 길을 확보하세요.",
 		"accept_dialogue": [
-			"캣닢은 사치품이 아닙니다. 주민 생산량에 그대로 잡히는 항목이에요.",
+			"캣닢은 사치품이 아닙니다. 주민 생산량에 그대로 잡히는 항목입니다.",
 			"운반로에 넷이 서 있습니다. 치워 주세요. 넷입니다.",
 		],
 		"complete_dialogue": [
@@ -638,7 +648,7 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		],
 		"complete_dialogue": [
 			"보고서 접수했습니다. 이 쉘터는 이제 거점으로 분류됩니다.",
-			"질문은 규정에 없습니다. 다음 계약을 준비하죠.",
+			"질문은 규정에 없습니다. 다음 계약을 준비하겠습니다.",
 		],
 		"objective": "현장 작전 완료",
 		"metric": "field_mission",
@@ -668,7 +678,7 @@ const IRON_SPECIAL_MISSIONS: Array[Dictionary] = [
 		"target": 5,
 		"training_id": "endurance",
 		"reward_text": "영구 최대 스태미나 +12",
-		"accept_dialogue": "싸움은 방아쇠보다 오래 간다. 무거운 부품을 끝까지 들고 오는 힘부터 봐야겠다.",
+		"accept_dialogue": "싸움은 방아쇠보다 오래 간다. 무거운 부품을 끝까지 들고 오는 힘부터 본다.",
 		"complete_dialogue": "호흡이 안 무너졌군. 도망칠 때도 쫓을 때도 한 걸음 더 간다.",
 	},
 	{
@@ -1838,7 +1848,7 @@ func get_pending_shelter_story_event() -> Dictionary:
 				"창고와 훈련장을 열었습니다. 전리품은 창고에, 통조림은 몸에 쓰세요.",
 				# 필드에 캣닢 픽업이 없다 — 없는 것을 찾게 만드는 대사는 뺐다.
 				"고철 더미는 그냥 지나치지 마세요. 그게 이 쉘터의 예산입니다.",
-				"저 근육 덩어리에게 훈련을 받으세요. 공사는 내 소관입니다.",
+				"훈련은 철근에게 받으세요. 몸은 그쪽 담당, 공사는 내 담당입니다.",
 				"오늘은 행상인도 올 겁니다. 들일지는 당신이 정하세요.",
 				"내 계약을 하나 처리할 때마다 시설이 하나 올라갑니다. 그 이상은 묻지 마세요.",
 			],
@@ -1910,7 +1920,7 @@ func get_pending_shelter_story_event() -> Dictionary:
 			"기록을 쓴 손은 한 방향으로만 움직였습니다. 이어지는 선입니다.",
 		]
 		if next_zone_id.is_empty():
-			closing_lines.append("그 선의 끝이 여깁니다. 남은 건 문 뒤를 직접 보는 일뿐이죠.")
+			closing_lines.append("그 선의 끝이 여깁니다. 남은 건 문 뒤를 직접 보는 일뿐입니다.")
 		else:
 			var next_name := str(
 				(RAID_ZONES.get(next_zone_id, {}) as Dictionary).get("name", "다음 구역")
@@ -1965,6 +1975,22 @@ func mark_shelter_story_event_seen(event_id: String) -> void:
 
 
 func get_pending_juhong_event() -> Dictionary:
+	# 무전기 복귀 — 부재 출정을 다 채우고 스스로 돌아온 판. 다른 방문 이벤트보다
+	# 우선한다(돌아왔다는 말부터 해야 다음 대화가 성립한다).
+	if (
+		juhong_radio_return_pending
+		and not juhong_seen_events.has("radio_return_%d" % juhong_radio_loss_count)
+	):
+		return {
+			"id": "radio_return_%d" % juhong_radio_loss_count,
+			"speaker": "주홍",
+			"title": "돌아온 목소리",
+			"lines": [
+				"죽은 줄 알았지. 하수구 애들은 그렇게 안 죽어.",
+				"무전기는 못 찾았더군. …버리고 간 건 아니라고 해 두자.",
+				"다음 출정부터 다시 간다. 빚 정산은 밖에서 하고.",
+			],
+		}
 	if recovered_story_cargo_ids.size() > 0 and not juhong_seen_events.has("cargo_warning"):
 		return {
 			"id": "cargo_warning",
@@ -2006,6 +2032,9 @@ func get_pending_juhong_event() -> Dictionary:
 func mark_juhong_event_seen(event_id: String) -> void:
 	if not event_id.is_empty() and not juhong_seen_events.has(event_id):
 		juhong_seen_events.append(event_id)
+	if event_id.begins_with("radio_return_"):
+		# 복귀 인사를 마쳤다 — 다음 출정부터 다시 동행한다.
+		juhong_radio_return_pending = false
 	save_persistent_state()
 
 
@@ -5633,6 +5662,9 @@ func save_persistent_state() -> bool:
 		"companion_unlocked": companion_unlocked,
 		"companion_enabled": companion_enabled,
 		"juhong_field_intro_seen": juhong_field_intro_seen,
+		"juhong_absent_runs": juhong_absent_runs,
+		"juhong_radio_return_pending": juhong_radio_return_pending,
+		"juhong_radio_loss_count": juhong_radio_loss_count,
 		"merchant_intro_seen": merchant_intro_seen,
 		"saja_second_run_intro_seen": saja_second_run_intro_seen,
 		"saja_seen_resident_count": saja_seen_resident_count,
@@ -5902,6 +5934,9 @@ func load_persistent_state() -> bool:
 	companion_unlocked = bool(data.get("companion_unlocked", false))
 	companion_enabled = bool(data.get("companion_enabled", true))
 	juhong_field_intro_seen = bool(data.get("juhong_field_intro_seen", false))
+	juhong_absent_runs = maxi(0, int(data.get("juhong_absent_runs", 0)))
+	juhong_radio_return_pending = bool(data.get("juhong_radio_return_pending", false))
+	juhong_radio_loss_count = maxi(0, int(data.get("juhong_radio_loss_count", 0)))
 	merchant_intro_seen = bool(data.get("merchant_intro_seen", false))
 	saja_second_run_intro_seen = bool(data.get("saja_second_run_intro_seen", false))
 	saja_seen_resident_count = maxi(0, int(data.get("saja_seen_resident_count", 0)))

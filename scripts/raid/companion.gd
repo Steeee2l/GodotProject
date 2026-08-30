@@ -24,6 +24,7 @@ extends RefCounted
 #            플레이어 다운: 30s, 주홍이 달려와 4s 채널 → HP 40%. 판당 각 1회.
 
 const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
+const ACTIVE_TUTORIAL := preload("res://scripts/shelter/active_tutorial.gd")
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const COVER_SYSTEM := preload("res://scripts/raid/cover_system.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
@@ -50,6 +51,7 @@ const JUHONG_REVIVE_HOLD_SECONDS := 3.0
 # 스펙 1.5m는 수평 기준 — 판정(distance_to)은 플레이어 y(0.78)와 지점 y(0.08)의
 # 0.7 차이까지 먹는 3D 거리라 그만큼 보정한다(수평 실효 ≈ 1.5m).
 const JUHONG_REVIVE_DISTANCE := 1.9
+const RADIO_HOLD_SECONDS := 2.5
 const EXTRACTION_BARK_DISTANCE := 5.5
 const DOWN_SATURATION := 0.26
 
@@ -74,6 +76,12 @@ var had_alerted_combat := false
 # 전투 후 회수 — 최근 처치 지점(스쿼드 하나 분량만 기억한다).
 var loot_spots: Array[Vector3] = []
 var revive_point: Node3D
+var radio_point: Node3D
+var radio_grave: Node3D
+var radio_indicator_layer: CanvasLayer
+var radio_arrow: Control
+var radio_chip_label: Label
+var player_rip_marker: Node3D
 # 다운 연출 원복용 — WorldEnvironment 리소스는 캐시가 공유되므로 반드시 되돌린다.
 var _saved_adjustment_enabled := false
 var _saved_saturation := 1.0
@@ -91,6 +99,15 @@ func spawn_if_active() -> void:
 	if not GameState.opening_completed:
 		return
 	if not GameState.is_companion_raid_active():
+		return
+	# 무전기 루프 — 지난 판에서 무전기를 못 찾고 나왔으면 그만큼의 출정 동안
+	# 부재. 다 깎이면 쉘터 복귀 인사(radio_return)가 걸릴 때까지도 없다.
+	if GameState.juhong_radio_return_pending:
+		return
+	if GameState.juhong_absent_runs > 0:
+		GameState.juhong_absent_runs -= 1
+		if GameState.juhong_absent_runs <= 0:
+			GameState.juhong_radio_return_pending = true
 		return
 	juhong = JuhongBody.new()
 	juhong.system = self
@@ -149,6 +166,8 @@ func update(delta: float) -> void:
 	if host == null:
 		return
 	_update_player_down(delta)
+	# 무전기 방향 인디케이터 — 주홍이 이탈한 동안(is_active false)에만 살아 있다.
+	_update_radio_indicator()
 	if not is_active():
 		_refresh_hud_chip()
 		return
@@ -273,8 +292,62 @@ func on_juhong_retreated() -> void:
 	if player_downed:
 		# 구조자가 사라졌다 — 남은 시간과 무관하게 기존 사망 흐름으로.
 		_fail_player_down()
+	# 무전기 루프 — 출혈사는 공짜가 아니다. 쓰러진 자리에 무전기가 남는다:
+	# 이 판에서 회수하면 즉시 복귀, 못 하면 3출정 부재 후 쉘터로 스스로 온다.
+	GameState.juhong_absent_runs = 3
+	GameState.juhong_radio_loss_count += 1
+	if juhong != null and is_instance_valid(juhong):
+		_drop_radio(juhong.global_position)
 	if host.get("hud") != null and host.hud.has_method("push_toast"):
-		host.hud.push_toast("주홍이 물러났다 — 판이 끝나면 쉘터에서 만난다", HudStyle.WARN, 3.0)
+		host.hud.push_toast(
+			"주홍 이탈 — 쓰러진 자리에 무전기가 남았다. 회수하면 복귀한다",
+			HudStyle.WARN,
+			3.6
+		)
+
+
+func _drop_radio(world_position: Vector3) -> void:
+	if radio_point != null and is_instance_valid(radio_point):
+		return
+	radio_point = host._create_field_interaction(
+		"companion_radio",
+		world_position,
+		"주홍의 무전기",
+		RADIO_HOLD_SECONDS
+	)
+	radio_point.set_meta("interaction_distance", JUHONG_REVIVE_DISTANCE)
+	# 이탈 지점의 십자가 — 주홍 노드는 통째로 숨었으니 독립 마커로 세운다.
+	radio_grave = CompanionSystem.build_rip_marker("주홍", JUHONG_ACCENT)
+	host.add_child(radio_grave)
+	radio_grave.global_position = Vector3(world_position.x, 0.78, world_position.z)
+
+
+func finish_radio_recall() -> void:
+	# main._complete_field_interaction("companion_radio")가 부른다 — 부재를 지우고
+	# 연막에서 걸어 나온다. 판당 소생 사용 여부는 그대로다(부활이 소생을 되돌리진 않는다).
+	GameState.juhong_absent_runs = 0
+	GameState.juhong_radio_return_pending = false
+	_clear_radio_point()
+	if juhong == null or not is_instance_valid(juhong):
+		return
+	var recall_origin: Vector3 = host.player.global_position + Vector3(2.4, 0.0, -1.8)
+	var world: Node = host.get_node_or_null("World")
+	if world != null and world.has_method("find_nearest_physically_open_position"):
+		recall_origin = world.call(
+			"find_nearest_physically_open_position", recall_origin, 0.58, [host.player.get_rid()]
+		)
+	juhong.return_from_retreat(recall_origin)
+
+
+func _clear_radio_point() -> void:
+	if radio_point != null and is_instance_valid(radio_point):
+		if host.get("field_interactions") != null:
+			host.field_interactions.erase(radio_point)
+		radio_point.queue_free()
+	radio_point = null
+	if radio_grave != null and is_instance_valid(radio_grave):
+		radio_grave.queue_free()
+	radio_grave = null
 
 
 func _clear_revive_point() -> void:
@@ -399,13 +472,14 @@ func _apply_down_visuals() -> void:
 		env.adjustment_saturation = DOWN_SATURATION
 	if host.get("hud") != null and host.hud.get("damage_vignette_material") != null:
 		host.hud.damage_vignette_material.set_shader_parameter("intensity", 0.85)
+	# 다운 = RIP 십자가 + 이름(유저 확정: 쓰러진 스프라이트 말고 십자가).
 	var survivor: AnimatedSprite3D = host.get("survivor")
 	if survivor != null:
-		survivor.modulate = Color(0.72, 0.6, 0.58, 0.95)
-		# 쓰러진 자세 — 주홍 다운과 같은 문법(눕힘+하강). 서 있는 스프라이트로
-		# 다운을 보내면 "죽었는데 서 있다"가 된다.
-		survivor.rotation.z = deg_to_rad(78.0)
-		survivor.position.y = 0.12
+		survivor.visible = false
+	var weapon_sprite = host.get("weapon_sprite")
+	if weapon_sprite != null and weapon_sprite is Node3D:
+		(weapon_sprite as Node3D).visible = false
+	_set_player_rip(true)
 	if host.get("state_label") != null:
 		host.state_label.text = "행동 불능 — 주홍이 온다"
 
@@ -423,10 +497,162 @@ func _restore_down_visuals() -> void:
 		host.hud.damage_vignette_material.set_shader_parameter("intensity", 0.0)
 	var survivor: AnimatedSprite3D = host.get("survivor")
 	if survivor != null:
+		survivor.visible = true
 		survivor.modulate = Color.WHITE
 		survivor.rotation.z = 0.0
 		survivor.position.y = 0.3
 		survivor.scale = Vector3.ONE
+	var weapon_sprite = host.get("weapon_sprite")
+	if weapon_sprite != null and weapon_sprite is Node3D:
+		# 표시 여부는 다음 프레임의 update_weapon_reveal(조준 시에만)이 다시 정한다.
+		(weapon_sprite as Node3D).visible = true
+	_set_player_rip(false)
+
+
+# ── RIP 마커 — 다운/이탈 지점의 십자가+이름(쓰러진 스프라이트 대신) ──
+
+static var _rip_cross_texture: Texture2D
+
+
+static func get_rip_cross_texture() -> Texture2D:
+	if _rip_cross_texture != null:
+		return _rip_cross_texture
+	var image := Image.create(48, 64, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	var outline := Color(0.09, 0.08, 0.07, 0.96)
+	var wood := Color(0.55, 0.5, 0.44, 1.0)
+	var wood_light := Color(0.66, 0.61, 0.54, 1.0)
+	# 판자 십자가 — 외곽 2px 테두리 + 좌/상단 하이라이트.
+	image.fill_rect(Rect2i(17, 4, 14, 54), outline)
+	image.fill_rect(Rect2i(5, 16, 38, 14), outline)
+	image.fill_rect(Rect2i(19, 6, 10, 50), wood)
+	image.fill_rect(Rect2i(7, 18, 34, 10), wood)
+	image.fill_rect(Rect2i(19, 6, 3, 50), wood_light)
+	image.fill_rect(Rect2i(7, 18, 34, 3), wood_light)
+	# 흙무덤.
+	image.fill_rect(Rect2i(10, 58, 28, 4), Color(0.24, 0.2, 0.16, 0.9))
+	image.fill_rect(Rect2i(14, 56, 20, 2), Color(0.3, 0.25, 0.2, 0.9))
+	_rip_cross_texture = ImageTexture.create_from_image(image)
+	return _rip_cross_texture
+
+
+static func build_rip_marker(name_text: String, accent: Color) -> Node3D:
+	# 배치 규약: 액터 원점(지면 +0.78)에 붙인다 — 십자가가 발치에 서고 이름이 위에 뜬다.
+	var marker := Node3D.new()
+	marker.name = "RipMarker"
+	var cross := Sprite3D.new()
+	cross.name = "RipCross"
+	cross.texture = get_rip_cross_texture()
+	cross.pixel_size = 0.014
+	cross.position = Vector3(0, 0.05, 0)
+	cross.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	cross.shaded = false
+	cross.transparent = true
+	cross.no_depth_test = true
+	cross.render_priority = 28
+	marker.add_child(cross)
+	var label := Label3D.new()
+	label.name = "RipName"
+	label.text = name_text
+	label.font = BARK_FONT
+	label.font_size = 30
+	label.pixel_size = 0.005
+	label.position = Vector3(0, 0.85, 0)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.render_priority = 118
+	label.modulate = accent
+	label.outline_modulate = Color(0.03, 0.05, 0.05, 0.94)
+	label.outline_size = 8
+	marker.add_child(label)
+	return marker
+
+
+func _set_player_rip(active: bool) -> void:
+	if active:
+		if player_rip_marker == null or not is_instance_valid(player_rip_marker):
+			player_rip_marker = CompanionSystem.build_rip_marker("나비", Color("#e8b64c"))
+			host.player.add_child(player_rip_marker)
+			player_rip_marker.position = Vector3.ZERO
+		player_rip_marker.visible = true
+	elif player_rip_marker != null and is_instance_valid(player_rip_marker):
+		player_rip_marker.queue_free()
+		player_rip_marker = null
+
+
+# ── 무전기 방향 인디케이터 — 화면 밖이면 가장자리에서 방향을 가리킨다 ──
+
+func _ensure_radio_indicator() -> void:
+	if radio_indicator_layer != null and is_instance_valid(radio_indicator_layer):
+		return
+	radio_indicator_layer = CanvasLayer.new()
+	radio_indicator_layer.name = "JuhongRadioIndicator"
+	radio_indicator_layer.layer = 88
+	host.add_child(radio_indicator_layer)
+	radio_arrow = ACTIVE_TUTORIAL.TutorialArrow.new()
+	radio_arrow.name = "RadioArrow"
+	radio_arrow.custom_minimum_size = Vector2(26, 26)
+	radio_arrow.size = Vector2(26, 26)
+	radio_arrow.modulate = JUHONG_ACCENT
+	radio_arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	radio_indicator_layer.add_child(radio_arrow)
+	radio_chip_label = Label.new()
+	radio_chip_label.name = "RadioChip"
+	radio_chip_label.add_theme_font_override("font", BARK_FONT)
+	radio_chip_label.add_theme_font_size_override("font_size", 13)
+	radio_chip_label.add_theme_color_override("font_color", JUHONG_ACCENT)
+	radio_chip_label.add_theme_color_override("font_outline_color", Color(0.02, 0.06, 0.05, 0.95))
+	radio_chip_label.add_theme_constant_override("outline_size", 7)
+	radio_chip_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	radio_indicator_layer.add_child(radio_chip_label)
+
+
+func _update_radio_indicator() -> void:
+	var radio_active := radio_point != null and is_instance_valid(radio_point)
+	if not radio_active:
+		if radio_indicator_layer != null and is_instance_valid(radio_indicator_layer):
+			radio_indicator_layer.visible = false
+		return
+	_ensure_radio_indicator()
+	var camera: Camera3D = host.get_viewport().get_camera_3d()
+	if camera == null:
+		radio_indicator_layer.visible = false
+		return
+	radio_indicator_layer.visible = true
+	var viewport_size: Vector2 = host.get_viewport().get_visible_rect().size
+	var anchor: Vector3 = radio_point.global_position + Vector3(0, 1.2, 0)
+	var behind := camera.is_position_behind(anchor)
+	var screen_point := camera.unproject_position(anchor)
+	var center := viewport_size * 0.5
+	if behind:
+		screen_point = center + (center - screen_point)
+	var margin := 46.0
+	var margin_rect := Rect2(
+		Vector2(margin, margin), viewport_size - Vector2(margin * 2.0, margin * 2.0)
+	)
+	var on_screen := not behind and margin_rect.has_point(screen_point)
+	var direction := Vector2.DOWN
+	var arrow_center := screen_point + Vector2(0.0, -34.0)
+	if not on_screen:
+		var to_target := screen_point - center
+		if to_target.length_squared() < 1.0:
+			to_target = Vector2.DOWN
+		direction = to_target.normalized()
+		arrow_center = Vector2(
+			clampf(screen_point.x, margin_rect.position.x, margin_rect.end.x),
+			clampf(screen_point.y, margin_rect.position.y, margin_rect.end.y)
+		)
+	radio_arrow.set("direction", direction)
+	radio_arrow.position = arrow_center - Vector2(13, 13)
+	radio_arrow.queue_redraw()
+	radio_chip_label.text = "무전기 %dm" % int(
+		round(host.player.global_position.distance_to(radio_point.global_position))
+	)
+	radio_chip_label.reset_size()
+	var chip_position: Vector2 = arrow_center + Vector2(-radio_chip_label.size.x * 0.5, 18.0)
+	chip_position.x = clampf(chip_position.x, 4.0, viewport_size.x - radio_chip_label.size.x - 4.0)
+	chip_position.y = clampf(chip_position.y, 4.0, viewport_size.y - 30.0)
+	radio_chip_label.position = chip_position
 
 
 # ── HUD 칩(우상단) ──────────────────────────────────────────────────
@@ -438,19 +664,24 @@ func _refresh_hud_chip() -> void:
 		host.hud.update_companion_chip(false, 0.0, "", HudStyle.TEXT_DIM)
 		return
 	if juhong.retreated:
-		host.hud.update_companion_chip(true, 0.0, "물러남", HudStyle.TEXT_FAINT)
+		host.hud.update_companion_chip(true, 0.0, "이탈 — 무전기를 찾아라", HudStyle.TEXT_FAINT)
 		return
 	var ratio := clampf(float(juhong.health) / float(juhong.max_health), 0.0, 1.0)
 	if juhong.downed:
-		host.hud.update_companion_chip(true, ratio, "다운 %.0f초" % maxf(0.0, juhong.down_remaining), HudStyle.DANGER)
+		host.hud.update_companion_chip(
+			true, ratio, "다운 %.0f초 — 일으켜라" % maxf(0.0, juhong.down_remaining), HudStyle.DANGER
+		)
 	elif juhong.state == "rescue":
-		host.hud.update_companion_chip(true, ratio, "구조 중", HudStyle.WARN)
+		host.hud.update_companion_chip(true, ratio, "구조하러 가는 중", HudStyle.WARN)
 	elif juhong.state == "combat":
-		host.hud.update_companion_chip(true, ratio, "교전", HudStyle.WARN)
+		var combat_status := "장전 중" if juhong.reload_remaining > 0.0 else "교전 중"
+		host.hud.update_companion_chip(true, ratio, combat_status, HudStyle.WARN)
 	elif juhong.state == "loot":
-		host.hud.update_companion_chip(true, ratio, "회수", JUHONG_ACCENT)
+		host.hud.update_companion_chip(true, ratio, "시체 회수 중", JUHONG_ACCENT)
+	elif juhong.motion_state == "walk":
+		host.hud.update_companion_chip(true, ratio, "따라가는 중", JUHONG_ACCENT)
 	else:
-		host.hud.update_companion_chip(true, ratio, "대기", JUHONG_ACCENT)
+		host.hud.update_companion_chip(true, ratio, "주변 경계", JUHONG_ACCENT)
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -502,6 +733,7 @@ class JuhongBody:
 	var motion_state := "idle"
 	var state := "follow"  # follow / combat / rescue / loot / down / retreated
 	var loot_timer := 0.0
+	var rip_marker: Node3D
 	var health := MAX_HEALTH
 	var max_health := MAX_HEALTH
 	var downed := false
@@ -1135,10 +1367,10 @@ class JuhongBody:
 		channeling_revive = false
 		velocity = Vector3.ZERO
 		collision_layer = 0
-		# 스프라이트 눕힘 + 회색 틴트(female_cat_companion 다운 문법).
-		sprite.rotation.z = deg_to_rad(78.0)
-		sprite.position.y = 0.1
-		sprite.modulate = Color(0.4, 0.39, 0.38, 0.85)
+		# 다운 = RIP 십자가 + 이름(유저 확정: 쓰러진 스프라이트 말고 십자가).
+		sprite.visible = false
+		name_label.visible = false
+		_set_rip_visible(true)
 		if weapon_visual != null:
 			weapon_visual.visible = false
 		if cover_arc != null and is_instance_valid(cover_arc):
@@ -1157,9 +1389,12 @@ class JuhongBody:
 		state = "follow"
 		health = maxi(1, roundi(float(max_health) * CompanionSystem.REVIVE_HEALTH_RATIO))
 		collision_layer = COLLISION_PROFILES.PLAYER_LAYER | COLLISION_PROFILES.COMPANION_LAYER
+		sprite.visible = true
 		sprite.rotation.z = 0.0
 		sprite.position.y = 0.48
 		sprite.modulate = Color.WHITE
+		name_label.visible = true
+		_set_rip_visible(false)
 		if weapon_visual != null:
 			weapon_visual.visible = true
 		_update_health_bar()
@@ -1187,6 +1422,44 @@ class JuhongBody:
 	func begin_rescue() -> void:
 		rescue_barked = false
 		state = "rescue"
+
+
+	func _set_rip_visible(active: bool) -> void:
+		if active:
+			if rip_marker == null or not is_instance_valid(rip_marker):
+				rip_marker = CompanionSystem.build_rip_marker("주홍", CompanionSystem.JUHONG_ACCENT)
+				add_child(rip_marker)
+			rip_marker.visible = true
+		elif rip_marker != null and is_instance_valid(rip_marker):
+			rip_marker.visible = false
+
+
+	func return_from_retreat(origin: Vector3) -> void:
+		# 무전기 회수 — 연막에서 돌아온다. 체력 60%, 판당 소생 카운트는 그대로.
+		if not retreated:
+			return
+		retreated = false
+		downed = false
+		state = "follow"
+		health = maxi(1, roundi(float(max_health) * 0.6))
+		collision_layer = COLLISION_PROFILES.PLAYER_LAYER | COLLISION_PROFILES.COMPANION_LAYER
+		collision_mask = COLLISION_PROFILES.WORLD_MOVEMENT_LAYER
+		set_physics_process(true)
+		visible = true
+		global_position = Vector3(origin.x, 0.78, origin.z)
+		sprite.rotation.z = 0.0
+		sprite.position.y = 0.48
+		sprite.modulate = Color.WHITE
+		if weapon_visual != null:
+			weapon_visual.visible = true
+		lagged_player_position = Vector3.INF
+		last_frame_position = Vector3.INF
+		_update_health_bar()
+		if host != null and host.has_method("_spawn_smoke_cloud"):
+			host._spawn_smoke_cloud(global_position + Vector3(0, 0.4, 0), Vector3.UP)
+		bark_cooldown = 0.0
+		bark("…무전 잘 받았어. 빚 하나 추가야.")
+		SFX.play("cover_enter")
 
 
 	# ── 끼임 방지 — 2.5s 제자리면 플레이어 옆 연막 재배치 ────────────

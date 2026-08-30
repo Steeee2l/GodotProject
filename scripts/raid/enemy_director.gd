@@ -97,6 +97,8 @@ const FIRST_STAGE_SQUAD_SIZE_CAP := 3
 # 스쿼드 전멸(킬 2~3건 = +44~66)을 완전히 상쇄하지는 않는다.
 const SQUAD_CLEAR_PRESSURE_RELIEF := 18.0
 const SQUAD_CLEAR_ANCHOR_RADIUS := 18.0
+# 소탕 안전 지속 시간 — 이 시간이 지나면 그 구역은 다시 보충 대상이 된다.
+const SQUAD_CLEAR_SAFE_SECONDS := 240.0
 const ROCKET_BOSS_SCRIPT := preload("res://scripts/rocket_boss.gd")
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
 const SCENT_TRAIL_MANAGER_SCRIPT := preload("res://scripts/scent_trail_manager.gd")
@@ -124,6 +126,9 @@ var enemy_spawn_serial := 0
 var enemy_ranged_spawn_serial := 0
 var enemy_squad_serial := 0
 var sustained_combat_time := 0.0
+# 교전당 증원 1회(유저 확정: "한 번 요청하면 끝나야 뭘 할 수 있다") —
+# 성공 스폰 후 켜지고, 교전이 완전히 끝나면(alerted 0) 풀린다.
+var reinforcement_wave_spent := false
 var concealed_combat_time := 0.0
 var reinforcement_call_cooldown := 0.0
 var active_reinforcement_caller: CharacterBody3D
@@ -133,7 +138,10 @@ var run_boss_kills := 0
 var run_elite_kills := 0
 var fatigue_boss_event_triggered := false
 # 소탕된 스쿼드 앵커들 — 이 판 동안 증원·보충 목적지 선정에서 회피한다.
-var cleared_squad_anchors: Array[Vector3] = []
+# [{"position": Vector3, "expires_msec": int}] — 소탕 직후엔 조용하지만 영원하진
+# 않다. 만료되면 상시 보충이 다시 채울 수 있다(플레이어 62m 밖에서만 스폰되므로,
+# "벗어났다가 돌아오면 리스폰돼 있다"는 유저가 원한 리듬이 된다).
+var cleared_squad_anchors: Array[Dictionary] = []
 var run_squads_cleared := 0
 
 
@@ -613,14 +621,18 @@ func _check_squad_cleared(dead_enemy: CharacterBody3D) -> void:
 func _on_squad_cleared(cleared_squad_id: int, last_enemy: CharacterBody3D) -> void:
 	# 소탕 = 안전. 네 가지가 한 프레임에 함께 온다:
 	# ① 배너(토스트)+골드 펄스 ② 긴장도 즉시 완화 ③ 보너스 드랍 1회
-	# ④ 이 판 동안 그 앵커 반경(18m)은 증원·보충 목적지에서 제외 + 지도 청록 원.
+	# ④ 4분간(SQUAD_CLEAR_SAFE_SECONDS) 그 앵커 반경(18m)은 증원·보충 목적지에서
+	#    제외 + 지도 청록 원. 만료 후엔 다시 채워질 수 있다(리스폰 리듬).
 	run_squads_cleared += 1
 	var corpse_position := last_enemy.global_position
 	var anchor: Vector3 = corpse_position
 	var anchor_raw = last_enemy.get("squad_anchor")
 	if anchor_raw is Vector3 and (anchor_raw as Vector3) != Vector3.ZERO:
 		anchor = anchor_raw as Vector3
-	cleared_squad_anchors.append(anchor)
+	cleared_squad_anchors.append({
+		"position": anchor,
+		"expires_msec": Time.get_ticks_msec() + int(SQUAD_CLEAR_SAFE_SECONDS * 1000.0),
+	})
 	if host.hud != null and host.hud.has_method("push_toast"):
 		host.hud.push_toast("구역 소탕 — 일대가 조용해진다", Color("#f0c860"), 2.8)
 	if host.hud != null and host.hud.has_method("pulse_squad_clear"):
@@ -913,6 +925,9 @@ func _update_reinforcement_call(delta: float, effective_threat: float) -> void:
 	# "다 죽이면 증원이 안 온다"가 성립해야 한다(유저 요구).
 	if reinforcement_call_banner_active and alerted_count <= 0:
 		_resolve_reinforcement_block()
+	# 교전 종료 = 증원 카드가 다시 채워진다. 다음 싸움은 다음 싸움이다.
+	if alerted_count <= 0:
+		reinforcement_wave_spent = false
 	if visual_contact_count > 0:
 		sustained_combat_time += delta
 		concealed_combat_time = maxf(0.0, concealed_combat_time - delta * 2.0)
@@ -923,6 +938,9 @@ func _update_reinforcement_call(delta: float, effective_threat: float) -> void:
 		sustained_combat_time = maxf(0.0, sustained_combat_time - delta * 2.0)
 		concealed_combat_time = maxf(0.0, concealed_combat_time - delta * 2.5)
 	if active_reinforcement_caller != null or reinforcement_call_cooldown > 0.0:
+		return
+	# 이 교전에서 증원이 이미 한 번 왔으면 끝 — 같은 싸움에 두 번은 없다.
+	if reinforcement_wave_spent:
 		return
 	# 이미 상한까지 교전 중이면 증원 호출 자체를 미룬다(타이머는 유지되므로,
 	# 수가 줄면 그때 호출이 성립한다).
@@ -1014,6 +1032,8 @@ func _spawn_called_reinforcements() -> void:
 			player.global_position
 		)
 		spawned_count += squad_size
+	if spawned_count > 0:
+		reinforcement_wave_spent = true
 
 
 func _find_reinforcement_position(minimum_distance: float = 0.0) -> Vector3:
@@ -1056,8 +1076,14 @@ func _find_reinforcement_position(minimum_distance: float = 0.0) -> Vector3:
 
 
 func _is_near_cleared_squad_anchor(candidate: Vector3) -> bool:
+	# 만료된 앵커는 지운다 — 소탕의 안전은 4분짜리다(영구 아님).
+	var now := Time.get_ticks_msec()
+	for anchor_index in range(cleared_squad_anchors.size() - 1, -1, -1):
+		if now >= int(cleared_squad_anchors[anchor_index].get("expires_msec", 0)):
+			cleared_squad_anchors.remove_at(anchor_index)
 	for cleared_anchor in cleared_squad_anchors:
-		if candidate.distance_to(cleared_anchor) < SQUAD_CLEAR_ANCHOR_RADIUS:
+		var anchor_position: Vector3 = cleared_anchor.get("position", Vector3.INF)
+		if candidate.distance_to(anchor_position) < SQUAD_CLEAR_ANCHOR_RADIUS:
 			return true
 	return false
 
@@ -1144,6 +1170,36 @@ func _spawn_test_boss_near_player() -> void:
 	if boss.has_method("receive_reinforcement_order"):
 		boss.call("receive_reinforcement_order", player.global_position)
 	host._show_field_notice("테스트 보스 출현 · 로켓 약탈대장이 접근합니다.")
+
+
+func spawn_chain_climax_boss() -> void:
+	# 메인 체인 마지막 회수 직후 — 구역 보스가 회수물을 되찾으러 온다.
+	# 탈출까지 들고 뛰는 길이 곧 보스전이 된다(잡든, 따돌리든).
+	for enemy in host.enemies:
+		if is_instance_valid(enemy) and bool(enemy.get_meta("raid_boss", false)):
+			# 이미 보스가 있는 판(피로 이벤트 등)이면 그 보스를 몰아붙인다.
+			if enemy.has_method("receive_reinforcement_order"):
+				enemy.call("receive_reinforcement_order", player.global_position)
+			return
+	var world := host.get_node("World") as ProceduralCityMap
+	var spawn_position := _find_event_position_near_player(world, 16.0, 24.0)
+	if spawn_position == Vector3.INF:
+		spawn_position = _find_reinforcement_position()
+	if spawn_position == Vector3.INF:
+		return
+	var boss_threat := clampf(maxf(0.55, float(host.raid_zone_data.get("threat", 0.0))), 0.0, 1.0)
+	var boss := _spawn_rocket_boss_at(
+		spawn_position, boss_threat, "ChainClimaxBoss_%d" % Time.get_ticks_msec()
+	)
+	var boss_title := "%s의 주인" % str(host.raid_zone_data.get("name", "구역"))
+	var boss_marker := boss.get_node_or_null("BossMarker") as Label3D
+	if boss_marker:
+		boss_marker.text = boss_title
+	boss.set_meta("display_name", boss_title)
+	if boss.has_method("receive_reinforcement_order"):
+		boss.call("receive_reinforcement_order", player.global_position)
+	host._show_boss_alert(boss_title)
+	host._show_field_notice("회수물의 주인이 왔다 — 들고 도망치거나, 끝장을 내라")
 
 
 func _trigger_fatigue_boss_event() -> void:

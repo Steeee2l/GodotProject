@@ -28,7 +28,7 @@ const CYCLE_HOLD_SECONDS := 0.45
 # 순환 순서 — 보유한 것만 돈다. 통조림 → 지뢰 → 포탑 → 로켓 → 드론 → 카트.
 const THROW_KINDS := [
 	"canned_food", "field_mine", "salvage_turret", "rocket_launcher",
-	"escort_drone", "supply_cart",
+	"escort_drone", "supply_cart", "strike_drone",
 ]
 const KIND_INFO := {
 	"canned_food": {
@@ -57,6 +57,11 @@ const KIND_INFO := {
 		"label": "카트", "toast": "보급 카트", "icon": "backpack",
 		"color": Color("#d8b56a"), "range": 3.0,
 	},
+	# 타격 드론도 조준점 불필요 — 확정하면 즉시 락온 모드가 켜진다.
+	"strike_drone": {
+		"label": "타격", "toast": "타격 드론", "icon": "raid",
+		"color": Color("#57d9c4"), "range": 3.0,
+	},
 }
 const EATER_LINES := [
 	"이게 웬 횡재냐",
@@ -71,7 +76,7 @@ const EATER_LINES := [
 const REACT_LINES := [
 	"응? 저 소리…",
 	"밥 냄새다",
-	"누가 통조림을 흘렸나",
+	"누가 통조림 흘렸나?",
 	"저쪽에서 깡통 소리 났는데",
 ]
 
@@ -417,6 +422,10 @@ func _dispatch_selected(target: Vector3) -> void:
 			if deployables != null and GameState.consume_heavy_gear("supply_cart", 1):
 				_set_aiming(false)
 				deployables.call("deploy_cart")
+		"strike_drone":
+			# 소모는 begin_strike_mode 안에서 — 이후 10초간 클릭이 일제 사격이 된다.
+			if deployables != null and bool(deployables.call("begin_strike_mode")):
+				_set_aiming(false)
 	if host.has_method("_update_medkit_button"):
 		host.call("_update_medkit_button")
 

@@ -1654,7 +1654,7 @@ func _start_tutorial_aim() -> void:
 	_show_objective(
 		"본다",
 		# 이 단계에서 총이 처음 손에 들린다 — 문구가 그 순간을 가리킨다.
-		"조준을 누른 채 — 총을 들고, 어둠이 열린다." if touch_enabled else "우클릭을 누른 채 — 총을 들고, 어둠이 열린다.",
+		"조준을 누른 채 — 총이 올라오고, 멀리까지 보인다." if touch_enabled else "우클릭을 누른 채 — 총이 올라오고, 멀리까지 보인다.",
 		"조준 유지 0.5초"
 	)
 
@@ -1898,7 +1898,7 @@ func _restart_opening_after_death() -> void:
 	dialogue_panel.visible = false
 	interaction_panel.visible = false
 	var death_label := Label.new()
-	death_label.text = "다시 숨을 고릅니다..."
+	death_label.text = "숨을 고른다. 다시 간다."
 	death_label.set_anchors_preset(Control.PRESET_CENTER)
 	death_label.position = Vector2(-220, -24)
 	death_label.size = Vector2(440, 48)

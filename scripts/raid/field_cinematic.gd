@@ -152,6 +152,9 @@ func play(sequence: Array, on_finished := Callable()) -> void:
 		return
 	running = true
 	mode = classify_mode(sequence)
+	# 선택지·대화 진행은 포인터 UI다 — 조준 레티클 대신 OS 커서를 보여 준다.
+	if mode == MODE_EVENT and host.has_method("_refresh_pointer_mode"):
+		host.call("_refresh_pointer_mode")
 	_sequence = sequence.duplicate()
 	_step_index = 0
 	_fast_forward = false
@@ -359,6 +362,8 @@ func _finish() -> void:
 	_cancel_pending_advance()
 	# 조작 잠금·일시정지는 레터박스가 걷히기 전에 먼저 푼다 — 답답함은 연출이 아니다.
 	_resume_world()
+	if host.has_method("_refresh_pointer_mode"):
+		host.call("_refresh_pointer_mode")
 	var closing_layer := layer
 	layer = null
 	if is_instance_valid(closing_layer):

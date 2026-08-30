@@ -273,6 +273,14 @@ const RECIPES := {
 			"cost": {"scrap": 10000, "magazine_spring": 2, "rubber_gasket": 2, "precision_gear": 1},
 			"result": {"heavy_gear": "supply_cart", "amount": 1},
 		},
+		# ── 3차(2026-08-30): 타격 드론 — 사다리 꼭대기의 '지우개'.
+		{
+			"id": "craft_strike_drone",
+			"name": "타격 드론",
+			"desc": "",
+			"cost": {"scrap": 28000, "scope_lens": 2, "precision_gear": 2, "military_alloy": 1},
+			"result": {"heavy_gear": "strike_drone", "amount": 1},
+		},
 	],
 	"supplies": [
 		{
@@ -2839,6 +2847,7 @@ func _recipe_icon(recipe: Dictionary) -> Texture2D:
 			"rocket_launcher": "raid",
 			"escort_drone": "dash",
 			"supply_cart": "backpack",
+			"strike_drone": "raid",
 		}.get(str(result["heavy_gear"]), "parts"))
 		return UI_ICONS.get_icon(heavy_icon, 72, Color("#7fd8c8"))
 	if result.has("canned_food"):
