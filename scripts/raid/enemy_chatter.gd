@@ -113,6 +113,14 @@ func attach(host_node: Node) -> void:
 func update(delta: float) -> void:
 	if host == null or not is_instance_valid(player):
 		return
+	# 연출 중에는 입을 다문다 — 사망 슬로모나 탈출 전환 위로 잡담이 뜨면
+	# 그 장면이 통째로 우스워진다.
+	if (
+		bool(host.get("player_death_sequence_active"))
+		or bool(host.get("extraction_transition_active"))
+		or bool(host.get("boss_defeat_sequence_active"))
+	):
+		return
 	elapsed += delta
 	combat_bark_timer = maxf(0.0, combat_bark_timer - delta)
 	chatter_timer -= delta
