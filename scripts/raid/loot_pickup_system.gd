@@ -11,7 +11,7 @@ const SFX := preload("res://scripts/sfx_bank.gd")
 const SHELTER_REQUISITION := preload("res://scripts/shelter/requisition.gd")
 const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
-const BASE_ENEMY_COUNT := 24
+const BASE_ENEMY_COUNT := 36
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const CHURU_TEXTURE := preload("res://assets/items/churu_rare.png")
 const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
@@ -48,7 +48,6 @@ const OVERLAY_DEPTH_SORT := preload("res://scripts/overlay_depth_sort.gd")
 const PERCEPTION_SYSTEM_SCRIPT := preload("res://scripts/perception_system.gd")
 const PICKUP_DISTANCE := 1.75
 const RAID_EVENT_DIRECTOR := preload("res://scripts/raid_event_director.gd")
-const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
 const SCENT_TRAIL_MANAGER_SCRIPT := preload("res://scripts/scent_trail_manager.gd")
 const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
@@ -295,15 +294,8 @@ func _update_ammo_pickups(delta: float) -> void:
 func _collect_nearby_ammo() -> void:
 	if not is_instance_valid(host.nearby_ammo_pickup):
 		return
-	var candidate := _build_pickup_candidate(host.nearby_ammo_pickup)
-	if not GameState.can_add_raid_item(
-		str(candidate.get("type", "")),
-		str(candidate.get("id", "")),
-		int(candidate.get("amount", 1))
-	):
-		_show_bag_full_notice()
-		_open_loot_swap()
-		return
+	# 가방 무제한(2026-08-30) — 만재 게이트·전리품 교체 모달이 폐지됐다.
+	# 줍는 건 언제나 통과, "언제 나갈까"는 위험도가 정한다.
 	var loot_type := str(host.nearby_ammo_pickup.get_meta("loot_type", "ammo"))
 	var amount := int(host.nearby_ammo_pickup.get_meta("amount", 1))
 	# 획득 알림은 전부 토스트 스택으로 — 자동 장착(금색·길게)이 탄약 줍기에
@@ -353,11 +345,10 @@ func _collect_nearby_ammo() -> void:
 				host.nearby_ammo_pickup.get_meta("progression_item_id", "rifle_blueprint")
 			)
 			GameState.add_progression_item(progression_item_id, amount)
-			# 진행도 품목은 칸 0 — 가방이 꽉 차도 먹힌다는 걸 토스트에서 바로 말해 준다.
 			var mission_tag := (
-				"임무 품목 · " if bool(host.nearby_ammo_pickup.get_meta("mission_item", false)) else ""
+				" · 임무 품목" if bool(host.nearby_ammo_pickup.get_meta("mission_item", false)) else ""
 			)
-			toast_text = "%s 획득 · %s가방 칸 사용 안 함" % [
+			toast_text = "%s 획득%s" % [
 				str(host.nearby_ammo_pickup.get_meta("display_name", "진행도 아이템")),
 				mission_tag,
 			]
@@ -402,17 +393,19 @@ func _collect_nearby_ammo() -> void:
 				toast_text = "장비 정보를 확인할 수 없습니다."
 		_:
 			var pickup_ammo_id := str(host.nearby_ammo_pickup.get_meta("ammo_id", "762_fmj"))
-			var updated_ammo_count: int = GameState.get_ammo_count(pickup_ammo_id) + amount
+			# 탄약 휴대 훈련 — 칸당 발수(폐지)에서 "주워 담는 발수 +15%/랭크"로 재정의.
+			var gained: int = maxi(1, roundi(float(amount) * GameState.get_ammo_pickup_multiplier()))
+			var updated_ammo_count: int = GameState.get_ammo_count(pickup_ammo_id) + gained
 			GameState.set_ammo_count(pickup_ammo_id, updated_ammo_count)
 			if GameState.equipped_ammo_id == pickup_ammo_id:
 				host.reserve_ammo = updated_ammo_count
 			GameState.reserve_ammo = host.reserve_ammo
 			if ammo_pickup_chain_time <= 0.0:
 				ammo_pickup_chain_total = 0
-			ammo_pickup_chain_total += amount
+			ammo_pickup_chain_total += gained
 			ammo_pickup_chain_time = 2.4
 			toast_text = "+%d %s   보유 %d" % [
-				amount,
+				gained,
 				str(host.nearby_ammo_pickup.get_meta("display_name", "탄약")),
 				updated_ammo_count,
 			]
@@ -450,189 +443,10 @@ func _armor_pickup_notice(equipment_id: String) -> String:
 	return "▲ %s 장착! 방어 %d%% → %d%%" % [display_name, previous_pct, new_pct]
 
 
-func _show_bag_full_notice() -> void:
-	host.hud.push_toast("가방이 꽉 찼습니다", HudStyle.WARN, 2.2)
-	# 처음 가방이 찬 순간이 이 게임의 핵심을 가르칠 유일한 자리다.
-	# 조작이 아니라 "무엇을 버릴 것인가"를 가르쳐야 한다.
-	if not GameState.bag_pressure_lesson_seen:
-		GameState.bag_pressure_lesson_seen = true
-		GameState.save_persistent_state()
-		host._show_field_notice(
-			"가방은 여기까지다.\n"
-			+ "이제부터는 줍는 게 아니라 고르는 일이다. "
-			+ "칸당 가치가 낮은 물건을 버리고 비싼 것을 실어라.\n"
-			+ "살아서 나가야 내 것이 된다."
-		)
-	host._update_equipment_ui()
-
-
-# ── 전리품 교체 UI ──────────────────────────────────────────────
-# 완성된 채 배선이 빠져 한 번도 뜬 적 없던 LootSwapUI를 연결한다.
-# 가방이 차면 토스트 한 줄 대신 "무엇을 버리고 무엇을 실을까"를 가치와
-# 칸 수로 비교하는 교체 화면이 뜬다 — 이 게임 핵심 결정의 전용 UI.
-var loot_swap: LootSwapUI
-
-
-func _ensure_loot_swap_ui() -> void:
-	if loot_swap != null and is_instance_valid(loot_swap):
-		return
-	# 전용 최상위 CanvasLayer — HUD 캔버스에 넣으면 시야 안개·다른 HUD 레이어가
-	# 모달 위에 그려져 "묻힌" 화면이 됐다(스크린샷 실측). 일시정지 중에도
-	# 동작해야 하므로 ALWAYS.
-	var swap_layer := CanvasLayer.new()
-	swap_layer.name = "LootSwapLayer"
-	swap_layer.layer = 95
-	swap_layer.process_mode = Node.PROCESS_MODE_ALWAYS
-	host.add_child(swap_layer)
-	loot_swap = LootSwapUI.new()
-	loot_swap.name = "LootSwapUI"
-	swap_layer.add_child(loot_swap)
-	loot_swap.setup(HudStyle.FONT)
-	loot_swap.visible = false
-	loot_swap.discard_requested.connect(_on_loot_swap_discard)
-	loot_swap.claim_requested.connect(_on_loot_swap_claim)
-	# 모달이 뜨고 닫힐 때 OS 커서를 되살린다/숨긴다 — 조준 레티클만 남으면
-	# "커서 없이 버튼을 누르는" 상태가 된다(유저 신고). 닫힘 경로가 여러 갈래
-	# (X·교체·ModalDismiss)라 visibility 시그널 하나로 전부 받는다.
-	loot_swap.visibility_changed.connect(func() -> void:
-		if host != null and host.has_method("_refresh_pointer_mode"):
-			host.call("_refresh_pointer_mode")
-	)
-
-
+# 전리품 교체 모달(LootSwapUI)은 가방 무제한화(2026-08-30)로 폐지됐다.
+# 입력 라우터·튜토리얼 게이트 호환용으로 판정 스텁만 남긴다.
 func is_loot_swap_open() -> bool:
-	# main의 수동 입력 라우터(근접 공격·조이스틱)가 모달 위 터치를 삼키지 않도록
-	# 게이트에 쓰는 단일 판정.
-	return loot_swap != null and is_instance_valid(loot_swap) and loot_swap.visible
-
-
-func _open_loot_swap() -> void:
-	if not is_instance_valid(host.nearby_ammo_pickup):
-		return
-	_ensure_loot_swap_ui()
-	loot_swap.open(
-		_build_pickup_candidate(host.nearby_ammo_pickup),
-		_build_bag_swap_entries(),
-		GameState.get_raid_bag_used_slots(),
-		GameState.get_raid_bag_capacity()
-	)
-
-
-func _build_bag_swap_entries() -> Array[Dictionary]:
-	var entries: Array[Dictionary] = []
-	for raw_value in GameState.get_raid_bag_entries():
-		var raw := raw_value as Dictionary
-		var item_type := str(raw.get("type", ""))
-		var item_id := str(raw.get("id", ""))
-		var count := int(raw.get("count", 0))
-		var drop_amount := int(raw.get("drop_amount", 1))
-		var slot_cost := GameState.get_raid_item_slot_cost(item_type, item_id, count)
-		var total_value := RAID_ITEM_ECONOMY.get_total_value(
-			item_type, item_id, count, GameState.raid_special_cargo
-		)
-		var drop_value := RAID_ITEM_ECONOMY.get_total_value(
-			item_type, item_id, drop_amount, GameState.raid_special_cargo
-		)
-		entries.append({
-			"type": item_type,
-			"id": item_id,
-			"count": count,
-			"drop_amount": drop_amount,
-			"drop_value": drop_value,
-			"slot_cost": slot_cost,
-			"total_value": total_value,
-			"value_per_slot": float(total_value) / float(maxi(1, slot_cost)),
-			"title": _raid_item_display_name(item_type, item_id),
-			"description": _raid_item_description(item_type, item_id),
-			"texture": _raid_item_texture(item_type, item_id),
-			"protected": RAID_ITEM_ECONOMY.is_protected(item_type, item_id),
-		})
-	return entries
-
-
-func _on_loot_swap_discard(entry: Dictionary) -> void:
-	var item_type := str(entry.get("type", ""))
-	var item_id := str(entry.get("id", ""))
-	var amount := int(entry.get("drop_amount", 1))
-	var removed := GameState.remove_raid_bag_item(item_type, item_id, amount)
-	if removed <= 0:
-		loot_swap.show_feedback("버릴 수 없는 물품입니다.")
-		return
-	_spawn_discarded_raid_item(item_type, item_id, removed)
-	host._update_equipment_ui()
-	loot_swap.show_feedback("%s x%d을 내려놓았다" % [str(entry.get("title", "휴대품")), removed])
-	# 최신 상태로 다시 그린다 — 자리가 났으면 '바로 획득'이 살아난다.
-	if is_instance_valid(host.nearby_ammo_pickup):
-		loot_swap.open(
-			_build_pickup_candidate(host.nearby_ammo_pickup),
-			_build_bag_swap_entries(),
-			GameState.get_raid_bag_used_slots(),
-			GameState.get_raid_bag_capacity()
-		)
-	else:
-		loot_swap.close()
-
-
-func _on_loot_swap_claim() -> void:
-	loot_swap.close()
-	if is_instance_valid(host.nearby_ammo_pickup):
-		_collect_nearby_ammo()
-
-
-func _build_pickup_candidate(pickup: Node3D) -> Dictionary:
-	var loot_type := str(pickup.get_meta("loot_type", "ammo"))
-	var amount := maxi(1, int(pickup.get_meta("amount", 1)))
-	var item_type := "ammo"
-	var item_id := str(pickup.get_meta("ammo_id", "762_fmj"))
-	match loot_type:
-		"canned_food":
-			item_type = "food"
-			item_id = "canned_food"
-		"churu":
-			item_type = "churu"
-			item_id = "churu"
-		"valuable":
-			item_type = "valuable"
-			item_id = str(pickup.get_meta("item_id", "subway_token"))
-		"medkit":
-			item_type = "medkit"
-			item_id = "medkit"
-		"mod_component":
-			item_type = "component"
-			item_id = str(pickup.get_meta("component_id", "rubber_gasket"))
-		"weapon_mod":
-			item_type = "mod"
-			item_id = str(pickup.get_meta("weapon_mod_id", "scope_2x"))
-		"progression_item":
-			item_type = "progression"
-			item_id = str(pickup.get_meta("progression_item_id", "rifle_blueprint"))
-		"weapon":
-			item_type = "weapon"
-			item_id = str(pickup.get_meta("weapon_id", "ak47"))
-		"armor":
-			item_type = "equipment"
-			item_id = str(pickup.get_meta("equipment_id", "scav_vest"))
-	var required := GameState.get_raid_item_added_slot_delta(item_type, item_id, amount)
-	var display_slots := maxi(1, required)
-	var total_value := RAID_ITEM_ECONOMY.get_total_value(
-		item_type,
-		item_id,
-		amount,
-		GameState.raid_special_cargo
-	)
-	return {
-		"type": item_type,
-		"id": item_id,
-		"amount": amount,
-		"title": str(pickup.get_meta("display_name", _raid_item_display_name(item_type, item_id))),
-		"description": _raid_item_description(item_type, item_id),
-		"texture": _raid_item_texture(item_type, item_id),
-		"required_slots": required,
-		"display_slots": display_slots,
-		"total_value": total_value,
-		"value_per_slot": float(total_value) / float(display_slots),
-		"protected": RAID_ITEM_ECONOMY.is_protected(item_type, item_id),
-	}
+	return false
 
 
 func _spawn_discarded_raid_item(item_type: String, item_id: String, amount: int) -> void:

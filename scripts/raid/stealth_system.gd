@@ -8,7 +8,7 @@ extends RefCounted
 const AIM_REVEAL_BUILDING_ALPHA := 0.28
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
 const BASE_CAMERA_SIZE := 28.0
-const BASE_ENEMY_COUNT := 24
+const BASE_ENEMY_COUNT := 36
 const BOSS_DEFEAT_CAMERA_SIZE := 19.5
 const BOSS_DEFEAT_FOCUS_SECONDS := 1.65
 const BOSS_DEFEAT_SLOWMO_SECONDS := 1.05

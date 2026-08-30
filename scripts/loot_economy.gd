@@ -571,7 +571,7 @@ const ITEM_CATALOG := {
 	# ── 쉘터 확장 키(티어 3·4·5) ──
 	# 메인 미션 체인 3단계 보상 전용. 드랍 테이블·상인 매대 어디에도 넣지 않는다 —
 	# 카탈로그에 두는 이유는 이름·가치 조회(정산·창고 표시)를 한 곳에서 하기 위해서다.
-	# progression 타입이라 가방 칸은 0(get_raid_item_slot_cost).
+	# progression 타입 — 쉘터 자산이라 버릴 수 없다(가방은 무제한).
 	"namdaemun_depot_plans": {
 		"loot_type": "progression_item",
 		"progression_item_id": "namdaemun_depot_plans",
@@ -602,8 +602,7 @@ const ITEM_CATALOG := {
 	# ── 무기·방어구 카탈로그 ─────────────────────────────────────
 	# 2026-08 경제 코어: 어떤 드랍 테이블에도 들어가지 않는다(작업대 제작 전용).
 	# 엔트리를 남기는 이유는 이름·가치 조회(시체 가치·창고 표시·정산)뿐이다.
-	# slot_size는 가방 칸과 무관하다 — GameState.get_raid_item_slot_cost가 무기·
-	# 장비를 0칸으로 친다(영구 귀속 장비는 가방이 아니라 몸에 딸린 것).
+	# slot_size는 가방과 무관한 잔존 데이터다(가방 무제한 — 칸 개념 없음).
 	"m1911": {
 		"loot_type": "weapon",
 		"weapon_id": "m1911",

@@ -123,7 +123,6 @@ func _run() -> void:
 	# 재료 부족이면 거절 — 합금이 0이 됐으니 로켓은 더 못 만든다.
 	workbench.call("_craft", recipe_by_id["craft_rocket_launcher"])
 	_check(int(game_state.call("get_heavy_gear_count", "rocket_launcher")) == 1, "재료 부족 시 제작 거절")
-	_check(int(game_state.call("get_raid_item_slot_cost", "heavy", "field_mine", 3)) == 1, "지뢰 3개 = 가방 1칸")
 	workbench.queue_free()
 	await process_frame
 
@@ -325,8 +324,8 @@ func _run() -> void:
 	)
 
 	# ── ⑦ 보급 카트 ─────────────────────────────────────────
-	print("[7] 보급 카트 — 가방 +6·이동 페널티·파괴 시 보너스 0·아이템 유지")
-	var capacity_before_cart := int(game_state.call("get_raid_bag_capacity"))
+	# 가방 무제한화(2026-08-30)로 +6칸이 폐지되고 '생환 시 정산 +15%'가 됐다.
+	print("[7] 보급 카트 — 정산 보너스·이동 페널티·파괴 시 보너스 0")
 	_check(absf(float(deployables.call("get_cart_speed_multiplier")) - 1.0) < 0.001, "카트 없음 → 이동 배율 1.0")
 	game_state.call("consume_heavy_gear", "supply_cart", 1)
 	deployables.call("deploy_cart")
@@ -334,10 +333,9 @@ func _run() -> void:
 	_check(is_instance_valid(cart), "카트 소환(active_cart)")
 	_check(cart.get_node_or_null("CartSprite") != null, "카트 스프라이트(handcart 재활용) 존재")
 	_check(bool(deployables.call("is_cart_active")), "is_cart_active = true")
-	_check(int(game_state.get("active_cart_bag_bonus")) == 6, "active_cart_bag_bonus = 6")
 	_check(
-		int(game_state.call("get_raid_bag_capacity")) == capacity_before_cart + 6,
-		"가방 용량 +6 (%d → %d)" % [capacity_before_cart, int(game_state.call("get_raid_bag_capacity"))]
+		absf(float(game_state.get("active_cart_value_bonus")) - 0.15) < 0.001,
+		"active_cart_value_bonus = 0.15"
 	)
 	_check(
 		absf(float(deployables.call("get_cart_speed_multiplier")) - 0.88) < 0.001,
@@ -346,41 +344,27 @@ func _run() -> void:
 	# 지면 추종 — 잠시 굴린 뒤에도 y=0(지면)이어야 한다.
 	await _sleep(0.8)
 	_check(absf(cart.global_position.y) < 0.05, "카트 지면 추종(y=%.3f)" % cart.global_position.y)
-	# 보너스 칸까지 가득 채운다 — 파괴 후 '아이템 유지 + 새 획득만 차단'을 본다.
-	var used_slots := int(game_state.call("get_raid_bag_used_slots"))
-	var free_slots := int(game_state.call("get_raid_bag_capacity")) - used_slots
-	if free_slots > 0:
-		game_state.call("add_mod_component", "rubber_gasket", free_slots)
-	_check(
-		not bool(game_state.call("can_add_raid_item", "component", "rubber_gasket", 1)),
-		"만재 상태 — 새 획득 거절"
-	)
+	game_state.call("add_mod_component", "rubber_gasket", 40)
 	var gasket_before_destroy := int(game_state.call("get_mod_component_count", "rubber_gasket"))
-	var used_before_destroy := int(game_state.call("get_raid_bag_used_slots"))
 	cart.call("force_destroy", "destroyed")
 	await _sleep(0.2)
-	_check(int(game_state.get("active_cart_bag_bonus")) == 0, "파괴 → 보너스 0(즉시)")
 	_check(
-		int(game_state.call("get_raid_bag_capacity")) == capacity_before_cart,
-		"가방 용량 원복(%d)" % int(game_state.call("get_raid_bag_capacity"))
+		absf(float(game_state.get("active_cart_value_bonus"))) < 0.001,
+		"파괴 → 정산 보너스 0(즉시)"
 	)
 	_check(not bool(deployables.call("is_cart_active")), "파괴 후 is_cart_active = false")
 	_check(
 		absf(float(deployables.call("get_cart_speed_multiplier")) - 1.0) < 0.001,
 		"파괴 후 이동 배율 1.0 복귀"
 	)
-	# 초과 적재 — 아이템은 사라지지 않고, 새 획득만 막힌다(기존 검사 로직).
+	# 카트를 잃어도 가방은 무제한 — 들고 있던 것도, 새로 줍는 것도 그대로다.
 	_check(
 		int(game_state.call("get_mod_component_count", "rubber_gasket")) == gasket_before_destroy,
-		"초과 적재 아이템 유지(고무 패킹 %d)" % gasket_before_destroy
+		"적재 아이템 유지(고무 패킹 %d)" % gasket_before_destroy
 	)
 	_check(
-		int(game_state.call("get_raid_bag_used_slots")) == used_before_destroy,
-		"사용 칸 수 유지(용량 초과 상태)"
-	)
-	_check(
-		not bool(game_state.call("can_add_raid_item", "component", "rubber_gasket", 1)),
-		"초과 상태 — 새 획득만 차단"
+		bool(game_state.call("can_add_raid_item", "component", "rubber_gasket", 1)),
+		"카트 파괴 후에도 새 획득 가능(가방 무제한)"
 	)
 
 	# ── ⑧ 시체 왕복 ─────────────────────────────────────────

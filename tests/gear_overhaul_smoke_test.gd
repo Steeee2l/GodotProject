@@ -418,14 +418,10 @@ func _check_legacy_migration(game_state: Node) -> void:
 	game_state.call("reset_run")
 
 
-# ── ⑦ 칸 0 · 버리기 보호 · 문구 ────────────────────────────────
+# ── ⑦ 버리기 보호 · 문구 ──────────────────────────────────────
+# 칸 비용 단언은 가방 무제한화(2026-08-30)로 폐지 — 칸 자체가 없다.
 func _check_slots_and_texts(game_state: Node) -> void:
 	game_state.call("reset_run")
-	_check(int(game_state.call("get_raid_item_slot_cost", "weapon", "mp5", 3)) == 0, "⑦ 무기 칸 0")
-	_check(int(game_state.call("get_raid_item_slot_cost", "equipment", "scav_vest", 2)) == 0, "⑦ 방어구 칸 0")
-	_check(int(game_state.call("get_raid_item_slot_cost", "component", "precision_gear", 2)) == 2, "⑦ 희귀 부품 1칸/개")
-	_check(int(game_state.call("get_raid_item_slot_cost", "progression", "blueprint_shard_k2", 5)) == 0, "⑦ 조각 0칸")
-	_check(int(game_state.call("get_raid_item_slot_cost", "progression", "artisan_seal", 1)) == 0, "⑦ 인장 0칸")
 	_check(RAID_ITEM_ECONOMY.is_protected("weapon", "mp5") and RAID_ITEM_ECONOMY.is_protected("equipment", "scav_vest"), "⑦ 장비는 버리기 보호")
 	# 상인 매대에 장비 없음
 	for good in game_state.MERCHANT_SUNDRY_GOODS + game_state.MERCHANT_AMMO_GOODS + game_state.MERCHANT_SELL_GOODS:

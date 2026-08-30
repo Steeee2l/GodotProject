@@ -730,7 +730,7 @@ func attempt_take_recovery(point_node: Node3D) -> void:
 		host._show_field_notice("이미 회수물을 들고 있다 — 먼저 탈출해서 정산하라")
 		return
 	host.hud.push_toast(
-		"%s 확보 · 임무 품목 · 가방 칸 사용 안 함" % str(cargo.get("title", "회수물")),
+		"%s 확보 · 임무 품목" % str(cargo.get("title", "회수물")),
 		HUD_STYLE.GOLD,
 		2.8
 	)

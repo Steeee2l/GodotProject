@@ -260,8 +260,6 @@ func _check_mission_blueprints(game_state: Node) -> void:
 	_check(int(game_state.call("get_blueprint_shard_count", "pump_shotgun")) == 2, "④ 펌프 조각 2")
 	var again: Array = game_state.call("ensure_story_key_items")
 	_check(again.is_empty(), "④ 멱등 — 두 번째는 아무것도 안 줌")
-	# 가방 칸 0
-	_check(int(game_state.call("get_raid_item_slot_cost", "progression", "blueprint_shard_akm", 1)) == 0, "④ 설계도 조각 가방 칸 0")
 	game_state.call("reset_run")
 
 

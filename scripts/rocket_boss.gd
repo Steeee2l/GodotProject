@@ -31,6 +31,9 @@ const POISE_BREAK_RATIO := 0.16
 const POISE_GROGGY_TIME := 1.15
 const ENRAGE_HEALTH_RATIO := 0.4
 
+# 위험도 하드캡 처형자(회수반)용 배율 — 기본 1.0, enemy_director가 처형자를
+# 만들 때만 올린다(36 → 약 65: 플레이어를 2~3방에 보내는 최후통첩 화력).
+var damage_multiplier := 1.0
 var boss_action := "combat"
 var boss_action_elapsed := 0.0
 var boss_action_duration := 0.0
@@ -387,7 +390,7 @@ func _fire_rocket(direction: Vector3) -> void:
 	rocket.call(
 		"configure", self, target,
 		global_position + direction * 0.72 + Vector3(0.0, 1.18, 0.0),
-		lead_position, ROCKET_DAMAGE, ROCKET_BLAST_RADIUS
+		lead_position, roundi(float(ROCKET_DAMAGE) * damage_multiplier), ROCKET_BLAST_RADIUS
 	)
 	get_parent().add_child(rocket)
 	_spawn_enemy_muzzle_flash(direction)
@@ -528,7 +531,7 @@ func _deploy_boss_mine(index: int) -> void:
 		target,
 		global_position + forward * 0.58 + Vector3(0.0, 0.92, 0.0),
 		landing_position,
-		MINE_DAMAGE,
+		roundi(float(MINE_DAMAGE) * damage_multiplier),
 		MINE_BLAST_RADIUS
 	)
 	get_parent().add_child(mine)

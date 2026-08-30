@@ -103,7 +103,7 @@ const STEPS := [
 	},
 	{
 		"id": "train_supply", "zone": "shelter", "title": "훈련장 — 출정 보급",
-		"text": "탄창 숙련 다음은 휴대와 보급입니다 — 탄약 휴대는 칸당 발수를, 출정 보급은 시작 탄창을 늘립니다.",
+		"text": "탄창 숙련 다음은 휴대와 보급입니다 — 탄약 휴대는 필드에서 줍는 탄약량을, 출정 보급은 시작 탄창을 늘립니다.",
 		"targets": ["dock:training", "find:TrainingCard_ammo_carry", "find:TrainingCard_sortie_supply"],
 	},
 ]

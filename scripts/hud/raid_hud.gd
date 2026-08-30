@@ -361,13 +361,13 @@ func build(owner_node: Node) -> void:
 	danger_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	danger_box.add_theme_constant_override("separation", 3)
 	danger_row.add_child(danger_box)
-	# "포위망" 라벨을 왼쪽에, 상태/퍼센트를
+	# "위험도" 라벨을 왼쪽에, 상태/퍼센트를
 	# 오른쪽에 두고 그 아래 바를 붙인다. 정렬이 분명해진다.
 	var danger_header := HBoxContainer.new()
 	danger_header.add_theme_constant_override("separation", 6)
 	danger_box.add_child(danger_header)
 	var danger_name := Label.new()
-	danger_name.text = "포위망"
+	danger_name.text = "위험도"
 	danger_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	danger_name.add_theme_font_override("font", font)
 	danger_name.add_theme_font_size_override("font_size", 12)

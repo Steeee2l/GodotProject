@@ -45,16 +45,10 @@ func _run() -> void:
 	assert(ui.inventory_panel.custom_minimum_size.x <= 560.0, "The default inventory panel must remain compact.")
 	assert(not ui.weapon_panel.visible, "Weapon detail must stay hidden until the weapon is selected.")
 	assert(ui.equipped_grid.get_child_count() == 4, "Primary, body, head, and footwear equipment slots should be visible.")
-	assert(int(state.call("get_raid_bag_used_slots")) == 3, "The spare MP5 and two stackable item types must use three slots.")
-	# 용량 상수(RAID_BAG_CAPACITY)는 밸런스로 바뀐다 — 하드코딩한 "15"가 남아
-	# 테스트만 옛 숫자를 붙들고 있었다. 기대값을 실제 용량에서 만든다.
-	var expected_bag_usage := "남은 슬롯 %d / %d" % [
-		int(state.call("get_raid_bag_capacity")) - int(state.call("get_raid_bag_used_slots")),
-		int(state.call("get_raid_bag_capacity")),
-	]
+	# 가방 무제한(2026-08-30) — 용량 표시 자체가 사라졌다.
 	assert(
-		ui.bag_slot_usage_label.text == expected_bag_usage,
-		"The bag header must expose remaining slots."
+		ui.find_child("BagSlotUsage", true, false) == null,
+		"The bag capacity readout must be gone with the slot system."
 	)
 	for equipment in ui.equipped_grid.get_children():
 		assert(((equipment as Control).size_flags_horizontal & Control.SIZE_EXPAND) != 0, "Equipment slots must share the full panel width.")

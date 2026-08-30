@@ -83,8 +83,14 @@ const LOW_HEALTH_VIGNETTE_RATIO := 0.3
 const LOW_HEALTH_VIGNETTE_BASE := 0.22
 # 연타 시 방향 호·진동이 매 탄마다 다시 터지지 않게 하는 최소 간격.
 const HIT_FEEDBACK_MIN_INTERVAL_MSEC := 70
-# 피격 카메라 셰이크 상한 — 예전 0.38은 조준이 흔들려 반격을 못 했다.
-const HIT_SHAKE_MAX := 0.24
+# ── 셰이크 강도 기준(2026-08-30 재조정) ───────────────────────────
+# 예전 값들은 "보간 목표에 섞기" 때문에 실제로는 15% 정도만 화면에 닿았다.
+# 유일하게 체감되던 보스 처치(0.46 × 0.15 ≈ 0.05)가 좋은 기준점이라,
+# 셰이크를 100% 전달하도록 고친 지금은 모든 값을 그 실효 진폭에 맞춰 다시 잡는다.
+# 여기 숫자는 이제 곧바로 월드 단위 진폭이다 — 함부로 키우면 멀미가 온다.
+const HIT_SHAKE_MAX := 0.10
+# 발사 반동 펀치 누적 상한 — 연사 중 카메라가 통째로 밀려나지 않게.
+const CAMERA_PUNCH_MAX := 0.085
 const WEAPON_FRAME_SIZE := Vector2(192, 192)
 const WEAPON_VISUAL_PIXEL_SIZE := 0.0018
 const AK_DIRECTIONAL_TEXTURE := preload("res://assets/weapons/ak47_directional.png")
@@ -133,8 +139,11 @@ const MAP_CONTENT_SCALE := ProceduralCityMap.WORLD_SCALE
 const SECONDS_PER_GAME_HOUR := 36.0
 const NIGHT_START_HOUR := 19.0
 const DEEP_NIGHT_HOUR := 22.0
-const BASE_ENEMY_COUNT := 24
-const MAX_NIGHT_ENEMY_COUNT := 44
+# 24 → 36(2026-08-30 유저 확정 "맵이 충분히 크니 더 배치해도 된다").
+# 머릿수를 늘리되 분대는 잘게 쪼갠다(_build_enemy_squad_sizes) — 목표는
+# "몰린 덩어리 + 텅 빈 구간"이 아니라 도로를 따라 군데군데 흩어진 밀도다.
+const BASE_ENEMY_COUNT := 36
+const MAX_NIGHT_ENEMY_COUNT := 58
 const ENEMY_PAIR_SQUAD_CHANCE := 0.78
 # ── 상시 보충(밀도 유지)의 안전장치 ────────────────────────────────
 # 이 보충은 "맵 전체 적 수를 target_count로 되돌리는" 배경 시스템이지 전투
@@ -170,12 +179,17 @@ const FIELD_INTERACTION_FACING_WEIGHT := 1.35
 const FIELD_INTERACTION_SIGHT_HEIGHT := 0.48
 const SALVAGE_HOLD_DURATION := 2.4
 const RESCUE_HOLD_DURATION := 1.8
-# ── 포위망(시간 위험도) — 피로도 대체(2026-08-30 유저 확정) ─────────
+# ── 위험도(시간) — 피로도 대체(2026-08-30 유저 확정) ─────────────────
 # 판에 오래 머물수록 게이지가 차고, 찰수록 적이 많아지고 강해진다.
 # 플레이어 디버프는 없다 — 압박은 내 몸이 아니라 도시가 만든다.
+# 가방이 무제한이 된 뒤로는 이 게이지가 "언제 집에 가야 하는가"의 유일한 시계다.
 const DANGER_RAMP_SECONDS := 600.0   # 10분에 100%
 const DANGER_DENSITY_BONUS := 12.0   # 100%일 때 상시 배치 목표 +12
 const DANGER_THREAT_SCALE := 0.85    # 100%일 때 위협 바닥 0.85
+# 하드캡 영파 방지 — 100%에서 버티면 처형자(로켓 보스급)가 오고, 계속 버티면
+# 주기마다 하나씩 더 온다. "무한 파밍의 끝은 회수반"이 규칙이 된다.
+const DANGER_ENFORCER_DELAY_SECONDS := 75.0
+const DANGER_ENFORCER_INTERVAL_SECONDS := 90.0
 const ESCORT_SPEED_PENALTY := 0.07
 const LORE_CLUE_COUNT := 6
 const RAID_PRESSURE_REVEAL_SECONDS := 3.4
@@ -296,6 +310,11 @@ var laser_glow_materials: Array[StandardMaterial3D] = []
 var damage_direction_tween: Tween
 var camera_shake_time := 0.0
 var camera_shake_strength := 0.0
+# 지난 프레임에 카메라에 얹은 흔들림 오프셋. 추종 보간 전에 도로 걷어내
+# 흔들림이 위치 드리프트로 눌어붙지 않게 한다(_update_camera_follow 참조).
+var camera_shake_applied_offset := Vector3.ZERO
+# 발사 반동 펀치 — 쏜 방향 반대로 카메라를 살짝 밀어낸다(랜덤 흔들림과 별개).
+var camera_punch_offset := Vector3.ZERO
 var hit_stop_serial := 0
 var combat_hit_stop_cooldown := 0.0
 # 같은 프레임에 들어간 피해 합. 샷건 펠릿 8발이 한 방으로 읽히게 한다.
@@ -346,6 +365,8 @@ var field_interaction_hold_time := 0.0
 var rescued_followers: Array[CharacterBody3D] = []
 var raid_danger := 0.0
 var danger_warning_band := -1
+var danger_overcap_seconds := 0.0
+var danger_enforcers_spawned := 0
 var run_started_msec := 0
 var run_kills := 0
 var run_damage_dealt := 0
@@ -721,22 +742,29 @@ func _update_camera_follow(delta: float) -> void:
 		if boss_defeat_sequence_active
 		else Vector3(player.position.x, 0, player.position.z) + scope_camera_offset
 	)
-	if camera_shake_time > 0.0:
-		var shake_scale := clampf(float(AccessibilitySettings.camera_shake_scale), 0.0, 1.0)
-		camera_target += Vector3(
-			weapon_random.randf_range(-camera_shake_strength, camera_shake_strength) * shake_scale,
-			0.0,
-			weapon_random.randf_range(-camera_shake_strength, camera_shake_strength) * shake_scale
-		)
 	var camera_follow_delta := (
 		delta / maxf(Engine.time_scale, 0.05)
 		if boss_defeat_sequence_active
 		else delta
 	)
+	# 흔들림은 추종 '목표점'이 아니라 보간이 끝난 '결과'에 얹는다. 예전처럼
+	# 목표에 섞으면 lerp가 프레임당 11%만 반영하는 데다 매 프레임 부호가 뒤집혀
+	# 서로 상쇄돼, 화면이 사실상 안 흔들렸다(유저 신고: "셰이크가 적용 안 됨").
+	# 그래서 지난 프레임 오프셋을 먼저 걷어내고 순수 추종 위치부터 계산한다.
+	camera_rig.position -= camera_shake_applied_offset
 	camera_rig.position = camera_rig.position.lerp(
 		camera_target,
 		1.0 - exp(-7.0 * camera_follow_delta)
 	)
+	var shake_scale := clampf(float(AccessibilitySettings.camera_shake_scale), 0.0, 1.0)
+	camera_shake_applied_offset = camera_punch_offset * shake_scale
+	if camera_shake_time > 0.0:
+		camera_shake_applied_offset += Vector3(
+			weapon_random.randf_range(-camera_shake_strength, camera_shake_strength) * shake_scale,
+			0.0,
+			weapon_random.randf_range(-camera_shake_strength, camera_shake_strength) * shake_scale
+		)
+	camera_rig.position += camera_shake_applied_offset
 
 
 func _play_raid_entry_fade() -> void:
@@ -1637,8 +1665,8 @@ func _resolve_melee_hit(direction: Vector3) -> void:
 			melee_damage = roundi(float(melee_damage) * 1.4)
 		enemy.call("take_melee_hit", melee_damage, direction, backstab)
 		# 배트가 실제로 맞았을 때만 화면이 울린다 — 헛스윙과 명중의 손맛을 가른다.
-		camera_shake_time = maxf(camera_shake_time, 0.12)
-		camera_shake_strength = maxf(camera_shake_strength, 0.22 if backstab else 0.16)
+		camera_shake_time = maxf(camera_shake_time, 0.14)
+		camera_shake_strength = maxf(camera_shake_strength, 0.075 if backstab else 0.058)
 		SFX.play("melee_hit")
 
 
@@ -1908,7 +1936,19 @@ func _update_player_combat_feedback(delta: float) -> void:
 
 	player_hit_flash_time = maxf(0.0, player_hit_flash_time - delta)
 	camera_shake_time = maxf(0.0, camera_shake_time - delta)
-	camera_shake_strength = move_toward(camera_shake_strength, 0.0, delta * 8.0)
+	# 감쇠는 지수식이어야 한다. 예전의 move_toward(0, delta*8)은 초당 8이라
+	# 발사 반동(0.05)처럼 작은 킥을 한 프레임 만에 0으로 지워 버렸다 —
+	# 지수 감쇠는 킥 크기와 무관하게 같은 비율로 잦아든다(반감기 ~0.08s).
+	if camera_shake_time <= 0.0:
+		camera_shake_strength = 0.0
+	else:
+		camera_shake_strength *= exp(-9.0 * delta)
+	camera_punch_offset *= exp(-11.0 * delta)
+	# 연사로 펀치가 무한 누적되면 카메라가 통째로 밀려 조준선이 어긋난다.
+	if camera_punch_offset.length() > CAMERA_PUNCH_MAX:
+		camera_punch_offset = camera_punch_offset.normalized() * CAMERA_PUNCH_MAX
+	elif camera_punch_offset.length_squared() < 0.000004:
+		camera_punch_offset = Vector3.ZERO
 	var hit_strength := clampf(player_hit_flash_time / 0.32, 0.0, 1.0)
 	var feedback_intensity := _get_hit_feedback_intensity()
 	var flash_scale := clampf(float(AccessibilitySettings.hit_flash_scale), 0.0, 1.0) * feedback_intensity
@@ -2114,8 +2154,8 @@ func _play_boss_defeat_sequence(enemy: CharacterBody3D) -> void:
 	boss_defeat_panel.scale = Vector2(0.82, 0.82)
 	boss_defeat_panel.pivot_offset = boss_defeat_panel.size * 0.5
 	boss_defeat_flash.color.a = 0.26
-	camera_shake_time = maxf(camera_shake_time, 0.72)
-	camera_shake_strength = maxf(camera_shake_strength, 0.46)
+	camera_shake_time = maxf(camera_shake_time, 0.4)
+	camera_shake_strength = maxf(camera_shake_strength, 0.13)
 	Engine.time_scale = BOSS_DEFEAT_TIME_SCALE
 	if boss_defeat_tween and boss_defeat_tween.is_valid():
 		boss_defeat_tween.kill()
@@ -2230,7 +2270,7 @@ func _build_death_lesson() -> String:
 	# 사망이 처벌로만 끝나면 배우는 게 없다.
 	# 나비 독백 톤(짧은 현재형) — building_interior의 사망 교훈과 같은 세트.
 	if raid_danger >= 0.65:
-		return "포위망 %d%%. 너무 오래 머물렀다. 다음엔 더 빨리 빠진다." % roundi(raid_danger * 100.0)
+		return "위험도 %d%%. 너무 오래 머물렀다. 다음엔 더 빨리 빠진다." % roundi(raid_danger * 100.0)
 	if magazine_ammo <= 0 and reserve_ammo <= 0:
 		return "탄이 바닥났다. 다음엔 다 떨어지기 전에 빠진다."
 	if raid_pressure_level >= 2:
@@ -2798,7 +2838,7 @@ func _apply_hud_layout() -> void:
 	var left_column_limit := viewport_size.y - bottom_margin - 10.0
 	if touch_available:
 		left_column_limit -= touch_stick_size
-	# 좌측 열 순서: 체력 → 포위망 → 목표. 커서로 쌓아 서로 밀어낸다.
+	# 좌측 열 순서: 체력 → 위험도 → 목표. 커서로 쌓아 서로 밀어낸다.
 	var left_column_cursor := (
 		top_left_status_panel.offset_bottom + 6.0
 		if top_left_status_panel.visible
@@ -3351,11 +3391,11 @@ func _on_fire_button_down() -> void:
 # 내 총알이 '박히는' 프레임에 화면이 미세하게 반응한다 — 히트마커와 같은 지점.
 # 피해 비례 0.02~0.05, 헤드샷/크리티컬 ×1.6. 연사 멀미 방지 장치 둘:
 # 스로틀 90ms + 총 상한 0.2(처치 셰이크 0.26보다 항상 작게).
-const HIT_SHAKE_MIN_KICK := 0.02
-const HIT_SHAKE_MAX_KICK := 0.05
+const HIT_SHAKE_MIN_KICK := 0.016
+const HIT_SHAKE_MAX_KICK := 0.038
 const HIT_SHAKE_FULL_KICK_DAMAGE := 60.0
 const HIT_SHAKE_EMPHASIS_SCALE := 1.6
-const HIT_SHAKE_STRENGTH_CAP := 0.2
+const HIT_SHAKE_STRENGTH_CAP := 0.065
 const HIT_SHAKE_THROTTLE_MSEC := 90
 var last_hit_shake_msec := 0
 
@@ -3636,7 +3676,7 @@ func _update_equipment_ui() -> void:
 
 
 func _refresh_top_status_label() -> void:
-	# Stats 한 줄(체력·총알·구급약 텍스트)은 체력바·포위망 게이지·탄약 패널·
+	# Stats 한 줄(체력·총알·구급약 텍스트)은 체력바·위험도 게이지·탄약 패널·
 	# 구급약 버튼과 전부 중복이라 삭제됐다. 갱신 훅은 구급약 버튼만 남는다.
 	_update_medkit_button()
 
@@ -3979,7 +4019,7 @@ func _spawn_enemies() -> void:
 	# 엘리트 — 판당 1~2명을 초기 배치에 섞는다(안전 반경 밖). 상세 규칙은
 	# enemy_director.spawn_initial_elites 참조.
 	enemy_director.spawn_initial_elites(world)
-	# 보스는 포위망이 절반을 넘긴 뒤에만 온다 — 초반 동선이 읽히고, 경보와
+	# 보스는 위험도이 절반을 넘긴 뒤에만 온다 — 초반 동선이 읽히고, 경보와
 	# 실제 스폰이 맞아떨어진다.
 
 
@@ -4078,7 +4118,7 @@ func _update_enemy_pressure(delta: float) -> void:
 	# 종로도 전부 threat 0으로 굴렀다 — 공격력·명중률·연사 곡선이 전부 죽어
 	# 존 난이도가 HP 말고는 작동하지 않았다. 밤은 그 위에 얹히는 가산 요소다.
 	var zone_threat := float(raid_zone_data.get("threat", 0.0))
-	# 포위망이 위협의 바닥을 끌어올린다 — 오래 머물수록 오는 적이 세진다.
+	# 위험도이 위협의 바닥을 끌어올린다 — 오래 머물수록 오는 적이 세진다.
 	var effective_threat := clampf(
 		maxf(maxf(night_intensity, zone_threat), raid_danger * DANGER_THREAT_SCALE), 0.0, 1.0
 	)
@@ -4099,7 +4139,7 @@ func _update_enemy_pressure(delta: float) -> void:
 	var target_count := (
 		BASE_ENEMY_COUNT
 		+ roundi(night_intensity * float(MAX_NIGHT_ENEMY_COUNT - BASE_ENEMY_COUNT))
-		# 포위망이 조여들수록 도시에 적이 는다(시간 위험도의 밀도 효과).
+		# 위험도이 조여들수록 도시에 적이 는다(시간 위험도의 밀도 효과).
 		+ roundi(raid_danger * DANGER_DENSITY_BONUS)
 	)
 	if enemies.size() >= target_count:
@@ -4128,10 +4168,12 @@ func _update_enemy_pressure(delta: float) -> void:
 	)
 	if squad_anchor != Vector3.INF:
 		var missing_count := target_count - enemies.size()
+		# 보충도 잘게 — 한 번에 2~3명씩 채우면 맵 반대편에 또 덩어리가 생긴다.
+		# 대부분 1명, 가끔 2명으로 흘려 넣어 빈 구간이 자연스럽게 메워지게 한다.
 		var squad_size := (
-			2
-			if missing_count <= 2 or spawn_random.randf() < ENEMY_PAIR_SQUAD_CHANCE
-			else 3
+			1
+			if missing_count <= 1 or spawn_random.randf() < 0.68
+			else 2
 		)
 		var kinds: Array[String] = []
 		for member_index in squad_size:
@@ -4347,11 +4389,15 @@ func take_hit(amount: int, hit_direction: Vector3, impact_kind: String = "bullet
 			last_hit_feedback_msec = now_msec
 			_show_damage_direction(hit_direction)
 			_play_hit_haptic()
-		camera_shake_time = 0.22
-		# 상한 0.24(예전 0.38) — 맞는 동안에도 조준선이 읽혀야 반격할 수 있다.
-		camera_shake_strength = minf(
-			HIT_SHAKE_MAX,
-			(0.12 + float(amount) * 0.006) * _get_hit_feedback_intensity()
+		camera_shake_time = 0.24
+		# 상한은 두되(맞는 동안에도 조준선은 읽혀야 반격할 수 있다) 셰이크가
+		# 실제로 화면에 닿게 고친 뒤라 이 값이 그대로 체감으로 온다.
+		camera_shake_strength = maxf(
+			camera_shake_strength,
+			minf(
+				HIT_SHAKE_MAX,
+				(0.045 + float(amount) * 0.0022) * _get_hit_feedback_intensity()
+			)
 		)
 		# 피격 히트스톱(0.045s 시간 정지)은 제거했다 — 연사에 맞으면 프레임이
 		# 계속 끊겨 조작이 이상해진다. 히트스톱은 '처치'에만 남긴다.
@@ -5544,13 +5590,7 @@ func _refresh_tactical_map_status() -> void:
 	var threat := clampf(float(raid_zone_data.get("threat", 0.0)), 0.0, 1.0)
 	var risk_tier := clampi(ceili(maxf(0.01, threat) * 5.0), 1, 5)
 	var risk_label := "구역 위험 %d/5" % risk_tier
-	tactical_map.call(
-		"set_raid_status",
-		bag_value,
-		GameState.get_raid_bag_used_slots(),
-		GameState.get_raid_bag_capacity(),
-		risk_label
-	)
+	tactical_map.call("set_raid_status", bag_value, risk_label)
 
 
 func _is_tactical_map_open() -> bool:
@@ -7119,13 +7159,23 @@ func _show_field_notice(message: String) -> void:
 
 
 func _update_raid_danger(delta: float) -> void:
-	# 포위망 — 시간만이 올린다. 회복 수단도, 플레이어 디버프도 없다.
+	# 위험도 — 시간만이 올린다. 회복 수단도, 플레이어 디버프도 없다.
 	# 효과는 전부 적 쪽: 밀도(+DANGER_DENSITY_BONUS)·위협 바닥(DANGER_THREAT_SCALE)·
 	# 50%에 사냥꾼 보스(enemy_director._trigger_danger_boss_event).
 	raid_danger = minf(1.0, raid_danger + delta / DANGER_RAMP_SECONDS)
 	GameState.raid_danger = raid_danger
 	_refresh_danger_hud()
 	enemy_director._trigger_danger_boss_event()
+	# 하드캡 영파 방지 — 100%에서 버틸수록 처형자가 계속 온다.
+	if raid_danger >= 1.0:
+		danger_overcap_seconds += delta
+		var next_enforcer_at := (
+			DANGER_ENFORCER_DELAY_SECONDS
+			+ float(danger_enforcers_spawned) * DANGER_ENFORCER_INTERVAL_SECONDS
+		)
+		if danger_overcap_seconds >= next_enforcer_at:
+			danger_enforcers_spawned += 1
+			enemy_director.spawn_danger_enforcer(danger_enforcers_spawned)
 
 
 func _refresh_danger_hud() -> void:
@@ -7162,13 +7212,19 @@ func _refresh_danger_hud() -> void:
 		danger_warning_band = next_warning_band
 	elif danger_warning_band != next_warning_band:
 		if next_warning_band > danger_warning_band:
+			# 주요 단계는 확실하게 알린다(유저 확정) — 경고음 + 붉은 토스트 길게.
 			var warning_text: String = str({
-				1: "포위망이 조여든다 · 도시에 적이 늘기 시작한다",
-				2: "포위망 위험 · 더 많은 적이, 더 세게 온다",
-				3: "포위망 최악 · 오래 버틸 곳이 아니다 — 챙긴 걸 들고 나가라",
+				1: "위험도 상승 · 도시에 적이 늘기 시작한다",
+				2: "위험도 위험 · 더 많은 적이, 더 세게 온다",
+				3: "위험도 최악 · 곧 회수반이 온다 — 챙긴 걸 들고 나가라",
 			}.get(next_warning_band, ""))
 			if not warning_text.is_empty():
-				_show_field_notice(warning_text)
+				hud.push_toast(
+					warning_text,
+					HudStyle.DANGER if next_warning_band >= 2 else HudStyle.WARN,
+					4.4
+				)
+				SFX.play("alert_sting")
 		danger_warning_band = next_warning_band
 		_apply_hud_layout()
 	_refresh_top_status_label()
@@ -7790,9 +7846,6 @@ func _collect_nearby_ammo() -> void:
 
 func _create_loot_pickup(loot_type: String, world_position: Vector3, data: Dictionary = {}) -> Node3D:
 	return loot_system._create_loot_pickup(loot_type, world_position, data)
-
-func _show_bag_full_notice() -> void:
-	loot_system._show_bag_full_notice()
 
 # 잠입/무기 전투는 scripts/raid/{stealth_system,weapon_combat}.gd 로 옮겨졌다.
 

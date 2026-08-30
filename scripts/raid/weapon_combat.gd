@@ -151,11 +151,17 @@ func _fire_ak47() -> void:
 	if host.get("cover_system") != null:
 		host.cover_system.notify_player_fired()
 	# 발사 반동을 화면에도 싣는다(화면 킥). 산탄(다연발)은 더 묵직하게.
-	# 0.032/0.062 → 0.05/0.09 상향(전투 코어 2차 타격감) — 조준 흔들림이 아니라
-	# 발사 순간의 짧은 킥이다. 상한 로직(maxf)은 그대로.
-	var recoil_kick := 0.05 if pellet_count <= 1 else 0.09
-	host.camera_shake_time = maxf(host.camera_shake_time, 0.05)
+	# 셰이크가 카메라에 제대로 도달하게 고친 뒤(main._update_camera_follow) 다시
+	# 잡은 값 — 랜덤 흔들림 + 쏜 방향 반대로 밀리는 펀치 두 겹이다.
+	var recoil_kick := 0.032 if pellet_count <= 1 else 0.058
+	host.camera_shake_time = maxf(host.camera_shake_time, 0.09)
 	host.camera_shake_strength = maxf(host.camera_shake_strength, recoil_kick)
+	var punch_back := aim_direction
+	punch_back.y = 0.0
+	if punch_back.length_squared() > 0.01:
+		host.camera_punch_offset -= punch_back.normalized() * (
+			0.030 if pellet_count <= 1 else 0.062
+		)
 	# 총성은 도시가 듣는다. 소음기를 달면 그만큼 덜 들린다.
 	var sound_scale := clampf(float(host.weapon_stats.get("sound_radius", 1.0)), 0.15, 2.0)
 	host._add_raid_pressure(
@@ -650,8 +656,7 @@ func _on_inventory_weapon_unequipped() -> void:
 	host.reserve_ammo = GameState.get_ammo_count(GameState.equipped_ammo_id)
 	GameState.magazine_ammo = host.magazine_ammo
 	GameState.reserve_ammo = host.reserve_ammo
-	# 가방이 꽉 차면 해제가 거부된다(벗은 무기가 들어갈 자리가 없다). 그 경우
-	# 장착 상태를 그대로 유지해야 GameState와 어긋나지 않는다.
+	# 해제가 거부되면(이미 맨손) 장착 상태를 그대로 유지해 GameState와 맞춘다.
 	if not GameState.unequip_weapon():
 		return
 	host.has_ak = false

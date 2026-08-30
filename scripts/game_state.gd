@@ -5,10 +5,10 @@ const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
 const RAID_REGION_CATALOG := preload("res://scripts/raid_region_catalog.gd")
 const MAIN_MISSION_CATALOG := preload("res://scripts/raid/main_mission_catalog.gd")
 
-# 기본 12칸 — 확장 사다리(고철)로 늘려 간다. 처음부터 넉넉하면 성장 재미가 없다.
-const RAID_BAG_CAPACITY := 12
-# Stack limits control discard batches only. Bag capacity uses one slot per
-# stackable type-and-ID pair and one slot per individual weapon or equipment item.
+# 가방은 무제한이다(2026-08-30 유저 확정: "파격적으로 가방 슬롯 제한을 없애자").
+# 칸·용량·만재라는 개념 자체가 없다 — 같은 아이템은 전부 한 더미로 쌓이고,
+# "언제 집에 가야 하는가"는 가방이 아니라 위험도(시간)가 결정한다.
+# RAID_STACK_LIMITS는 용량이 아니라 '버리기 한 번의 배치 크기'만 정한다.
 const RAID_STACK_LIMITS := {
 	"ammo": 60,
 	"food": 4,
@@ -78,7 +78,7 @@ var valuable_inventory: Dictionary = {}
 # 받아 같은 id라도 주운 존에 따라 값이 다르다 — 개수(valuable_inventory)만으로는 환전액을 못 구해
 # 주울 때 가치를 함께 적는다. 원장이 없는(구세이브) id는 카탈로그 base_value×개수로 환산.
 var valuable_value_ledger: Dictionary = {}
-# 포위망(시간 위험도) — 판 진행 중에만 의미가 있지만, 건물 진출입·중간 저장을
+# 위험도(시간 위험도) — 판 진행 중에만 의미가 있지만, 건물 진출입·중간 저장을
 # 건너 이어져야 해서 여기 산다. 새 판 시작 시 main이 0으로 되돌린다.
 var raid_danger: float = 0.0
 var rescued_workers: int = 0
@@ -119,16 +119,18 @@ const HEAVY_GEAR_DEFS := {
 	},
 	"supply_cart": {
 		"name": "보급 카트", "stack_per_slot": 1,
-		"description": "끌고 다니면 이 판 가방 +6칸, 대신 걸음이 느려진다. 파괴되면 끝 — 탈출하면 해체된다.",
+		"description": "끌고 다니면 걸음이 느려지는 대신, 살려서 데리고 탈출하면 이번 판 귀중품 정산 +15%. 파괴되면 끝이다.",
 	},
 	"strike_drone": {
 		"name": "타격 드론", "stack_per_slot": 1,
 		"description": "10초간 커서로 적을 지정해 클릭하면 드론이 일제 사격한다. 5회 쏘면 귀환·소멸.",
 	},
 }
-# 보급 카트가 살아 있는 동안의 가방 보너스(판 한정 런타임 상태 — 저장 안 함).
-# deployables가 켜고 끄며, 사망·포기·복귀 정산에서 0으로 돌아간다.
-var active_cart_bag_bonus := 0
+# 보급 카트가 살아 있는 동안의 귀중품 정산 보너스(판 한정 런타임 — 저장 안 함).
+# 가방 무제한화로 +6칸이 무의미해져 재정의(2026-08-30): 살려서 탈출하면
+# sell_all_valuables가 이 배율만큼 더 쳐준다. deployables가 켜고 끄며,
+# 사망·포기에서 0으로 돌아간다(복귀 정산에서는 정산이 끝난 뒤 리셋).
+var active_cart_value_bonus := 0.0
 var heavy_gear_inventory: Dictionary = {}
 
 
@@ -263,8 +265,6 @@ var raid_in_progress := false
 var last_corpse_decay_notice: Dictionary = {}
 # 직전 복귀 정산 결과(통조림·창고 이동·환전·창고 초과분). 쉘터가 한 번 읽고 비운다.
 var last_return_settlement: Dictionary = {}
-# 첫 판에서 "가방이 꽉 찼을 때의 갈등"을 한 번은 반드시 겪게 한다.
-var bag_pressure_lesson_seen: bool = false
 # 첫 출정에서 한 번씩만 뜨는 코칭. 다리 위 튜토리얼은 동사(이동·조준·사격)만
 # 가르치고 끝나서, 정작 이 게임의 결정 구조는 아무도 설명하지 않았다.
 var workbench_lesson_seen: bool = false
@@ -547,12 +547,12 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"title": "부품 세 개",
 		"brief": "도시에서 기초 부품 3개를 확보해 사자에게 전달하세요.",
 		"accept_dialogue": [
-			"쉘터가 아직 벽만 남아서요. 생산기 하나만 세우면 애들이 놀고 먹지 않아도 되는데….",
-			"부품 세 개면 돼요. 무리는 말고요. 없으면 그냥 돌아와요, 그게 더 중요하니까.",
+			"쉘터가 벽만 남았다. 생산기 하나만 세우면 애들이 놀고먹지 않아도 되는데.",
+			"부품 세 개면 된다. 무리는 말고. 없으면 그냥 와라, 그게 더 중요하다.",
 		],
 		"complete_dialogue": [
-			"세 개나… 고마워요, 정말. 애들 불러서 바로 세울게요.",
-			"이제 이 쉘터도 스스로 벌어먹기 시작하는 거예요. 당신 덕이에요.",
+			"세 개나. …고맙다. 애들 불러서 바로 세운다.",
+			"이제 이 쉘터도 지 밥벌이를 시작하는 거다. 네 덕이야.",
 		],
 		"objective": "기초 부품 확보",
 		"metric": "parts",
@@ -567,12 +567,12 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"title": "운반로 정리",
 		"brief": "주변 위협 4명을 정리해 캣닢 재배 장비를 옮길 길을 확보하세요.",
 		"accept_dialogue": [
-			"캣닢 재배 장비를 옮겨야 하는데, 길목에 그놈들이 버티고 있어요.",
-			"넷이에요. …조심해요. 장비보다 당신이 먼저예요.",
+			"캣닢 재배 장비를 옮겨야 하는데, 길목에 그놈들이 버티고 있다.",
+			"넷이다. …조심해라. 장비보다 네가 먼저다.",
 		],
 		"complete_dialogue": [
-			"길이 뚫렸다고 애들이 만세를 부르던데요.",
-			"캣닢 냄새가 나면 쉘터가 살아 있는 것 같아요. 고마워요.",
+			"길 뚫렸다고 애들이 만세 부르더라.",
+			"캣닢 냄새 나면 쉘터가 살아 있는 것 같단 말이지. 고맙다.",
 		],
 		"objective": "운반로 위협 제거",
 		"metric": "kills",
@@ -587,12 +587,12 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"title": "정비 기록 두 건",
 		"brief": "현장 기록 2개를 조사해 폐쇄된 정비 구역의 위치를 찾으세요.",
 		"accept_dialogue": [
-			"망가진 총들을 살려 보고 싶은데, 옛날 정비 기록이 필요해요.",
-			"현장 기록 두 건이면 돼요. 종이 쪼가리라 무겁지도 않아요.",
+			"망가진 총들 좀 살려 보고 싶은데, 옛날 정비 기록이 필요하다.",
+			"현장 기록 두 건이면 된다. 종이 쪼가리라 무겁지도 않아.",
 		],
 		"complete_dialogue": [
-			"이거예요, 이거. …보고 있으니 옛날 생각이 나네요.",
-			"주운 총은 버리지 말고 작업대로 가져와요. 고쳐 쓰는 재미가 있어요.",
+			"이거다, 이거. …보고 있으니 옛날 생각나네.",
+			"주운 총은 버리지 말고 작업대로 가져와라. 고쳐 쓰는 맛이 있다.",
 		],
 		"objective": "정비 기록 조사",
 		"metric": "lore",
@@ -606,12 +606,12 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"title": "설비 분해 두 건",
 		"brief": "버려진 차량이나 군용 설비 2개를 분해하세요.",
 		"accept_dialogue": [
-			"버려진 차나 설비, 그냥 지나치기엔 아깝잖아요.",
-			"두 개만 분해해 봐요. 뭐가 쓸 만한지는 몸으로 배우는 게 제일 빨라요.",
+			"버려진 차나 설비, 그냥 지나치긴 아깝잖냐.",
+			"두 개만 분해해 봐라. 뭐가 쓸 만한지는 몸으로 배우는 게 제일 빠르다.",
 		],
 		"complete_dialogue": [
-			"부품 상태가 좋네요. 작업대 애들이 신났어요.",
-			"좋은 부품 하나가 총 한 자루보다 오래 가요. 우리 아버지가 하던 말이에요.",
+			"부품 상태 좋네. 작업대 애들이 신났다.",
+			"좋은 부품 하나가 총 한 자루보다 오래 간다. 우리 아버지가 하던 말이다.",
 		],
 		"objective": "현장 설비 분해",
 		"metric": "salvage",
@@ -625,12 +625,12 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"title": "빈 침상 한 자리",
 		"brief": "도시에서 주민 1명을 구출해 쉘터까지 호송하세요.",
 		"accept_dialogue": [
-			"침상이 하나 비어 있어요. 빈 침대를 보면 마음이 안 좋아요.",
-			"밖에 아직 혼자 버티는 애들이 있어요. 한 명만 데려와 줘요.",
+			"침상이 하나 빈다. 빈 침대 보면 영 그렇다.",
+			"밖에 아직 혼자 버티는 애들이 있어. 하나만 데려와라.",
 		],
 		"complete_dialogue": [
-			"따뜻한 물부터 데워 줬어요. 많이 지쳤더라고요.",
-			"이름도 적어 뒀어요. …이제 우리 식구예요.",
+			"따뜻한 물부터 데워 줬다. 많이 지쳤더라.",
+			"이름도 적어 뒀다. …이제 식구다.",
 		],
 		"objective": "주민 구출",
 		"metric": "rescue",
@@ -644,12 +644,12 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"title": "현장 작전 한 건",
 		"brief": "필드 작전 1개를 수락하고 완수한 뒤 생환하세요.",
 		"accept_dialogue": [
-			"이제 당신은 남이 낸 길만 다닐 사람이 아니에요.",
-			"현장 작전 하나, 당신 방식대로 끝내고 와요. 나는 여기서 기다릴게요.",
+			"이제 너는 남이 낸 길만 다닐 놈이 아니다.",
+			"현장 작전 하나, 네 방식대로 끝내고 와라. 나는 여기서 기다린다.",
 		],
 		"complete_dialogue": [
-			"돌아온 얼굴을 보니 잘 끝났네요. 그거면 됐어요.",
-			"이 쉘터가 당신 덕에 거점 소리를 들어요. …다음 일도 부탁해도 될까요?",
+			"돌아온 얼굴 보니 잘 끝났구나. 그럼 됐다.",
+			"이 쉘터가 네 덕에 거점 소리를 듣는다. …다음 일도 맡아 주겠냐.",
 		],
 		"objective": "현장 작전 완료",
 		"metric": "field_mission",
@@ -802,26 +802,21 @@ const TRAINING_NODE_DEFS := {
 		"title": "신속 장전", "description": "랭크마다 장전 시간 -8%", "icon": "reload",
 		"max_rank": 4, "base_cost": 24, "cost_step": 16, "requires": {"magazine_drill": 1},
 	},
+	# 탄약 휴대는 "칸당 발수"에서 "주워 담는 발수"로 재정의(2026-08-30 가방
+	# 무제한화). 칸이 사라져도 노드는 남는다 — sortie_supply의 선행 조건이고
+	# 액티브 튜토리얼이 이 카드 구매를 가르치기 때문. 효과는
+	# get_ammo_pickup_multiplier(단일 지점)가 읽는다.
 	"ammo_carry": {
-		"title": "탄약 휴대", "description": "랭크마다 탄약 한 칸에 들어가는 발수 +25%", "icon": "backpack",
+		"title": "탄약 휴대", "description": "랭크마다 필드에서 줍는 탄약 +15%", "icon": "backpack",
 		"max_rank": 4, "base_cost": 30, "cost_step": 20, "requires": {"vitality": 1},
 	},
 	"sortie_supply": {
 		"title": "출정 보급", "description": "랭크마다 출정 시작 시 장착 구경 1탄창 지급", "icon": "raid",
 		"max_rank": 3, "base_cost": 50, "cost_step": 36, "requires": {"ammo_carry": 1},
 	},
-	# 가방 확장은 인벤토리의 고철 버튼에서 훈련 트리로 이사했다(2026-08-28 유저
-	# 지시: "가방 슬롯은 훈련에서 늘어나는 게 더 좋을듯"). 효과는
-	# get_raid_bag_capacity(단일 지점)가 랭크를 읽는다.
-	"bag_capacity": {
-		"title": "가방 확장", "description": "랭크마다 가방 +1칸", "icon": "backpack",
-		"max_rank": 12, "base_cost": 16, "cost_step": 12, "requires": {},
-	},
+	# 훈련 '가방 확장'은 가방 무제한화(2026-08-30)로 폐지 — 구 세이브의
+	# training_levels["bag_capacity"] 랭크는 남아 있어도 읽는 곳이 없다.
 }
-# 탄약 한 칸에 들어가는 발수(훈련 0랭크). 예전엔 "탄약 한 종류 = 무조건 1칸"이라
-# 발수가 칸에 영향을 주지 않았다 — 탄약 휴대 훈련이 의미를 가지려면 상한이 있어야
-# 한다. 240은 AK 8탄창: 평범한 출정에선 1칸 그대로고, 쟁여 둔 600발만 3칸이 된다.
-const AMMO_ROUNDS_PER_SLOT := 240
 const RAID_ZONES := {
 	"jongno_outskirts": {
 		"name": "종로 외곽",
@@ -1047,13 +1042,8 @@ const CHURU_BUFFS := {
 		"cost": 1,
 		"icon": "stamina",
 	},
-	"big_pockets": {
-		"title": "넉넉한 주머니",
-		"short_title": "가방",
-		"description": "이번 출정 동안 가방 슬롯 +4",
-		"cost": 2,
-		"icon": "loot",
-	},
+	# big_pockets(가방 +4칸)는 가방 무제한화(2026-08-30)로 폐지 — 구 세이브의
+	# active_churu_buffs에 남아 있어도 효과 지점이 없어 무해하다.
 }
 
 # 특성은 서열이 아니라 선택이어야 한다. 예전엔 전부 1.0 이상이라
@@ -1142,7 +1132,7 @@ func randomize_map() -> void:
 
 func start_new_raid() -> void:
 	process_shelter_progress()
-	# 새 출정 = 포위망 초기화(건물 진출입 이어하기는 main이 별도로 복원한다).
+	# 새 출정 = 위험도 초기화(건물 진출입 이어하기는 main이 별도로 복원한다).
 	raid_danger = 0.0
 	if (
 		confirmed_raid_manifest.is_empty()
@@ -1463,7 +1453,7 @@ func clear_carried_raid_inventory_after_death() -> void:
 	churu = 0
 	# 중장비도 가방의 소모품이다 — 시체에 실렸으니 여기서는 비운다.
 	heavy_gear_inventory.clear()
-	active_cart_bag_bonus = 0
+	active_cart_value_bonus = 0.0
 	valuable_inventory.clear()
 	valuable_value_ledger.clear()
 	clear_churu_buffs()
@@ -1514,14 +1504,15 @@ func register_shelter_return(survived: bool = true) -> void:
 	shelter_return_serial += 1
 	# 정상 경로(추출·사망 정산)로 돌아왔다 — 판 포기 감시 해제.
 	raid_in_progress = false
-	# 보급 카트는 판 한정 — 탈출하면 해체된다(가방 보너스도 함께).
-	active_cart_bag_bonus = 0
 	# 쉘터 복귀 = 완전 회복. 침대·수면 절차는 폐지됐다.
 	player_health = get_max_health()
 	if survived:
 		survived_return_count += 1
 		# 살아 돌아온 판만 정산한다. 사망 귀환은 이미 가방을 통째로 잃었다.
+		# 카트 정산 보너스는 정산(sell_all_valuables)이 읽으므로 리셋보다 먼저.
 		last_return_settlement = settle_shelter_return_inventory()
+	# 보급 카트는 판 한정 — 탈출하면 해체된다(정산 보너스는 위에서 이미 반영).
+	active_cart_value_bonus = 0.0
 	clear_confirmed_raid_manifest()
 	# 츄르 버프는 한 판짜리다. 복귀와 동시에 사라진다.
 	clear_churu_buffs()
@@ -1559,6 +1550,8 @@ func settle_shelter_return_inventory() -> Dictionary:
 	var valuable_result := sell_all_valuables()
 	report["valuable_count"] = int(valuable_result.get("count", 0))
 	report["valuable_scrap"] = int(valuable_result.get("scrap", 0))
+	# 보급 카트 생환 보너스(+15%) — 정산 카드가 한 줄 자랑할 수 있게 따로 적는다.
+	report["cart_bonus"] = int(valuable_result.get("cart_bonus", 0))
 	# 2.5) 잉여 장비 → 부품. 창고 입고 전에 한다 — 잉여가 창고 칸을 먹은 뒤
 	#    분해하면 그 칸만큼 다른 물건이 넘쳤다고 거짓 보고하게 된다. 나온 부품은
 	#    가방에 들어가 바로 아래 3)에서 다른 부품과 함께 창고로 간다.
@@ -1786,80 +1779,80 @@ func sync_shelter_progression_milestones() -> Array[String]:
 const SAJA_CHATTER := {
 	"early": [
 		{"title": "흙먼지", "lines": [
-			"얼굴에 흙먼지가… 이리 와 봐요. …됐다, 이제 사람 꼴이 났네요.",
-			"밖에서 뭘 보든, 돌아와서 이 문만 두드리면 돼요. 그게 쉘터예요.",
+			"얼굴에 흙먼지 봐라. 이리 와 봐. …됐다. 사람 꼴 났네.",
+			"밖에서 뭘 보든, 돌아와서 이 문만 두드리면 된다. 그게 쉘터다.",
 		]},
-		{"title": "당신 몫", "lines": [
-			"오늘 배급은 국물 있는 거예요. 당신 몫은 따로 덜어 놨어요.",
-			"왜 그렇게 봐요. 밖에 나가는 사람 몫이 큰 건 당연하죠.",
+		{"title": "네 몫", "lines": [
+			"오늘 배급은 국물 있는 거다. 네 몫은 따로 덜어 놨어.",
+			"왜 그렇게 보냐. 밖에 나가는 놈 몫이 큰 건 당연하다.",
 		]},
 		{"title": "걸음소리", "lines": [
-			"망루 애들이 그러던데, 당신 걸음소리는 멀리서도 알아보겠대요.",
-			"조용히 걷는 법도 배워 둬요. 오래 봐야 할 얼굴이니까.",
+			"망루 애들이 그러는데, 네 걸음소리는 멀리서도 알겠단다.",
+			"조용히 걷는 것도 배워 둬라. 오래 볼 얼굴이니까.",
 		]},
 		{"title": "그 소리", "lines": [
-			"라디오 말인데… 나는 그 근처에 안 가요. 왠지 싫더라고요, 그 소리.",
-			"당신은 그 소리를 따라온 사람이니까, 이런 말 이상하게 들리려나.",
+			"라디오 말인데. 나는 그 근처엔 안 간다. 왠지 싫어, 그 소리.",
+			"너는 그 소리 따라온 놈이니… 이상하게 들리겠구나.",
 		]},
 		{"title": "버릇", "lines": [
-			"지난번에 다친 데는 좀 어때요? …내가 그런 걸 잘 기억해요. 버릇이에요.",
-			"기억하는 게 많으면 걱정도 많아져요. 늙는다는 게 그래요.",
+			"지난번에 다친 데는 어떠냐. …내가 그런 걸 잘 기억한다. 버릇이야.",
+			"기억하는 게 많으면 걱정도 많아진다. 늙는 게 그래.",
 		]},
 		{"title": "바깥", "lines": [
-			"애들이 자꾸 물어요. 밖은 어떠냐고. 나는 모른다고 해요.",
-			"나가 본 지가… 너무 오래됐거든요. 당신 얘기가 내 바깥이에요.",
+			"애들이 자꾸 묻는다. 밖은 어떠냐고. 나는 모른다고 한다.",
+			"나가 본 지 너무 오래됐거든. …네 얘기가 내 바깥이다.",
 		]},
 	],
 	"mid": [
 		{"title": "이름의 무게", "lines": [
-			"명단 얘기 들었어요. 이름이 스물일곱이라고요.",
-			"이름이라는 게, 적어 놓으면 무거워져요. …내가 요즘 쓸데없는 소리를 하네요. 밥 먹어요.",
+			"명단 얘기 들었다. 이름이 스물일곱이라며.",
+			"이름이란 게, 적어 놓으면 무거워진다. …쓸데없는 소리다. 밥 먹어라.",
 		]},
 		{"title": "생선 대가리", "lines": [
-			"남대문 시장, 옛날엔 나도 자주 갔어요. 생선 대가리를 공짜로 주던 할머니가 있었죠.",
-			"…그 할머니는 어떻게 됐으려나. 모르겠네요.",
+			"남대문 시장, 옛날엔 나도 자주 갔다. 생선 대가리 공짜로 주던 할매가 있었지.",
+			"…그 할매는 어찌 됐으려나. 모르겠다.",
 		]},
 		{"title": "정리하는 손", "lines": [
-			"당신이 가져오는 기록들, 내가 정리해서 보관하고 있어요.",
-			"언젠가 전부 이어 보면 뭔가 보이겠죠. 그때까진 내가 잘 갖고 있을게요.",
+			"네가 가져오는 기록들, 내가 정리해서 보관한다.",
+			"언젠가 다 이어 보면 뭐가 보이겠지. 그때까진 내가 갖고 있으마.",
 		]},
 		{"title": "잠", "lines": [
-			"요즘 잠을 잘 못 자요. 쉘터가 커지니까 지킬 게 많아져서 그런가.",
-			"당신도 자는 얼굴이 편치 않던데. …서로 못 본 척해 줘요.",
+			"요즘 잠을 설친다. 쉘터가 커지니 지킬 게 많아져서 그런가.",
+			"너도 자는 얼굴이 편치 않더라. …서로 못 본 척해 주자.",
 		]},
 		{"title": "주홍", "lines": [
-			"주홍이 다녀갔다면서요. 걔가 나를 싫어하는 건 알아요.",
-			"이유는… 언젠가 걔한테 직접 물어봐 줘요. 내 입으로 할 얘기는 아니에요.",
+			"주홍이 다녀갔다며. 걔가 나 싫어하는 건 안다.",
+			"이유는… 언젠가 걔한테 직접 물어봐라. 내 입으로 할 얘기는 아니다.",
 		]},
 		{"title": "서명", "lines": [
-			"혹시 밖에서 내 이름이 적힌 걸 보면, 놀라지 말아요.",
-			"사람 있던 시절엔 여기저기 서명할 일이 많았거든요. 관리인이 다 그렇죠, 뭐.",
+			"혹시 밖에서 내 이름 적힌 걸 보면, 놀라지 마라.",
+			"사람 있던 시절엔 여기저기 서명할 일이 많았다. 관리인이 다 그렇지.",
 		]},
 	],
 	"late": [
 		{"title": "달라진 눈", "lines": [
-			"요즘 당신이 나를 보는 눈이 좀 달라졌네요.",
-			"…피곤해서 그럴 거예요. 국 먼저 먹어요. 식겠어요.",
+			"요즘 네가 나를 보는 눈이 좀 다르다?",
+			"…피곤해서 그렇겠지. 국 먼저 먹어라. 식는다.",
 		]},
 		{"title": "어두운 데", "lines": [
-			"을지로 아래까지 내려갔었다고요. 어두웠죠, 거기.",
-			"나는 어두운 데가 싫어요. 그래서 여기 등을 안 꺼요.",
+			"을지로 아래까지 내려갔다 왔다며. 어두웠지, 거기.",
+			"나는 어두운 데가 싫다. 그래서 여기 등을 안 끈다.",
 		]},
 		{"title": "밥은 밥", "lines": [
-			"무슨 얘길 들었는지 모르겠지만… 밥은 밥이에요.",
-			"식기 전에 먹어요. 그건 어느 쪽이든 변하지 않아요.",
+			"무슨 얘길 들었는지 모르겠다만… 밥은 밥이다.",
+			"식기 전에 먹어라. 그건 어느 쪽이든 안 변한다.",
 		]},
 		{"title": "그날", "lines": [
-			"사람들이 사라진 날 말이에요. 나는 그날 여기서 문을 잠그고 있었어요.",
-			"애들이 못 나가게요. …그게 내가 한 일의 전부예요.",
+			"사람들 사라진 날 말이다. 나는 그날 여기서 문 잠그고 있었다.",
+			"애들 못 나가게. …그게 내가 한 일의 전부다.",
 		]},
 		{"title": "남산", "lines": [
-			"남산에는 눈이 일찍 와요. 올라갈 거면 따뜻하게 입어요.",
-			"…거긴 왜 가냐고는 안 물을게요. 당신은 늘 이유가 있었으니까.",
+			"남산엔 눈이 일찍 온다. 올라갈 거면 든든히 입어라.",
+			"…왜 가냐고는 안 묻는다. 너는 늘 이유가 있었으니까.",
 		]},
 		{"title": "사나운 꿈", "lines": [
-			"당신이 못 돌아오는 꿈을 꿨어요. …웃지 말아요.",
-			"늙으면 꿈이 사나워져요. 그러니까 꼭 돌아와요. 꿈이 틀리게.",
+			"네가 못 돌아오는 꿈을 꿨다. …웃지 마라.",
+			"늙으면 꿈이 사나워진다. 그러니까 꼭 돌아와라. 꿈이 틀리게.",
 		]},
 	],
 }
@@ -1901,20 +1894,20 @@ func get_pending_shelter_story_event() -> Dictionary:
 			"id": "saja_intro",
 			"speaker": "사자",
 			"title": "쉘터의 사자",
-			# 사자 v2(2026-08-30 유저 확정): 누구도 의심 못 할 다정한 관리자.
-			# 반전의 설득력은 대사의 서늘함이 아니라 다정함에서 나온다 — 의심의
-			# 단서는 수집 기록물('사자의 기록')과 주홍의 입에만 둔다. 대사는 끝까지
-			# 따뜻하게. '이름을 적는 버릇'은 여기선 애정으로 읽히고, 존2~3에서
-			# 명단의 필체로 되짚였을 때에야 소름이 되게 설계.
+			# 사자 v3(2026-08-30 유저 확정): 외모(안전모·공구 벨트의 현장 반장)에
+			# 맞는 무뚝뚝한 반말 — 말은 뚝뚝, 챙김은 행동으로("밥부터 먹어. 식는다.").
+			# 다정함으로 의심을 차단한다는 설계는 유지: 의심의 단서는 수집 기록물
+			# ('사자의 기록')과 주홍의 입에만. '이름을 적는 버릇'은 여기선 아저씨의
+			# 습관으로 읽히고, 존2~3에서 명단의 필체로 되짚였을 때에야 소름이 된다.
 			"lines": [
-				"아이고, 총은 내려요. 다리 망루가 한 시간 전부터 봤어요 — 위험한 사람이었으면 벌써 문을 잠갔죠.",
-				"어서 와요. 여기는 쉘터예요. 갈 곳 없는 고양이들이 모여 살아요. 나는 사자라고 해요. 살림을 맡고 있어요.",
-				"…라디오 소리를 따라왔죠? 안 물어봐도 알아요. 다리를 건너오는 애들은 다 같은 얼굴을 하고 있거든요.",
-				"여기 있는 모두가 그 소리를 듣고 왔어요. 이상하죠. 우리 중 누구도 송신기 같은 건 가져 본 적이 없는데.",
-				"발신지는 종로 쪽이에요. 가 본 식구는 아직 없어요. 총을 든 식구가 없었거든요. …당신이 처음이에요.",
-				"규칙은 하나예요. 밖에서 가져온 건 값을 제대로 쳐 주고, 안에서는 아무도 안 굶어요. 그게 다예요.",
-				"이름이 뭐예요? …나비. 좋은 이름이네요. 적어 둘게요 — 버릇이에요. 적어 두면, 잊히지 않거든요.",
-				"오늘은 그냥 쉬어요. 종로는 내일도 거기 있을 테니까. 밥부터 먹고요.",
+				"총 내려. 다리 망루가 한 시간 전부터 봤다. 위험한 놈이었으면 문도 안 열었어.",
+				"여긴 쉘터다. 갈 데 없는 애들이 모여 산다. 나는 사자. 시설이랑 살림 본다.",
+				"…라디오 따라왔지. 안 물어봐도 안다. 다리 건너오는 애들은 죄다 같은 얼굴이야.",
+				"여기 다 그 소리 듣고 온 애들이다. 웃기지. 송신기 가진 놈은 하나도 없는데.",
+				"발신지는 종로 쪽. 가 본 놈은 없다. 총 든 놈이 없었으니까. …네가 처음이다.",
+				"규칙은 하나. 밖에서 가져온 건 값 제대로 쳐주고, 안에서는 아무도 안 굶는다.",
+				"이름. …나비라. 적어 둔다. 버릇이다. 적어 두면 안 잊어버려.",
+				"오늘은 자라. 종로는 내일도 거기 있다. 밥부터 먹고.",
 			],
 		}
 	# 주홍 합류 — 생환 3회째. 사자를 의심하는 인물이 내 출정에 붙는 순간이라
@@ -1942,11 +1935,11 @@ func get_pending_shelter_story_event() -> Dictionary:
 			# 보상·시설 안내는 대사에서 뺀다(몰입 붕괴, 유저 확정) — 해금 알림은
 			# 쉘터 진입 토스트가 맡는다. 대사는 안부와 이야기만.
 			"lines": [
-				"돌아왔네요. …다행이에요, 정말. 문소리 나자마자 뛰어나왔잖아요.",
-				"밖은 어땠어요? 아니다, 밥부터 먹어요. 국물 있는 걸로 데워 놨어요.",
-				"종로 그 지하철역 말이에요… 사람들이 사라진 날 밤, 마지막까지 불이 켜져 있던 곳이에요.",
-				"뭘 보고 오든 나한테는 편하게 얘기해요. 무서운 얘기일수록 나눠야 가벼워져요.",
-				"아, 철근이 당신을 눈여겨보던데요. 무뚝뚝해도 나쁜 애는 아니에요. 시간 나면 가 봐요.",
+				"…왔냐. 문소리 나서 나와 봤다.",
+				"밖은 어땠… 아니다. 밥부터 먹어. 국 데워 놨다. 식는다.",
+				"종로 그 지하철역, 사람들 사라진 날 밤에 마지막까지 불 켜져 있던 데다.",
+				"뭘 보고 왔든 나한테는 말해라. 무서운 얘기는 나눠야 가벼워진다.",
+				"철근이 너 눈여겨보더라. 무뚝뚝해도 나쁜 놈은 아니다. 시간 나면 가 봐.",
 			],
 		}
 	# 부품을 처음 들고 온 순간이 제작대를 가르칠 유일한 적기다. "스프링을 주웠는데
@@ -1962,9 +1955,9 @@ func get_pending_shelter_story_event() -> Dictionary:
 			"speaker": "사자",
 			"title": "쇳내",
 			"lines": [
-				"가방에서 쇳내가 나요. 스프링에, 렌즈에… 좋은 걸 주웠네요.",
-				"작업대에서 총에 먹여 봐요. 스프링이든 렌즈든, 하나하나가 총을 조금씩 좋게 만들어 줘요.",
-				"총은 좋은 걸 들어요. 밖에 나가는 사람이 당신뿐이라… 나는 그게 늘 마음에 걸려요.",
+				"가방에서 쇳내 난다. 스프링, 렌즈… 좋은 거 주웠네.",
+				"작업대에서 총에 먹여라. 하나 먹일 때마다 총이 조금씩 좋아진다.",
+				"총은 좋은 거 들어. 밖에 나가는 게 너 하나라… 그게 늘 걸린다.",
 			],
 		}
 	if rescued_workers > saja_seen_resident_count:
@@ -1973,9 +1966,9 @@ func get_pending_shelter_story_event() -> Dictionary:
 			"speaker": "사자",
 			"title": "새 식구",
 			"lines": [
-				"한 명 데려왔어요? 잘했어요. 정말 잘했어요.",
-				"이름부터 물어봐야죠. …적어 둘게요. 오늘부터 우리 식구예요.",
-				"밥은 내가 챙길 테니까, 당신은 몸이나 성해서 다녀요.",
+				"하나 데려왔냐. …잘했다.",
+				"이름부터 물어봐라. 적어 둬야지. 오늘부터 식구다.",
+				"밥은 내가 챙긴다. 너는 몸이나 성해서 다녀.",
 			],
 		}
 	if total_boss_kills > saja_seen_boss_kills:
@@ -1984,9 +1977,9 @@ func get_pending_shelter_story_event() -> Dictionary:
 			"speaker": "사자",
 			"title": "바깥 소문",
 			"lines": [
-				"밖이 시끄러웠다면서요. 이름 있는 놈을 잡았다고 애들이 문 앞에서 떠들던데요.",
-				"무리하진 말아요. 그런 놈들 자리는 금방 딴 놈이 채워요. 도시가 원래 그래요.",
-				"…그래도 오늘은 자랑해도 돼요. 국 한 그릇 더 줄게요.",
+				"밖이 시끄러웠다며. 이름 있는 놈 잡았다고 애들이 문 앞에서 떠들더라.",
+				"무리하지 마라. 그런 놈 자리는 금방 딴 놈이 채운다. 도시가 원래 그래.",
+				"…그래도 오늘은 자랑해도 된다. 국 한 그릇 더 준다.",
 			],
 		}
 	if recovered_story_cargo_ids.size() > saja_seen_story_cargo_count:
@@ -1994,11 +1987,11 @@ func get_pending_shelter_story_event() -> Dictionary:
 			"id": "saja_cargo_%d" % recovered_story_cargo_ids.size(),
 			"speaker": "사자",
 			"title": "오래된 표식",
-			# 그는 화제를 다정하게 돌린다 — 나중에 돌아보면 이게 회피였다.
+			# 그는 화제를 퉁명하게 돌린다 — 나중에 돌아보면 이게 회피였다.
 			"lines": [
-				"이 표식… 옛날 수송 서식이네요. 사람 있던 시절에 관공서에서 쓰던 거예요.",
-				"잉크가 아직 안 말랐네. 요즘도 이런 걸 쓰는 사람이 있나 봐요.",
-				"…무거운 얘기는 그만해요. 다친 데는 없어요? 나는 그게 제일 중요해요.",
+				"이 표식… 옛날 수송 서식이다. 사람 있을 때 관공서에서 쓰던 거.",
+				"잉크가 안 말랐네. 요즘도 이런 걸 쓰는 놈이 있나.",
+				"…무거운 얘기는 됐다. 다친 데는. …없으면 됐어. 그게 제일 중요하다.",
 			],
 		}
 	# 한 구역의 메인 미션 셋을 다 끝냈으면 사자가 다음 도시를 가리킨다.
@@ -2012,20 +2005,20 @@ func get_pending_shelter_story_event() -> Dictionary:
 		var zone_name := str((RAID_ZONES.get(chain_zone_id, {}) as Dictionary).get("name", "그 구역"))
 		var next_zone_id := MAIN_MISSION_CATALOG.get_next_zone(chain_zone_id)
 		var closing_lines: Array[String] = [
-			"%s 얘기, 애들한테 들었어요. 거기까지 들어갔다 왔다니… 일단 앉아요." % zone_name,
-			"당신이 가져온 기록들은 내가 잘 보관하고 있어요. 이어 보면 뭔가 보이겠죠.",
+			"%s 얘기, 애들한테 들었다. 거기까지 들어갔다 왔냐. …일단 앉아라." % zone_name,
+			"네가 가져온 기록은 내가 잘 보관하고 있다. 이어 보면 뭐가 보이겠지.",
 		]
 		if next_zone_id.is_empty():
-			closing_lines.append("…이제 남산만 남았네요. 끝을 보고 와요. 나는 여기서 기다릴게요.")
+			closing_lines.append("…이제 남산만 남았네. 끝을 보고 와라. 나는 여기서 기다린다.")
 		else:
 			var next_name := str(
 				(RAID_ZONES.get(next_zone_id, {}) as Dictionary).get("name", "다음 구역")
 			)
-			closing_lines.append("다음은 %s겠네요. 가지 말라고 하고 싶은데… 그런 말 들을 사람이 아니죠." % next_name)
+			closing_lines.append("다음은 %s겠구나. 가지 말라고 해도… 들을 놈이 아니지." % next_name)
 			var hint := get_zone_unlock_hint(next_zone_id)
 			if not hint.is_empty():
-				closing_lines.append("%s 준비가 되면 길이 열릴 거예요. 서두르지 않아도 돼요." % hint)
-			closing_lines.append("밥 든든히 먹고 가요. 그거 하나만 약속해요.")
+				closing_lines.append("%s 준비가 되면 길이 열린다. 서두를 거 없다." % hint)
+			closing_lines.append("밥 든든히 먹고 가라. 그거 하나만 약속해.")
 		return {
 			"id": "saja_main_chain_%s" % chain_zone_id,
 			"speaker": "사자",
@@ -2038,9 +2031,9 @@ func get_pending_shelter_story_event() -> Dictionary:
 			"speaker": "사자",
 			"title": "지하의 소리",
 			"lines": [
-				"지하에서 신호가 다시 잡힌대요. 기계가 저 혼자 켜질 리는 없는데….",
-				"…괜히 무서운 소리를 했네요. 내려가 볼 거죠? 조심해요. 정말로요.",
-				"주홍이 먼저 내려갔을 거예요. 만나면 안부 전해 줘요. …걔는 내 말이라면 안 믿겠지만요.",
+				"지하에서 신호가 다시 잡힌단다. 기계가 저 혼자 켜질 리는 없는데.",
+				"…괜한 소리 했다. 내려가 볼 거지. 조심해라. 진심이다.",
+				"주홍이 먼저 내려갔을 거다. 만나면 안부나 전해라. …걔는 내 말은 안 믿겠지만.",
 			],
 		}
 	# 복귀 잡담 — 큰 이벤트가 없는 복귀에도 사자가 말을 건다(복귀당 1회).
@@ -2397,7 +2390,7 @@ func get_backpack_storage_count(item_type: String, item_id: String) -> int:
 			return medkits
 		"progression":
 			# 창고에 넣은 진행 아이템은 가방 몫이 아니다 — 원장(dict)만 센다.
-			# (가방 '칸'은 안 먹는다 — get_raid_item_slot_cost에서 0으로 친다.)
+			# (가방은 무제한이라 칸 개념 자체가 없다.)
 			return maxi(0, int(progression_item_inventory.get(item_id, 0)))
 		"food":
 			# 통조림은 창고에 안 들어간다 — canned_food가 곧 가방 몫(투척용)이다.
@@ -2408,31 +2401,14 @@ func get_backpack_storage_count(item_type: String, item_id: String) -> int:
 
 # ── 인크리멘탈 사다리 ────────────────────────────────────────────
 # 인크리멘탈 게임의 핵심 문법: 화폐마다 "다음에 살 것"이 항상 보이고, 비용은
-# 점증하며, 생산 건물은 자기 강화를 판다(복리). 고철=가방·오버클럭,
+# 점증하며, 생산 건물은 자기 강화를 판다(복리). 고철=오버클럭,
 # 캣닢=농축, 츄르=시큐어·티어.
-var bag_capacity_level: int = 0
+# (고철 가방 사다리는 가방 무제한화로 폐지 — bag_capacity_level 세이브 값은 무시.)
 var scratcher_overclock_level: int = 0
 var catnip_infusion_level: int = 0
 
-const BAG_UPGRADE_MAX_LEVEL := 12
 const OVERCLOCK_BONUS_PER_LEVEL := 0.08
 const INFUSION_BONUS_PER_LEVEL := 0.08
-
-
-func get_bag_upgrade_cost() -> int:
-	if bag_capacity_level >= BAG_UPGRADE_MAX_LEVEL:
-		return 0
-	return roundi(400.0 * pow(1.6, bag_capacity_level) / 10.0) * 10
-
-
-func try_upgrade_bag_capacity() -> bool:
-	var cost := get_bag_upgrade_cost()
-	if cost <= 0 or scrap < cost:
-		return false
-	scrap -= cost
-	bag_capacity_level += 1
-	save_persistent_state()
-	return true
 
 
 const OVERCLOCK_COST_GROWTH := 1.5
@@ -2494,54 +2470,17 @@ func try_upgrade_secure_dog() -> bool:
 	return true
 
 
-func get_raid_bag_capacity() -> int:
-	# bag_capacity_level 은 폐지된 고철 구매분(옛 세이브 보존용), 신규 성장은
-	# 훈련 '가방 확장' 랭크로만 온다.
-	return (
-		RAID_BAG_CAPACITY
-		+ bag_capacity_level
-		+ get_training_rank("bag_capacity")
-		+ get_churu_bag_bonus_slots()
-		+ maxi(0, active_cart_bag_bonus)
-	)
-
-
+# ── 가방 무제한(2026-08-30 유저 확정) ─────────────────────────────
+# 칸·용량·만재 판정·전리품 교체 모달이 전부 폐지됐다. 마음껏 파밍하고,
+# 나갈 때를 정하는 건 위험도다. can_add류는 호출처 호환을 위해 남는다.
 func get_raid_item_stack_limit(item_type: String) -> int:
+	# 용량이 아니라 '버리기 한 번의 배치 크기'다.
 	return maxi(1, int(RAID_STACK_LIMITS.get(item_type, 1)))
 
 
-func get_ammo_rounds_per_slot() -> int:
-	# 탄약 휴대 훈련: 랭크마다 칸당 발수 +25% (240 → 300/360/420/480).
-	return maxi(1, roundi(float(AMMO_ROUNDS_PER_SLOT) * (1.0 + 0.25 * float(get_training_rank("ammo_carry")))))
-
-
-func get_raid_item_slot_cost(item_type: String, _item_id: String, amount: int) -> int:
-	if amount <= 0:
-		return 0
-	# 청사진·키카드는 버릴 수도 쓸 수도 없는 쉘터 자산이다. 칸만 먹던
-	# 문제(유저 신고) — 보유는 유지하되 가방 칸은 차지하지 않는다.
-	if item_type == "progression":
-		return 0
-	# 메인 미션 회수물(특별 화물)은 가방과 무관하게 먹힌다(유저 신고: "메인 미션
-	# 아이템 루팅은 가방과 상관없이 먹을 수 있어야지"). 칸 0, 만재 검사 우회.
-	if item_type == "special_cargo":
-		return 0
-	# 무기·방어구는 가방 칸을 먹지 않는다(2026-08 영구 귀속): 제작 전용 장비는 몸에
-	# 딸린 것이지 전리품이 아니다. 가방에 보이는 장비는 장착 교체용(0칸).
-	if item_type in ["weapon", "equipment"]:
-		return 0
-	# 제작 재료는 부피가 있다 — 한 개가 한 칸. 재료를 쓸어 담으면 가방이
-	# 실제로 차야 '무엇을 두고 갈까'라는 이 게임의 심장이 재료에도 뛴다.
-	if item_type == "component":
-		return amount
-	# 중장비: 지뢰는 3개 1칸, 포탑·로켓은 개당 1칸(부피 큰 물건).
-	if item_type == "heavy":
-		var stack := int((HEAVY_GEAR_DEFS.get(_item_id, {}) as Dictionary).get("stack_per_slot", 1))
-		return ceili(float(amount) / float(maxi(1, stack)))
-	# 탄약은 칸당 발수 상한(탄약 휴대 훈련으로 늘어난다)을 넘는 만큼 칸을 더 먹는다.
-	if item_type == "ammo":
-		return ceili(float(amount) / float(get_ammo_rounds_per_slot()))
-	return 1
+func get_ammo_pickup_multiplier() -> float:
+	# 탄약 휴대 훈련: 랭크마다 필드에서 줍는 탄약 +15%.
+	return 1.0 + 0.15 * float(get_training_rank("ammo_carry"))
 
 
 func _get_raid_bag_count(item_type: String, item_id: String) -> int:
@@ -2559,121 +2498,18 @@ func _get_raid_bag_count(item_type: String, item_id: String) -> int:
 	return 0
 
 
-func get_raid_bag_used_slots() -> int:
-	var used := 0
-	for ammo_id in ammo_inventory.keys():
-		used += get_raid_item_slot_cost("ammo", str(ammo_id), get_ammo_count(str(ammo_id)))
-	used += get_raid_item_slot_cost("medkit", "medkit", medkits)
-	used += get_raid_item_slot_cost(
-		"food",
-		"canned_food",
-		get_backpack_storage_count("food", "canned_food")
-	)
-	used += get_raid_item_slot_cost("churu", "churu", churu)
-	for valuable_id in valuable_inventory.keys():
-		used += get_raid_item_slot_cost(
-			"valuable", str(valuable_id), int(valuable_inventory[valuable_id])
-		)
-	for component_id in mod_component_inventory.keys():
-		used += get_raid_item_slot_cost(
-			"component",
-			str(component_id),
-			get_mod_component_count(str(component_id))
-		)
-	for heavy_id in heavy_gear_inventory.keys():
-		used += get_raid_item_slot_cost("heavy", str(heavy_id), get_heavy_gear_count(str(heavy_id)))
-	for progression_id in progression_item_inventory.keys():
-		used += get_raid_item_slot_cost(
-			"progression",
-			str(progression_id),
-			get_backpack_storage_count("progression", str(progression_id))
-		)
-	for mod_id in weapon_mod_inventory.keys():
-		# 장착분 제외는 get_backpack_storage_count가 안다 — 총에 박힌
-		# 부착물이 가방 칸을 계속 먹던 문제(유저 신고)의 지점.
-		used += get_raid_item_slot_cost(
-			"mod",
-			str(mod_id),
-			get_backpack_storage_count("mod", str(mod_id))
-		)
-	for weapon_id in weapon_inventory.keys():
-		# 장착 중인 1정은 몸에 있는 것이지 가방에 있는 게 아니다 — 그 차감은
-		# get_backpack_storage_count가 이미 한다. 여기서 한 번 더 빼면 같은 총을
-		# 2정 들고 있을 때 예비 1정이 공짜가 돼 가방이 용량 너머로 부푼다.
-		var weapon_count := get_backpack_storage_count("weapon", str(weapon_id))
-		used += get_raid_item_slot_cost("weapon", str(weapon_id), weapon_count)
-	for equipment_id in equipment_inventory.keys():
-		used += get_raid_item_slot_cost(
-			"equipment",
-			str(equipment_id),
-			get_equipment_count(str(equipment_id))
-		)
-	# 특별 화물(메인 미션 회수물)은 칸을 먹지 않는다 — get_raid_item_slot_cost가 0.
-	return used
+func can_add_raid_items(_items: Array[Dictionary]) -> bool:
+	# 가방 무제한 — 배치 획득은 언제나 통과.
+	return true
 
 
-func get_raid_item_added_slot_delta(
-	item_type: String,
-	item_id: String,
-	amount: int
-) -> int:
-	var current := _get_raid_bag_count(item_type, item_id)
-	if item_type == "special_cargo":
-		return 0
-	return (
-		get_raid_item_slot_cost(item_type, item_id, current + maxi(0, amount))
-		- get_raid_item_slot_cost(item_type, item_id, current)
-	)
-
-
-func get_raid_items_added_slot_delta(items: Array[Dictionary]) -> int:
-	var added_slots: int = 0
-	# 더미 단위로 합산해 칸을 센다 — 탄약은 칸당 발수 상한이 있어 같은 더미에
-	# 여러 번 얹히면 합계로 넘침 여부를 봐야 한다.
-	var planned_amounts: Dictionary = {}
-	var planned_types: Dictionary = {}
-	for item in items:
-		var item_type: String = str(item.get("type", ""))
-		var item_id: String = str(item.get("id", ""))
-		var amount: int = maxi(0, int(item.get("amount", 0)))
-		if item_type.is_empty() or item_id.is_empty() or amount <= 0:
-			continue
-		# 개수만큼 칸을 먹는 부류(재료)는 한 상자에서 여러 개가 나와도 개수만큼
-		# 자리가 필요하다. 무기·장비는 0칸(영구 귀속)이라 가방 판정에서 빠진다.
-		if item_type == "component":
-			added_slots += amount
-			continue
-		if item_type in ["weapon", "equipment"]:
-			continue
-		if item_type == "special_cargo":
-			# 메인 미션 회수물은 칸 0 — 가방과 무관하게 먹힌다.
-			continue
-		var stack_key: String = "%s:%s" % [item_type, item_id]
-		planned_amounts[stack_key] = int(planned_amounts.get(stack_key, 0)) + amount
-		planned_types[stack_key] = [item_type, item_id]
-	for stack_key in planned_amounts.keys():
-		var item_type: String = str((planned_types[stack_key] as Array)[0])
-		var item_id: String = str((planned_types[stack_key] as Array)[1])
-		var current: int = _get_raid_bag_count(item_type, item_id)
-		added_slots += (
-			get_raid_item_slot_cost(item_type, item_id, current + int(planned_amounts[stack_key]))
-			- get_raid_item_slot_cost(item_type, item_id, current)
-		)
-	return added_slots
-
-
-func can_add_raid_items(items: Array[Dictionary]) -> bool:
-	return get_raid_bag_used_slots() + get_raid_items_added_slot_delta(items) <= get_raid_bag_capacity()
-
-
-func can_add_raid_item(item_type: String, item_id: String, amount: int = 1) -> bool:
+func can_add_raid_item(item_type: String, _item_id: String, amount: int = 1) -> bool:
 	if amount <= 0:
 		return false
 	if item_type == "special_cargo":
-		# 미션 화물은 만재 검사를 타지 않는다 — 이미 하나 들고 있을 때만 거절.
+		# 특별 화물만은 여전히 하나씩 — 중복 화물 방지(만재 검사가 아니다).
 		return raid_special_cargo.is_empty()
-	var delta := get_raid_item_added_slot_delta(item_type, item_id, amount)
-	return delta <= 0 or get_raid_bag_used_slots() + delta <= get_raid_bag_capacity()
+	return true
 
 
 func try_add_raid_item(item_type: String, item_id: String, amount: int = 1) -> bool:
@@ -2889,11 +2725,6 @@ func withdraw_storage_item(slot_index: int, amount: int = 1) -> Dictionary:
 	var moved := mini(maxi(amount, 1), int(entry.get("count", 0)))
 	if moved <= 0:
 		return {"ok": false, "reason": "선택한 창고 슬롯이 비어 있습니다."}
-	if not can_add_raid_item(item_type, item_id, moved):
-		return {
-			"ok": false,
-			"reason": "가방이 꽉 찼습니다.",
-		}
 	_add_backpack_storage_item(item_type, item_id, moved)
 	entry["count"] = int(entry.get("count", 0)) - moved
 	if int(entry.get("count", 0)) <= 0:
@@ -3293,9 +3124,7 @@ func unequip_equipment(slot: String) -> bool:
 	var equipped_id := get_equipped_equipment(slot)
 	if equipped_id.is_empty():
 		return false
-	# 몸에서 벗으면 가방으로 들어간다 — 가방에 그 자리가 있어야 벗을 수 있다.
-	if not can_add_raid_item("equipment", equipped_id, 1):
-		return false
+	# 몸에서 벗으면 가방으로 들어간다(가방은 무제한 — 만재 거부 없음).
 	equipment_inventory[equipped_id] = get_equipment_count(equipped_id) + 1
 	match slot:
 		"head":
@@ -3439,9 +3268,6 @@ func equip_weapon(weapon_id: String) -> bool:
 
 func unequip_weapon() -> bool:
 	if not has_ak:
-		return false
-	# 장착 해제하면 그 1정이 다시 가방 슬롯을 차지한다. 자리가 없으면 못 벗는다.
-	if not can_add_raid_item("weapon", equipped_weapon_id, 1):
 		return false
 	save_equipped_weapon_loadout()
 	has_ak = false
@@ -4253,12 +4079,17 @@ func sell_all_valuables() -> Dictionary:
 	for amount in valuable_inventory.values():
 		count += maxi(0, int(amount))
 	if total <= 0:
-		return {"scrap": 0, "count": 0}
+		return {"scrap": 0, "count": 0, "cart_bonus": 0}
+	# 보급 카트를 살려서 데리고 나왔다면 정산을 더 쳐준다(+15%) — 가방 무제한화로
+	# +6칸이 사라진 카트의 새 존재 이유다.
+	var cart_bonus := 0
+	if active_cart_value_bonus > 0.0:
+		cart_bonus = roundi(float(total) * active_cart_value_bonus)
 	valuable_inventory.clear()
 	valuable_value_ledger.clear()
-	scrap += total
+	scrap += total + cart_bonus
 	save_persistent_state()
-	return {"scrap": total, "count": count}
+	return {"scrap": total + cart_bonus, "count": count, "cart_bonus": cart_bonus}
 
 
 func get_resident_reroll_cost(resident_id: String) -> int:
@@ -4346,7 +4177,6 @@ func capture_pre_raid_snapshot() -> void:
 	# 출정 직전 상태를 남겨 둔다. 다음 출정 브리핑에서 "지난번과 무엇이
 	# 달라졌는지"를 만들기 위한 기준점이다.
 	pre_raid_snapshot = {
-		"bag_capacity": get_raid_bag_capacity(),
 		"max_health": get_max_health(),
 		"player_level": player_level,
 		"weapon_level": get_weapon_enhancement_level(equipped_weapon_id),
@@ -4366,7 +4196,6 @@ func build_pre_raid_changes() -> Array[String]:
 	if pre_raid_snapshot.is_empty():
 		return changes
 	var rows := [
-		["bag_capacity", "가방", get_raid_bag_capacity(), "칸"],
 		["max_health", "최대 체력", get_max_health(), ""],
 		["player_level", "레벨", player_level, ""],
 		["weapon_level", "무기 강화", get_weapon_enhancement_level(equipped_weapon_id), "단계"],
@@ -4453,10 +4282,6 @@ func clear_churu_buffs() -> void:
 		return
 	active_churu_buffs.clear()
 	player_health = mini(player_health, get_max_health())
-
-
-func get_churu_bag_bonus_slots() -> int:
-	return 4 if is_churu_buff_active("big_pockets") else 0
 
 
 func get_catnip_boost_cost() -> int:
@@ -5701,7 +5526,6 @@ func save_persistent_state() -> bool:
 		"valuable_value_ledger": valuable_value_ledger,
 		"active_churu_buffs": active_churu_buffs,
 		"raid_in_progress": raid_in_progress,
-		"bag_pressure_lesson_seen": bag_pressure_lesson_seen,
 		"workbench_lesson_seen": workbench_lesson_seen,
 		"field_controls_lesson_seen": field_controls_lesson_seen,
 		"telegraph_lesson_seen": telegraph_lesson_seen,
@@ -5774,7 +5598,6 @@ func save_persistent_state() -> bool:
 		"shelter_return_serial": shelter_return_serial,
 		"survived_return_count": survived_return_count,
 		"city_commission": city_commission,
-		"bag_capacity_level": bag_capacity_level,
 		"scratcher_overclock_level": scratcher_overclock_level,
 		"catnip_infusion_level": catnip_infusion_level,
 		"secure_dog_slots": secure_dog_slots,
@@ -5889,7 +5712,6 @@ func load_persistent_state() -> bool:
 	valuable_value_ledger = (data.get("valuable_value_ledger", {}) as Dictionary).duplicate(true)
 	active_churu_buffs = _to_string_array(data.get("active_churu_buffs", []))
 	raid_in_progress = bool(data.get("raid_in_progress", false))
-	bag_pressure_lesson_seen = bool(data.get("bag_pressure_lesson_seen", bag_pressure_lesson_seen))
 	workbench_lesson_seen = bool(data.get("workbench_lesson_seen", workbench_lesson_seen))
 	field_controls_lesson_seen = bool(data.get("field_controls_lesson_seen", field_controls_lesson_seen))
 	telegraph_lesson_seen = bool(data.get("telegraph_lesson_seen", telegraph_lesson_seen))
@@ -6028,7 +5850,6 @@ func load_persistent_state() -> bool:
 	# 구 세이브 호환: 값이 없으면 기존 귀환 수를 생환 수로 간주한다.
 	survived_return_count = int(data.get("survived_return_count", shelter_return_serial))
 	city_commission = (data.get("city_commission", {}) as Dictionary).duplicate(true)
-	bag_capacity_level = int(data.get("bag_capacity_level", bag_capacity_level))
 	scratcher_overclock_level = int(data.get("scratcher_overclock_level", scratcher_overclock_level))
 	catnip_infusion_level = int(data.get("catnip_infusion_level", catnip_infusion_level))
 	secure_dog_slots = clampi(int(data.get("secure_dog_slots", secure_dog_slots)), 1, 3)
@@ -6187,7 +6008,6 @@ func reset_run() -> void:
 	valuable_inventory.clear()
 	valuable_value_ledger.clear()
 	active_churu_buffs.clear()
-	bag_pressure_lesson_seen = false
 	field_controls_lesson_seen = false
 	telegraph_lesson_seen = false
 	headshot_lesson_seen = false
@@ -6254,7 +6074,6 @@ func reset_run() -> void:
 		"762_fmj": 240,
 	}
 	secure_dog_slots = 1
-	bag_capacity_level = 0
 	scratcher_overclock_level = 0
 	catnip_infusion_level = 0
 	secure_dog_items.clear()

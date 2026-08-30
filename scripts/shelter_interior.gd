@@ -1023,7 +1023,7 @@ func _interact_with_saja() -> void:
 		_open_pending_shelter_story()
 		return
 	if not GameState.is_contract_agent_available():
-		_show_status("사자 · 일단 살아서 돌아와요. 얘기는 그다음에 해요.")
+		_show_status("사자 · 일단 살아서 돌아와라. 얘기는 그다음이다.")
 		return
 	_open_contract_ui()
 
@@ -2452,15 +2452,15 @@ func _refresh_contract_ui() -> void:
 		# 막다른 벽이 아니라 다음 목표 게시판이 된다.
 		var commission: Dictionary = GameState.get_city_commission()
 		if not commission.is_empty() and not bool(commission.get("completed", false)):
-			finished_body.text = "덕분에 쉘터는 이제 스스로 굴러가요. 남은 건 도시 쪽 일이에요.\n\n이번 의뢰 · %s → 고철 %s%s" % [
+			finished_body.text = "덕분에 쉘터는 이제 지 발로 굴러간다. 남은 건 도시 쪽 일이다.\n\n이번 의뢰 · %s → 고철 %s%s" % [
 				GameState.get_city_commission_summary(),
 				GameState.format_compact_number(int(commission.get("reward_scrap", 0))),
 				" + 츄르 %d" % int(commission.get("reward_churu", 0)) if int(commission.get("reward_churu", 0)) > 0 else "",
 			]
 		elif not commission.is_empty():
-			finished_body.text = "이번 의뢰도 잘 끝났어요. 다음 복귀까지 새 일감을 찾아 둘게요."
+			finished_body.text = "이번 의뢰도 잘 끝났다. 다음 복귀까지 새 일감 찾아 두마."
 		else:
-			finished_body.text = "계약한 시설은 전부 잘 돌아가요.\n이제 주민 배치와 업그레이드로 쉘터를 키워 봐요."
+			finished_body.text = "계약한 시설은 전부 잘 돈다.\n주민 배치랑 업그레이드로 쉘터 키워 봐라."
 		finished_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		finished_body.add_theme_font_override("font", FONT)
 		finished_body.add_theme_font_size_override("font_size", 16)
@@ -2626,13 +2626,13 @@ func _add_contract_reward_chips(
 func _accept_current_contract() -> void:
 	var result := GameState.accept_current_contract()
 	if not bool(result.get("ok", false)):
-		contract_report_message = "사자: 지금 맡은 일부터 끝내고 와요. 욕심내면 몸이 상해요."
+		contract_report_message = "사자: 지금 맡은 일부터 끝내고 와라. 욕심내면 몸 상한다."
 	else:
 		var definition := result.get("definition", {}) as Dictionary
 		var story_lines: Array[String] = []
 		for line in definition.get("accept_dialogue", []) as Array:
 			story_lines.append(str(line))
-		story_lines.append("할 일은 %s. …뭐가 됐든, 살아서 돌아오는 게 먼저예요." % str(
+		story_lines.append("할 일은 %s. …뭐가 됐든, 살아서 돌아오는 게 먼저다." % str(
 			definition.get("objective", "현장 목표 완수")
 		))
 		_show_status("사자에게서 시설 건설 계약을 받았습니다.")
@@ -2648,7 +2648,7 @@ func _accept_current_contract() -> void:
 func _claim_current_contract() -> void:
 	var result := GameState.claim_current_contract_reward()
 	if not bool(result.get("ok", false)):
-		contract_report_message = "사자: 아직 조금 모자라네요. 급할 것 없어요, 천천히 챙겨 와요."
+		contract_report_message = "사자: 아직 좀 모자란다. 급할 거 없다, 천천히 챙겨 와라."
 	else:
 		var definition := result.get("definition", {}) as Dictionary
 		var construction_line := ""
@@ -5026,10 +5026,7 @@ func _refresh_raid_zone_loadout_chips(manifest: Dictionary) -> void:
 		weapon_text = "%s +%d" % [short_name, GameState.get_weapon_enhancement_level(weapon_id)]
 		weapon_color = BRIEFING_CHIP_OK_COLOR
 	raid_zone_loadout_chips.add_child(_briefing_chip("weapon", weapon_text, weapon_color))
-	var used_slots := int(GameState.get_raid_bag_used_slots())
-	var bag_capacity := int(GameState.get_raid_bag_capacity())
-	var bag_overflow := used_slots > bag_capacity
-	raid_zone_loadout_chips.add_child(_build_raid_zone_bag_chip(used_slots, bag_capacity, bag_overflow))
+	# 가방 칩·초과 경고는 가방 무제한화(2026-08-30)로 폐지 — 만재라는 상태가 없다.
 	var ammo_count := int(manifest.get("ammo_count", 0))
 	raid_zone_loadout_chips.add_child(_briefing_chip(
 		"ammo",
@@ -5048,12 +5045,7 @@ func _refresh_raid_zone_loadout_chips(manifest: Dictionary) -> void:
 	# 초상만 얹고, 누르면 GameState.companion_enabled를 뒤집어 저장한다.
 	if GameState.companion_unlocked:
 		raid_zone_loadout_chips.add_child(_build_companion_toggle_chip())
-	# 가방이 넘치면 출정 버튼이 거부한다 — 누르기 전에 여기서 먼저 말한다.
-	raid_zone_loadout_warning.visible = bag_overflow
-	if bag_overflow:
-		raid_zone_loadout_warning.text = "가방 초과 · 창고에 %d칸을 비워야 출정할 수 있습니다." % (
-			used_slots - bag_capacity
-		)
+	raid_zone_loadout_warning.visible = false
 	HudStyle.pop_in(raid_zone_loadout_chips, 0.18)
 
 
@@ -5111,29 +5103,6 @@ func _build_companion_toggle_chip() -> PanelContainer:
 		var manifest := GameState.build_raid_loadout_manifest(raid_zone_selected_id)
 		_refresh_raid_zone_loadout_chips(manifest)
 	)
-	return chip
-
-
-func _build_raid_zone_bag_chip(used_slots: int, capacity: int, overflow: bool) -> PanelContainer:
-	# 가방만은 숫자보다 '얼마나 찼나'가 중요해서 미니 게이지를 단다.
-	var accent := BRIEFING_CHIP_DANGER_COLOR if overflow else BRIEFING_CHIP_OK_COLOR
-	var chip := _briefing_chip("backpack", "%d/%d칸" % [used_slots, capacity], accent)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 3)
-	var row := chip.get_child(0) as Control
-	chip.remove_child(row)
-	box.add_child(row)
-	var gauge := ProgressBar.new()
-	gauge.custom_minimum_size = Vector2(0, 4)
-	gauge.show_percentage = false
-	gauge.min_value = 0.0
-	gauge.max_value = 100.0
-	gauge.value = clampf(float(used_slots) / maxf(1.0, float(capacity)), 0.0, 1.0) * 100.0
-	gauge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	gauge.add_theme_stylebox_override("background", HudStyle.panel(HudStyle.INK, HudStyle.LINE, 2))
-	gauge.add_theme_stylebox_override("fill", HudStyle.panel(accent, accent.lightened(0.2), 2))
-	box.add_child(gauge)
-	chip.add_child(box)
 	return chip
 
 
@@ -5386,16 +5355,7 @@ func _quick_resupply_for_raid() -> void:
 func _launch_raid_zone(zone_id: String) -> void:
 	if not GameState.is_raid_zone_unlocked(zone_id):
 		return
-	var used_slots := int(GameState.get_raid_bag_used_slots())
-	var capacity := int(GameState.get_raid_bag_capacity())
-	if used_slots > capacity:
-		# 거부 사유는 반드시 출정 모달 안(layer 70)에 써야 한다. 예전엔 layer 5
-		# 토스트로만 나가서 딤 0.86에 완전히 가려졌고, 버튼이 고장 난 것으로 읽혔다.
-		_show_raid_launch_error(
-			"출정 불가 · 가방이 %d/%d칸입니다. 창고에 휴대품을 보관한 뒤 다시 시도하세요."
-			% [used_slots, capacity]
-		)
-		return
+	# 가방 무제한 — 만재로 출정을 막던 게이트는 폐지됐다.
 	# 맨손이어도 확인 팝업 없이 바로 출정한다 — "무기 없이 출정하시겠습니까?"
 	# 팝업은 유저 요구로 폐지(2026-08). 무장 상태는 출정 브리핑의 장비 줄이 보여준다.
 	_confirm_launch_raid_zone(zone_id)
@@ -5602,6 +5562,8 @@ func _build_return_settlement_card_lines(settlement: Dictionary) -> Array[String
 			valuable_count,
 			GameState.format_compact_number(int(settlement.get("valuable_scrap", 0))),
 		])
+	if int(settlement.get("cart_bonus", 0)) > 0:
+		lines.append("보급 카트 생환 보너스  +%s 포함" % GameState.format_compact_number(int(settlement.get("cart_bonus", 0))))
 	var overflow := int(settlement.get("overflow", 0))
 	if overflow > 0:
 		lines.append("창고가 꽉 차 %d점은 가방에 남았습니다" % overflow)

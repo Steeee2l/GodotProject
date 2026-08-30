@@ -17,8 +17,6 @@ var raid_markers: Array[Dictionary] = []
 var visited_cells: Dictionary = {}
 var manual_marker_position := Vector3.INF
 var current_bag_value := 0
-var current_bag_slots := 0
-var current_bag_capacity := 0
 var current_risk_label := "위험 정보 확인 중"
 var visit_update_timer := 0.0
 var last_map_rect := Rect2()
@@ -62,10 +60,9 @@ func setup(
 	_record_player_visit(true)
 
 
-func set_raid_status(bag_value: int, used_slots: int, capacity: int, risk_label: String) -> void:
+func set_raid_status(bag_value: int, risk_label: String) -> void:
+	# 가방 무제한(2026-08-30) — 칸 수 대신 "지금 지고 있는 가치"만 말한다.
 	current_bag_value = maxi(0, bag_value)
-	current_bag_slots = maxi(0, used_slots)
-	current_bag_capacity = maxi(0, capacity)
 	current_risk_label = risk_label
 	queue_redraw()
 
@@ -658,13 +655,8 @@ func _draw() -> void:
 			Color.WHITE,
 			LABEL_PRIORITY_PLAYER
 		)
-		# 가방이 넘치면 그 자리에서 루팅이 막힌다 — 만재는 경고색으로 말한다.
-		var bag_full := current_bag_slots >= current_bag_capacity
-		var footer := "현재 %s   ·   %s %d/%d칸   ·   회수 가치 %s   ·   %s" % [
+		var footer := "현재 %s   ·   회수 가치 %s   ·   %s" % [
 			sector,
-			"가방 만재" if bag_full else "가방",
-			current_bag_slots,
-			current_bag_capacity,
 			_compact_number(current_bag_value),
 			current_risk_label,
 		]
@@ -677,7 +669,7 @@ func _draw() -> void:
 			HORIZONTAL_ALIGNMENT_LEFT,
 			-1,
 			16,
-			Color("#ff9595") if bag_full else Color("#d7d4b9")
+			Color("#d7d4b9")
 		)
 	if discovered_extraction_indices.is_empty():
 		_queue_label(

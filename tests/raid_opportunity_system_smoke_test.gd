@@ -87,7 +87,6 @@ func _run() -> void:
 	main_scene.call("_complete_field_interaction", cargo_site)
 	assert(str(main_mission.get("state")) == "carried")
 	assert(not (game_state.get("raid_special_cargo") as Dictionary).is_empty())
-	assert(int(game_state.call("get_raid_bag_used_slots")) <= 15)
 	assert(is_instance_valid(main_mission.get("carried_sprite") as Sprite3D))
 	var cargo_result := main_scene.call("_settle_jackpot_cargo") as Dictionary
 	assert(str(cargo_result.get("summary", "")).contains("3번 보급 코어"))

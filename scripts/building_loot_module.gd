@@ -122,13 +122,7 @@ func interact() -> String:
 		)
 	else:
 		definitions.append(fixed_definition)
-	var pending_items: Array[Dictionary] = []
-	for definition in definitions:
-		var pending_item: Dictionary = _raid_item_from_definition(definition)
-		if not pending_item.is_empty():
-			pending_items.append(pending_item)
-	if not GameState.can_add_raid_items(pending_items):
-		return "가방이 꽉 찼습니다. 가방에서 물품을 버린 뒤 다시 시도하세요."
+	# 가방 무제한(2026-08-30) — 만재 사전검사 없이 전부 지급한다.
 	var acquired_names: Array[String] = []
 	var goal_note := ""
 	for definition in definitions:
@@ -169,10 +163,15 @@ func _grant_definition(definition: Dictionary) -> String:
 	var raid_item: Dictionary = _raid_item_from_definition(definition)
 	if raid_item.is_empty():
 		return ""
+	var grant_amount: int = int(raid_item.get("amount", 1))
+	# 탄약 휴대 훈련(+15%/랭크)은 건물 루팅에도 같은 배율로 붙는다.
+	if str(raid_item.get("type", "")) == "ammo":
+		grant_amount = maxi(1, roundi(float(grant_amount) * GameState.get_ammo_pickup_multiplier()))
+		item_amount = grant_amount
 	if not GameState.try_add_raid_item(
 		str(raid_item.get("type", "")),
 		str(raid_item.get("id", "")),
-		int(raid_item.get("amount", 1))
+		grant_amount
 	):
 		return ""
 	return "%s x%d" % [display_name, item_amount]

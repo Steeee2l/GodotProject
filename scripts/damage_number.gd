@@ -7,7 +7,8 @@ extends Label3D
 # 비용 절감). 풀 상한을 넘는 라벨만 실제로 해제해 노드 수가 무한히 늘지
 # 않는다. 씬 전환으로 무효화된 항목은 acquire가 걸러낸다.
 
-const DURATION := 0.64
+# 0.64 → 0.78: 숫자를 키운 만큼 읽을 시간도 준다(유저 요청 "훨씬 잘 보이게").
+const DURATION := 0.78
 const MAX_POOL_SIZE := 40
 
 static var idle_pool: Array[Label3D] = []
@@ -75,35 +76,39 @@ func setup(
 			text_scale = clampf(float(accessibility.get("combat_text_scale")), 0.8, 1.4)
 	# 명중 등급은 1.94배 데미지 차이인데 여태 아무 표시가 없었다. 정조준(center)은
 	# 호박색으로 크게, 스침(graze)은 회청색으로 작게 — 조준 실력이 눈에 보이게 한다.
-	var grade_size := 58
-	base_color = Color("#f2f0e8")
+	# 크기는 2026-08-30 전면 상향(유저: "훨씬 굵고 크고 찐하게") — 색도 흰끼를
+	# 빼고 원색에 가깝게 올려 배경 위에서 바로 튀게 한다.
+	var grade_size := 84
+	base_color = Color("#fffdf2")
 	if hit_grade == "center":
-		grade_size = 66
-		base_color = Color("#ffb347")
+		grade_size = 96
+		base_color = Color("#ffa11f")
 	elif hit_grade == "graze":
-		grade_size = 46
-		base_color = Color("#9fb2c4")
+		grade_size = 66
+		base_color = Color("#8fb0cc")
 	elif hit_grade == "head":
 		# 헤드샷 — 주황. 정조준(호박색)보다 붉고 크리티컬(노랑)과도 구분된다.
-		grade_size = 70
-		base_color = Color("#ff8a2a")
+		grade_size = 104
+		base_color = Color("#ff6f0d")
 	elif hit_grade == "hostile":
 		# 내가 맞은 피해 — 붉은색. 적에게 주는 숫자와 색으로 즉시 구분된다.
-		grade_size = 60
-		base_color = Color("#ff5348")
+		grade_size = 88
+		base_color = Color("#ff3226")
 	# 엘리트 표적은 금색 — 정예 토스트·확정 전리품과 같은 색으로
 	# "가치 있는 표적을 때리고 있다"가 숫자만 봐도 읽히게 한다.
 	if elite_target:
-		base_color = Color("#f2bd55")
+		base_color = Color("#ffbe33")
 	if killing_blow:
 		# 처치 마지막 타격 — 등급 크기 위에 한 단계 더 얹어 살짝 크게.
 		grade_size = roundi(float(grade_size) * 1.22)
-	font_size = roundi(float(78 if is_critical else grade_size) * text_scale)
-	outline_size = roundi(float(18 if is_critical else 14) * text_scale)
+	font_size = roundi(float(118 if is_critical else grade_size) * text_scale)
+	# 외곽선을 두껍게 = 글자가 굵어 보인다(Label3D에는 굵기 옵션이 없다).
+	# 검은 테를 두껍게 두르면 밝은 바닥·불빛 위에서도 숫자가 안 묻힌다.
+	outline_size = roundi(float(font_size) * (0.34 if is_critical else 0.30))
 	if is_critical:
-		base_color = Color("#ffd84a")
+		base_color = Color("#ffd21f")
 	modulate = base_color
-	outline_modulate = Color(0.16, 0.08, 0.01, 0.96) if is_critical else Color(0.02, 0.025, 0.025, 0.94)
+	outline_modulate = Color(0.10, 0.04, 0.0, 1.0) if is_critical else Color(0.0, 0.0, 0.0, 1.0)
 	billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	no_depth_test = true
 	render_priority = 127

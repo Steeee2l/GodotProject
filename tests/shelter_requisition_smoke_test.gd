@@ -111,8 +111,6 @@ func _run() -> void:
 	_check(bool(game_state.call("try_upgrade_shelter_tier")), "③ upgrade allowed with key")
 	_check(int(game_state.get("shelter_tier")) == 3, "③ tier now 3")
 	_check(int(game_state.call("get_progression_item_count", "namdaemun_depot_plans")) == 1, "③ key not consumed")
-	# 가방 칸 0
-	_check(int(game_state.call("get_raid_item_slot_cost", "progression", "namdaemun_depot_plans", 1)) == 0, "③ key takes 0 bag slots")
 	# 소급 없음: Tier 3인 세이브의 다음 목표는 Tier 4 키(을지로)만 본다
 	goal = SHELTER_REQUISITION.get_next_goal()
 	_check(_req(goal, "namdaemun_depot_plans").is_empty() and not _req(goal, "euljiro_grid_schematic").is_empty(), "③ no retroactive key check")

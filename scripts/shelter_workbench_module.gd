@@ -2922,7 +2922,7 @@ func _recipe_icon(recipe: Dictionary) -> Texture2D:
 		return UI_ICONS.get_icon("mod", 72, Color("#e2a962"))
 	if result.has("heavy_gear"):
 		# ui_icon_factory 실제 키: 지뢰=alert(경보 삼각), 포탑=parts(부품), 로켓=raid(출격
-		# 화살), 드론=dash(기동), 카트=backpack(가방 확장이 본질).
+		# 화살), 드론=dash(기동), 카트=backpack(적재 동반 기물 — 지금은 정산 보너스).
 		var heavy_icon: String = str({
 			"field_mine": "alert",
 			"salvage_turret": "parts",
@@ -3187,10 +3187,7 @@ func _result_stat_line(recipe: Dictionary) -> String:
 		return str(mod.get("slot", "")).to_upper() if not mod.is_empty() else ""
 	if result.has("heavy_gear"):
 		var heavy_id := str(result["heavy_gear"])
-		var stack := int((GameState.HEAVY_GEAR_DEFS.get(heavy_id, {}) as Dictionary).get("stack_per_slot", 1))
-		var line := "가방 %d개 1칸 · 현재 보유 x%d" % [stack, GameState.get_heavy_gear_count(heavy_id)] \
-			if stack > 1 \
-			else "가방 1칸 · 현재 보유 x%d" % GameState.get_heavy_gear_count(heavy_id)
+		var line := "현재 보유 x%d" % GameState.get_heavy_gear_count(heavy_id)
 		if heavy_id == "rocket_launcher":
 			line += " · 3발 쏘면 소멸"
 		return line

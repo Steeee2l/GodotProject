@@ -12,7 +12,7 @@ const AIM_REVEAL_BUILDING_ALPHA := 0.28
 const AK_DROP_TEXTURE := preload("res://assets/weapons/ak47_drop.png")
 const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
-const BASE_ENEMY_COUNT := 24
+const BASE_ENEMY_COUNT := 36
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const CHURU_TEXTURE := preload("res://assets/items/churu_rare.png")
 const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
@@ -33,10 +33,17 @@ const ENEMY_VISIBILITY_FADE_IN_SPEED := 10.0
 const ENEMY_VISIBILITY_FADE_OUT_SPEED := 3.2
 const ENEMY_VISIBILITY_HOLD_SECONDS := 0.32
 const DANGER_BOSS_NAME := "폐허의 포격수 묘르"
-# 포위망 절반부터 사냥꾼 보스가 온다(피로도 폐지로 트리거 이관).
+# 위험도 절반부터 사냥꾼 보스가 온다(피로도 폐지로 트리거 이관).
 const DANGER_BOSS_TRIGGER := 0.5
 const FIELD_LOOT_CACHE_TEXTURE := preload("res://assets/interiors/office_dungeon/modules/office_salvage_loot_v1.png")
 const FIRST_STAGE_SOLO_SQUAD_CHANCE := 0.62
+# 초반 존 밖 일반 배치의 분대 크기 분포 — 1인 48% / 2인 37% / 3인 15%.
+# 1인 순찰이 많아야 도로를 따라 '군데군데' 만나는 그림이 된다.
+const AMBIENT_SOLO_SQUAD_CHANCE := 0.48
+const AMBIENT_PAIR_SQUAD_CHANCE := 0.37
+# 진입 안전 반경 바로 바깥에 반드시 놓는 분대 수. "출발점 근처는 비어야 하지만
+# 조금만 벗어나면 적이 있어야 한다"(유저)는 요구의 구현 지점이다.
+const NEAR_BAND_SQUAD_COUNT := 4
 const FIRST_STAGE_ZONE_ID := "jongno_outskirts"
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const INTERACTION_TARGETING := preload("res://scripts/interaction_targeting.gd")
@@ -181,13 +188,22 @@ func _find_distributed_enemy_position(
 	for enemy in host.enemies:
 		if is_instance_valid(enemy):
 			occupied_positions.append(enemy.global_position)
-	if index == 0:
+	# 근접 띠 — 앞의 몇 분대는 진입 안전 반경 바로 바깥(+6~+24m)에 서로 다른
+	# 방위로 흩어 놓는다. 예전엔 이 자리가 딱 한 분대뿐이라 "나가도 한참 아무도
+	# 없다"가 됐다. 안전 반경 자체는 그대로라 출발 지점은 여전히 조용하다.
+	var near_band_count := mini(NEAR_BAND_SQUAD_COUNT, maxi(1, total_count - 1))
+	if index < near_band_count:
 		var map_limit := world.get_map_limit() - 8.0
+		# 분대마다 기본 방위를 균등 분할해 한쪽에 몰리지 않게 한다.
+		var band_base_angle := (
+			TAU * float(index) / float(near_band_count)
+			+ spawn_random.randf_range(-0.22, 0.22)
+		)
 		for attempt in 16:
-			var angle := TAU * float(attempt) / 16.0 + spawn_random.randf_range(-0.12, 0.12)
+			var angle := band_base_angle + TAU * float(attempt) / 16.0
+			var band_distance := entry_safe_radius + spawn_random.randf_range(6.0, 24.0)
 			var requested := (
-				player.global_position
-				+ Vector3(cos(angle), 0.0, sin(angle)) * (entry_safe_radius + 8.0)
+				player.global_position + Vector3(cos(angle), 0.0, sin(angle)) * band_distance
 			)
 			requested.x = clampf(requested.x, -map_limit, map_limit)
 			requested.z = clampf(requested.z, -map_limit, map_limit)
@@ -198,17 +214,26 @@ func _find_distributed_enemy_position(
 				[player.get_rid()]
 			)
 			nearby_candidate.y = 0.78
-			if (
-				nearby_candidate.distance_to(player.global_position) >= entry_safe_radius + 3.0
-				and world.get_risk_band(nearby_candidate) != "safe"
-			):
-				return nearby_candidate
+			if nearby_candidate.distance_to(player.global_position) < entry_safe_radius + 3.0:
+				continue
+			if world.get_risk_band(nearby_candidate) == "safe":
+				continue
+			# 같은 띠의 다른 분대와 겹치지 않게 — 이 함수가 만드는 뭉침을 막는다.
+			var too_close := false
+			for occupied in occupied_positions:
+				if occupied.distance_to(nearby_candidate) < 11.0:
+					too_close = true
+					break
+			if too_close:
+				continue
+			return nearby_candidate
+	# 근접 띠에서 자리를 못 찾은 분대도 여기로 떨어진다 — 음수 인덱스 방지.
 	return host._find_stratified_map_position(
 		world,
-		index - 1,
-		total_count - 1,
+		maxi(0, index - near_band_count),
+		maxi(1, total_count - near_band_count),
 		entry_safe_radius + 3.0,
-		7.0,
+		9.0,
 		occupied_positions,
 		0.78
 	)
@@ -276,6 +301,10 @@ func _ensure_initial_enemy_safe_anchor(
 
 
 func _build_enemy_squad_sizes(total_count: int) -> Array[int]:
+	# 분대 크기가 곧 '흩어짐'을 정한다. 한 분대는 한 앵커 주위 4m 안에 뭉쳐
+	# 서므로, 2~3인 분대만 만들면 맵에는 덩어리 열 개와 텅 빈 구간만 남는다
+	# (유저 신고: "몰려 있을 땐 너무 몰리고 없을 땐 너무 없다").
+	# 이제 절반 가까이를 1인 순찰로 뽑아 같은 인원을 훨씬 많은 지점에 흩는다.
 	var sizes: Array[int] = []
 	var remaining := maxi(0, total_count)
 	while remaining > 0:
@@ -286,12 +315,14 @@ func _build_enemy_squad_sizes(total_count: int) -> Array[int]:
 		elif host.active_zone_rule == "crowd":
 			# 무리 규칙(남대문): 분대를 더 크게 뭉친다. 좁은 통로에서 몰려온다.
 			squad_size = mini(remaining, 3 if remaining >= 3 else remaining)
-		elif remaining == 2 or remaining == 4:
-			squad_size = 2
-		elif remaining == 3:
-			squad_size = 3
-		elif remaining > 4:
-			squad_size = 2 if spawn_random.randf() < ENEMY_PAIR_SQUAD_CHANCE else 3
+		elif remaining >= 2:
+			var roll := spawn_random.randf()
+			if roll < AMBIENT_SOLO_SQUAD_CHANCE:
+				squad_size = 1
+			elif roll < AMBIENT_SOLO_SQUAD_CHANCE + AMBIENT_PAIR_SQUAD_CHANCE or remaining < 3:
+				squad_size = 2
+			else:
+				squad_size = 3
 		sizes.append(squad_size)
 		remaining -= squad_size
 	return sizes
@@ -338,13 +369,15 @@ func _spawn_enemy_squad(
 		if order_position != Vector3.INF and enemy.has_method("receive_reinforcement_order"):
 			enemy.call("receive_reinforcement_order", order_position)
 		elif enemy.has_method("configure_patrol"):
-			# road_route 비중 50%→25% — 맵을 가로지르는 장거리 순찰이 교전지를
-			# 관통하며 합류하던 주된 공급선이었다(국소 교전 개편).
-			var patrol_selector := posmod(assigned_squad_id, 4)
+			# 도로 순찰 비중 25%→37.5%(8분의 3). 한때 50%였던 걸 25%로 내린 건
+			# 장거리 순찰이 교전지를 관통해 합류하던 탓인데, 그 문제는 지금
+			# 동시 교전 상한(MAX_CONCURRENT_ALERTED)이 직접 막는다. 도로를 걷는
+			# 적이 있어야 "도로에 군데군데"라는 그림이 실제로 만들어진다(유저 요구).
+			var patrol_selector := posmod(assigned_squad_id, 8)
 			var patrol_mode := (
 				"road_route"
-				if patrol_selector == 3
-				else ("route" if patrol_selector == 1 else "sentry")
+				if patrol_selector < 3
+				else ("route" if patrol_selector < 5 else "sentry")
 			)
 			enemy.call(
 				"configure_patrol",
@@ -1196,6 +1229,31 @@ func spawn_chain_climax_boss() -> void:
 		boss.call("receive_reinforcement_order", player.global_position)
 	host._show_boss_alert(boss_title)
 	host._show_field_notice("회수물의 주인이 왔다 — 들고 도망치거나, 끝장을 내라")
+
+
+func spawn_danger_enforcer(wave_index: int) -> void:
+	# 위험도 하드캡 영파 방지 — 캡에서 버틸수록 처형자(로켓 보스급, 위협 1.0)가
+	# 주기마다 하나씩 더 온다. 목적은 전투가 아니라 "이제 집에 가라"는 최후통첩.
+	var world := host.get_node("World") as ProceduralCityMap
+	var spawn_position := _find_event_position_near_player(world, 18.0, 26.0)
+	if spawn_position == Vector3.INF:
+		spawn_position = _find_reinforcement_position()
+	if spawn_position == Vector3.INF:
+		return
+	var enforcer := _spawn_rocket_boss_at(
+		spawn_position, 1.0, "DangerEnforcer_%d" % wave_index
+	)
+	# 로켓 36→약 65: 방어구를 감안해도 2~3방이면 눕는다(영파 방지 화력).
+	enforcer.set("damage_multiplier", 1.8)
+	var title := "회수반 처형자" if wave_index <= 1 else "회수반 처형자 %d호" % wave_index
+	var enforcer_marker := enforcer.get_node_or_null("BossMarker") as Label3D
+	if enforcer_marker:
+		enforcer_marker.text = title
+	enforcer.set_meta("display_name", title)
+	if enforcer.has_method("receive_reinforcement_order"):
+		enforcer.call("receive_reinforcement_order", player.global_position)
+	host._show_boss_alert(title)
+	host._show_field_notice("위험도 한계 초과 — 도시가 회수반을 보냈다. 지금 나가라")
 
 
 func _trigger_danger_boss_event() -> void:

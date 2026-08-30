@@ -220,8 +220,7 @@ func _rebuild_ui() -> void:
 	_add_training_card(tree, "endurance")
 	_add_training_card(tree, "agility")
 	_add_training_card(tree, "fieldcraft")
-	# 가방 확장 — 인벤토리 고철 버튼에서 이사 왔다(가방 성장은 훈련으로만).
-	_add_training_card(tree, "bag_capacity")
+	# 가방 확장 카드는 가방 무제한화(2026-08-30)로 폐지됐다.
 	# 탄약 운용 훈련 4종 — 정의는 GameState.TRAINING_NODE_DEFS가 쥔다.
 	_add_training_card(tree, "magazine_drill")
 	_add_training_card(tree, "quick_hands")
@@ -413,7 +412,7 @@ func _training_description_text(node_id: String, definition: Dictionary) -> Stri
 			if base > 0.0:
 				text += " · 현재 장전 %.2fs → %.2fs" % [base, now]
 		"ammo_carry":
-			text += " · 현재 칸당 %d발" % GameState.get_ammo_rounds_per_slot()
+			text += " · 현재 줍는 탄약 x%.2f" % GameState.get_ammo_pickup_multiplier()
 		"sortie_supply":
 			var magazine := int(stats.get("magazine_size", 0))
 			if magazine > 0:

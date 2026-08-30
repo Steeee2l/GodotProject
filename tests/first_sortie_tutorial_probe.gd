@@ -111,10 +111,7 @@ func _run() -> void:
 	tutorial.set("poll_timer", 0.0)
 	await _sleep(0.5)
 	_check(bool(game_state.call("is_tutorial_step_done", "sortie_loot")), "상호작용 완료 → sortie_loot 완료 저장")
-	# 루팅이 교체 모달을 띄웠으면 닫는다.
-	var loot_system = main_scene.get("loot_system")
-	if loot_system != null and bool(loot_system.call("is_loot_swap_open")):
-		(main_scene.get("loot_swap_ui") as Node).call("close")
+	# 전리품 교체 모달은 가방 무제한화(2026-08-30)로 폐지 — 닫을 창이 없다.
 	await _sleep(0.3)
 
 	# ④ 가방 — 실제 인벤토리 열기로.

@@ -1,4 +1,4 @@
-﻿extends Control
+extends Control
 
 signal open_state_changed(is_open: bool)
 signal weapon_mods_changed
@@ -75,7 +75,7 @@ var weapon_preview: TextureRect
 var weapon_stats: Label
 var weapon_state_action_button: Button
 var mod_slot_grid: GridContainer
-var bag_slot_usage_label: Label
+# bag_slot_usage_label(남은 칸 표시)은 가방 무제한화로 폐지됐다.
 var item_detail_icon: TextureRect
 var item_detail_title: Label
 var item_detail_description: Label
@@ -330,26 +330,10 @@ func _build_inventory_panel() -> Control:
 	var bag_title := _section("가방")
 	bag_title.custom_minimum_size.x = 44
 	bag_header.add_child(bag_title)
-	bag_slot_usage_label = _label(
-		"남은 슬롯 %d / %d" % [
-			int(game_state.get_raid_bag_capacity()),
-			int(game_state.get_raid_bag_capacity()),
-		],
-		12,
-		Color("#b7c8c0")
-	)
-	bag_slot_usage_label.name = "BagSlotUsage"
-	bag_slot_usage_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	bag_slot_usage_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	# 만재 경고는 필드 루팅이 실패하는 이유 그 자체다 — 절대 잘리면 안 된다.
-	bag_slot_usage_label.custom_minimum_size.x = 148
-	bag_slot_usage_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-	bag_slot_usage_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bag_header.add_child(bag_slot_usage_label)
-	# 용량 표시 뒤 약한 글로우 — 만재가 되면 _refresh_contents가 빨강으로 바꾼다.
-	HudFx.attach_text_glow(bag_slot_usage_label, Color(HudFx.GOLD, 0.5))
-	# 가방 확장·시큐어 구매 버튼은 폐지됐다(2026-08-28 유저 지시) — 가방 슬롯은
-	# 훈련장 '가방 확장' 트리에서 키운다. 시큐어 칸은 방어구 +90 돌파 특전만 남는다.
+	# 용량 표시는 통째로 없앴다(2026-08-30 유저: "무제한 같은 표시는 없어도 될 듯").
+	# 제한이 없으면 알릴 것도 없다 — 가방 제목만 남는다.
+	# 가방 확장·시큐어 구매 버튼은 폐지됐다. 가방은 무제한(2026-08-30)이고,
+	# 시큐어 칸은 방어구 +90 돌파 특전만 남는다.
 
 	# 필터 바 — 완성된 채 배선이 빠져 한 번도 화면에 나온 적이 없던 UI.
 	# 필터 바는 폐지됐다(유저: "하나도 이해를 못 하겠다"). 가방은 12칸짜리라
@@ -1174,26 +1158,7 @@ func _refresh_contents() -> void:
 			"texture": UI_ICONS.get_icon("secure", 64, Color("#f0ad55")),
 		})
 
-	var occupied_slots := int(game_state.get_raid_bag_used_slots())
-	var bag_capacity := int(game_state.get_raid_bag_capacity())
-	var empty_slots := maxi(0, bag_capacity - occupied_slots)
-	for index in range(empty_slots):
-		bag_grid.add_child(_empty_slot())
-	if bag_slot_usage_label:
-		# 만재는 "남은 슬롯 0"보다 "가방 만재"가 먼저 읽혀야 한다.
-		bag_slot_usage_label.text = (
-			"가방 만재 %d / %d칸" % [occupied_slots, bag_capacity]
-			if occupied_slots >= bag_capacity
-			else "남은 슬롯 %d / %d" % [empty_slots, bag_capacity]
-		)
-		bag_slot_usage_label.add_theme_color_override(
-			"font_color",
-			Color("#ff9595") if occupied_slots >= bag_capacity else Color("#b7c8c0")
-		)
-		HudFx.set_text_glow_color(
-			bag_slot_usage_label,
-			Color("#ff6a5a", 0.9) if occupied_slots >= bag_capacity else Color(HudFx.GOLD, 0.5)
-		)
+	# 가방 무제한 — 빈 칸 타일도, 만재 경고도, 용량 표시도 없다.
 	if scrap_label:
 		scrap_label.text = "쉘터 고철 %d" % int(game_state.scrap if game_state else 0)
 	if weapon_detail_open and has_weapon_state:
@@ -1207,27 +1172,16 @@ func _refresh_contents() -> void:
 func _add_bag_item(item: Dictionary) -> void:
 	if not _should_show_bag_item(item):
 		return
-	# 가방 격자는 "칸"을 그린다. 무기·장비·재료는 1개가 1칸이므로 4개짜리 더미는
-	# 타일 4장이어야 한다. 더미당 타일 1장만 그리던 탓에 실제로 9칸을 쓰고 있어도
-	# 화면은 4칸만 차 보였고, 유저는 "거의 빈 가방"인데 만재 모달을 만났다.
+	# 가방 무제한 — 같은 아이템은 무조건 한 더미 = 타일 한 장 + 수량 배지.
+	# (칸 개념이 사라져 slot_span 타일 복제도 함께 폐지됐다.)
 	var quantity: int = int(item.get("quantity", 0))
-	var slot_cost: int = int(game_state.get_raid_item_slot_cost(
-		str(item.get("type", "")),
-		str(item.get("id", "")),
-		quantity
-	))
-	# 청사진·키카드는 칸을 먹지 않는 쉘터 자산이다 — 그래도 등에 지고 있으니
-	# 타일 한 장은 보여 주되 "0칸"임을 툴팁으로 밝힌다.
-	var slot_span: int = maxi(1, slot_cost)
-	for slot_index in range(slot_span):
-		var tile := item.duplicate(true)
-		tile["slot_index"] = slot_index
-		tile["slot_span"] = slot_span
-		tile["slot_cost"] = slot_cost
-		# 1개=1칸인 부류는 타일 하나가 딱 1개다 — "x4"를 네 번 찍으면 12개처럼 읽힌다.
-		tile["badge_quantity"] = 1 if slot_span > 1 else quantity
-		bag_grid.add_child(_bag_item_button(tile))
-		visible_bag_items += 1
+	var tile := item.duplicate(true)
+	tile["slot_index"] = 0
+	tile["slot_span"] = 1
+	tile["slot_cost"] = 0
+	tile["badge_quantity"] = quantity
+	bag_grid.add_child(_bag_item_button(tile))
+	visible_bag_items += 1
 
 
 func _update_bag_empty_hint() -> void:
@@ -1646,7 +1600,7 @@ func _on_selected_item_action() -> void:
 			if game_state.unequip_equipment(slot):
 				_show_inventory_feedback("%s 해제" % str(definition.get("display_name", item_id)), Color("#d9c579"))
 			else:
-				_show_inventory_feedback("가방이 가득 찼습니다 · 가방을 비운 뒤 해제하세요", Color("#ee806c"))
+				_show_inventory_feedback("해제할 장비가 없습니다.", Color("#ee806c"))
 		else:
 			game_state.equip_equipment(item_id)
 			_show_inventory_feedback("%s 장착" % str(definition.get("display_name", item_id)), Color("#a3ff92"))
@@ -1771,8 +1725,7 @@ func _request_weapon_unequip() -> void:
 		_show_inventory_feedback("주무기를 가방에 보관했습니다.", Color("#d9c579"))
 		_refresh_contents()
 	else:
-		# unequip이 거부됐다 = 가방에 그 1정이 들어갈 자리가 없다.
-		_show_inventory_feedback("가방이 가득 찼습니다 · 가방을 비운 뒤 해제하세요", Color("#ee806c"))
+		_show_inventory_feedback("해제할 무기가 없습니다.", Color("#ee806c"))
 
 
 func _build_mod_slot_button(slot: String) -> Button:
@@ -2076,15 +2029,6 @@ func _bag_item_button(item: Dictionary) -> Button:
 	button.custom_minimum_size = Vector2(82, 74)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.tooltip_text = "%s  x%d" % [str(item.get("title", "")), quantity]
-	# 칸 값을 툴팁에 박아 둔다. "재료 4개 = 4칸"이 어디에도 안 적혀 있어
-	# 가방이 왜 차는지 알 길이 없던 것이 만재 오해의 절반이었다.
-	var slot_cost := int(item.get("slot_cost", slot_span))
-	if slot_cost <= 0:
-		button.tooltip_text += " · 0칸 (쉘터 자산 · 가방을 차지하지 않음)"
-	elif slot_cost > 1:
-		button.tooltip_text += " · %d칸 차지" % slot_cost
-	else:
-		button.tooltip_text += " · 1칸"
 	if not has_quantity:
 		button.tooltip_text += " (보유하지 않음)"
 	elif item_type == "component":
@@ -2430,26 +2374,26 @@ func _progression_item_name(item_id: String) -> String:
 func _progression_item_description(item_id: String) -> String:
 	if item_id.begins_with("blueprint_shard_"):
 		var recipe_id := item_id.trim_prefix("blueprint_shard_")
-		return "작업대 제작 해금 조각 — 3조각이 모이면 만들 수 있습니다(%s). 가방 칸을 차지하지 않습니다." % str(game_state.get_blueprint_progress_text(recipe_id))
+		return "작업대 제작 해금 조각 — 3조각이 모이면 만들 수 있습니다(%s)." % str(game_state.get_blueprint_progress_text(recipe_id))
 	if item_id == "artisan_seal":
-		return "장인의 인장 — +10·+20·… 강화 돌파 1회에 1개. 보스·메인 미션 3단계에서 나옵니다. 가방 칸을 차지하지 않습니다."
+		return "장인의 인장 — +10·+20·… 강화 돌파 1회에 1개. 보스·메인 미션 3단계에서 나옵니다."
 	match item_id:
 		"rifle_blueprint":
 			return "AK 계열 소총(AKM 개조형) 제작법을 해금하는 희귀 청사진입니다."
 		"shotgun_blueprint":
 			return "고화력 산탄총 제작법을 해금하는 희귀 청사진입니다."
 		"akm_blueprint":
-			return "작업대에서 AKM 개조형을 만들 수 있습니다. 첫 제작 시 AK-47 강화의 60%를 이어받습니다. 가방 칸을 차지하지 않습니다."
+			return "작업대에서 AKM 개조형을 만들 수 있습니다. 첫 제작 시 AK-47 강화의 60%를 이어받습니다."
 		"pump_blueprint":
-			return "작업대에서 펌프 산탄총을 만들 수 있습니다. 첫 제작 시 참치 헌터 강화의 60%를 이어받습니다. 가방 칸을 차지하지 않습니다."
+			return "작업대에서 펌프 산탄총을 만들 수 있습니다. 첫 제작 시 참치 헌터 강화의 60%를 이어받습니다."
 		"sealed_zone_keycard":
 			return "Stage 4 봉인구역 진입에 필요한 보안 키카드입니다."
 		"namdaemun_depot_plans":
-			return "쉘터 Tier 3 확장에 필요한 설계도입니다. 가방 칸을 차지하지 않습니다."
+			return "쉘터 Tier 3 확장에 필요한 설계도입니다."
 		"euljiro_grid_schematic":
-			return "쉘터 Tier 4 확장에 필요한 배전 도면입니다. 가방 칸을 차지하지 않습니다."
+			return "쉘터 Tier 4 확장에 필요한 배전 도면입니다."
 		"yongsan_control_key":
-			return "쉘터 Tier 5 확장에 필요한 통제 키입니다. 가방 칸을 차지하지 않습니다."
+			return "쉘터 Tier 5 확장에 필요한 통제 키입니다."
 	return "상위 스테이지 진행에 사용하는 희귀 물품입니다."
 
 

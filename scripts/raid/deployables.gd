@@ -65,9 +65,10 @@ const STRIKE_BURST_INTERVAL := 0.09
 const STRIKE_MAX_BURSTS := 5
 const LOCK_FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 
-# 보급 카트(2차) — 살아 있는 동안 가방 +6칸, 대신 걸음 x0.88.
+# 보급 카트(2차) — 걸음 x0.88을 감수하면 살아서 탈출 시 귀중품 정산 +15%.
+# (+6칸은 가방 무제한화로 폐지 — 카트의 존재 이유를 정산 보너스로 재정의.)
 const CART_HP := 180
-const CART_BAG_BONUS := 6
+const CART_VALUE_BONUS := 0.15
 const CART_FOLLOW_DISTANCE := 1.6
 const CART_MOVE_MULTIPLIER := 0.88
 const CART_MAX_SPEED := 6.5
@@ -492,21 +493,23 @@ func deploy_cart() -> void:
 	cart.global_position = Vector3(spawn.x, 0.0, spawn.z)
 	active_cart = cart
 	carts_deployed += 1
-	# 살아 있는 동안 가방 +6칸 — 판 종료 리셋은 game_state가, 파괴는 여기가 끈다.
-	GameState.active_cart_bag_bonus = CART_BAG_BONUS
+	# 살아 있는 동안 정산 +15% — 판 종료 리셋은 game_state가, 파괴는 여기가 끈다.
+	GameState.active_cart_value_bonus = CART_VALUE_BONUS
 	if host.hud != null and host.hud.has_method("push_toast"):
-		host.hud.push_toast("보급 카트 연결 — 가방 +%d칸" % CART_BAG_BONUS, Color("#d8b56a"), 2.2)
+		host.hud.push_toast(
+			"보급 카트 연결 — 살려서 탈출하면 귀중품 정산 +%d%%" % roundi(CART_VALUE_BONUS * 100.0),
+			Color("#d8b56a"), 2.6
+		)
 
 
 func notify_cart_gone(reason: String) -> void:
 	active_cart = null
 	# 파괴·교체 즉시 보너스 회수 — 교체라면 deploy_cart가 곧바로 다시 켠다.
-	# 초과 적재 상태의 기존 아이템은 사라지지 않는다(가방 검사는 '새 획득'만 막는다).
-	GameState.active_cart_bag_bonus = 0
+	GameState.active_cart_value_bonus = 0.0
 	if host == null or host.hud == null or not host.hud.has_method("push_toast"):
 		return
 	if reason == "destroyed":
-		host.hud.push_toast("보급 카트 파괴 · 가방 +%d칸 상실" % CART_BAG_BONUS, Color("#e2724e"), 2.6)
+		host.hud.push_toast("보급 카트 파괴 · 정산 보너스 상실", Color("#e2724e"), 2.6)
 
 
 func is_cart_active() -> bool:
@@ -1477,7 +1480,7 @@ class EscortDrone extends Node3D:
 
 # ══════════════════════════════════════════════════════════════════
 # 보급 카트 — 플레이어 뒤 1.6m를 지연 lerp로 따라오는 지면 기물(끌려오는 느낌).
-# 살아 있는 동안 GameState.active_cart_bag_bonus = 6(파괴 시 여기서 직접 0).
+# 살아 있는 동안 GameState.active_cart_value_bonus = 0.15(파괴 시 여기서 직접 0).
 # HP 180(스플래시만). 아트: market_handcart_v1 재활용, 접지는 생산기 기물 방식.
 # ══════════════════════════════════════════════════════════════════
 class SupplyCart extends Node3D:
