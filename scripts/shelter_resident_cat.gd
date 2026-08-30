@@ -38,6 +38,8 @@ const WANDER_RETARGET_TIME := 9.0
 # 목적지로 삼으면 애써 만든 무리가 몇 초 만에 균일 분포로 풀어진다.
 # 배치 최소 간격(0.42m)의 절반 아래로 잡아야 이웃과 겹쳐 서지 않는다.
 const WAITING_HOME_RADIUS := 0.2
+# 좌석에 "도착했다"고 볼 거리. 머리 위 생산 표시와 생산 팝업이 이걸 본다.
+const WORK_ARRIVAL_RADIUS := 0.5
 const PRODUCTION_POP_INTERVAL := 1.0
 const PRODUCTION_POP_HEIGHT := 1.34
 const PRODUCTION_POP_DURATION := 1.12
@@ -253,7 +255,7 @@ func emit_production_feedback_now() -> void:
 		return
 	if assignment_kind == "waiting" or production_rate_per_second <= 0.0:
 		return
-	if position.distance_to(target_position) > 0.28:
+	if position.distance_to(target_position) > WORK_ARRIVAL_RADIUS:
 		return
 	_spawn_production_pop()
 	production_pop_timer = PRODUCTION_POP_INTERVAL
@@ -265,7 +267,7 @@ func _update_production_pop(delta: float) -> void:
 	if assignment_kind == "waiting" or production_rate_per_second <= 0.0:
 		production_pop_timer = PRODUCTION_POP_INTERVAL
 		return
-	if position.distance_to(target_position) > 0.28:
+	if position.distance_to(target_position) > WORK_ARRIVAL_RADIUS:
 		return
 	production_pop_timer -= delta
 	if production_pop_timer <= 0.0:
@@ -387,7 +389,11 @@ func _choose_wander_target() -> void:
 func _update_work_indicator() -> void:
 	if work_indicator == null:
 		return
-	var arrived := position.distance_to(target_position) <= 0.28
+	# 도착 판정 0.28 → 0.5. 좌석이 촘촘해지면서(0.66 간격) 마지막 한 뼘을
+	# 좁히는 데 시간이 걸리는데, 그동안 머리 위 생산 표시가 통째로 사라져
+	# "생산량이 안 보인다"(유저 신고)가 됐다. 자리 간격의 절반보다 작게 두면
+	# 옆자리 고양이와 헷갈릴 일도 없다.
+	var arrived := position.distance_to(target_position) <= WORK_ARRIVAL_RADIUS
 	work_indicator.visible = assignment_kind != "waiting" and arrived
 	if not work_indicator.visible:
 		return

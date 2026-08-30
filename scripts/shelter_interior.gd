@@ -107,9 +107,15 @@ const WAIT_REST_POSE_RATIO := 0.16
 const WAIT_AREA_PER_RESIDENT := 2.6
 # 배치 난수 시드. 고정값이라 씬을 다시 들어와도 같은 자리가 나온다.
 const WAIT_LAYOUT_SEED := 0x5AFED00D
-# 작업조 좌석 흔들림(m). 줄은 유지하되 자로 잰 격자로는 안 보이게.
-# 0.19면 최악의 경우에도 이웃 간격이 0.92-0.38=0.54m로 겹침 하한을 넘는다.
-const WORK_SLOT_JITTER := 0.19
+# ── 작업조 격자(2026-08-30) ────────────────────────────────
+# 대기 무리(0.92)보다 촘촘하게 붙여 세운다. 캡슐 반지름 0.24라 0.6이면
+# 서로 파고들지 않으면서도 "빽빽하게 모여 일하는" 밀도가 나온다.
+const WORK_SLOT_SPACING := 0.66
+# 생산기 정면에서 첫 줄까지의 거리. 기계에 붙되 겹치지는 않는 간격.
+const WORK_FRONT_GAP := 1.7
+# 작업 블록 최대 폭(m). 두 생산기 기준점 간격이 7m라 이보다 넓히면
+# 꾹꾹이 조와 스크래핑 조가 서로 파고든다.
+const WORK_BLOCK_MAX_WIDTH := 6.2
 # 생산 팝업(+고철)을 띄우는 인원 상한. 똑같은 숫자가 100개 떠오르면 정보가
 # 아니라 노이즈이고, Label3D + 트윈 3개가 매초 100세트씩 생긴다.
 const PRODUCTION_POP_VISIBLE_LIMIT := 20
@@ -1676,6 +1682,18 @@ func refresh_shelter_residents(snap := false) -> void:
 	var waiting_slot := 0
 	var kneading_slot := 0
 	var catnip_slot := 0
+	# 격자 열 수는 '이 라인에 몇 명이 붙어 있는가'로 정해진다 — 자리를 나눠
+	# 주기 전에 먼저 센다(한 바퀴 더 도는 비용은 인원 수만큼이라 무시할 만하다).
+	var kneading_total := 0
+	var catnip_total := 0
+	for resident in shelter_residents:
+		if not is_instance_valid(resident):
+			continue
+		var counted_id := str(resident.get_meta("resident_id", ""))
+		if kneading_set.has(counted_id):
+			kneading_total += 1
+		elif catnip_set.has(counted_id):
+			catnip_total += 1
 	waiting_tail_cluster_center = Vector3.ZERO
 	var scratcher_focus := _scratcher_bank_position()
 	var catnip_focus := _catnip_scraper_position()
@@ -1690,12 +1708,12 @@ func refresh_shelter_residents(snap := false) -> void:
 		var focus := Vector3.ZERO
 		if kneading_set.has(resident_id):
 			assignment_kind = "kneading"
-			target = _scratcher_work_position(kneading_slot)
+			target = _scratcher_work_position(kneading_slot, kneading_total)
 			focus = scratcher_focus
 			kneading_slot += 1
 		elif catnip_set.has(resident_id):
 			assignment_kind = "catnip"
-			target = _catnip_work_position(catnip_slot)
+			target = _catnip_work_position(catnip_slot, catnip_total)
 			focus = catnip_focus
 			catnip_slot += 1
 		else:
@@ -1953,43 +1971,45 @@ func _screen_facing_name(world_direction: Vector2) -> String:
 	return SCREEN_DIRECTION_NAMES[index]
 
 
-func _scratcher_work_position(index: int) -> Vector3:
-	return _factory_work_position(_scratcher_bank_position(), index, 8)
+func _scratcher_work_position(index: int, crowd_size: int) -> Vector3:
+	return _factory_work_position(_scratcher_bank_position(), index, crowd_size)
 
 
-func _catnip_work_position(index: int) -> Vector3:
-	return _factory_work_position(_catnip_scraper_position(), index, 5)
+func _catnip_work_position(index: int, crowd_size: int) -> Vector3:
+	return _factory_work_position(_catnip_scraper_position(), index, crowd_size)
 
 
-func _factory_work_position(station: Vector3, index: int, columns: int) -> Vector3:
-	# 생산기 앞에 붙는 작업조. 열 수를 라인마다 못 박아(꾹꾹이 8 / 스크래핑 5)
-	# 두 무리가 서로 겹치지 않게 한다 — 두 기준점의 간격은 7m다.
-	# 다만 자로 잰 격자는 작업조가 아니라 타일 무늬로 읽히므로, 줄을 반 칸씩
-	# 엇갈리고 자리를 결정적으로 흔든다(재진입해도 같은 자리).
+func _factory_work_position(station: Vector3, index: int, crowd_size: int) -> Vector3:
+	# 생산기 앞에 촘촘히 늘어선 작업조(2026-08-30 유저 지시: "각 생산기 앞에서
+	# 그리드 모양으로 촘촘하게").
+	#
+	# 예전에는 열 수를 8·5로 못 박고 호·엇갈림·흔들림을 얹었다. 주민이 수십
+	# 명일 때는 '무리'로 보였지만, 디버그로 100명을 배정하니 블록이 12줄 넘게
+	# 남쪽으로 뻗으면서 방 한복판까지 밀려 나가 덩어리로 뭉개졌다. 이제 인원에
+	# 맞춰 열 수를 늘려(가로로 먼저 채운다) 블록이 깊어지지 않게 하고, 흔들림을
+	# 걷어내 줄이 눈에 보이는 격자로 만든다.
 	var safe_index := maxi(0, index)
+	var columns := _factory_column_count(crowd_size)
 	var column := safe_index % columns
 	var row := safe_index / columns
-	var stagger := 0.5 if row % 2 == 1 else 0.0
-	var lateral := float(column) + stagger - float(columns - 1) * 0.5
-	# 가장자리를 뒤로 빼 얕은 호를 만든다 — 직사각 블록은 무리가 아니라 카펫이다.
-	var arc := absf(lateral) * 0.34
-	var jitter := _work_slot_jitter(int(station.x * 7.0) + safe_index * 31)
+	# 열 중앙이 생산기 정면에 오게 — 기계 앞에 모인 그림이 되어야 한다.
+	var lateral := float(column) - float(columns - 1) * 0.5
 	return Vector3(
-		station.x + lateral * RESIDENT_PACK_SPACING + jitter.x,
+		station.x + lateral * WORK_SLOT_SPACING,
 		0.78,
-		station.z + 2.0 + arc + float(row) * RESIDENT_PACK_SPACING + jitter.y
+		station.z + WORK_FRONT_GAP + float(row) * WORK_SLOT_SPACING
 	)
 
 
-func _work_slot_jitter(seed_value: int) -> Vector2:
-	# 좌석 번호만으로 정해지는 흔들림 — 난수 상태를 들고 다니지 않으므로
-	# 몇 번을 다시 들어와도 같은 값이 나온다.
-	var noise_x := float(posmod(hash(seed_value * 2 + 1), 1024)) / 1023.0
-	var noise_z := float(posmod(hash(seed_value * 2 + 7919), 1024)) / 1023.0
-	return Vector2(
-		(noise_x - 0.5) * 2.0 * WORK_SLOT_JITTER,
-		(noise_z - 0.5) * 2.0 * WORK_SLOT_JITTER
-	)
+func _factory_column_count(crowd_size: int) -> int:
+	# 가로를 먼저 채우되 두 생산기(간격 7m)의 작업조가 서로 겹치지 않게
+	# 폭을 제한한다. 인원이 많아지면 줄이 길어지는 게 아니라 열이 늘어난다.
+	var max_columns := maxi(3, int(WORK_BLOCK_MAX_WIDTH / WORK_SLOT_SPACING))
+	if crowd_size <= 1:
+		return 1
+	# 세로보다 가로가 긴 블록(가로:세로 ≈ 1.6:1) — 기계 앞에 늘어선 모양.
+	var wanted := int(ceil(sqrt(float(crowd_size) * 1.6)))
+	return clampi(wanted, 3, max_columns)
 
 
 func _update_camera(delta: float) -> void:
@@ -5362,6 +5382,21 @@ func _quick_resupply_for_raid() -> void:
 
 func _launch_raid_zone(zone_id: String) -> void:
 	if not GameState.is_raid_zone_unlocked(zone_id):
+		# 조용히 return 하면 버튼이 고장 난 것으로 읽힌다(유저 신고: "다 해금하니까
+		# 출정을 못 나가던데"). 티어 4 이상 구역은 봉인 구역 키카드가 따로 필요한데,
+		# 아무 말도 없으니 이유를 알 길이 없었다. 사유는 반드시 모달 안에 쓴다.
+		var zone := GameState.get_raid_zone(zone_id)
+		var required_tier := int(zone.get("required_tier", 1))
+		if GameState.shelter_tier < required_tier:
+			_show_raid_launch_error(
+				"출정 불가 · %s는 쉘터 Tier %d부터 들어갈 수 있습니다."
+				% [str(zone.get("name", zone_id)), required_tier]
+			)
+		else:
+			_show_raid_launch_error(
+				"출정 불가 · %s는 봉인 구역 키카드가 있어야 열립니다."
+				% str(zone.get("name", zone_id))
+			)
 		return
 	# 가방 무제한 — 만재로 출정을 막던 게이트는 폐지됐다.
 	# 맨손이어도 확인 팝업 없이 바로 출정한다 — "무기 없이 출정하시겠습니까?"

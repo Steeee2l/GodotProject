@@ -64,30 +64,61 @@ func _build_panel() -> void:
 	style.content_margin_top = 12.0
 	style.content_margin_bottom = 12.0
 	panel.add_theme_stylebox_override("panel", style)
-	panel.set_anchors_preset(Control.PRESET_CENTER_LEFT)
+	# 세로로 꽉 채운다 — 모바일에서 600px 고정이면 목록 끝(닫기 버튼)이
+	# 화면 밖으로 밀려 "열고 나면 닫을 수가 없다"(유저 신고)가 된다.
+	panel.set_anchors_preset(Control.PRESET_LEFT_WIDE)
 	panel.offset_left = 16.0
-	panel.offset_top = -300.0
+	panel.offset_top = 16.0
 	panel.offset_right = 16.0 + PANEL_WIDTH
-	panel.offset_bottom = 300.0
+	panel.offset_bottom = -16.0
 	add_child(panel)
 
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	panel.add_child(scroll)
+	# 헤더(제목 + 큰 닫기 버튼)는 스크롤 밖에 고정한다. 스크롤을 어디까지
+	# 내렸든 닫기는 항상 같은 자리에 있어야 한다.
+	var root_column := VBoxContainer.new()
+	root_column.add_theme_constant_override("separation", 8)
+	panel.add_child(root_column)
 
-	button_column = VBoxContainer.new()
-	button_column.add_theme_constant_override("separation", 6)
-	button_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(button_column)
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 8)
+	root_column.add_child(header)
+	var header_title := Label.new()
+	header_title.text = "개발자 메뉴"
+	header_title.add_theme_font_override("font", FONT)
+	header_title.add_theme_font_size_override("font_size", 16)
+	header_title.add_theme_color_override("font_color", Color("#41e0c9"))
+	header_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	header.add_child(header_title)
+	var close_button := Button.new()
+	close_button.text = "✕ 닫기"
+	close_button.focus_mode = Control.FOCUS_NONE
+	close_button.add_theme_font_override("font", FONT)
+	close_button.add_theme_font_size_override("font_size", 15)
+	# 손가락으로 누르는 버튼이다 — 44px 아래로 내리지 않는다.
+	close_button.custom_minimum_size = Vector2(96.0, 44.0)
+	close_button.pressed.connect(func() -> void: set_open(false))
+	header.add_child(close_button)
 
-	_add_title("개발자 메뉴")
 	status_label = Label.new()
 	status_label.add_theme_font_override("font", FONT)
 	status_label.add_theme_font_size_override("font_size", 12)
 	status_label.add_theme_color_override("font_color", Color("#f0d78a"))
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	status_label.custom_minimum_size.y = 30.0
-	button_column.add_child(status_label)
+	status_label.custom_minimum_size.y = 34.0
+	root_column.add_child(status_label)
+
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# 터치 드래그로 굴린다 — 모바일에는 스크롤 휠이 없다(유저 신고: 스크롤 불편).
+	scroll.follow_focus = false
+	root_column.add_child(scroll)
+
+	button_column = VBoxContainer.new()
+	button_column.add_theme_constant_override("separation", 6)
+	button_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(button_column)
 
 	_add_title("재화")
 	_add_action("고철 +999만", func() -> String:
@@ -122,10 +153,18 @@ func _build_panel() -> void:
 		GameState.unlock_all_shelter_facilities()
 		return "시설 전부 해금"
 	)
-	_add_action("쉘터 티어 최대", func() -> String:
-		GameState.shelter_tier = GameState.SHELTER_CAPACITY_BY_TIER.keys().max()
+	_add_action("쉘터 티어 최대 · 전 구역 개방", func() -> String:
+		GameState.shelter_tier = int(GameState.SHELTER_CAPACITY_BY_TIER.keys().max())
 		GameState.ensure_story_key_items()
-		return "쉘터 티어 %d" % GameState.shelter_tier
+		# 티어만 올리면 티어 4↑ 구역은 '봉인 구역 키카드'가 없어 계속 잠긴다
+		# (유저 신고: "다 해금하니까 출정을 못 나가던데"). 키카드까지 쥐여 준다.
+		if GameState.get_progression_item_count("sealed_zone_keycard") <= 0:
+			GameState.add_progression_item("sealed_zone_keycard", 1)
+		var open_zones := 0
+		for zone_id in GameState.get_raid_zone_ids():
+			if GameState.is_raid_zone_unlocked(str(zone_id)):
+				open_zones += 1
+		return "쉘터 티어 %d · 출정 가능 구역 %d곳" % [GameState.shelter_tier, open_zones]
 	)
 	_add_action("모든 무기 지급", func() -> String:
 		var count := 0
@@ -194,11 +233,7 @@ func _build_panel() -> void:
 		return "세이브 삭제 — 쉘터에서 새로 시작"
 	)
 
-	_add_title("")
-	_add_action("닫기", func() -> String:
-		set_open(false)
-		return ""
-	)
+	# 목록 맨 아래 닫기는 없앴다 — 헤더의 고정 닫기 버튼이 그 역할을 한다.
 
 
 func _add_title(text: String) -> void:
@@ -217,8 +252,9 @@ func _add_action(text: String, action: Callable) -> void:
 	button.text = text
 	button.focus_mode = Control.FOCUS_NONE
 	button.add_theme_font_override("font", FONT)
-	button.add_theme_font_size_override("font_size", 13)
-	button.custom_minimum_size.y = 32.0
+	button.add_theme_font_size_override("font_size", 14)
+	# 손가락 기준 최소 44px — 32px는 모바일에서 자꾸 빗나간다.
+	button.custom_minimum_size.y = 44.0
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.pressed.connect(func() -> void:
 		var result: Variant = action.call()
