@@ -5314,7 +5314,11 @@ func _raid_zone_marker_style(unlocked: bool, selected: bool, hovered: bool) -> S
 
 
 func _launch_selected_raid_zone() -> void:
-	if raid_launch_in_progress or raid_zone_selected_id.is_empty():
+	if raid_launch_in_progress:
+		return
+	# 선택된 구역이 없으면 버튼이 먹통으로만 보인다 — 여기도 조용한 return 금지.
+	if raid_zone_selected_id.is_empty():
+		_show_raid_launch_error("먼저 지도에서 출정할 구역을 고르세요.")
 		return
 	_launch_raid_zone(raid_zone_selected_id)
 

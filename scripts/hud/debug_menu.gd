@@ -180,6 +180,9 @@ func _build_panel() -> void:
 	)
 	_add_action("주민 5명 영입", func() -> String:
 		var accepted := int(GameState.try_add_rescued_workers(5))
+		# 명단만 늘리면 화면에는 아무 일도 안 일어난다 — 쉘터에 다시 세우게 한다.
+		GameState._ensure_resident_records()
+		get_tree().call_group("shelter_resident_host", "refresh_shelter_residents", true)
 		return "주민 +%d명(정원 여유만큼)" % accepted
 	)
 
