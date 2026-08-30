@@ -1963,7 +1963,7 @@ func get_pending_shelter_story_event() -> Dictionary:
 			"title": "쇳내",
 			"lines": [
 				"가방에서 쇳내가 나요. 스프링에, 렌즈에… 좋은 걸 주웠네요.",
-				"팔기 전에 작업대에 한번 가져가 봐요. 손재주 좋은 애들이 조준경이며 급탄이며 뚝딱 만들어 줘요.",
+				"작업대에서 총에 먹여 봐요. 스프링이든 렌즈든, 하나하나가 총을 조금씩 좋게 만들어 줘요.",
 				"총은 좋은 걸 들어요. 밖에 나가는 사람이 당신뿐이라… 나는 그게 늘 마음에 걸려요.",
 			],
 		}
@@ -3145,6 +3145,14 @@ func transfer_weapon_enhancement(from_id: String, to_id: String) -> Dictionary:
 	weapon_enhancement_levels[to_id] = next_level
 	if to_id == equipped_weapon_id:
 		weapon_level = next_level + 1
+	# 튜닝(부품 게이지)도 60% 이관 — 강화와 같은 규약(기존 값이 더 크면 유지).
+	var from_tuning := weapon_tuning.get(from_id, {}) as Dictionary
+	if not from_tuning.is_empty():
+		var to_tuning := weapon_tuning.get(to_id, {}) as Dictionary
+		for component_id in from_tuning.keys():
+			var carried := int(floor(float(from_tuning[component_id]) * WEAPON_SYSTEM.ENHANCEMENT_TRANSFER_RATIO))
+			to_tuning[component_id] = maxi(int(to_tuning.get(component_id, 0)), carried)
+		weapon_tuning[to_id] = to_tuning
 	var result := {
 		"from_id": from_id,
 		"to_id": to_id,
@@ -3438,6 +3446,53 @@ func unequip_weapon() -> bool:
 	save_equipped_weapon_loadout()
 	has_ak = false
 	return true
+
+
+# ── 무기 튜닝(인크리멘탈 개조, 2026-08-30 A안) ──────────────────────
+# 폐지된 1회성 개조의 재설계 — 부품을 무기에 '먹여서' 게이지를 올린다.
+# 트랙: 스프링→급탄(장전) / 패킹→안정(반동·탄퍼짐) / 렌즈→정밀(사거리·치명타).
+# 수렴 곡선 bonus = cap × n / (n + half): 첫 개는 크게, 이후 끝없이 조금씩 —
+# 부품 드랍 하나하나가 "돌아가서 한 번 더 누른다"로 환산되는 인크리멘탈 축.
+const WEAPON_TUNING_TRACKS := {
+	"magazine_spring": {"name": "급탄", "effect": "장전 속도", "cap": 0.25, "half": 40.0},
+	"rubber_gasket": {"name": "안정", "effect": "반동·탄퍼짐", "cap": 0.25, "half": 40.0},
+	"scope_lens": {"name": "정밀", "effect": "사거리·치명타", "cap": 0.25, "half": 40.0},
+}
+# weapon_id → {component_id: 먹인 개수}. 세이브 저장, 사다리 이관 60% 적용.
+var weapon_tuning: Dictionary = {}
+
+
+func get_weapon_tuning_count(weapon_id: String, component_id: String) -> int:
+	var tuning := weapon_tuning.get(weapon_id, {}) as Dictionary
+	return maxi(0, int(tuning.get(component_id, 0)))
+
+
+func get_weapon_tuning_bonus(weapon_id: String, component_id: String) -> float:
+	var track := WEAPON_TUNING_TRACKS.get(component_id, {}) as Dictionary
+	if track.is_empty() or weapon_id.is_empty():
+		return 0.0
+	var fed := float(get_weapon_tuning_count(weapon_id, component_id))
+	return float(track.get("cap", 0.0)) * fed / (fed + float(track.get("half", 40.0)))
+
+
+func try_feed_weapon_tuning(weapon_id: String, component_id: String, amount: int = 1) -> Dictionary:
+	if weapon_id.is_empty() or not WEAPON_TUNING_TRACKS.has(component_id):
+		return {"ok": false, "reason": "unknown"}
+	var available := get_mod_component_count(component_id)
+	var used := mini(maxi(amount, 0), available)
+	if used <= 0:
+		return {"ok": false, "reason": "component"}
+	mod_component_inventory[component_id] = available - used
+	var tuning := weapon_tuning.get(weapon_id, {}) as Dictionary
+	tuning[component_id] = int(tuning.get(component_id, 0)) + used
+	weapon_tuning[weapon_id] = tuning
+	save_persistent_state()
+	return {
+		"ok": true,
+		"used": used,
+		"count": int(tuning[component_id]),
+		"bonus": get_weapon_tuning_bonus(weapon_id, component_id),
+	}
 
 
 func add_mod_component(component_id: String, amount: int = 1) -> void:
@@ -5199,6 +5254,19 @@ func build_player_weapon_stats(
 	if perks.has("kill_refund"):
 		stats["durability_loss"] = 0.0
 	stats["breakthrough_perks"] = perks
+	# 무기 튜닝(부품 게이지) — 급탄/안정/정밀. 전부 스탯 키로 실어 적용 지점이 읽는다.
+	var tuning_reload := get_weapon_tuning_bonus(weapon_id, "magazine_spring")
+	if tuning_reload > 0.0:
+		stats["reload_time"] = float(stats.get("reload_time", 2.15)) * (1.0 - tuning_reload)
+	var tuning_stability := get_weapon_tuning_bonus(weapon_id, "rubber_gasket")
+	if tuning_stability > 0.0:
+		stats["base_spread_deg"] = float(stats.get("base_spread_deg", 2.4)) * (1.0 - tuning_stability)
+		stats["max_spread_deg"] = float(stats.get("max_spread_deg", 14.0)) * (1.0 - tuning_stability)
+		stats["recoil_kick"] = float(stats.get("recoil_kick", 0.7)) * (1.0 - tuning_stability)
+	var tuning_precision := get_weapon_tuning_bonus(weapon_id, "scope_lens")
+	# 치명타는 절반 배율(캡 25% → +12.5%p), 사거리는 그대로(캡 +25%).
+	stats["critical_chance_bonus"] = tuning_precision * 0.5
+	stats["range_multiplier"] = 1.0 + tuning_precision
 	return stats
 
 
@@ -5730,6 +5798,7 @@ func save_persistent_state() -> bool:
 		"juhong_field_intro_seen": juhong_field_intro_seen,
 		"saja_chatter_serial_seen": saja_chatter_serial_seen,
 		"saja_chatter_indices": saja_chatter_indices,
+		"weapon_tuning": weapon_tuning,
 		"juhong_absent_runs": juhong_absent_runs,
 		"juhong_radio_return_pending": juhong_radio_return_pending,
 		"juhong_radio_loss_count": juhong_radio_loss_count,
@@ -6003,6 +6072,7 @@ func load_persistent_state() -> bool:
 	juhong_field_intro_seen = bool(data.get("juhong_field_intro_seen", false))
 	saja_chatter_serial_seen = int(data.get("saja_chatter_serial_seen", -1))
 	saja_chatter_indices = (data.get("saja_chatter_indices", {}) as Dictionary).duplicate(true)
+	weapon_tuning = (data.get("weapon_tuning", {}) as Dictionary).duplicate(true)
 	juhong_absent_runs = maxi(0, int(data.get("juhong_absent_runs", 0)))
 	juhong_radio_return_pending = bool(data.get("juhong_radio_return_pending", false))
 	juhong_radio_loss_count = maxi(0, int(data.get("juhong_radio_loss_count", 0)))

@@ -192,8 +192,10 @@ func _spawn_weapon_projectile(direction: Vector3, pellet_index: int) -> void:
 	projectile.set("critical_multiplier", 1.65)
 	projectile.set("penetrations_remaining", penetration)
 	var range_profile: Vector3 = host._get_weapon_range_profile(host.equipped_weapon_id)
-	projectile.set("effective_range", range_profile.x)
-	projectile.set("maximum_range", range_profile.y)
+	# 튜닝 '정밀' — 유효/최대 사거리 배율(range_multiplier).
+	var range_multiplier := float(host.weapon_stats.get("range_multiplier", 1.0))
+	projectile.set("effective_range", range_profile.x * range_multiplier)
+	projectile.set("maximum_range", range_profile.y * range_multiplier)
 	projectile.set("minimum_damage_multiplier", range_profile.z)
 	# 약점 판정 입력 — 마우스는 발사 순간의 화면 레이, 모바일은 어시스트 조준 높이.
 	if _uses_mouse_aim():

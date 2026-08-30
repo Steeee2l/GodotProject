@@ -1252,8 +1252,90 @@ func _build_owned_card_blocks(entry: Dictionary) -> Array[Control]:
 	blocks.append(_build_breakthrough_track(kind, gear_id, level))
 	blocks.append(_build_stat_grid(kind, gear_id, level))
 	blocks.append(_build_perk_row(kind, gear_id, level))
+	if kind == "weapon":
+		blocks.append(_build_tuning_block(gear_id))
 	blocks.append(_build_enhance_cost_row(kind, gear_id, level))
 	return blocks
+
+
+const TUNING_COMPONENT_TEXTURES := {
+	"magazine_spring": MAGAZINE_SPRING_TEXTURE,
+	"rubber_gasket": RUBBER_GASKET_TEXTURE,
+	"scope_lens": SCOPE_LENS_TEXTURE,
+}
+
+
+func _build_tuning_block(gear_id: String) -> Control:
+	# 부품 튜닝(인크리멘탈 개조, 2026-08-30 A안) — 부품을 먹여 무기별 게이지를
+	# 올린다. 고철 연타 강화와 같은 쾌감 축: 주운 부품 = "한 번 더 누를 수 있다".
+	var block := VBoxContainer.new()
+	block.name = "WorkbenchTuningBlock"
+	block.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	block.add_theme_constant_override("separation", 4)
+	var title := _label("부품 튜닝 · 먹인 만큼 이 무기가 영구히 좋아진다", 11, DIM)
+	title.name = "WorkbenchTuningTitle"
+	block.add_child(title)
+	for component_id in ["magazine_spring", "rubber_gasket", "scope_lens"]:
+		block.add_child(_build_tuning_row(gear_id, str(component_id)))
+	return block
+
+
+func _build_tuning_row(gear_id: String, component_id: String) -> Control:
+	var track := (GameState.WEAPON_TUNING_TRACKS as Dictionary).get(component_id, {}) as Dictionary
+	var fed := GameState.get_weapon_tuning_count(gear_id, component_id)
+	var bonus := GameState.get_weapon_tuning_bonus(gear_id, component_id)
+	var have := GameState.get_mod_component_count(component_id)
+	var row := PanelContainer.new()
+	row.name = "WorkbenchTuningRow_%s" % component_id
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_stylebox_override("panel", _well_style())
+	var margin := _margin(8, 4, 8, 4)
+	row.add_child(margin)
+	var line := HBoxContainer.new()
+	line.add_theme_constant_override("separation", 8)
+	margin.add_child(line)
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(22, 22)
+	icon.texture = TUNING_COMPONENT_TEXTURES.get(component_id)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	line.add_child(icon)
+	var text_box := VBoxContainer.new()
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	text_box.add_theme_constant_override("separation", 0)
+	line.add_child(text_box)
+	var name_label := _label(
+		"%s — %s" % [str(track.get("name", "")), str(track.get("effect", ""))], 11, GOLD_TEXT
+	)
+	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	text_box.add_child(name_label)
+	var value_label := _label(
+		"+%.1f%% · 먹임 %d · 보유 %d" % [bonus * 100.0, fed, have], 10, GREEN if bonus > 0.0 else DIM
+	)
+	value_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	text_box.add_child(value_label)
+	var feed_one := _button("+1", "")
+	feed_one.name = "WorkbenchTuningFeed1_%s" % component_id
+	feed_one.custom_minimum_size = Vector2(52, 40)
+	feed_one.disabled = have <= 0
+	feed_one.pressed.connect(_feed_tuning.bind(gear_id, component_id, 1))
+	line.add_child(feed_one)
+	var feed_ten := _button("+10", "")
+	feed_ten.name = "WorkbenchTuningFeed10_%s" % component_id
+	feed_ten.custom_minimum_size = Vector2(58, 40)
+	feed_ten.disabled = have <= 0
+	feed_ten.pressed.connect(_feed_tuning.bind(gear_id, component_id, 10))
+	line.add_child(feed_ten)
+	return row
+
+
+func _feed_tuning(gear_id: String, component_id: String, amount: int) -> void:
+	var result: Dictionary = GameState.try_feed_weapon_tuning(gear_id, component_id, amount)
+	if bool(result.get("ok", false)):
+		_refresh_enhance_card()
 
 
 func _build_perk_row(kind: String, gear_id: String, level: int) -> Control:

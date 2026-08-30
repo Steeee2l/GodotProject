@@ -3492,11 +3492,13 @@ func _get_weapon_range_profile(weapon_id: String) -> Vector3:
 
 
 func _get_weapon_critical_chance() -> float:
+	# 튜닝 '정밀' 보너스(critical_chance_bonus)가 기본치 위에 얹힌다.
+	var tuning_bonus := float(weapon_stats.get("critical_chance_bonus", 0.0))
 	match equipped_weapon_id:
-		"m1911": return 0.16
-		"mp5": return 0.08
-		"double_barrel", "pump_shotgun": return 0.11
-		_: return 0.12
+		"m1911": return 0.16 + tuning_bonus
+		"mp5": return 0.08 + tuning_bonus
+		"double_barrel", "pump_shotgun": return 0.11 + tuning_bonus
+		_: return 0.12 + tuning_bonus
 
 
 func _weapon_jammed() -> bool:
