@@ -35,6 +35,13 @@ const ENEMY_VISIBILITY_HOLD_SECONDS := 0.32
 const DANGER_BOSS_NAME := "폐허의 포격수 묘르"
 # 위험도 절반부터 사냥꾼 보스가 온다(피로도 폐지로 트리거 이관).
 const DANGER_BOSS_TRIGGER := 0.5
+# ── 적 스탯 배율 손잡이(2026-08-30) ───────────────────────────────
+# 존 4부터 단계마다 ×2.1. 존 1~3은 킬 타이밍 튜닝 구간이라 건드리지 않는다.
+const ENEMY_STAGE_POWER_GROWTH := 2.1
+const ENEMY_STAGE_POWER_FLOOR := 3
+# 엔드게임: 위험도 100% 초과 체류 90초마다 +100%, 최대 +300%.
+const ENEMY_ENDGAME_RAMP_SECONDS := 90.0
+const ENEMY_ENDGAME_MAX_BONUS := 3.0
 const FIELD_LOOT_CACHE_TEXTURE := preload("res://assets/interiors/office_dungeon/modules/office_salvage_loot_v1.png")
 const FIRST_STAGE_SOLO_SQUAD_CHANCE := 0.62
 # 초반 존 밖 일반 배치의 분대 크기 분포 — 1인 48% / 2인 37% / 3인 15%.
@@ -165,6 +172,47 @@ func _zone_stage_tier() -> int:
 	if host == null:
 		return 3
 	return LOOT_ECONOMY.get_stage_for_zone(host.raid_zone_data)
+
+
+func get_enemy_power_scale() -> float:
+	# 적 스탯 배율 — 플레이어 강화 천장을 걷어낸 뒤(무기 +25 이후 복리) 심층
+	# 존과 엔드게임이 종잇장이 되지 않게 잡는 값이다.
+	#
+	# 러버밴딩 금지: 입력은 '어느 존인가'(required_tier)와 '얼마나 오래 버텼는가'
+	# (위험도 100% 초과 체류)뿐이다. 플레이어의 레벨·강화·장비는 보지 않는다.
+	#
+	#   존 1~3 : ×1.0 — 종로/남대문/을지로는 킬 타이밍이 튜닝된 구간이라 불변
+	#   존 4   : ×2.1  (K2 +40 ≈ ×3.45 피해와 맞물린다)
+	#   존 5   : ×4.4  (+55 ≈ ×7.2)
+	#   엔드게임: 위험도 100%를 넘겨 버틴 시간마다 계속 붙는다(상한 ×4)
+	return get_enemy_stage_scale() * get_enemy_endgame_scale()
+
+
+func get_enemy_stage_scale() -> float:
+	# 존 단계만. 보스는 자체 티어 곡선을 이미 갖고 있어 이 배율을 타지 않는다.
+	if host == null:
+		return 1.0
+	# 보스(rocket_boss)와 같은 필드를 읽는다 — 단계 기준이 갈리면 안 된다.
+	var zone_data := host.raid_zone_data as Dictionary
+	var zone_tier := clampi(
+		int(zone_data.get("stage_tier", zone_data.get("required_tier", 1))), 1, 5
+	)
+	return pow(
+		ENEMY_STAGE_POWER_GROWTH, float(maxi(0, zone_tier - ENEMY_STAGE_POWER_FLOOR))
+	)
+
+
+func get_enemy_endgame_scale() -> float:
+	# 엔드게임 — 위험도 하드캡을 넘겨 버티는 동안 도시가 계속 세진다.
+	# 처형자만으로는 "오래 버티면 위험하다"가 한 번 오고 끝이라, 밀도·위협에
+	# 이어 스탯도 함께 오르게 한다. 보스에게도 이 몫만은 붙는다.
+	if host == null:
+		return 1.0
+	var overcap_seconds := float(host.get("danger_overcap_seconds"))
+	return 1.0 + minf(
+		ENEMY_ENDGAME_MAX_BONUS,
+		overcap_seconds / ENEMY_ENDGAME_RAMP_SECONDS
+	)
 
 
 func get_max_concurrent_alerted() -> int:
@@ -364,6 +412,8 @@ func _spawn_enemy_squad(
 			squad_anchor,
 			spawn_position - squad_anchor
 		)
+		# 모든 스폰 경로가 이 함수를 지난다 — 존 단계·엔드게임 배율도 여기 한 곳에서.
+		enemy.call("set_power_scale", get_enemy_power_scale())
 		for metadata_key in metadata:
 			enemy.set_meta(str(metadata_key), metadata[metadata_key])
 		if order_position != Vector3.INF and enemy.has_method("receive_reinforcement_order"):
@@ -1133,6 +1183,9 @@ func _spawn_rocket_boss_at(
 	if boss.has_signal("damaged"):
 		boss.connect("damaged", _on_enemy_damaged)
 	host.enemies.append(boss)
+	# 보스는 존 티어 곡선을 스스로 갖고 있으므로(rocket_boss.configure_rocket_boss)
+	# 엔드게임 몫만 얹는다 — 단계 배율까지 곱하면 이중 계산이 된다.
+	boss.call("set_power_scale", get_enemy_endgame_scale())
 	boss.name = boss_name
 	boss.set_meta("raid_boss", true)
 	boss.set_meta("zone_id", GameState.selected_raid_zone)

@@ -77,7 +77,10 @@ func configure_rocket_boss(target_body: CharacterBody3D, initial_threat: float) 
 				"get_raid_zone", str(game_state.get("selected_raid_zone"))
 			) as Dictionary
 			zone_tier = clampi(int(zone.get("stage_tier", 1)), 1, 5)
-	var tier_multiplier := 1.0 + float(zone_tier - 1) * 0.30
+	# 티어당 +30% → +62%(2026-08-30). 플레이어 강화 천장을 걷어내(+25 이후 복리)
+	# K2 +55가 한 발 345까지 오르면서, 옛 곡선(남산 ×2.2 ≈ 4,400)은 열 몇 발이면
+	# 끝나 보스가 보스로 안 읽혔다. 종로(티어 1)는 ×1.0 그대로다.
+	var tier_multiplier := 1.0 + float(zone_tier - 1) * 0.62
 	# 기준: 유저 신고 "아무리 때려도 안 줄어든다". 예전 (2400+위협×1400)×(1+0.45×(티어-1))은
 	# 종로 2,610 / 남산 ~7,900 — AK+0 30dmg·실명중 50%면 첫 보스에만 3탄창 넘게 들었다.
 	# 지금은 종로 ~1,235(AK+0 약 41발·1.4탄창), 남산 ~4,400. 포이즈(16%)·격노(40%)는 그대로라
@@ -390,7 +393,9 @@ func _fire_rocket(direction: Vector3) -> void:
 	rocket.call(
 		"configure", self, target,
 		global_position + direction * 0.72 + Vector3(0.0, 1.18, 0.0),
-		lead_position, roundi(float(ROCKET_DAMAGE) * damage_multiplier), ROCKET_BLAST_RADIUS
+		lead_position,
+		roundi(float(ROCKET_DAMAGE) * damage_multiplier * get_power_damage_multiplier()),
+		ROCKET_BLAST_RADIUS
 	)
 	get_parent().add_child(rocket)
 	_spawn_enemy_muzzle_flash(direction)
@@ -531,7 +536,7 @@ func _deploy_boss_mine(index: int) -> void:
 		target,
 		global_position + forward * 0.58 + Vector3(0.0, 0.92, 0.0),
 		landing_position,
-		roundi(float(MINE_DAMAGE) * damage_multiplier),
+		roundi(float(MINE_DAMAGE) * damage_multiplier * get_power_damage_multiplier()),
 		MINE_BLAST_RADIUS
 	)
 	get_parent().add_child(mine)

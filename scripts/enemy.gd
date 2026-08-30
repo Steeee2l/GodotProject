@@ -274,6 +274,16 @@ var opening_pressure_time := 0.0
 # 엘리트 상태 — promote_to_elite()가 스폰 직후 한 번만 켠다.
 var elite := false
 var elite_damage_multiplier := 1.0
+# ── 존 단계·엔드게임 배율(2026-08-30) ─────────────────────────────
+# 플레이어 강화 곡선의 천장을 걷어내면서(무기 +25 이후 복리) 심층 존과
+# 엔드게임이 종잇장이 됐다. 그 균형을 여기서 되찾는다.
+#
+# 중요: 이 값은 **플레이어 상태를 절대 보지 않는다**(러버밴딩 금지 규칙).
+# 입력은 '어느 존인가'와 '얼마나 오래 버텼는가'뿐이다 — 둘 다 세계의 상태다.
+# 체력은 배율 그대로, 피해는 제곱근에 가깝게(0.42승) 완만히 올린다. 피해까지
+# 같이 부풀리면 심층에서 한 방에 죽어 '어려운 게 아니라 불공평한' 판이 된다.
+var power_scale := 1.0
+const POWER_SCALE_DAMAGE_EXPONENT := 0.42
 var elite_speed_multiplier := 1.0
 var elite_icon: Sprite3D
 var elite_name_label: Label3D
@@ -349,6 +359,26 @@ func configure(
 
 func set_threat_level(value: float) -> void:
 	threat_level = clampf(value, 0.0, 1.0)
+
+
+func set_power_scale(value: float) -> void:
+	# 스폰 직후에만 부른다(enemy_director._spawn_enemy_squad). 이미 잡힌 체력을
+	# 같은 비율로 다시 세워, configure에 인자를 하나 더 다는 것과 같은 결과를 낸다.
+	var next_scale := maxf(0.1, value)
+	if is_equal_approx(next_scale, power_scale):
+		return
+	var ratio := next_scale / power_scale
+	power_scale = next_scale
+	health = maxi(1, roundi(float(health) * ratio))
+	max_health = maxi(1, roundi(float(max_health) * ratio))
+	health_ratio = 1.0
+	damage_trail_ratio = 1.0
+
+
+func get_power_damage_multiplier() -> float:
+	if is_equal_approx(power_scale, 1.0):
+		return 1.0
+	return pow(power_scale, POWER_SCALE_DAMAGE_EXPONENT)
 
 
 func promote_to_elite(elite_display_name: String) -> void:
@@ -2551,8 +2581,12 @@ func _perform_melee_strike() -> void:
 	offset.y = 0.0
 	if offset.length() > 1.75 or not _has_line_of_sight():
 		return
-	# 엘리트 배율(일반 1.0)을 근접 타격에도 동일하게 적용한다.
-	var strike_damage := roundi(float(12 + roundi(6.0 * threat_level)) * elite_damage_multiplier)
+	# 엘리트 배율(일반 1.0)과 존 단계/엔드게임 배율을 근접 타격에도 똑같이.
+	var strike_damage := maxi(1, roundi(
+		float(12 + roundi(6.0 * threat_level))
+		* elite_damage_multiplier
+		* get_power_damage_multiplier()
+	))
 	if target.has_method("take_hostile_hit"):
 		# 5인자(impact_kind)를 받는 상대(플레이어)에겐 근접이라고 알린다 —
 		# 방망이·발톱 같은 큰 타격만 몸이 밀리는 감각을 남긴다.
@@ -2654,8 +2688,10 @@ func _get_enemy_bullet_damage() -> int:
 		# 존 체력 곡선(러버밴딩 없음)은 그대로다. 적 무장은 존 threat이 정한다.
 		"akm", "k2": base_damage = 10 + roundi(4.0 * threat_level)
 		"double_barrel", "pump_shotgun": base_damage = 5 + roundi(2.0 * threat_level)
-	# 엘리트 배율(일반 1.0) — 존 티어 스탯 위에 곱한다.
-	return roundi(float(base_damage) * elite_damage_multiplier)
+	# 엘리트 배율(일반 1.0) · 존 단계/엔드게임 배율 — 존 티어 스탯 위에 곱한다.
+	return maxi(1, roundi(
+		float(base_damage) * elite_damage_multiplier * get_power_damage_multiplier()
+	))
 
 
 func get_combat_identity() -> Dictionary:
