@@ -138,8 +138,8 @@ func _run() -> void:
 			gear_drop_count += 1
 		if str(ranged_drop.get("type", "")) == "ammo":
 			var ammo_amount := int((ranged_drop.get("data", {}) as Dictionary).get("amount", 0))
-			# 스마트 탄약: 장착 구경 매칭 드랍은 정상 스택(최대 12발)까지 나온다.
-			assert(ammo_amount >= 2 and ammo_amount <= 12)
+			# 2026-08-30 탄약 넉넉화: 낱개 8~16, 정상 스택(존4) 15~26.
+			assert(ammo_amount >= 8 and ammo_amount <= 26)
 		# 옛 "맨손 회복 무기 58%" — 장비가 영구 귀속이라 플래그가 켜져도 무기는 없다.
 		var recovery_drop := LOOT_ECONOMY.roll_enemy_drop(1, "ranged", "m1911", random, true)
 		if str(recovery_drop.get("type", "")) in ["weapon", "armor"]:
@@ -161,19 +161,20 @@ func _run() -> void:
 				matched_ammo_count += 1
 	assert(ammo_drop_count > 100)
 	var matched_rate := float(matched_ammo_count) / float(ammo_drop_count)
-	assert(matched_rate >= 0.55, "장착 구경 매칭 탄약이 다수여야 한다 (실측 %.2f)" % matched_rate)
+	# 매칭 확률 70→90%(2026-08-30) — 다수가 아니라 '거의 전부'여야 한다.
+	assert(matched_rate >= 0.8, "장착 구경 매칭 탄약이 거의 전부여야 한다 (실측 %.2f)" % matched_rate)
 
-	# 호환탄 회수량: 6~(10+min(스테이지,3)) — 종전 규칙 그대로.
+	# 호환탄 회수량: 12~(20+2×min(스테이지,3)) — 2026-08-30 넉넉화.
 	for recovery_stage in range(1, 6):
 		var recovery_total := 0
-		var recovery_cap := 10 + mini(recovery_stage, 3)
+		var recovery_cap := 20 + 2 * mini(recovery_stage, 3)
 		for _sample in 2000:
 			var recovery := LOOT_ECONOMY.roll_matched_ammo_recovery(recovery_stage, random)
 			var recovery_amount := int((recovery.get("data", {}) as Dictionary).get("amount", 0))
-			assert(recovery_amount >= 6 and recovery_amount <= recovery_cap)
+			assert(recovery_amount >= 12 and recovery_amount <= recovery_cap)
 			recovery_total += recovery_amount
 		var recovery_average := float(recovery_total) / 2000.0
-		var expected_average := (6.0 + float(recovery_cap)) * 0.5
+		var expected_average := (12.0 + float(recovery_cap)) * 0.5
 		assert(absf(recovery_average - expected_average) <= 0.4)
 
 	# 스마트 탄약 치환률: 일반 상자 75%.
