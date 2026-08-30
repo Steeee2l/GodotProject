@@ -420,6 +420,13 @@ func _show_catnip_fever_lesson_once() -> void:
 
 
 func _open_shelter_return_followups() -> void:
+	# 시설 해금 알림 — 사자 대사에서 추방된 시스템 안내의 새 자리.
+	if not GameState.pending_facility_unlock_notices.is_empty():
+		var facility_names: Array[String] = []
+		for facility_id in GameState.pending_facility_unlock_notices:
+			facility_names.append(str(GameState.SHELTER_FACILITY_NAMES.get(facility_id, facility_id)))
+		_show_status("새 시설 개방 · %s" % " · ".join(facility_names))
+		GameState.pending_facility_unlock_notices.clear()
 	_show_catnip_fever_lesson_once()
 	var pending_story: Dictionary = GameState.get_pending_shelter_story_event()
 	if str(pending_story.get("id", "")) == "juhong_intro":
@@ -1016,7 +1023,7 @@ func _interact_with_saja() -> void:
 		_open_pending_shelter_story()
 		return
 	if not GameState.is_contract_agent_available():
-		_show_status("사자 · 첫 출정에서 살아 돌아오면 재건 계획을 맡기겠습니다.")
+		_show_status("사자 · 일단 살아서 돌아와요. 얘기는 그다음에 해요.")
 		return
 	_open_contract_ui()
 
@@ -2445,15 +2452,15 @@ func _refresh_contract_ui() -> void:
 		# 막다른 벽이 아니라 다음 목표 게시판이 된다.
 		var commission: Dictionary = GameState.get_city_commission()
 		if not commission.is_empty() and not bool(commission.get("completed", false)):
-			finished_body.text = "생산망은 완성됐습니다. 다음 장부는 도시입니다.\n\n이번 의뢰 · %s → 고철 %s%s" % [
+			finished_body.text = "덕분에 쉘터는 이제 스스로 굴러가요. 남은 건 도시 쪽 일이에요.\n\n이번 의뢰 · %s → 고철 %s%s" % [
 				GameState.get_city_commission_summary(),
 				GameState.format_compact_number(int(commission.get("reward_scrap", 0))),
 				" + 츄르 %d" % int(commission.get("reward_churu", 0)) if int(commission.get("reward_churu", 0)) > 0 else "",
 			]
 		elif not commission.is_empty():
-			finished_body.text = "이번 의뢰는 기록했습니다. 다음 복귀까지 새 의뢰를 준비해 두겠습니다."
+			finished_body.text = "이번 의뢰도 잘 끝났어요. 다음 복귀까지 새 일감을 찾아 둘게요."
 		else:
-			finished_body.text = "계약한 시설은 전부 가동 중입니다.\n이제 주민 배치와 업그레이드로 쉘터를 키우세요."
+			finished_body.text = "계약한 시설은 전부 잘 돌아가요.\n이제 주민 배치와 업그레이드로 쉘터를 키워 봐요."
 		finished_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		finished_body.add_theme_font_override("font", FONT)
 		finished_body.add_theme_font_size_override("font_size", 16)
@@ -2619,13 +2626,13 @@ func _add_contract_reward_chips(
 func _accept_current_contract() -> void:
 	var result := GameState.accept_current_contract()
 	if not bool(result.get("ok", false)):
-		contract_report_message = "사자: 지금 맡긴 계약부터 끝내세요. 순서는 내가 정합니다."
+		contract_report_message = "사자: 지금 맡은 일부터 끝내고 와요. 욕심내면 몸이 상해요."
 	else:
 		var definition := result.get("definition", {}) as Dictionary
 		var story_lines: Array[String] = []
 		for line in definition.get("accept_dialogue", []) as Array:
 			story_lines.append(str(line))
-		story_lines.append("목표는 %s. 살아서 돌아와 보고하세요. 숫자는 내가 세고 있겠습니다." % str(
+		story_lines.append("할 일은 %s. …뭐가 됐든, 살아서 돌아오는 게 먼저예요." % str(
 			definition.get("objective", "현장 목표 완수")
 		))
 		_show_status("사자에게서 시설 건설 계약을 받았습니다.")
@@ -2641,7 +2648,7 @@ func _accept_current_contract() -> void:
 func _claim_current_contract() -> void:
 	var result := GameState.claim_current_contract_reward()
 	if not bool(result.get("ok", false)):
-		contract_report_message = "사자: 수량이 모자랍니다. 목표부터 확인하고 오세요."
+		contract_report_message = "사자: 아직 조금 모자라네요. 급할 것 없어요, 천천히 챙겨 와요."
 	else:
 		var definition := result.get("definition", {}) as Dictionary
 		var construction_line := ""

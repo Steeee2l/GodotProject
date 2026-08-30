@@ -422,6 +422,11 @@ var shelter_facility_unlocks: Dictionary = {
 }
 var contract_agent_intro_seen: bool = false
 var saja_intro_seen: bool = false
+# 사자 복귀 잡담 — 큰 이벤트가 없는 복귀에도 말을 건다(복귀당 1회, 진행 단계별 풀).
+var saja_chatter_serial_seen: int = -1
+var saja_chatter_indices: Dictionary = {}
+# 복귀에서 새로 열린 시설 — 쉘터 진입 토스트가 소비한다(대사 언급 금지).
+var pending_facility_unlock_notices: Array[String] = []
 # ── 주홍 동행(2026-08-30) — 생환 3회째에 쉘터로 찾아와 합류한다. ──
 # unlocked = 동행 시스템 해금(주홍 등장 이벤트 확인 시), enabled = 브리핑 토글
 # (잠입 판은 끄고 갈 수 있다 — 기본 켬).
@@ -542,12 +547,12 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"title": "부품 세 개",
 		"brief": "도시에서 기초 부품 3개를 확보해 사자에게 전달하세요.",
 		"accept_dialogue": [
-			"이 쉘터는 벽만 남았습니다. 설비가 없으면 장부에 올릴 게 없습니다.",
-			"부품 세 개. 가져오면 생산기를 세웁니다. 계산은 정확하게 합시다.",
+			"쉘터가 아직 벽만 남아서요. 생산기 하나만 세우면 애들이 놀고 먹지 않아도 되는데….",
+			"부품 세 개면 돼요. 무리는 말고요. 없으면 그냥 돌아와요, 그게 더 중요하니까.",
 		],
 		"complete_dialogue": [
-			"세 개 확인했습니다. 수령 처리하겠습니다.",
-			"꾹꾹이 고철 생산기를 가동합니다. 주민이 늘면 수치도 오릅니다.",
+			"세 개나… 고마워요, 정말. 애들 불러서 바로 세울게요.",
+			"이제 이 쉘터도 스스로 벌어먹기 시작하는 거예요. 당신 덕이에요.",
 		],
 		"objective": "기초 부품 확보",
 		"metric": "parts",
@@ -562,12 +567,12 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"title": "운반로 정리",
 		"brief": "주변 위협 4명을 정리해 캣닢 재배 장비를 옮길 길을 확보하세요.",
 		"accept_dialogue": [
-			"캣닢은 사치품이 아닙니다. 주민 생산량에 그대로 잡히는 항목입니다.",
-			"운반로에 넷이 서 있습니다. 치워 주세요. 넷입니다.",
+			"캣닢 재배 장비를 옮겨야 하는데, 길목에 그놈들이 버티고 있어요.",
+			"넷이에요. …조심해요. 장비보다 당신이 먼저예요.",
 		],
 		"complete_dialogue": [
-			"넷 확인. 운반로 개통으로 처리했습니다.",
-			"캣닢 생산기를 올립니다. 고철은 뼈, 캣닢은 피. 둘 다 숫자로 관리합니다.",
+			"길이 뚫렸다고 애들이 만세를 부르던데요.",
+			"캣닢 냄새가 나면 쉘터가 살아 있는 것 같아요. 고마워요.",
 		],
 		"objective": "운반로 위협 제거",
 		"metric": "kills",
@@ -582,13 +587,12 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"title": "정비 기록 두 건",
 		"brief": "현장 기록 2개를 조사해 폐쇄된 정비 구역의 위치를 찾으세요.",
 		"accept_dialogue": [
-			"망가진 총을 살리려면 기록이 필요합니다. 두 건이면 됩니다.",
-			"정비 구역 위치가 거기 적혀 있습니다. 찾아오세요.",
+			"망가진 총들을 살려 보고 싶은데, 옛날 정비 기록이 필요해요.",
+			"현장 기록 두 건이면 돼요. 종이 쪼가리라 무겁지도 않아요.",
 		],
 		"complete_dialogue": [
-			"원본과 대조했습니다. 좌표가 맞습니다.",
-			# 제작대는 이제 처음부터 열려 있다(2026-08-28) — 개방 선언 대신 정비 팁.
-			"정비 구역 부품 목록을 작업대에 걸어 두었습니다. 주운 총은 버리지 마세요. 자산입니다.",
+			"이거예요, 이거. …보고 있으니 옛날 생각이 나네요.",
+			"주운 총은 버리지 말고 작업대로 가져와요. 고쳐 쓰는 재미가 있어요.",
 		],
 		"objective": "정비 기록 조사",
 		"metric": "lore",
@@ -602,12 +606,12 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"title": "설비 분해 두 건",
 		"brief": "버려진 차량이나 군용 설비 2개를 분해하세요.",
 		"accept_dialogue": [
-			"폐허는 쓰레기장이 아니라 미정리 재고입니다.",
-			"설비 두 개를 분해해 오세요. 무엇을 챙길지는 목록으로 배우는 겁니다.",
+			"버려진 차나 설비, 그냥 지나치기엔 아깝잖아요.",
+			"두 개만 분해해 봐요. 뭐가 쓸 만한지는 몸으로 배우는 게 제일 빨라요.",
 		],
 		"complete_dialogue": [
-			"두 건 확인. 품목별로 정리해 두었습니다.",
-			"좋은 부품 하나가 총 한 자루보다 오래 갑니다. 계산이 그렇게 나옵니다.",
+			"부품 상태가 좋네요. 작업대 애들이 신났어요.",
+			"좋은 부품 하나가 총 한 자루보다 오래 가요. 우리 아버지가 하던 말이에요.",
 		],
 		"objective": "현장 설비 분해",
 		"metric": "salvage",
@@ -621,12 +625,12 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"title": "빈 침상 한 자리",
 		"brief": "도시에서 주민 1명을 구출해 쉘터까지 호송하세요.",
 		"accept_dialogue": [
-			"침상이 하나 비어 있습니다. 빈 자리는 장부에 손실로 잡힙니다.",
-			"밖에서 한 명 데려오세요. 한 명입니다.",
+			"침상이 하나 비어 있어요. 빈 침대를 보면 마음이 안 좋아요.",
+			"밖에 아직 혼자 버티는 애들이 있어요. 한 명만 데려와 줘요.",
 		],
 		"complete_dialogue": [
-			"한 명 등록했습니다. 이름과 배급량을 적어 두었습니다.",
-			"숫자가 하나 늘었습니다. 나는 늘어난 숫자를 좋아합니다.",
+			"따뜻한 물부터 데워 줬어요. 많이 지쳤더라고요.",
+			"이름도 적어 뒀어요. …이제 우리 식구예요.",
 		],
 		"objective": "주민 구출",
 		"metric": "rescue",
@@ -640,12 +644,12 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"title": "현장 작전 한 건",
 		"brief": "필드 작전 1개를 수락하고 완수한 뒤 생환하세요.",
 		"accept_dialogue": [
-			"이제 남이 낸 길만 따라갈 단계는 지났습니다.",
-			"현장 작전 한 건을 끝내고 오세요. 결과는 보고서로 받겠습니다.",
+			"이제 당신은 남이 낸 길만 다닐 사람이 아니에요.",
+			"현장 작전 하나, 당신 방식대로 끝내고 와요. 나는 여기서 기다릴게요.",
 		],
 		"complete_dialogue": [
-			"보고서 접수했습니다. 이 쉘터는 이제 거점으로 분류됩니다.",
-			"질문은 규정에 없습니다. 다음 계약을 준비하겠습니다.",
+			"돌아온 얼굴을 보니 잘 끝났네요. 그거면 됐어요.",
+			"이 쉘터가 당신 덕에 거점 소리를 들어요. …다음 일도 부탁해도 될까요?",
 		],
 		"objective": "현장 작전 완료",
 		"metric": "field_mission",
@@ -1524,7 +1528,8 @@ func register_shelter_return(survived: bool = true) -> void:
 	# 남겨 둔 시체는 그동안 남의 손을 탄다.
 	last_corpse_decay_notice = apply_corpse_decay()
 	pending_milestone_unlocks = check_milestone_unlocks()
-	sync_shelter_progression_milestones()
+	# 시설 해금 안내는 대사가 아니라 토스트가 맡는다(사자 대사에서 시스템 언급 추방).
+	pending_facility_unlock_notices = sync_shelter_progression_milestones()
 	# 계약을 완주했다면 복귀마다 새 도시 의뢰를 내건다(후반 반복 목표).
 	roll_city_commission()
 	save_persistent_state()
@@ -1775,6 +1780,119 @@ func sync_shelter_progression_milestones() -> Array[String]:
 	return newly_unlocked
 
 
+# 사자 복귀 잡담 풀 — 매 복귀, 큰 이벤트가 없을 때 하나씩 돈다. 반전 전(early/mid)은
+# 순수한 다정함 + 아주 옅은 복선, 반전 후(late)는 같은 다정함이 무섭게 읽힌다.
+# 대사는 절대 보상·시설·시스템을 언급하지 않는다(몰입, 유저 확정).
+const SAJA_CHATTER := {
+	"early": [
+		{"title": "흙먼지", "lines": [
+			"얼굴에 흙먼지가… 이리 와 봐요. …됐다, 이제 사람 꼴이 났네요.",
+			"밖에서 뭘 보든, 돌아와서 이 문만 두드리면 돼요. 그게 쉘터예요.",
+		]},
+		{"title": "당신 몫", "lines": [
+			"오늘 배급은 국물 있는 거예요. 당신 몫은 따로 덜어 놨어요.",
+			"왜 그렇게 봐요. 밖에 나가는 사람 몫이 큰 건 당연하죠.",
+		]},
+		{"title": "걸음소리", "lines": [
+			"망루 애들이 그러던데, 당신 걸음소리는 멀리서도 알아보겠대요.",
+			"조용히 걷는 법도 배워 둬요. 오래 봐야 할 얼굴이니까.",
+		]},
+		{"title": "그 소리", "lines": [
+			"라디오 말인데… 나는 그 근처에 안 가요. 왠지 싫더라고요, 그 소리.",
+			"당신은 그 소리를 따라온 사람이니까, 이런 말 이상하게 들리려나.",
+		]},
+		{"title": "버릇", "lines": [
+			"지난번에 다친 데는 좀 어때요? …내가 그런 걸 잘 기억해요. 버릇이에요.",
+			"기억하는 게 많으면 걱정도 많아져요. 늙는다는 게 그래요.",
+		]},
+		{"title": "바깥", "lines": [
+			"애들이 자꾸 물어요. 밖은 어떠냐고. 나는 모른다고 해요.",
+			"나가 본 지가… 너무 오래됐거든요. 당신 얘기가 내 바깥이에요.",
+		]},
+	],
+	"mid": [
+		{"title": "이름의 무게", "lines": [
+			"명단 얘기 들었어요. 이름이 스물일곱이라고요.",
+			"이름이라는 게, 적어 놓으면 무거워져요. …내가 요즘 쓸데없는 소리를 하네요. 밥 먹어요.",
+		]},
+		{"title": "생선 대가리", "lines": [
+			"남대문 시장, 옛날엔 나도 자주 갔어요. 생선 대가리를 공짜로 주던 할머니가 있었죠.",
+			"…그 할머니는 어떻게 됐으려나. 모르겠네요.",
+		]},
+		{"title": "정리하는 손", "lines": [
+			"당신이 가져오는 기록들, 내가 정리해서 보관하고 있어요.",
+			"언젠가 전부 이어 보면 뭔가 보이겠죠. 그때까진 내가 잘 갖고 있을게요.",
+		]},
+		{"title": "잠", "lines": [
+			"요즘 잠을 잘 못 자요. 쉘터가 커지니까 지킬 게 많아져서 그런가.",
+			"당신도 자는 얼굴이 편치 않던데. …서로 못 본 척해 줘요.",
+		]},
+		{"title": "주홍", "lines": [
+			"주홍이 다녀갔다면서요. 걔가 나를 싫어하는 건 알아요.",
+			"이유는… 언젠가 걔한테 직접 물어봐 줘요. 내 입으로 할 얘기는 아니에요.",
+		]},
+		{"title": "서명", "lines": [
+			"혹시 밖에서 내 이름이 적힌 걸 보면, 놀라지 말아요.",
+			"사람 있던 시절엔 여기저기 서명할 일이 많았거든요. 관리인이 다 그렇죠, 뭐.",
+		]},
+	],
+	"late": [
+		{"title": "달라진 눈", "lines": [
+			"요즘 당신이 나를 보는 눈이 좀 달라졌네요.",
+			"…피곤해서 그럴 거예요. 국 먼저 먹어요. 식겠어요.",
+		]},
+		{"title": "어두운 데", "lines": [
+			"을지로 아래까지 내려갔었다고요. 어두웠죠, 거기.",
+			"나는 어두운 데가 싫어요. 그래서 여기 등을 안 꺼요.",
+		]},
+		{"title": "밥은 밥", "lines": [
+			"무슨 얘길 들었는지 모르겠지만… 밥은 밥이에요.",
+			"식기 전에 먹어요. 그건 어느 쪽이든 변하지 않아요.",
+		]},
+		{"title": "그날", "lines": [
+			"사람들이 사라진 날 말이에요. 나는 그날 여기서 문을 잠그고 있었어요.",
+			"애들이 못 나가게요. …그게 내가 한 일의 전부예요.",
+		]},
+		{"title": "남산", "lines": [
+			"남산에는 눈이 일찍 와요. 올라갈 거면 따뜻하게 입어요.",
+			"…거긴 왜 가냐고는 안 물을게요. 당신은 늘 이유가 있었으니까.",
+		]},
+		{"title": "사나운 꿈", "lines": [
+			"당신이 못 돌아오는 꿈을 꿨어요. …웃지 말아요.",
+			"늙으면 꿈이 사나워져요. 그러니까 꼭 돌아와요. 꿈이 틀리게.",
+		]},
+	],
+}
+
+
+func _completed_main_zone_count() -> int:
+	var count := 0
+	for zone_value in MAIN_MISSION_CATALOG.ZONE_ORDER:
+		if is_zone_main_chain_complete(str(zone_value)):
+			count += 1
+	return count
+
+
+func _build_saja_chatter_event() -> Dictionary:
+	var completed := _completed_main_zone_count()
+	var stage_key := "early"
+	if completed >= 3:
+		stage_key = "late"
+	elif completed >= 1:
+		stage_key = "mid"
+	var pool := SAJA_CHATTER.get(stage_key, []) as Array
+	if pool.is_empty():
+		return {}
+	var index := int(saja_chatter_indices.get(stage_key, 0)) % pool.size()
+	var entry := pool[index] as Dictionary
+	return {
+		"id": "saja_chatter_%s_%d" % [stage_key, index],
+		"speaker": "사자",
+		"title": str(entry.get("title", "잡담")),
+		"lines": (entry.get("lines", []) as Array).duplicate(),
+	}
+
+
 func get_pending_shelter_story_event() -> Dictionary:
 	if not opening_completed:
 		return {}
@@ -1782,23 +1900,21 @@ func get_pending_shelter_story_event() -> Dictionary:
 		return {
 			"id": "saja_intro",
 			"speaker": "사자",
-			"title": "쉘터 관리자",
-			# 쉘터에서 처음 만나는 인물 — 첫 만남의 일: 긴장 풀기(망루가 봤다) →
-			# 쉘터 소개 → 라디오의 정체를 뒤집기: 나비만 들은 게 아니라 "여기 모두가
-			# 그 소리를 듣고 강을 건너왔다". 쉘터가 왜 존재하는지(신호가 모았다)와
-			# 사자가 라디오를 아는 이유(누가 말 안 해도 안다)가 이 한 수로 풀린다 —
-			# 그리고 '부르는 소리'는 종로의 수거 방송, 남산의 시스템까지 같은 소리다.
-			# '이름을 적는다'는 다정해 보이지만 반전(명단을 받아 적은 손)의 복선.
-			# 겉은 험악, 말은 꼼꼼하고 예의 바르게.
+			"title": "쉘터의 사자",
+			# 사자 v2(2026-08-30 유저 확정): 누구도 의심 못 할 다정한 관리자.
+			# 반전의 설득력은 대사의 서늘함이 아니라 다정함에서 나온다 — 의심의
+			# 단서는 수집 기록물('사자의 기록')과 주홍의 입에만 둔다. 대사는 끝까지
+			# 따뜻하게. '이름을 적는 버릇'은 여기선 애정으로 읽히고, 존2~3에서
+			# 명단의 필체로 되짚였을 때에야 소름이 되게 설계.
 			"lines": [
-				"총은 내려도 됩니다. 다리 쪽 망루가 당신을 한 시간 전부터 보고 있었으니까.",
-				"여기는 쉘터. 갈 곳 잃은 고양이들이 모여 사는 곳입니다. 나는 사자, 장부를 맡고 있습니다.",
-				"무엇을 따라왔는지는 묻지 않겠습니다. 다리를 건너온 고양이는 전부 같은 말을 하니까 — 라디오가 불렀다고.",
-				"여기 있는 모두가 그 소리를 듣고 왔습니다. 그리고 우리 중 누구도 송신기를 가진 적이 없습니다.",
-				"발신지는 종로 방향입니다. 확인하러 간 식구는 아직 없습니다 — 총을 든 식구가 없었으니까.",
-				"규칙은 하나입니다. 밖에서 가져온 건 값을 쳐 받고, 안에서는 아무도 굶지 않습니다.",
-				"이름은? …나비. 적어 두겠습니다. 오늘부터 이 쉘터 식구입니다.",
-				"우선 쉬세요. 종로는 내일도 그 자리에 있을 테니까.",
+				"아이고, 총은 내려요. 다리 망루가 한 시간 전부터 봤어요 — 위험한 사람이었으면 벌써 문을 잠갔죠.",
+				"어서 와요. 여기는 쉘터예요. 갈 곳 없는 고양이들이 모여 살아요. 나는 사자라고 해요. 살림을 맡고 있어요.",
+				"…라디오 소리를 따라왔죠? 안 물어봐도 알아요. 다리를 건너오는 애들은 다 같은 얼굴을 하고 있거든요.",
+				"여기 있는 모두가 그 소리를 듣고 왔어요. 이상하죠. 우리 중 누구도 송신기 같은 건 가져 본 적이 없는데.",
+				"발신지는 종로 쪽이에요. 가 본 식구는 아직 없어요. 총을 든 식구가 없었거든요. …당신이 처음이에요.",
+				"규칙은 하나예요. 밖에서 가져온 건 값을 제대로 쳐 주고, 안에서는 아무도 안 굶어요. 그게 다예요.",
+				"이름이 뭐예요? …나비. 좋은 이름이네요. 적어 둘게요 — 버릇이에요. 적어 두면, 잊히지 않거든요.",
+				"오늘은 그냥 쉬어요. 종로는 내일도 거기 있을 테니까. 밥부터 먹고요.",
 			],
 		}
 	# 주홍 합류 — 생환 3회째. 사자를 의심하는 인물이 내 출정에 붙는 순간이라
@@ -1822,15 +1938,15 @@ func get_pending_shelter_story_event() -> Dictionary:
 		return {
 			"id": "saja_second_run",
 			"speaker": "사자",
-			"title": "생환 1회 · 기록 완료",
+			"title": "돌아온 날",
+			# 보상·시설 안내는 대사에서 뺀다(몰입 붕괴, 유저 확정) — 해금 알림은
+			# 쉘터 진입 토스트가 맡는다. 대사는 안부와 이야기만.
 			"lines": [
-				"제 발로 돌아왔군요. 생환 1회, 기록했습니다.",
-				"창고와 훈련장을 열었습니다. 전리품은 창고에, 통조림은 몸에 쓰세요.",
-				# 필드에 캣닢 픽업이 없다 — 없는 것을 찾게 만드는 대사는 뺐다.
-				"고철 더미는 그냥 지나치지 마세요. 그게 이 쉘터의 예산입니다.",
-				"훈련은 철근에게 받으세요. 몸은 그쪽 담당, 공사는 내 담당입니다.",
-				"오늘은 행상인도 올 겁니다. 들일지는 당신이 정하세요.",
-				"내 계약을 하나 처리할 때마다 시설이 하나 올라갑니다. 그 이상은 묻지 마세요.",
+				"돌아왔네요. …다행이에요, 정말. 문소리 나자마자 뛰어나왔잖아요.",
+				"밖은 어땠어요? 아니다, 밥부터 먹어요. 국물 있는 걸로 데워 놨어요.",
+				"종로 그 지하철역 말이에요… 사람들이 사라진 날 밤, 마지막까지 불이 켜져 있던 곳이에요.",
+				"뭘 보고 오든 나한테는 편하게 얘기해요. 무서운 얘기일수록 나눠야 가벼워져요.",
+				"아, 철근이 당신을 눈여겨보던데요. 무뚝뚝해도 나쁜 애는 아니에요. 시간 나면 가 봐요.",
 			],
 		}
 	# 부품을 처음 들고 온 순간이 제작대를 가르칠 유일한 적기다. "스프링을 주웠는데
@@ -1844,45 +1960,45 @@ func get_pending_shelter_story_event() -> Dictionary:
 		return {
 			"id": "saja_workbench",
 			"speaker": "사자",
-			"title": "가방 점검",
+			"title": "쇳내",
 			"lines": [
-				"가방에서 쇳내가 납니다. 스프링, 렌즈, 고무. 팔 생각부터 하지 마세요.",
-				"작업대로 가져가세요. 부품 몇 개면 조준경이 되고, 스프링은 급탄 개조가 됩니다.",
-				"만든 개조품은 무기에 끼우세요. 같은 총이 다른 물건이 됩니다.",
-				"고철이 남으면 영구 강화도 됩니다. 모든 품목에는 자리가 있습니다.",
+				"가방에서 쇳내가 나요. 스프링에, 렌즈에… 좋은 걸 주웠네요.",
+				"팔기 전에 작업대에 한번 가져가 봐요. 손재주 좋은 애들이 조준경이며 급탄이며 뚝딱 만들어 줘요.",
+				"총은 좋은 걸 들어요. 밖에 나가는 사람이 당신뿐이라… 나는 그게 늘 마음에 걸려요.",
 			],
 		}
 	if rescued_workers > saja_seen_resident_count:
 		return {
 			"id": "saja_resident_%d" % rescued_workers,
 			"speaker": "사자",
-			"title": "명단 추가",
+			"title": "새 식구",
 			"lines": [
-				"한 명 데려왔군요. 이름을 부르세요. 적어야 합니다.",
-				"…적었습니다. 배급량은 내가 정합니다.",
-				"쉬게 두었다가 생산기에 세우세요. 숫자는 늘어야 합니다.",
+				"한 명 데려왔어요? 잘했어요. 정말 잘했어요.",
+				"이름부터 물어봐야죠. …적어 둘게요. 오늘부터 우리 식구예요.",
+				"밥은 내가 챙길 테니까, 당신은 몸이나 성해서 다녀요.",
 			],
 		}
 	if total_boss_kills > saja_seen_boss_kills:
 		return {
 			"id": "saja_boss_%d" % total_boss_kills,
 			"speaker": "사자",
-			"title": "빈자리 보고",
+			"title": "바깥 소문",
 			"lines": [
-				"밖이 시끄러웠다더군요. 이름 있는 놈 하나가 지워졌다고.",
-				"빈자리는 채워집니다. 예외를 본 적이 없습니다.",
-				"다음 출정 때 같은 길이어도 주인이 다를 겁니다. 참고하세요.",
+				"밖이 시끄러웠다면서요. 이름 있는 놈을 잡았다고 애들이 문 앞에서 떠들던데요.",
+				"무리하진 말아요. 그런 놈들 자리는 금방 딴 놈이 채워요. 도시가 원래 그래요.",
+				"…그래도 오늘은 자랑해도 돼요. 국 한 그릇 더 줄게요.",
 			],
 		}
 	if recovered_story_cargo_ids.size() > saja_seen_story_cargo_count:
 		return {
 			"id": "saja_cargo_%d" % recovered_story_cargo_ids.size(),
 			"speaker": "사자",
-			"title": "품목 확인",
+			"title": "오래된 표식",
+			# 그는 화제를 다정하게 돌린다 — 나중에 돌아보면 이게 회피였다.
 			"lines": [
-				"이 표식… 오래된 수송 서식입니다. 지금은 안 씁니다.",
-				"잉크가 아직 안 말랐군요. 누가 최근에 다시 썼다는 뜻입니다.",
-				"어디서 가져왔는지는 적지 않겠습니다. 그게 서로 편합니다.",
+				"이 표식… 옛날 수송 서식이네요. 사람 있던 시절에 관공서에서 쓰던 거예요.",
+				"잉크가 아직 안 말랐네. 요즘도 이런 걸 쓰는 사람이 있나 봐요.",
+				"…무거운 얘기는 그만해요. 다친 데는 없어요? 나는 그게 제일 중요해요.",
 			],
 		}
 	# 한 구역의 메인 미션 셋을 다 끝냈으면 사자가 다음 도시를 가리킨다.
@@ -1896,36 +2012,47 @@ func get_pending_shelter_story_event() -> Dictionary:
 		var zone_name := str((RAID_ZONES.get(chain_zone_id, {}) as Dictionary).get("name", "그 구역"))
 		var next_zone_id := MAIN_MISSION_CATALOG.get_next_zone(chain_zone_id)
 		var closing_lines: Array[String] = [
-			"%s에서 가져온 기록은 전부 접수했습니다. 그 구역은 정리 완료입니다." % zone_name,
-			"기록을 쓴 손은 한 방향으로만 움직였습니다. 이어지는 선입니다.",
+			"%s 얘기, 애들한테 들었어요. 거기까지 들어갔다 왔다니… 일단 앉아요." % zone_name,
+			"당신이 가져온 기록들은 내가 잘 보관하고 있어요. 이어 보면 뭔가 보이겠죠.",
 		]
 		if next_zone_id.is_empty():
-			closing_lines.append("그 선의 끝이 여깁니다. 남은 건 문 뒤를 직접 보는 일뿐입니다.")
+			closing_lines.append("…이제 남산만 남았네요. 끝을 보고 와요. 나는 여기서 기다릴게요.")
 		else:
 			var next_name := str(
 				(RAID_ZONES.get(next_zone_id, {}) as Dictionary).get("name", "다음 구역")
 			)
-			closing_lines.append("다음은 %s입니다. 같은 글씨가 거기서 다시 시작됩니다." % next_name)
+			closing_lines.append("다음은 %s겠네요. 가지 말라고 하고 싶은데… 그런 말 들을 사람이 아니죠." % next_name)
 			var hint := get_zone_unlock_hint(next_zone_id)
 			if not hint.is_empty():
-				closing_lines.append("%s 준비가 안 되면 문은 안 열립니다. 규정입니다." % hint)
+				closing_lines.append("%s 준비가 되면 길이 열릴 거예요. 서두르지 않아도 돼요." % hint)
+			closing_lines.append("밥 든든히 먹고 가요. 그거 하나만 약속해요.")
 		return {
 			"id": "saja_main_chain_%s" % chain_zone_id,
 			"speaker": "사자",
-			"title": "구역 정리 완료",
+			"title": "먼 길",
 			"lines": closing_lines,
 		}
 	if subway_story_stage > saja_seen_subway_stage:
 		return {
 			"id": "saja_subway_%d" % subway_story_stage,
 			"speaker": "사자",
-			"title": "지하 신호 보고",
+			"title": "지하의 소리",
 			"lines": [
-				"지하 신호가 다시 잡힙니다. 설비가 저 혼자 켜질 리는 없습니다.",
-				"누가 아래에서 손을 대고 있습니다. 누구인지는 내 소관이 아닙니다.",
-				"주홍이 먼저 내려갔을 겁니다. 만나면… 그 아이 말은 걸러 들으세요.",
+				"지하에서 신호가 다시 잡힌대요. 기계가 저 혼자 켜질 리는 없는데….",
+				"…괜히 무서운 소리를 했네요. 내려가 볼 거죠? 조심해요. 정말로요.",
+				"주홍이 먼저 내려갔을 거예요. 만나면 안부 전해 줘요. …걔는 내 말이라면 안 믿겠지만요.",
 			],
 		}
+	# 복귀 잡담 — 큰 이벤트가 없는 복귀에도 사자가 말을 건다(복귀당 1회).
+	# "말을 걸면 늘 뭔가 있다"가 사자라는 인물의 살결이 된다.
+	if (
+		saja_intro_seen
+		and shelter_return_serial >= 1
+		and shelter_return_serial > saja_chatter_serial_seen
+	):
+		var chatter := _build_saja_chatter_event()
+		if not chatter.is_empty():
+			return chatter
 	return {}
 
 
@@ -1951,6 +2078,12 @@ func mark_shelter_story_event_seen(event_id: String) -> void:
 		var chain_zone_id := event_id.trim_prefix("saja_main_chain_")
 		if not saja_seen_main_mission_zones.has(chain_zone_id):
 			saja_seen_main_mission_zones.append(chain_zone_id)
+	elif event_id.begins_with("saja_chatter_"):
+		# id = saja_chatter_{stage}_{index} — 이번 복귀 소진 + 그 단계 인덱스 전진.
+		saja_chatter_serial_seen = shelter_return_serial
+		var chatter_stage := event_id.trim_prefix("saja_chatter_")
+		chatter_stage = chatter_stage.substr(0, chatter_stage.rfind("_"))
+		saja_chatter_indices[chatter_stage] = int(saja_chatter_indices.get(chatter_stage, 0)) + 1
 	save_persistent_state()
 
 
@@ -5595,6 +5728,8 @@ func save_persistent_state() -> bool:
 		"companion_unlocked": companion_unlocked,
 		"companion_enabled": companion_enabled,
 		"juhong_field_intro_seen": juhong_field_intro_seen,
+		"saja_chatter_serial_seen": saja_chatter_serial_seen,
+		"saja_chatter_indices": saja_chatter_indices,
 		"juhong_absent_runs": juhong_absent_runs,
 		"juhong_radio_return_pending": juhong_radio_return_pending,
 		"juhong_radio_loss_count": juhong_radio_loss_count,
@@ -5866,6 +6001,8 @@ func load_persistent_state() -> bool:
 	companion_unlocked = bool(data.get("companion_unlocked", false))
 	companion_enabled = bool(data.get("companion_enabled", true))
 	juhong_field_intro_seen = bool(data.get("juhong_field_intro_seen", false))
+	saja_chatter_serial_seen = int(data.get("saja_chatter_serial_seen", -1))
+	saja_chatter_indices = (data.get("saja_chatter_indices", {}) as Dictionary).duplicate(true)
 	juhong_absent_runs = maxi(0, int(data.get("juhong_absent_runs", 0)))
 	juhong_radio_return_pending = bool(data.get("juhong_radio_return_pending", false))
 	juhong_radio_loss_count = maxi(0, int(data.get("juhong_radio_loss_count", 0)))
