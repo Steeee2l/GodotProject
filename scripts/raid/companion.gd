@@ -940,15 +940,46 @@ class JuhongBody:
 	# ── 전투 후 회수 — 시체를 돌며 장착 구경 탄약을 챙겨 준다 ────────
 
 	func _update_looting(delta: float) -> bool:
-		# 처치 지점이 남아 있고 전투가 끝났을 때만. 플레이어가 식빵 자세(은신)면
-		# 돌아다니지 않고, 플레이어가 멀어지면 지점을 버리고 따라간다.
+		# 전투가 끝났을 때만. 플레이어가 식빵 자세(은신)면 돌아다니지 않는다.
+		if bool(host.get("loafing")):
+			return false
+		# ① 플레이어 예비탄이 1탄창 이하면 — 바닥의 장착 구경 탄약부터 대신
+		# 주워 온다(유저 요청: "탄약이 모자라면 지가 가서 루팅도 하고").
+		var ammo_fetch := _find_ammo_fetch_target()
+		if ammo_fetch != null:
+			if state != "loot":
+				state = "loot"
+				bark("탄 떨어졌지? 잠깐 있어 봐.")
+			var fetch_offset := ammo_fetch.global_position - global_position
+			fetch_offset.y = 0.0
+			var fetch_distance := fetch_offset.length()
+			if fetch_distance > 1.0:
+				loot_timer = 0.0
+				var fetch_direction := _steer_around_obstacles(
+					fetch_offset / maxf(fetch_distance, 0.01)
+				)
+				velocity = fetch_direction * WALK_SPEED
+				if fetch_direction.length_squared() > 0.01:
+					_set_facing_from_world_direction(fetch_direction)
+				_set_motion_state("walk")
+				_apply_crouch_visual(false)
+				return true
+			velocity = Vector3.ZERO
+			_set_motion_state("idle")
+			_apply_crouch_visual(true)
+			loot_timer += delta
+			if loot_timer >= LOOT_SECONDS:
+				loot_timer = 0.0
+				_collect_ammo_pickup(ammo_fetch)
+			return true
+		# ② 처치 지점 회수 — 플레이어가 멀어지면 지점을 버리고 따라간다.
 		while not system.loot_spots.is_empty():
 			var stale: Vector3 = system.loot_spots[0]
 			if host.player.global_position.distance_to(stale) > 20.0:
 				system.loot_spots.pop_front()
 				continue
 			break
-		if system.loot_spots.is_empty() or bool(host.get("loafing")):
+		if system.loot_spots.is_empty():
 			return false
 		if state != "loot":
 			state = "loot"
@@ -975,6 +1006,67 @@ class JuhongBody:
 			system.loot_spots.pop_front()
 			_finish_loot_roll()
 		return true
+
+
+	func _find_ammo_fetch_target() -> Node3D:
+		# 플레이어 예비탄이 1탄창 이하일 때만 발동. 대상: 바닥의 장착 구경 탄약
+		# 픽업(주홍 기준 18m·플레이어 기준 22m 안). 플레이어가 지금 줍고 있는
+		# 픽업은 건드리지 않는다.
+		if not bool(GameState.has_ak):
+			return null
+		var weapon_stats = host.get("weapon_stats")
+		var magazine_size := 30
+		if weapon_stats is Dictionary:
+			magazine_size = int((weapon_stats as Dictionary).get("magazine_size", 30))
+		if int(host.get("reserve_ammo")) > magazine_size:
+			return null
+		var equipped_ammo := str(GameState.equipped_ammo_id)
+		if equipped_ammo.is_empty():
+			return null
+		var loot = host.get("loot_system")
+		if loot == null:
+			return null
+		var best: Node3D = null
+		var best_distance := 18.0
+		for pickup_value in loot.ammo_pickups:
+			var pickup := pickup_value as Node3D
+			if pickup == null or not is_instance_valid(pickup):
+				continue
+			if str(pickup.get_meta("loot_type", "")) != "ammo":
+				continue
+			if str(pickup.get_meta("ammo_id", "")) != equipped_ammo:
+				continue
+			if pickup == host.get("nearby_ammo_pickup"):
+				continue
+			if host.player.global_position.distance_to(pickup.global_position) > 22.0:
+				continue
+			var pickup_distance := global_position.distance_to(pickup.global_position)
+			if pickup_distance < best_distance:
+				best_distance = pickup_distance
+				best = pickup
+		return best
+
+
+	func _collect_ammo_pickup(pickup: Node3D) -> void:
+		# 플레이어 픽업 경로의 최소 재현 — 탄약만 다루므로 가방 검사 불필요.
+		if pickup == null or not is_instance_valid(pickup):
+			return
+		var ammo_id := str(pickup.get_meta("ammo_id", "762_fmj"))
+		var amount := int(pickup.get_meta("amount", 1))
+		var updated := GameState.get_ammo_count(ammo_id) + amount
+		GameState.set_ammo_count(ammo_id, updated)
+		if GameState.equipped_ammo_id == ammo_id:
+			host.reserve_ammo = updated
+			GameState.reserve_ammo = updated
+		if host.has_method("_update_equipment_ui"):
+			host.call("_update_equipment_ui")
+		var loot = host.get("loot_system")
+		if loot != null:
+			loot.ammo_pickups.erase(pickup)
+		if pickup == host.get("nearby_ammo_pickup"):
+			host.set("nearby_ammo_pickup", null)
+		pickup.queue_free()
+		show_loot_popup("탄약 +%d" % amount)
 
 
 	func _finish_loot_roll() -> void:
