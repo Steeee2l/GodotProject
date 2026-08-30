@@ -2236,7 +2236,7 @@ func _build_death_lesson() -> String:
 	if fatigue >= 65.0:
 		return "피로 %d%%. 발이 느렸고 탄이 퍼졌다. 더 일찍 나왔어야 했다." % roundi(fatigue)
 	if magazine_ammo <= 0 and reserve_ammo <= 0:
-		return "탄이 바닥났다. 탄이 떨어진 자리가 곧 한계선이다."
+		return "탄이 바닥났다. 다음엔 다 떨어지기 전에 빠진다."
 	if raid_pressure_level >= 2:
 		return "긴장도가 높았다. 증원은 계속 온다 — 그럴 땐 탈출구가 답이다."
 	if GameState.medkits > 0:
@@ -2835,14 +2835,8 @@ func _apply_hud_layout() -> void:
 		objective_height,
 		maxf(44.0, left_column_limit - objective_panel.offset_top)
 	)
-	# 주홍 동행 칩 — 메인 임무 카드 바로 아래, 같은 폭의 가로형 바(우상단에선
-	# 가방 버튼과 겹쳤다). 초상+이름 왼쪽 / 상태 오른쪽 / 체력바 전체 폭.
-	if hud.companion_chip != null and is_instance_valid(hud.companion_chip):
-		hud.companion_chip.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		hud.companion_chip.offset_left = side_margin
-		hud.companion_chip.offset_right = side_margin + objective_width
-		hud.companion_chip.offset_top = objective_panel.offset_bottom + 6.0
-		hud.companion_chip.offset_bottom = hud.companion_chip.offset_top + 44.0
+	# 주홍 동행 칩은 raid_hud가 매 프레임 임무 카드 밑에 직접 붙인다
+	# (_layout_companion_chip) — 이벤트 시점 배치는 첫 판에서 (0,0)에 굳었다.
 
 	var right_column_top := top_margin
 	var top_right_panel := get_node_or_null("HUD/TopRight") as VBoxContainer

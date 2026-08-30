@@ -1649,8 +1649,20 @@ func build_companion_chip(portrait: Texture2D) -> void:
 	companion_chip_health_fill.add_theme_stylebox_override("panel", fill_style)
 	companion_chip_bar_holder.add_child(companion_chip_health_fill)
 	HudStyle.enter(companion_chip)
-	if host.has_method("_apply_hud_layout"):
-		host.call_deferred("_apply_hud_layout")
+
+
+func _layout_companion_chip() -> void:
+	# 매 프레임(update_companion_chip 경유) 메인 임무 카드 바로 아래에 같은 폭으로
+	# 붙인다 — 이벤트 시점 배치는 판 시작 타이밍에 따라 (0,0)에 굳는 사고가 있었다.
+	var objective_panel := host.get("objective_panel") as Control
+	if objective_panel == null or not is_instance_valid(objective_panel):
+		return
+	var chip_height := maxf(40.0, companion_chip.get_combined_minimum_size().y)
+	companion_chip.global_position = Vector2(
+		objective_panel.global_position.x,
+		objective_panel.global_position.y + objective_panel.size.y + 6.0
+	)
+	companion_chip.size = Vector2(objective_panel.size.x, chip_height)
 
 
 func update_companion_chip(shown: bool, health_ratio: float, status: String, accent: Color) -> void:
@@ -1659,6 +1671,7 @@ func update_companion_chip(shown: bool, health_ratio: float, status: String, acc
 	companion_chip.visible = shown
 	if not shown:
 		return
+	_layout_companion_chip()
 	companion_chip_status.text = status
 	companion_chip_status.add_theme_color_override("font_color", accent)
 	var bar_width := 64.0
