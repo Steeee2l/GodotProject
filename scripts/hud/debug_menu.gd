@@ -164,6 +164,12 @@ func _build_panel() -> void:
 		for zone_id in GameState.get_raid_zone_ids():
 			if GameState.is_raid_zone_unlocked(str(zone_id)):
 				open_zones += 1
+		# 방 크기·생산기 위치·좌석이 전부 티어에서 나온다 — 쉘터에 있다면
+		# 다시 지어야 넓어진 방이 실제로 보인다.
+		if host != null and host.is_in_group("shelter_resident_host"):
+			get_tree().call_deferred(
+				"change_scene_to_file", "res://scenes/shelter_interior.tscn"
+			)
 		return "쉘터 티어 %d · 출정 가능 구역 %d곳" % [GameState.shelter_tier, open_zones]
 	)
 	_add_action("모든 무기 지급", func() -> String:

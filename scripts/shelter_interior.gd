@@ -96,26 +96,34 @@ const RESIDENT_PACK_SPACING := 0.92
 # 간격만은 지킨다. 계산은 진입 시 1회(레이아웃 캐시) — 매 프레임 비용 0.
 const WAIT_CLUSTER_MIN_SIZE := 3
 const WAIT_CLUSTER_MAX_SIZE := 8
-const WAIT_CLUSTER_MIN_GAP := 0.42
-const WAIT_CLUSTER_SEPARATION := 2.35
+# 간격은 전부 스프라이트 실폭(1m 남짓) 기준으로 다시 잡았다(2026-08-30).
+# 충돌 캡슐(0.24)만 보고 0.42로 두니 화면에서는 서로 파고들어 뭉개졌다.
+const WAIT_CLUSTER_MIN_GAP := 0.88
+const WAIT_CLUSTER_SEPARATION := 3.0
 # 무리 중심을 벽·구석 쪽으로 끌어당기는 비율. 대기조는 통로 한복판이 아니라
 # 가장자리에 몰려 있어야 "쉬는 무리"로 읽힌다.
 const WAIT_CLUSTER_WALL_BIAS := 0.66
 # 앉아 쉬는(웅크린) 포즈 비율. 무리에 정지점이 섞여야 산만하지 않다.
 const WAIT_REST_POSE_RATIO := 0.16
-# 무리 사이 통로까지 감안한 1인당 바닥(㎡).
-const WAIT_AREA_PER_RESIDENT := 2.6
+# 무리 사이 통로까지 감안한 1인당 바닥(㎡). 넓은 쉘터를 놀리지 않도록
+# 넉넉히 잡는다 — 대기 구역 자체가 방 크기에 맞춰 커진다(_waiting_area).
+const WAIT_AREA_PER_RESIDENT := 3.6
 # 배치 난수 시드. 고정값이라 씬을 다시 들어와도 같은 자리가 나온다.
 const WAIT_LAYOUT_SEED := 0x5AFED00D
 # ── 작업조 격자(2026-08-30) ────────────────────────────────
-# 대기 무리(0.92)보다 촘촘하게 붙여 세운다. 캡슐 반지름 0.24라 0.6이면
-# 서로 파고들지 않으면서도 "빽빽하게 모여 일하는" 밀도가 나온다.
-const WORK_SLOT_SPACING := 0.66
+# 좌석 간격은 방 크기를 따라간다(유저: "티어가 올라가면 공간이 넓어지니까
+# 주민들이 더 넓게 공간을 써도 될 것 같아. 지금은 너무 겹쳐 있잖아").
+# 충돌 캡슐은 반지름 0.24로 작지만 스프라이트는 256px × 0.0092 = 2.36m짜리라
+# 실제 몸통 폭이 1m 남짓이다 — 1.05 아래로 내려가면 눈에 띄게 파고든다.
+const WORK_SLOT_SPACING_MIN := 1.05
+const WORK_SLOT_SPACING_MAX := 1.45
 # 생산기 정면에서 첫 줄까지의 거리. 기계에 붙되 겹치지는 않는 간격.
-const WORK_FRONT_GAP := 1.7
-# 작업 블록 최대 폭(m). 두 생산기 기준점 간격이 7m라 이보다 넓히면
-# 꾹꾹이 조와 스크래핑 조가 서로 파고든다.
-const WORK_BLOCK_MAX_WIDTH := 6.2
+const WORK_FRONT_GAP := 1.9
+# 작업 구역을 놓을 수 있는 북쪽 벽 구간의 오른쪽 끝. 사자(x 2.8)·철근(7.6)이
+# 서 있는 자리를 침범하지 않게 여기서 자른다.
+const FACTORY_LINE_RIGHT_LIMIT := -3.0
+# 왼쪽 벽에서 띄우는 여유.
+const FACTORY_LINE_LEFT_MARGIN := 6.0
 # 생산 팝업(+고철)을 띄우는 인원 상한. 똑같은 숫자가 100개 떠오르면 정보가
 # 아니라 노이즈이고, Label3D + 트윈 3개가 매초 100세트씩 생긴다.
 const PRODUCTION_POP_VISIBLE_LIMIT := 20
@@ -304,12 +312,22 @@ func _player_bed_position() -> Vector3:
 
 # 기계 기물은 사라졌지만 작업조가 모이는 "작업 구역" 좌표는 남는다.
 # 배정된 주민은 여전히 이 지점 주변에 줄지어 앉아 일한다.
+func _factory_line_span() -> Vector2:
+	# 두 작업 구역을 늘어놓을 수 있는 북쪽 벽 구간(x 최소, 최대).
+	# 예전에는 왼쪽 벽에서 +13·+20으로 못 박아, 티어 5(폭 80m)에서도 두 무리가
+	# 왼쪽 구석 7m 안에 겹쳐 서고 방의 오른쪽 절반이 통째로 비었다.
+	var half := _room_half_extents()
+	return Vector2(-half.x + FACTORY_LINE_LEFT_MARGIN, FACTORY_LINE_RIGHT_LIMIT)
+
+
 func _scratcher_bank_position() -> Vector3:
-	return Vector3(-_room_half_extents().x + 20.0, 0.0, _factory_line_z())
+	var span := _factory_line_span()
+	return Vector3(lerpf(span.x, span.y, 0.76), 0.0, _factory_line_z())
 
 
 func _catnip_scraper_position() -> Vector3:
-	return Vector3(-_room_half_extents().x + 13.0, 0.0, _factory_line_z())
+	var span := _factory_line_span()
+	return Vector3(lerpf(span.x, span.y, 0.24), 0.0, _factory_line_z())
 
 
 func _contract_agent_position() -> Vector3:
@@ -1837,9 +1855,9 @@ func _build_waiting_layout(limit: int) -> Array[Dictionary]:
 			limit - slots.size()
 		)
 		# 채워진 원판에 몰아넣으면 서로를 가려서 몇 마리인지 안 읽힌다.
-		# 둘레에 흩는 고리로 잡되(1마리당 0.78m 호), 반지름·각도를 흔들어
-		# 자로 잰 원이 아니라 "둘러앉은 무리"로 보이게 한다.
-		var ring_radius := maxf(0.5, float(cluster_size) * 0.78 / TAU)
+		# 둘레에 흩는 고리로 잡되(1마리당 1.15m 호 — 스프라이트 실폭 기준),
+		# 반지름·각도를 흔들어 자로 잰 원이 아니라 "둘러앉은 무리"로 보이게 한다.
+		var ring_radius := maxf(0.7, float(cluster_size) * 1.15 / TAU)
 		var center_position := Vector3(center.x, 0.78, center.y)
 		# 작은 무리는 전원이 중심을 본다(마주보는 잡담). 큰 무리는 절반만.
 		var face_center_chance := 1.0 if cluster_size <= 4 else 0.45
@@ -1990,25 +2008,40 @@ func _factory_work_position(station: Vector3, index: int, crowd_size: int) -> Ve
 	# 걷어내 줄이 눈에 보이는 격자로 만든다.
 	var safe_index := maxi(0, index)
 	var columns := _factory_column_count(crowd_size)
+	var spacing := _work_slot_spacing()
 	var column := safe_index % columns
 	var row := safe_index / columns
 	# 열 중앙이 생산기 정면에 오게 — 기계 앞에 모인 그림이 되어야 한다.
 	var lateral := float(column) - float(columns - 1) * 0.5
 	return Vector3(
-		station.x + lateral * WORK_SLOT_SPACING,
+		station.x + lateral * spacing,
 		0.78,
-		station.z + WORK_FRONT_GAP + float(row) * WORK_SLOT_SPACING
+		station.z + WORK_FRONT_GAP + float(row) * spacing
 	)
 
 
+func _work_slot_spacing() -> float:
+	# 티어가 오르면 방이 넓어지고, 넓어진 만큼 작업조도 여유 있게 선다.
+	var tier_progress := clampf(float(GameState.shelter_tier - 1) / 4.0, 0.0, 1.0)
+	return lerpf(WORK_SLOT_SPACING_MIN, WORK_SLOT_SPACING_MAX, tier_progress)
+
+
+func _work_block_max_width() -> float:
+	# 두 작업조가 서로 파고들지 않을 만큼만 — 두 생산기 간격의 80%.
+	# 간격 자체가 방 크기를 따라가므로 넓은 쉘터일수록 블록도 넓어진다.
+	var gap := absf(_scratcher_bank_position().x - _catnip_scraper_position().x)
+	return maxf(4.0, gap * 0.8)
+
+
 func _factory_column_count(crowd_size: int) -> int:
-	# 가로를 먼저 채우되 두 생산기(간격 7m)의 작업조가 서로 겹치지 않게
-	# 폭을 제한한다. 인원이 많아지면 줄이 길어지는 게 아니라 열이 늘어난다.
-	var max_columns := maxi(3, int(WORK_BLOCK_MAX_WIDTH / WORK_SLOT_SPACING))
+	# 가로를 먼저 채운다 — 인원이 많아지면 줄이 남쪽으로 길어지는 게 아니라
+	# 열이 늘어야 "생산기 앞에 늘어선 작업조"로 읽힌다.
 	if crowd_size <= 1:
 		return 1
-	# 세로보다 가로가 긴 블록(가로:세로 ≈ 1.6:1) — 기계 앞에 늘어선 모양.
-	var wanted := int(ceil(sqrt(float(crowd_size) * 1.6)))
+	var spacing := _work_slot_spacing()
+	var max_columns := maxi(3, int(_work_block_max_width() / spacing))
+	# 세로보다 가로가 긴 블록(가로:세로 ≈ 2:1).
+	var wanted := int(ceil(sqrt(float(crowd_size) * 2.0)))
 	return clampi(wanted, 3, max_columns)
 
 
