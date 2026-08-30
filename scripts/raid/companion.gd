@@ -659,6 +659,12 @@ class JuhongBody:
 	const STEERING_LOCK_MSEC := 220
 	const LOOT_SECONDS := 1.2
 	const LOOT_AMMO_CHANCE := 0.65
+	# 주홍 본인의 산탄 — 무한이 아니다(유저 지적). 시체를 회수할 때 자기 몫을
+	# 먼저 챙겨 자급자족하므로 플레이어가 관리할 일은 없다.
+	const START_SHELLS := 24
+	const MAX_SHELLS := 30
+	const SELF_SHELL_LOOT_MIN := 3
+	const SELF_SHELL_LOOT_MAX := 6
 
 	var system  # CompanionSystem
 	var host: Node
@@ -682,6 +688,8 @@ class JuhongBody:
 	var channeling_revive := false
 	var combat_target: CharacterBody3D
 	var magazine_ammo := MAGAZINE_SIZE
+	var shell_reserve := START_SHELLS
+	var dry_barked := false
 	var fire_cooldown := 0.0
 	var reload_remaining := 0.0
 	var peek_time := 0.0
@@ -1070,8 +1078,17 @@ class JuhongBody:
 
 
 	func _finish_loot_roll() -> void:
-		# 65%: 장착 무기 구경 탄약을 플레이어 몫으로 — "내 몫은 내가 챙긴다"지만
-		# 탄은 네 총 것이니까. 획득은 머리 위 금색 팝업으로 보인다.
+		# "내 몫은 내가 챙긴다" — 자기 산탄부터 먼저(청록 팝업), 부족할 때만.
+		if shell_reserve < MAX_SHELLS:
+			var self_shells := mini(
+				randi_range(SELF_SHELL_LOOT_MIN, SELF_SHELL_LOOT_MAX),
+				MAX_SHELLS - shell_reserve
+			)
+			if self_shells > 0:
+				shell_reserve += self_shells
+				dry_barked = false
+				show_loot_popup("산탄 +%d" % self_shells, CompanionSystem.JUHONG_ACCENT)
+		# 65%: 장착 무기 구경 탄약을 플레이어 몫으로(금색 팝업).
 		if randf() >= LOOT_AMMO_CHANCE or not bool(GameState.has_ak):
 			return
 		var ammo_id := str(GameState.equipped_ammo_id)
@@ -1086,15 +1103,16 @@ class JuhongBody:
 		show_loot_popup("탄약 +%d" % amount)
 
 
-	func show_loot_popup(text: String) -> void:
-		# 바크와 다른 층위 — 금색·짧게 떠오르고 사라지는 획득 팝업.
+	func show_loot_popup(text: String, accent: Color = Color("#ffd45e")) -> void:
+		# 바크와 다른 층위 — 짧게 떠오르고 사라지는 획득 팝업.
+		# 금색 = 플레이어 몫, 청록 = 주홍 본인 몫.
 		var popup := Label3D.new()
 		popup.name = "JuhongLootPopup"
 		popup.text = text
 		popup.font = BARK_FONT
 		popup.font_size = 44
 		popup.pixel_size = 0.0042
-		popup.modulate = Color("#ffd45e")
+		popup.modulate = accent
 		popup.outline_size = 12
 		popup.outline_modulate = Color(0.09, 0.06, 0.01, 0.92)
 		popup.position = Vector3(0, 1.55, 0)
@@ -1150,7 +1168,13 @@ class JuhongBody:
 		if reload_remaining > 0.0:
 			reload_remaining -= delta
 			if reload_remaining <= 0.0:
-				magazine_ammo = MAGAZINE_SIZE
+				# 예비 산탄에서 채운다 — 바닥나면 빈 총이고, 시체 회수가 곧 보급이다.
+				var loaded := mini(MAGAZINE_SIZE, shell_reserve)
+				magazine_ammo = loaded
+				shell_reserve -= loaded
+				if loaded <= 0 and not dry_barked:
+					dry_barked = true
+					bark("탄 없어. 시체 좀 뒤질게.")
 
 
 	func _try_fire(target: CharacterBody3D, target_distance: float) -> void:
