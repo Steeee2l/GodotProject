@@ -268,8 +268,8 @@ func _run() -> void:
 	main_scene.call("_complete_field_interaction", subway_site)
 	assert(int(game_state.get("subway_story_stage")) == 1)
 	assert(_has_mission(main_scene.get("basic_raid_missions"), "subway_boss"))
-	main_scene.set("fatigue", 50.0)
-	main_scene.call("_trigger_fatigue_boss_event")
+	main_scene.set("raid_danger", 0.5)
+	main_scene.call("_trigger_danger_boss_event")
 	var story_boss: CharacterBody3D
 	for candidate in main_scene.get("enemies"):
 		if is_instance_valid(candidate) and bool(candidate.get_meta("raid_boss", false)):

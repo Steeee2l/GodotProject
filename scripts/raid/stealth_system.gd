@@ -30,11 +30,6 @@ const ENEMY_PAIR_SQUAD_CHANCE := 0.78
 const ENEMY_VISIBILITY_FADE_IN_SPEED := 10.0
 const ENEMY_VISIBILITY_FADE_OUT_SPEED := 3.2
 const ENEMY_VISIBILITY_HOLD_SECONDS := 0.32
-const FATIGUE_DAMAGE_PER_POINT := 0.045
-const FATIGUE_MAX := 100.0
-const FATIGUE_MELEE_GAIN := 1.1
-const FATIGUE_RELOAD_GAIN := 0.8
-const FATIGUE_SHOT_GAIN := 0.28
 const FIELD_INTERACTION_DISTANCE := 2.8
 const FIELD_LOOT_CACHE_TEXTURE := preload("res://assets/interiors/office_dungeon/modules/office_salvage_loot_v1.png")
 const FIELD_MISSION_CATALOG := preload("res://scripts/field_mission_catalog.gd")
@@ -475,7 +470,6 @@ func _try_stealth_takedown() -> bool:
 	_play_stealth_takedown_impact()
 	host.run_stealth_kills += 1
 	host.melee_attack_cooldown = MELEE_ATTACK_COOLDOWN
-	host._add_fatigue(FATIGUE_MELEE_GAIN * 0.65)
 	host._lock_aim_direction(attack_direction)
 	host._set_facing_from_world_direction(attack_direction)
 	host.melee_attack_active = true

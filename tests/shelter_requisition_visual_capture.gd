@@ -13,7 +13,7 @@ extends SceneTree
 
 const OUTPUT_DIR := "res://test-output"
 const DOCK_FACILITIES := [
-	"scratcher_bank", "catnip_scraper", "workbench", "training", "storage", "recruit",
+	"scratcher_bank", "catnip_scraper", "workbench", "training", "storage",
 ]
 
 

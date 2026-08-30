@@ -32,13 +32,9 @@ const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const ENEMY_VISIBILITY_FADE_IN_SPEED := 10.0
 const ENEMY_VISIBILITY_FADE_OUT_SPEED := 3.2
 const ENEMY_VISIBILITY_HOLD_SECONDS := 0.32
-const FATIGUE_BOSS_NAME := "폐허의 포격수 묘르"
-const FATIGUE_BOSS_TRIGGER := 50.0
-const FATIGUE_DAMAGE_PER_POINT := 0.045
-const FATIGUE_LOOT_GAIN := 0.85
-const FATIGUE_MAX := 100.0
-const FATIGUE_RELOAD_GAIN := 0.8
-const FATIGUE_SHOT_GAIN := 0.28
+const DANGER_BOSS_NAME := "폐허의 포격수 묘르"
+# 포위망 절반부터 사냥꾼 보스가 온다(피로도 폐지로 트리거 이관).
+const DANGER_BOSS_TRIGGER := 0.5
 const FIELD_LOOT_CACHE_TEXTURE := preload("res://assets/interiors/office_dungeon/modules/office_salvage_loot_v1.png")
 const FIRST_STAGE_SOLO_SQUAD_CHANCE := 0.62
 const FIRST_STAGE_ZONE_ID := "jongno_outskirts"
@@ -136,7 +132,7 @@ var active_reinforcement_caller: CharacterBody3D
 var reinforcement_call_banner_active := false
 var run_boss_kills := 0
 var run_elite_kills := 0
-var fatigue_boss_event_triggered := false
+var danger_boss_event_triggered := false
 # 소탕된 스쿼드 앵커들 — 이 판 동안 증원·보충 목적지 선정에서 회피한다.
 # [{"position": Vector3, "expires_msec": int}] — 소탕 직후엔 조용하지만 영원하진
 # 않다. 만료되면 상시 보충이 다시 채울 수 있다(플레이어 62m 밖에서만 스폰되므로,
@@ -1202,8 +1198,8 @@ func spawn_chain_climax_boss() -> void:
 	host._show_field_notice("회수물의 주인이 왔다 — 들고 도망치거나, 끝장을 내라")
 
 
-func _trigger_fatigue_boss_event() -> void:
-	if fatigue_boss_event_triggered or host.fatigue < FATIGUE_BOSS_TRIGGER:
+func _trigger_danger_boss_event() -> void:
+	if danger_boss_event_triggered or float(host.raid_danger) < DANGER_BOSS_TRIGGER:
 		return
 	var boss: CharacterBody3D
 	for enemy in host.enemies:
@@ -1217,14 +1213,14 @@ func _trigger_fatigue_boss_event() -> void:
 		boss = _spawn_rocket_boss_at(
 			spawn_position,
 			maxf(0.45, float(host.raid_zone_data.get("threat", 0.0))),
-			"FatigueBoss_%d" % Time.get_ticks_msec()
+			"DangerBoss_%d" % Time.get_ticks_msec()
 		)
 	var marker := boss.get_node_or_null("BossMarker") as Label3D
 	if marker:
-		marker.text = FATIGUE_BOSS_NAME
-	boss.set_meta("display_name", FATIGUE_BOSS_NAME)
-	fatigue_boss_event_triggered = true
-	host._show_boss_alert(FATIGUE_BOSS_NAME)
+		marker.text = DANGER_BOSS_NAME
+	boss.set_meta("display_name", DANGER_BOSS_NAME)
+	danger_boss_event_triggered = true
+	host._show_boss_alert(DANGER_BOSS_NAME)
 	if GameState.subway_story_stage == 1:
 		host._show_field_notice("연속 임무 갱신 · 포격 신호의 주인을 잡는다")
 

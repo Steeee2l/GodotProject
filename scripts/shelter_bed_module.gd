@@ -28,7 +28,6 @@ func get_interaction_radius() -> float:
 
 func interact() -> String:
 	GameState.player_health = 100
-	GameState.fatigue = 0.0
 	interacted.emit(self)
 	return "침대 %d에서 휴식했습니다. 체력이 모두 회복되었습니다." % bed_index
 

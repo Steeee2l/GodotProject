@@ -93,8 +93,7 @@ func _run_movement_leg(
 	player: CharacterBody3D,
 	hit_frames: Array
 ) -> float:
-	# 계측 구간마다 같은 조건에서 출발한다 — 피로도는 속도 배율에 직접 걸린다.
-	main_scene.set("fatigue", 0.0)
+	# 계측 구간마다 같은 조건에서 출발한다.
 	main_scene.set("recoil_velocity", Vector3.ZERO)
 	main_scene.set("player_health", 9999)
 	root.get_node("GameState").set("player_health", 9999)
@@ -117,7 +116,6 @@ func _run_movement_leg(
 func _probe_movement_during_hits(main_scene: Node, player: CharacterBody3D) -> void:
 	print("① ② 피격 중 이동 유지")
 	# ① 피격 바로 다음 프레임에 이동 입력이 살아 있는지.
-	main_scene.set("fatigue", 0.0)
 	main_scene.set("recoil_velocity", Vector3.ZERO)
 	main_scene.set("touch_vector", Vector2(1.0, 0.0))
 	await physics_frame

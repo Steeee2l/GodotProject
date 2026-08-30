@@ -9,7 +9,6 @@ const BED_MODULE_SCENE := preload("res://scenes/modules/shelter_bed_module.tscn"
 const WORKBENCH_MODULE_SCRIPT := preload("res://scripts/shelter_workbench_module.gd")
 const SCRATCHER_BANK_MODULE_SCRIPT := preload("res://scripts/scratcher_bank_module.gd")
 const CATNIP_SCRAPER_MODULE_SCRIPT := preload("res://scripts/catnip_scraper_module.gd")
-const RECRUIT_MODULE_SCRIPT := preload("res://scripts/shelter_recruit_module.gd")
 const STORAGE_MODULE_SCRIPT := preload("res://scripts/shelter_storage_module.gd")
 const TRAINING_MODULE_SCRIPT := preload("res://scripts/shelter_training_module.gd")
 const SHELTER_OPS_CONSOLE_SCRIPT := preload("res://scripts/hud/shelter_ops_console.gd")
@@ -673,7 +672,6 @@ func _build_stage_one_modules() -> void:
 
 
 const LOCKED_FACILITY_HINTS := {
-	"recruit": "꾹꾹이 생산기 가동",
 	"scratcher_bank": "사자의 첫 계약",
 	"catnip_scraper": "사자의 두 번째 계약",
 	"workbench": "사자의 계약 진행",
@@ -696,7 +694,6 @@ func _refresh_unlocked_facilities(module_root: Node3D = null, animate: bool = tr
 		["workbench", "WeaponWorkbench", WORKBENCH_MODULE_SCRIPT],
 		["scratcher_bank", "ScratcherBank", SCRATCHER_BANK_MODULE_SCRIPT],
 		["catnip_scraper", "CatnipScraper", CATNIP_SCRAPER_MODULE_SCRIPT],
-		["recruit", "ShelterRecruit", RECRUIT_MODULE_SCRIPT],
 		["storage", "ShelterStorage", STORAGE_MODULE_SCRIPT],
 		["training", "SurvivalTrainingFacility", TRAINING_MODULE_SCRIPT],
 	]:
@@ -4131,8 +4128,7 @@ func _refresh_inventory_state() -> void:
 		int(GameState.canned_food),
 		stored_weapons,
 		GameState.mod_component_inventory,
-		int(GameState.rescued_workers),
-		float(GameState.fatigue)
+		int(GameState.rescued_workers)
 	)
 
 

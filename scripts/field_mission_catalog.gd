@@ -196,7 +196,7 @@ static func get_basic_mission(mission_id: String) -> Dictionary:
 		"subway":
 			return _mission("subway", "지하철역 입구 조사", "정체불명의 포격 신호 확인", 1, BASIC_SUBWAY_XP)
 		"subway_boss":
-			return _mission("subway_boss", "포격 신호의 주인 추적", "피로 50% 이후 출현하는 묘르 처치", 1, BASIC_SUBWAY_BOSS_XP)
+			return _mission("subway_boss", "포격 신호의 주인 추적", "포위망 50% 이후 출현하는 묘르 처치", 1, BASIC_SUBWAY_BOSS_XP)
 		"subway_return":
 			return _mission("subway_return", "지하 보급로 봉쇄", "묘르가 사용한 지하철 통로 확인", 1, BASIC_SUBWAY_RETURN_XP)
 		"subway_complete":

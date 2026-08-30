@@ -30,10 +30,6 @@ const ENEMY_PAIR_SQUAD_CHANCE := 0.78
 const ENEMY_VISIBILITY_FADE_IN_SPEED := 10.0
 const ENEMY_VISIBILITY_FADE_OUT_SPEED := 3.2
 const ENEMY_VISIBILITY_HOLD_SECONDS := 0.32
-const FATIGUE_DAMAGE_PER_POINT := 0.045
-const FATIGUE_LOOT_GAIN := 0.85
-const FATIGUE_RELOAD_GAIN := 0.8
-const FATIGUE_SHOT_GAIN := 0.28
 const FIRST_STAGE_ZONE_ID := "jongno_outskirts"
 const INTERACTION_TARGETING := preload("res://scripts/interaction_targeting.gd")
 const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
@@ -308,7 +304,6 @@ func _collect_nearby_ammo() -> void:
 		_show_bag_full_notice()
 		_open_loot_swap()
 		return
-	host._add_fatigue(FATIGUE_LOOT_GAIN)
 	var loot_type := str(host.nearby_ammo_pickup.get_meta("loot_type", "ammo"))
 	var amount := int(host.nearby_ammo_pickup.get_meta("amount", 1))
 	# 획득 알림은 전부 토스트 스택으로 — 자동 장착(금색·길게)이 탄약 줍기에

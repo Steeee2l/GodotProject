@@ -13,7 +13,7 @@ const SFX := preload("res://scripts/sfx_bank.gd")
 const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
-const FATIGUE_MAX := 100.0
+const DANGER_MAX := 100.0
 const UI_SAFE_AREA := preload("res://scripts/ui_safe_area.gd")
 const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/magazine_spring.png")
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
@@ -109,10 +109,10 @@ var equipment_condition_label: Label
 var equipment_panel: PanelContainer
 var equipment_reload_bar: ProgressBar
 var equipment_weapon_image: TextureRect
-var fatigue_bar: ProgressBar
-var fatigue_fill_style: StyleBoxFlat
-var fatigue_panel: PanelContainer
-var fatigue_status_label: Label
+var danger_bar: ProgressBar
+var danger_fill_style: StyleBoxFlat
+var danger_panel: PanelContainer
+var danger_status_label: Label
 var field_interaction_action_detail_label: Label
 var field_interaction_action_label: Label
 var field_interaction_button: Button
@@ -326,68 +326,68 @@ func build(owner_node: Node) -> void:
 	field_interaction_button.move_to_front()
 	host._setup_stealth_takedown_prompt(font)
 
-	fatigue_panel = PanelContainer.new()
-	fatigue_panel.name = "FatiguePanel"
-	fatigue_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	fatigue_panel.offset_left = 18
-	fatigue_panel.offset_top = 214
-	fatigue_panel.offset_right = 280
-	fatigue_panel.offset_bottom = 276
-	fatigue_panel.add_theme_stylebox_override(
+	danger_panel = PanelContainer.new()
+	danger_panel.name = "DangerPanel"
+	danger_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	danger_panel.offset_left = 18
+	danger_panel.offset_top = 214
+	danger_panel.offset_right = 280
+	danger_panel.offset_bottom = 276
+	danger_panel.add_theme_stylebox_override(
 		"panel",
 		HudStyle.panel(HudStyle.INK, Color("#60766a"), 7)
 	)
-	host.get_node("HUD").add_child(fatigue_panel)
-	var fatigue_margin := MarginContainer.new()
-	fatigue_margin.add_theme_constant_override("margin_left", 10)
-	fatigue_margin.add_theme_constant_override("margin_top", 7)
-	fatigue_margin.add_theme_constant_override("margin_right", 10)
-	fatigue_margin.add_theme_constant_override("margin_bottom", 7)
-	fatigue_panel.add_child(fatigue_margin)
-	var fatigue_row := HBoxContainer.new()
-	fatigue_row.add_theme_constant_override("separation", 9)
-	fatigue_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	fatigue_margin.add_child(fatigue_row)
-	var fatigue_icon := TextureRect.new()
-	fatigue_icon.name = "FatigueIcon"
-	fatigue_icon.custom_minimum_size = Vector2(28, 28)
-	fatigue_icon.texture = UI_ICONS.get_icon("stamina", 32, Color("#e3c069"))
-	fatigue_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	fatigue_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	fatigue_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	fatigue_row.add_child(fatigue_icon)
-	var fatigue_box := VBoxContainer.new()
-	fatigue_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	fatigue_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	fatigue_box.add_theme_constant_override("separation", 3)
-	fatigue_row.add_child(fatigue_box)
-	# 유저가 이게 뭔지 모른다는 피드백. "피로도" 라벨을 왼쪽에, 상태/퍼센트를
+	host.get_node("HUD").add_child(danger_panel)
+	var danger_margin := MarginContainer.new()
+	danger_margin.add_theme_constant_override("margin_left", 10)
+	danger_margin.add_theme_constant_override("margin_top", 7)
+	danger_margin.add_theme_constant_override("margin_right", 10)
+	danger_margin.add_theme_constant_override("margin_bottom", 7)
+	danger_panel.add_child(danger_margin)
+	var danger_row := HBoxContainer.new()
+	danger_row.add_theme_constant_override("separation", 9)
+	danger_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	danger_margin.add_child(danger_row)
+	var danger_icon := TextureRect.new()
+	danger_icon.name = "DangerIcon"
+	danger_icon.custom_minimum_size = Vector2(28, 28)
+	danger_icon.texture = UI_ICONS.get_icon("alert", 32, Color("#5fc9b4"))
+	danger_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	danger_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	danger_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	danger_row.add_child(danger_icon)
+	var danger_box := VBoxContainer.new()
+	danger_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	danger_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	danger_box.add_theme_constant_override("separation", 3)
+	danger_row.add_child(danger_box)
+	# "포위망" 라벨을 왼쪽에, 상태/퍼센트를
 	# 오른쪽에 두고 그 아래 바를 붙인다. 정렬이 분명해진다.
-	var fatigue_header := HBoxContainer.new()
-	fatigue_header.add_theme_constant_override("separation", 6)
-	fatigue_box.add_child(fatigue_header)
-	var fatigue_name := Label.new()
-	fatigue_name.text = "피로도"
-	fatigue_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	fatigue_name.add_theme_font_override("font", font)
-	fatigue_name.add_theme_font_size_override("font_size", 12)
-	fatigue_name.add_theme_color_override("font_color", Color("#9fb4a9"))
-	fatigue_header.add_child(fatigue_name)
-	fatigue_status_label = Label.new()
-	fatigue_status_label.text = "0%"
-	fatigue_status_label.add_theme_font_override("font", font)
-	fatigue_status_label.add_theme_font_size_override("font_size", 12)
-	fatigue_status_label.add_theme_color_override("font_color", Color("#8fc7a8"))
-	fatigue_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	fatigue_header.add_child(fatigue_status_label)
-	fatigue_bar = ProgressBar.new()
-	fatigue_bar.custom_minimum_size = Vector2(190, 7)
-	fatigue_bar.max_value = FATIGUE_MAX
-	fatigue_bar.show_percentage = false
-	fatigue_bar.add_theme_stylebox_override("background", HudStyle.panel(Color("#17201d"), Color("#32443c"), 4))
-	fatigue_fill_style = HudStyle.panel(Color("#78b993"), Color("#a7d6b9"), 4)
-	fatigue_bar.add_theme_stylebox_override("fill", fatigue_fill_style)
-	fatigue_box.add_child(fatigue_bar)
+	var danger_header := HBoxContainer.new()
+	danger_header.add_theme_constant_override("separation", 6)
+	danger_box.add_child(danger_header)
+	var danger_name := Label.new()
+	danger_name.text = "포위망"
+	danger_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	danger_name.add_theme_font_override("font", font)
+	danger_name.add_theme_font_size_override("font_size", 12)
+	danger_name.add_theme_color_override("font_color", Color("#9fb4a9"))
+	danger_header.add_child(danger_name)
+	danger_status_label = Label.new()
+	danger_status_label.text = "0%"
+	danger_status_label.add_theme_font_override("font", font)
+	danger_status_label.add_theme_font_size_override("font_size", 12)
+	danger_status_label.add_theme_color_override("font_color", Color("#8fc7a8"))
+	danger_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	danger_header.add_child(danger_status_label)
+	danger_bar = ProgressBar.new()
+	danger_bar.custom_minimum_size = Vector2(190, 7)
+	danger_bar.max_value = DANGER_MAX
+	danger_bar.show_percentage = false
+	danger_bar.add_theme_stylebox_override("background", HudStyle.panel(Color("#17201d"), Color("#32443c"), 4))
+	danger_fill_style = HudStyle.panel(Color("#78b993"), Color("#a7d6b9"), 4)
+	danger_bar.add_theme_stylebox_override("fill", danger_fill_style)
+	danger_box.add_child(danger_bar)
 
 	equipment_panel = PanelContainer.new()
 	equipment_panel.name = "EquipmentPanel"
@@ -664,7 +664,7 @@ func hide_field_combat_hud() -> void:
 	for panel in [
 		raid_pressure_panel, dynamic_incident_hud, reinforcement_call_panel,
 		jackpot_hud, ammo_prompt_panel, field_interaction_panel, equipment_panel,
-		fatigue_panel, ammo_notice, toast_stack, fire_button, melee_button,
+		danger_panel, ammo_notice, toast_stack, fire_button, melee_button,
 		dash_button, combat_feedback,
 	]:
 		if panel != null and is_instance_valid(panel):

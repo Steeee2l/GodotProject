@@ -11,7 +11,7 @@ extends SceneTree
 # ⑥ 카드 탭 = 확장(원탭 방지 무장 → 두 번째 탭 실행). 확장은 씬을 리로드하므로 맨 끝.
 
 const DOCK_FACILITIES := [
-	"scratcher_bank", "catnip_scraper", "workbench", "training", "storage", "recruit",
+	"scratcher_bank", "catnip_scraper", "workbench", "training", "storage",
 ]
 
 var failures := 0

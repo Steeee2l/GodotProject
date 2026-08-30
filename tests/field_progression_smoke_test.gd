@@ -34,17 +34,17 @@ func _run() -> void:
 	var raid_boss: CharacterBody3D
 	for enemy in (main.get("enemies") as Array):
 		if is_instance_valid(enemy) and bool(enemy.get_meta("raid_boss", false)):
-			_fail("raid boss spawned before the fatigue threshold")
+			_fail("raid boss spawned before the danger threshold")
 			return
-	main.set("fatigue", 50.0)
-	main.call("_trigger_fatigue_boss_event")
+	main.set("raid_danger", 0.5)
+	main.call("_trigger_danger_boss_event")
 	for enemy in (main.get("enemies") as Array):
 		if is_instance_valid(enemy) and bool(enemy.get_meta("raid_boss", false)):
 			boss_found = true
 			raid_boss = enemy
 			break
 	if not boss_found:
-		_fail("high-risk zone did not spawn its raid boss at the fatigue threshold")
+		_fail("high-risk zone did not spawn its raid boss at the danger threshold")
 		return
 	if not raid_boss.is_in_group("rocket_boss") or int(raid_boss.call("get_rocket_magazine_ammo")) != 4:
 		_fail("high-risk zone boss is not using the rocket boss controller")
@@ -147,18 +147,13 @@ func _run() -> void:
 		_fail("mod component pickup was not stored")
 		return
 
-	main.set("fatigue", 100.0)
-	if float(main.call("_get_fatigue_speed_multiplier")) >= 0.99:
-		_fail("maximum fatigue did not reduce movement speed")
+	# 포위망 — 시간만으로 오른다(피로도 대체). 10초에 램프의 10/600만큼.
+	main.set("raid_danger", 0.0)
+	main.call("_update_raid_danger", 10.0)
+	if float(main.get("raid_danger")) < 0.015:
+		_fail("raid danger did not accumulate over time")
 		return
-	main.set("fatigue", 0.0)
-	main.set("laser_aim_held", true)
-	main.set("has_ak", true)
-	main.call("_update_fatigue", 10.0, false)
-	if float(main.get("fatigue")) < 0.89:
-		_fail("holding aim did not accumulate fatigue")
-		return
-	main.set("laser_aim_held", false)
+	main.set("raid_danger", 0.0)
 	main.call("_add_rescued_follower", player.global_position + Vector3(1, 0, 1))
 	if (main.get("rescued_followers") as Array).size() != 1:
 		_fail("rescued follower was not added")

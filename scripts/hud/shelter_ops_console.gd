@@ -13,8 +13,6 @@ const FACILITIES := [
 	{"id": "workbench", "label": "제작", "icon": "craft", "accent": Color("#d8e4de")},
 	{"id": "training", "label": "훈련", "icon": "fitness", "accent": Color("#9fc9d8")},
 	{"id": "storage", "label": "창고", "icon": "secure", "accent": Color("#d8b46a")},
-	# 영입소는 3D 기물이 없다 — 이 버튼이 유일한 진입점이다(쉘터 UI-first).
-	{"id": "recruit", "label": "영입", "icon": "resident", "accent": Color("#9fc9d8")},
 ]
 
 # 툴팁과 탭 사유 토스트가 같은 문구를 쓰도록 한곳에 둔다.
@@ -308,7 +306,7 @@ func _visible_button_count() -> int:
 
 func _required_rail_width(base_width: float) -> float:
 	var needed := base_width
-	# 숨은 버튼의 글자 폭은 세지 않는다 — 안 보이는 "영입 만실"이 레일을 넓히면
+	# 숨은 버튼의 글자 폭은 세지 않는다 — 안 보이는 배지가 레일을 넓히면
 	# 화면만 잡아먹는다.
 	for facility_id in facility_buttons:
 		var button := facility_buttons[facility_id] as Button
@@ -514,12 +512,6 @@ func _facility_badge(facility_id: String) -> String:
 		"storage":
 			if GameState.get_storage_used_slots() >= GameState.get_storage_capacity():
 				return "만재"
-		"recruit":
-			# 남은 자리를 배지로 — 열어 봐야 아는 정보는 죽은 정보다.
-			var room_left: int = GameState.get_available_resident_slots()
-			if room_left <= 0:
-				return "만실"
-			return "+%s" % GameState.format_compact_number(room_left)
 	return ""
 
 

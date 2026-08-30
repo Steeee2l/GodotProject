@@ -17,7 +17,6 @@ class TestGameState:
 	var weapon_level := 1
 	var ammo_inventory := {"762_fmj": 90}
 	var scrap := 80
-	var fatigue := 17.0
 	var mod_component_inventory := {
 		"rubber_gasket": 0,
 		"scope_lens": 0,
@@ -55,7 +54,6 @@ func _initialize() -> void:
 	_assert(get_nodes_in_group("building_room_module").size() >= 7, "한 층은 넓은 사무실 구역 7개 이상으로 구성되어야 합니다.")
 	var floor_root := interior.get_node("Floor01Modules")
 	_assert(interior.get_node_or_null("AimGuideLaserCore") != null, "Building aim laser must exist.")
-	_assert(interior.get_node_or_null("HUD/FatiguePanel") != null, "Building fatigue HUD must exist.")
 	_assert(interior.get_node_or_null("HUD/FireButton") != null, "Mobile building HUD must have a fire button.")
 	_assert(interior.get_node_or_null("HUD/MeleeButton") != null, "Mobile building HUD must have a melee button.")
 	_assert(interior.get_node_or_null("HUD/DashButton") != null, "Mobile building HUD must have a dash button.")
@@ -107,7 +105,6 @@ func _initialize() -> void:
 			# 텍스처 다이어트(size_limit) 이후 pixel_size 는 텍스처 폭에 따라 달라진다 — 월드 폭(≤1.0m)으로 검증.
 			_assert(loot_visual.pixel_size * float(loot_visual.texture.get_width()) <= 1.0, "총기 부품 이미지는 탄약 상자보다 작고 현실적인 크기여야 합니다.")
 	var ammo_before := int(game_state.magazine_ammo)
-	var fatigue_before := float(game_state.fatigue)
 	var left_click := InputEventMouseButton.new()
 	left_click.button_index = MOUSE_BUTTON_LEFT
 	left_click.pressed = true
@@ -127,7 +124,6 @@ func _initialize() -> void:
 	_assert(bool(interior.get_node("AimGuideLaserCore").visible), "Right-click aim must show the field-style laser guide.")
 	interior.call("_input", left_click)
 	_assert(int(game_state.magazine_ammo) == ammo_before - 1, "필드와 동일하게 우클릭 조준 중 좌클릭으로 사격해야 합니다.")
-	_assert(float(game_state.fatigue) > fatigue_before, "Building combat must update the shared field fatigue value.")
 	interior.set("weapon_reloading", true)
 	interior.get_node("BuildingPlayer").velocity = Vector3.ZERO
 	Input.action_press("ui_right")

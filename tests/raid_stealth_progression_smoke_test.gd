@@ -48,9 +48,9 @@ func _run() -> void:
 	assert(bool(missions[1].get("completed", false)))
 	assert(int(main_scene.get("completed_mission_xp")) == 210)
 
-	main_scene.set("fatigue", 50.0)
-	main_scene.call("_trigger_fatigue_boss_event")
-	assert(bool(main_scene.get("enemy_director").fatigue_boss_event_triggered))
+	main_scene.set("raid_danger", 0.5)
+	main_scene.call("_trigger_danger_boss_event")
+	assert(bool(main_scene.get("enemy_director").danger_boss_event_triggered))
 	var found_boss := false
 	for enemy in main_scene.get("enemies"):
 		if is_instance_valid(enemy) and bool(enemy.get_meta("raid_boss", false)):

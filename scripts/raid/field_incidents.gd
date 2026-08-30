@@ -13,7 +13,6 @@ const CRASHED_CONVOY_CACHE_TEXTURE := preload("res://assets/events/crashed_convo
 const DYNAMIC_INCIDENT_DURATION := 150.0
 const DYNAMIC_INCIDENT_GUARD_RADIUS := 6.0
 const DYNAMIC_INCIDENT_GUARD_ROUTE_POINTS := 6
-const FATIGUE_DAMAGE_PER_POINT := 0.045
 const LOOT_ECONOMY := preload("res://scripts/loot_economy.gd")
 const MAP_CONTENT_SCALE := ProceduralCityMap.WORLD_SCALE
 const OCCLUSION_DEPTH_LIMIT := 14.0

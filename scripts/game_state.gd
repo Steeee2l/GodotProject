@@ -34,7 +34,6 @@ var player_stat_levels: Dictionary = {
 	"move_speed": 0,
 	"recovery": 0,
 	"toughness": 0,
-	"fatigue_resistance": 0,
 }
 var training_levels: Dictionary = {
 	"vitality": 0,
@@ -79,7 +78,9 @@ var valuable_inventory: Dictionary = {}
 # 받아 같은 id라도 주운 존에 따라 값이 다르다 — 개수(valuable_inventory)만으로는 환전액을 못 구해
 # 주울 때 가치를 함께 적는다. 원장이 없는(구세이브) id는 카탈로그 base_value×개수로 환산.
 var valuable_value_ledger: Dictionary = {}
-var fatigue: float = 0.0
+# 포위망(시간 위험도) — 판 진행 중에만 의미가 있지만, 건물 진출입·중간 저장을
+# 건너 이어져야 해서 여기 산다. 새 판 시작 시 main이 0으로 되돌린다.
+var raid_danger: float = 0.0
 var rescued_workers: int = 0
 var resident_cat_ids: Array[String] = []
 var assigned_worker_ids: Array[String] = []
@@ -273,7 +274,6 @@ var field_controls_lesson_seen: bool = false
 var telegraph_lesson_seen: bool = false
 var headshot_lesson_seen: bool = false
 var cover_lesson_seen: bool = false
-var fatigue_lesson_seen: bool = false
 var extraction_choice_lesson_seen: bool = false
 # 캣닢 피버는 시설이 아니라 '사건'이라 아무도 설명해 주지 않았다 — 해금 1회 레슨.
 var catnip_fever_lesson_seen: bool = false
@@ -500,7 +500,7 @@ const WEAPON_PERK_KILL_AMMO_REFUND := 0.10      # +90: 처치 시 탄창 10% 탄
 const ARMOR_PERK_KNOCKBACK_RESIST := 0.50       # +30(몸): 넉백 저항 50%
 const ARMOR_PERK_POST_HIT_WINDOW_SEC := 1.5     # +50: 피격 후 1.5s 추가 피해 −20%
 const ARMOR_PERK_POST_HIT_DAMAGE_MULTIPLIER := 0.80
-const ARMOR_PERK_FATIGUE_MULTIPLIER := 0.85     # +70: 피로 누적 −15%
+const ARMOR_PERK_MOVE_SPEED_BONUS := 0.04       # +70: 이동 속도 +4%(피로 폐지로 교체)
 const ARMOR_PERK_SECURE_SLOT_BONUS := 1         # +90: 시큐어 슬롯 +1
 
 
@@ -527,8 +527,6 @@ const SHELTER_FACILITY_NAMES := {
 	"workbench": "무기 작업대",
 	"scratcher_bank": "꾹꾹이 고철 생산기",
 	"catnip_scraper": "스크래핑 캣닢 생산기",
-	# 영입소는 3D 기물이 없다 — 운영 독의 버튼과 모달로만 존재한다(쉘터 UI-first).
-	"recruit": "주민 영입소",
 }
 const SHELTER_FACILITY_NAMES_V2 := {
 	"bed": "개인 침상",
@@ -537,7 +535,6 @@ const SHELTER_FACILITY_NAMES_V2 := {
 	"workbench": "무기 작업대",
 	"scratcher_bank": "꾹꾹이 고철 생산기",
 	"catnip_scraper": "스크래핑 캣닢 생산기",
-	"recruit": "주민 영입소",
 }
 const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 	{
@@ -688,7 +685,7 @@ const IRON_SPECIAL_MISSIONS: Array[Dictionary] = [
 		"metric": "boss",
 		"target": 1,
 		"training_id": "fieldcraft",
-		"reward_text": "영구 피로 저항 및 생존술 강화",
+		"reward_text": "사격 자세 훈련 해금(반동 제어)",
 		"accept_dialogue": "잔챙이 백 마리보다 이름 붙은 놈 하나다. 그걸 잡아 와.",
 		"complete_dialogue": "잡았군. 이제 이 도시에서 네 이름이 돈다.",
 	},
@@ -759,7 +756,6 @@ const PLAYER_LEVEL_REWARDS := {
 	"move_speed": {"title": "민첩한 발", "description": "이동 속도 +2.5%", "icon": "speed"},
 	"recovery": {"title": "호흡 조절", "description": "스태미나 회복 +7%", "icon": "recovery"},
 	"toughness": {"title": "충격 적응", "description": "받는 피해 -2%", "icon": "armor"},
-	"fatigue_resistance": {"title": "현장 적응", "description": "피로 획득 -5%", "icon": "fitness"},
 }
 # 훈련 비용은 통조림이다(유저 확정: "고철 투자해서 훈련 아니야 통조림 소비해야해").
 # 지불처는 쉘터 재고(shelter_canned_food) — 가방 통조림은 던지기용이다.
@@ -787,7 +783,8 @@ const TRAINING_NODE_DEFS := {
 		"max_rank": 4, "base_cost": 20, "cost_step": 14, "requires": {"endurance": 2},
 	},
 	"fieldcraft": {
-		"title": "현장 체력", "description": "랭크마다 피로 획득 -7%", "icon": "fitness",
+		# 피로 폐지(2026-08-30) — 이 노드의 남은 효과는 반동 제어(get_recoil_control_multiplier).
+		"title": "사격 자세", "description": "랭크마다 반동 제어 +5.5%", "icon": "fitness",
 		"max_rank": 3, "base_cost": 40, "cost_step": 26, "requires": {"recovery": 2, "agility": 2},
 	},
 	# ── 탄약 운용 훈련(유저 신고: "총기 업그레이드가 아니라 훈련으로 탄창 개수·기본
@@ -960,22 +957,9 @@ const RESIDENT_REROLL_BASE_COST := 1
 const RESIDENT_REROLL_STEP := 1
 const RESIDENT_REROLL_MAX_COST := 5
 
-# ── 주민 영입 ─────────────────────────────────────────────────
-# 수용량이 900이 됐는데 획득 경로가 출정 후송(판당 1~2)뿐이면 그 900은 영원히
-# 숫자로만 남는다. 두 축을 더한다: 고철·캣닢으로 부르는 "영입"과 시간이 데려오는
-# "자연 유입". 출정 후송은 그대로 보너스로 남는다.
-#
-# 비용은 티어 구간 안에서 지수로 오른다. 티어를 올리면 새 구간의 첫 마리는 다시
-# 싸진다 — "확장했더니 또 빠글빠글해진다"가 티어업의 보상이 되게. 구간 끝의 한
-# 마리는 첫 마리의 RESIDENT_RECRUIT_BAND_SPAN배가 든다.
-const RESIDENT_RECRUIT_COSTS := {
-	1: {"scrap": 800, "catnip": 40},
-	2: {"scrap": 6000, "catnip": 260},
-	3: {"scrap": 90000, "catnip": 3200},
-	4: {"scrap": 2200000, "catnip": 65000},
-	5: {"scrap": 90000000, "catnip": 2200000},
-}
-const RESIDENT_RECRUIT_BAND_SPAN := 12.0
+# ── 주민 유입 ─────────────────────────────────────────────────
+# 유료 영입소는 폐지됐다(2026-08-30, 유저 확정 — 캣닢=피버 전용 원칙 위반이기도
+# 했다). 주민은 두 경로로만 늘어난다: 출정 후송(구조)과 자연 유입.
 # 자연 유입: 티어가 높을수록, 이미 사는 고양이가 많을수록 소문이 빨리 퍼진다.
 # 오프라인 정산에도 붙지만 SHELTER_OFFLINE_MAX_SECONDS(8h) 상한을 그대로 쓴다.
 const RESIDENT_DRIFT_PER_TIER_HOUR := 0.5
@@ -1154,6 +1138,8 @@ func randomize_map() -> void:
 
 func start_new_raid() -> void:
 	process_shelter_progress()
+	# 새 출정 = 포위망 초기화(건물 진출입 이어하기는 main이 별도로 복원한다).
+	raid_danger = 0.0
 	if (
 		confirmed_raid_manifest.is_empty()
 		or str(confirmed_raid_manifest.get("zone_id", "")) != selected_raid_zone
@@ -1169,7 +1155,6 @@ func start_new_raid() -> void:
 		randomize_map()
 		corpse_recovery_attempt_active = false
 	world_time_hours = 9.0
-	fatigue = 0.0
 	reset_raid_supply_counters()
 	save_persistent_state()
 
@@ -1780,11 +1765,6 @@ func sync_shelter_progression_milestones() -> Array[String]:
 	if is_contract_agent_available():
 		if unlock_shelter_facility("training"):
 			newly_unlocked.append("training")
-	# 영입소는 생산 라인이 돌기 시작한 뒤에 열린다. 고철·캣닢을 벌 수단이
-	# 없는 상태에서 "고양이를 사세요"는 안내가 아니라 벽이다.
-	if is_shelter_facility_unlocked("scratcher_bank"):
-		if unlock_shelter_facility("recruit"):
-			newly_unlocked.append("recruit")
 	for contract_value in SAJA_FACILITY_CONTRACTS:
 		var contract := contract_value as Dictionary
 		if not completed_contract_ids.has(str(contract.get("id", ""))):
@@ -3407,45 +3387,6 @@ func try_add_rescued_workers(amount: int) -> int:
 	return accepted
 
 
-func get_resident_recruit_cost() -> Dictionary:
-	# 지금 한 마리를 부르는 값. 현재 티어 구간을 얼마나 채웠는지로 정해진다.
-	var tier := clampi(shelter_tier, 1, 5)
-	var base := RESIDENT_RECRUIT_COSTS.get(tier, RESIDENT_RECRUIT_COSTS[1]) as Dictionary
-	var band_floor := int(SHELTER_CAPACITY_BY_TIER.get(tier - 1, 0))
-	var band := maxi(1, get_resident_capacity() - band_floor)
-	_ensure_resident_records()
-	var filled := clampi(resident_cat_ids.size() - band_floor, 0, band)
-	var multiplier := pow(RESIDENT_RECRUIT_BAND_SPAN, float(filled) / float(band))
-	return {
-		"scrap": maxi(1, roundi(float(base.get("scrap", 800)) * multiplier)),
-		"catnip": maxi(1, roundi(float(base.get("catnip", 40)) * multiplier)),
-	}
-
-
-func try_recruit_resident() -> Dictionary:
-	# 실패는 조용히 두지 않는다 — 모달이 그대로 문구로 쓸 사유를 돌려준다.
-	if not is_shelter_facility_unlocked("recruit"):
-		return {"ok": false, "reason": "locked"}
-	_ensure_resident_records()
-	if get_available_resident_slots() <= 0:
-		return {"ok": false, "reason": "capacity"}
-	var cost := get_resident_recruit_cost()
-	var scrap_cost := int(cost.get("scrap", 0))
-	var catnip_cost := int(cost.get("catnip", 0))
-	if scrap < scrap_cost:
-		return {"ok": false, "reason": "scrap", "cost": cost}
-	if catnip < catnip_cost:
-		return {"ok": false, "reason": "catnip", "cost": cost}
-	scrap -= scrap_cost
-	catnip -= catnip_cost
-	if try_add_rescued_workers(1) <= 0:
-		# 방어적 롤백 — 수용량 검사와 실제 합류 사이가 어긋나면 값을 돌려준다.
-		scrap += scrap_cost
-		catnip += catnip_cost
-		return {"ok": false, "reason": "capacity", "cost": cost}
-	return {"ok": true, "cost": cost, "resident_id": str(resident_cat_ids[-1])}
-
-
 func get_resident_drift_per_hour() -> float:
 	# 소문을 듣고 제 발로 오는 고양이. 라인이 돌기 시작한 뒤부터, 수용량이 찰
 	# 때까지만 흐른다.
@@ -4757,7 +4698,7 @@ func try_breakthrough(kind: String, item_id: String) -> bool:
 #   무기 — build_player_weapon_stats(관통·탄창·장전·내구·스탯 키), enemy.take_projectile_hit(엘리트 피해),
 #          main._on_enemy_died(처치 탄약 환급)
 #   방어구 — main.take_hit(넉백 저항) · main/building_interior.take_damage(피격 후 추가 피해 −20%) ·
-#          get_fatigue_gain_multiplier(피로) · get_secure_slot_count(시큐어 슬롯)
+#          get_move_speed_multiplier(+70 이동 속도) · get_secure_slot_count(시큐어 슬롯)
 # 방어구는 장착 중인 피스 기준: +30(넉백)은 몸 슬롯만, 나머지는 장착 피스 중 하나라도 달성하면(중첩 없음).
 const BREAKTHROUGH_PERKS := {
 	"weapon": {
@@ -4769,7 +4710,7 @@ const BREAKTHROUGH_PERKS := {
 	"armor": {
 		30: {"id": "knockback_resist", "label": "넉백 저항 50% (몸 방어구)", "description": "피격 밀림이 절반으로 준다."},
 		50: {"id": "post_hit_guard", "label": "피격 후 1.5초 추가 피해 −20%", "description": "연타를 맞을 때 뒤이은 피해가 줄어든다."},
-		70: {"id": "fatigue_guard", "label": "피로 누적 −15%", "description": "필드에 더 오래 머물 수 있다."},
+		70: {"id": "light_frame", "label": "이동 속도 +4%", "description": "무게가 몸에 붙는다 — 걸음이 빨라진다."},
 		90: {"id": "secure_slot", "label": "시큐어 슬롯 +1", "description": "죽어도 지키는 칸이 하나 늘어난다."},
 	},
 }
@@ -4787,7 +4728,7 @@ func is_breakthrough_perk_unlocked(kind: String, item_id: String, perk_level: in
 
 func get_breakthrough_perks(kind: String, item_id: String) -> Array[String]:
 	# 열린 보너스 id 목록(낮은 단계부터). 무기: pierce/magazine/elite_damage/kill_refund,
-	# 방어구: knockback_resist/post_hit_guard/fatigue_guard/secure_slot.
+	# 방어구: knockback_resist/post_hit_guard/light_frame/secure_slot.
 	var perks: Array[String] = []
 	var table: Dictionary = BREAKTHROUGH_PERKS.get(kind, {})
 	for perk_level in BREAKTHROUGH_PERK_LEVELS:
@@ -5024,6 +4965,9 @@ func get_max_stamina() -> float:
 
 func get_move_speed_multiplier() -> float:
 	var progression_multiplier := 1.0 + float(player_stat_levels.get("move_speed", 0)) * 0.025 + float(training_levels.get("agility", 0)) * 0.02
+	# 방어구 돌파 +70 보너스 — 이동 속도 +4%(피로 폐지로 교체된 퍼크).
+	if has_armor_breakthrough_perk(70):
+		progression_multiplier *= 1.0 + ARMOR_PERK_MOVE_SPEED_BONUS
 	var equipment_bonus := 0.0
 	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
 		if not equipment_id.is_empty():
@@ -5055,16 +4999,6 @@ func get_stamina_recovery_multiplier() -> float:
 func get_damage_taken_multiplier() -> float:
 	var toughness_multiplier := maxf(0.68, 1.0 - float(player_stat_levels.get("toughness", 0)) * 0.02)
 	return toughness_multiplier * get_equipment_damage_multiplier()
-
-
-func get_fatigue_gain_multiplier() -> float:
-	var reduction := float(player_stat_levels.get("fatigue_resistance", 0)) * 0.05
-	reduction += float(training_levels.get("fieldcraft", 0)) * 0.07
-	var multiplier := maxf(0.45, 1.0 - reduction)
-	# 방어구 돌파 +70 보너스 — 피로 누적 −15%(피로 계산의 단일 지점은 여기).
-	if has_armor_breakthrough_perk(70):
-		multiplier *= ARMOR_PERK_FATIGUE_MULTIPLIER
-	return multiplier
 
 
 func get_recoil_control_multiplier() -> float:
@@ -5572,13 +5506,12 @@ func save_persistent_state() -> bool:
 		"telegraph_lesson_seen": telegraph_lesson_seen,
 		"headshot_lesson_seen": headshot_lesson_seen,
 		"cover_lesson_seen": cover_lesson_seen,
-		"fatigue_lesson_seen": fatigue_lesson_seen,
+		"raid_danger": raid_danger,
 		"extraction_choice_lesson_seen": extraction_choice_lesson_seen,
 		"catnip_fever_lesson_seen": catnip_fever_lesson_seen,
 		"tutorial_steps_done": tutorial_steps_done,
 		"unlocked_milestones": unlocked_milestones,
 		"resident_reroll_counts": resident_reroll_counts,
-		"fatigue": fatigue,
 		"rescued_workers": rescued_workers,
 		"resident_cat_ids": resident_cat_ids,
 		"assigned_worker_ids": assigned_worker_ids,
@@ -5758,7 +5691,7 @@ func load_persistent_state() -> bool:
 	telegraph_lesson_seen = bool(data.get("telegraph_lesson_seen", telegraph_lesson_seen))
 	headshot_lesson_seen = bool(data.get("headshot_lesson_seen", headshot_lesson_seen))
 	cover_lesson_seen = bool(data.get("cover_lesson_seen", cover_lesson_seen))
-	fatigue_lesson_seen = bool(data.get("fatigue_lesson_seen", fatigue_lesson_seen))
+	raid_danger = clampf(float(data.get("raid_danger", 0.0)), 0.0, 1.0)
 	extraction_choice_lesson_seen = bool(data.get("extraction_choice_lesson_seen", extraction_choice_lesson_seen))
 	catnip_fever_lesson_seen = bool(data.get("catnip_fever_lesson_seen", catnip_fever_lesson_seen))
 	tutorial_steps_done = _to_string_array(data.get("tutorial_steps_done", []))
@@ -5770,7 +5703,6 @@ func load_persistent_state() -> bool:
 		var legacy_raw := maxi(0, int(data.get("raw_scrap", 0))) + maxi(0, int(data.get("raw_catnip", 0)))
 		if legacy_raw > 0:
 			canned_food += maxi(1, ceili(float(legacy_raw) / 4.0))
-	fatigue = float(data.get("fatigue", fatigue))
 	rescued_workers = int(data.get("rescued_workers", rescued_workers))
 	resident_cat_ids = _to_string_array(data.get("resident_cat_ids", []))
 	# 세이브를 덮어썼으면 정규화 캐시는 무조건 버린다(같은 키로 우연히 겹치는 사고 방지).
@@ -6019,7 +5951,6 @@ func reset_run() -> void:
 		"move_speed": 0,
 		"recovery": 0,
 		"toughness": 0,
-		"fatigue_resistance": 0,
 	}
 	training_levels = {
 		"vitality": 0,
@@ -6050,17 +5981,16 @@ func reset_run() -> void:
 	valuable_value_ledger.clear()
 	active_churu_buffs.clear()
 	bag_pressure_lesson_seen = false
-	fatigue_lesson_seen = false
 	field_controls_lesson_seen = false
 	telegraph_lesson_seen = false
 	headshot_lesson_seen = false
 	cover_lesson_seen = false
+	raid_danger = 0.0
 	extraction_choice_lesson_seen = false
 	catnip_fever_lesson_seen = false
 	tutorial_steps_done.clear()
 	unlocked_milestones.clear()
 	resident_reroll_counts.clear()
-	fatigue = 0.0
 	rescued_workers = 0
 	resident_cat_ids.clear()
 	invalidate_resident_records_cache()
@@ -6220,7 +6150,6 @@ func reset_all_progress_for_opening() -> bool:
 func complete_opening_and_prepare_shelter() -> void:
 	opening_completed = true
 	player_health = get_max_health()
-	fatigue = 0.0
 	has_ak = true
 	weapon_inventory["ak47"] = maxi(1, int(weapon_inventory.get("ak47", 0)))
 	equipped_weapon_id = "ak47"

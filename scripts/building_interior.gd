@@ -63,14 +63,6 @@ const BASE_CAMERA_SIZE := 28.0
 const CAMERA_DIAGONAL_OFFSET := 13.5
 const MOBILE_AIM_ASSIST_MAX_DISTANCE := 30.0
 const MOBILE_AIM_ASSIST_HALF_ANGLE_DEG := 55.0
-const FATIGUE_MAX := 100.0
-const FATIGUE_MOVING_RATE := 0.055
-const FATIGUE_AIM_HOLD_RATE := 0.09
-const FATIGUE_SHOT_GAIN := 0.28
-const FATIGUE_MELEE_GAIN := 1.1
-const FATIGUE_RELOAD_GAIN := 0.8
-const FATIGUE_ROLL_GAIN := 0.45
-const FATIGUE_SPEED_MIN := 0.58
 
 var game_over_screen := GAME_OVER_SCREEN.new()
 var player_death_sequence_active := false
@@ -165,11 +157,6 @@ var touch_id := -1
 var fire_touch_id := -1
 var touch_origin := Vector2.ZERO
 var touch_vector := Vector2.ZERO
-var fatigue := 0.0
-var fatigue_panel: PanelContainer
-var fatigue_bar: ProgressBar
-var fatigue_label: Label
-var fatigue_fill_style: StyleBoxFlat
 var collision_debug_enabled := false
 var auto_paused_for_background := false
 @onready var BuildingRunState: Node = get_node("/root/BuildingRunState")
@@ -194,7 +181,6 @@ func _ready() -> void:
 	_setup_weapon_visual()
 	_setup_melee_weapon()
 	_setup_aim_laser()
-	fatigue = clampf(float(GameState.fatigue), 0.0, FATIGUE_MAX)
 	_build_interface()
 	building_run_started_msec = Time.get_ticks_msec()
 	game_over_screen.build(self)
@@ -244,14 +230,13 @@ func _physics_process(delta: float) -> void:
 	if touch_vector.length_squared() > input_vector.length_squared():
 		input_vector = touch_vector
 	var direction := Vector3(input_vector.x + input_vector.y, 0.0, -input_vector.x + input_vector.y)
-	_update_fatigue(delta, direction.length_squared() > 0.01)
 	if roll_active:
 		_update_roll(delta)
 	elif melee_attack_active:
 		# 필드와 동일: 스윙 중에는 이동해도 방향·모션은 melee가 유지된다.
 		player.velocity = Vector3.ZERO
 	elif direction.length_squared() > 0.01:
-		var movement_speed := MOVE_SPEED * _get_fatigue_speed_multiplier()
+		var movement_speed := MOVE_SPEED
 		if weapon_reloading:
 			movement_speed *= 0.55
 		player.velocity = direction.normalized() * movement_speed
@@ -553,7 +538,6 @@ func _clear_carried_inventory_after_death() -> void:
 	GameState.clear_carried_raid_inventory_after_death()
 	# 시큐어 슬롯이 지킨 것을 돌려준다 — 필드 사망과 동일하게.
 	RAID_LOSS_MANAGER.restore_secure_items_after_death()
-	GameState.fatigue = minf(fatigue + 18.0, FATIGUE_MAX)
 	GameState.player_health = mini(82, GameState.get_max_health())
 	GameState.returning_from_shelter = false
 	GameState.world_time_hours = 9.0
@@ -962,10 +946,8 @@ func _build_interface() -> void:
 		flashlight_button,
 	]:
 		mobile_control.visible = touch_enabled
-	_build_fatigue_panel(canvas)
 	_update_health()
 	_update_ammo_label()
-	_update_fatigue_ui()
 	_update_medkit_button()
 
 
@@ -1135,69 +1117,6 @@ func _build_floor_clear_banner(canvas: CanvasLayer) -> void:
 	text_box.add_child(floor_clear_detail)
 
 
-func _build_fatigue_panel(canvas: CanvasLayer) -> void:
-	# 필드(raid_hud.gd)의 피로도 패널과 같은 구성·수치: 좌상단, 아이콘 +
-	# "피로도" 헤더 + 상태 퍼센트 + 190x7 바, HudStyle 색.
-	fatigue_panel = PanelContainer.new()
-	fatigue_panel.name = "FatiguePanel"
-	fatigue_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	fatigue_panel.offset_left = 18
-	fatigue_panel.offset_top = 214
-	fatigue_panel.offset_right = 280
-	fatigue_panel.offset_bottom = 276
-	fatigue_panel.add_theme_stylebox_override(
-		"panel",
-		HudStyle.panel(HudStyle.INK, Color("#60766a"), 7)
-	)
-	canvas.add_child(fatigue_panel)
-	var fatigue_margin := MarginContainer.new()
-	fatigue_margin.add_theme_constant_override("margin_left", 10)
-	fatigue_margin.add_theme_constant_override("margin_top", 7)
-	fatigue_margin.add_theme_constant_override("margin_right", 10)
-	fatigue_margin.add_theme_constant_override("margin_bottom", 7)
-	fatigue_panel.add_child(fatigue_margin)
-	var fatigue_row := HBoxContainer.new()
-	fatigue_row.add_theme_constant_override("separation", 9)
-	fatigue_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	fatigue_margin.add_child(fatigue_row)
-	var fatigue_icon := TextureRect.new()
-	fatigue_icon.name = "FatigueIcon"
-	fatigue_icon.custom_minimum_size = Vector2(28, 28)
-	fatigue_icon.texture = UI_ICONS.get_icon("stamina", 32, Color("#e3c069"))
-	fatigue_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	fatigue_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	fatigue_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	fatigue_row.add_child(fatigue_icon)
-	var fatigue_box := VBoxContainer.new()
-	fatigue_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	fatigue_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	fatigue_box.add_theme_constant_override("separation", 3)
-	fatigue_row.add_child(fatigue_box)
-	var fatigue_header := HBoxContainer.new()
-	fatigue_header.add_theme_constant_override("separation", 6)
-	fatigue_box.add_child(fatigue_header)
-	var fatigue_name := Label.new()
-	fatigue_name.text = "피로도"
-	fatigue_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	fatigue_name.add_theme_font_override("font", FONT)
-	fatigue_name.add_theme_font_size_override("font_size", 12)
-	fatigue_name.add_theme_color_override("font_color", Color("#9fb4a9"))
-	fatigue_header.add_child(fatigue_name)
-	fatigue_label = Label.new()
-	fatigue_label.text = "0%"
-	fatigue_label.add_theme_font_override("font", FONT)
-	fatigue_label.add_theme_font_size_override("font_size", 12)
-	fatigue_label.add_theme_color_override("font_color", Color("#8fc7a8"))
-	fatigue_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	fatigue_header.add_child(fatigue_label)
-	fatigue_bar = ProgressBar.new()
-	fatigue_bar.custom_minimum_size = Vector2(190, 7)
-	fatigue_bar.max_value = FATIGUE_MAX
-	fatigue_bar.show_percentage = false
-	fatigue_bar.add_theme_stylebox_override("background", HudStyle.panel(Color("#17201d"), Color("#32443c"), 4))
-	fatigue_fill_style = HudStyle.panel(Color("#78b993"), Color("#a7d6b9"), 4)
-	fatigue_bar.add_theme_stylebox_override("fill", fatigue_fill_style)
-	fatigue_box.add_child(fatigue_bar)
 
 
 func _make_panel_style(background: Color, border: Color, radius: int = 4) -> StyleBoxFlat:
@@ -1833,7 +1752,6 @@ func _try_melee_attack(screen_point: Vector2) -> void:
 	if melee_attack_cooldown > 0.0 or melee_attack_active or roll_active:
 		return
 	melee_attack_cooldown = MELEE_ATTACK_COOLDOWN
-	_add_fatigue(FATIGUE_MELEE_GAIN)
 	var target := _screen_point_to_world(screen_point)
 	var attack_direction := Vector3.ZERO
 	if is_finite(target.x):
@@ -2228,7 +2146,6 @@ func _fire_toward_world(target_position: Vector3) -> void:
 	GameState.magazine_ammo = int(GameState.magazine_ammo) - 1
 	# 건물 내부도 필드와 같은 뱅크의 구경별 총성.
 	SFX.play_weapon_shot(str(GameState.equipped_weapon_id))
-	_add_fatigue(FATIGUE_SHOT_GAIN)
 	fire_cooldown = float(weapon_stats.get("fire_interval", 0.12))
 	_update_ammo_label()
 
@@ -2250,7 +2167,6 @@ func _start_reload() -> void:
 		return
 	weapon_reloading = true
 	SFX.play("reload_start")
-	_add_fatigue(FATIGUE_RELOAD_GAIN)
 	reload_timer = float(weapon_stats.get("reload_time", 2.15))
 	fire_cooldown = reload_timer
 	_show_status("재장전 중 · %.1f초" % reload_timer)
@@ -2322,7 +2238,7 @@ func _update_ammo_label() -> void:
 			stored_weapon_count += int(count)
 		if _has_equipped_firearm():
 			stored_weapon_count = maxi(0, stored_weapon_count - 1)
-		inventory_ui.call("update_state", _has_equipped_firearm(), int(GameState.magazine_ammo), _get_reserve_ammo(), str(weapon_stats.get("display_name", "AK-47")), int(weapon_stats.get("magazine_size", 30)), float(GameState.get("weapon_durability") if GameState.get("weapon_durability") != null else 100.0), mods, int(GameState.get("canned_food") if GameState.get("canned_food") != null else 0), stored_weapon_count, GameState.get("mod_component_inventory") if GameState.get("mod_component_inventory") is Dictionary else {}, 0, fatigue)
+		inventory_ui.call("update_state", _has_equipped_firearm(), int(GameState.magazine_ammo), _get_reserve_ammo(), str(weapon_stats.get("display_name", "AK-47")), int(weapon_stats.get("magazine_size", 30)), float(GameState.get("weapon_durability") if GameState.get("weapon_durability") != null else 100.0), mods, int(GameState.get("canned_food") if GameState.get("canned_food") != null else 0), stored_weapon_count, GameState.get("mod_component_inventory") if GameState.get("mod_component_inventory") is Dictionary else {}, 0)
 
 
 func _update_shared_equipment_hud(hud_state: Dictionary) -> void:
@@ -2404,7 +2320,6 @@ func _try_start_roll() -> void:
 	roll_active = true
 	roll_elapsed = 0.0
 	roll_stamina -= ROLL_STAMINA_COST
-	_add_fatigue(FATIGUE_ROLL_GAIN)
 	motion_state = "roll"
 	_play_animation()
 
@@ -2429,57 +2344,6 @@ func _get_facing_world_direction() -> Vector3:
 	return Vector3(screen_direction.x + screen_direction.y, 0, -screen_direction.x + screen_direction.y).normalized()
 
 
-func _update_fatigue(delta: float, is_moving: bool) -> void:
-	var rate := FATIGUE_MOVING_RATE if is_moving else 0.0
-	if laser_aim_held and _has_equipped_firearm():
-		rate += FATIGUE_AIM_HOLD_RATE
-	_add_fatigue(rate * delta)
-	_update_fatigue_ui()
-
-
-func _add_fatigue(amount: float) -> void:
-	if amount <= 0.0:
-		return
-	fatigue = clampf(fatigue + amount, 0.0, FATIGUE_MAX)
-	GameState.fatigue = fatigue
-	_update_fatigue_ui()
-
-
-func _update_fatigue_ui() -> void:
-	# 필드 _refresh_fatigue_hud와 같은 단계·색: 35 피곤 / 65 과부하 / 90 탈진.
-	if fatigue_bar != null:
-		fatigue_bar.value = fatigue
-	var status := "안정"
-	var color := Color("#78b993")
-	var warning_band := 0
-	if fatigue >= 90.0:
-		status = "탈진"
-		color = Color("#e06c62")
-		warning_band = 3
-	elif fatigue >= 65.0:
-		status = "과부하"
-		color = Color("#e3ad61")
-		warning_band = 2
-	elif fatigue >= 35.0:
-		status = "피곤"
-		color = Color("#d5c16b")
-		warning_band = 1
-	if fatigue_label != null:
-		fatigue_label.text = (
-			"%d%%" % roundi(fatigue)
-			if warning_band <= 0
-			else "%d%% · %s" % [roundi(fatigue), status]
-		)
-		fatigue_label.add_theme_color_override("font_color", color)
-	if fatigue_fill_style != null:
-		fatigue_fill_style.bg_color = color
-		fatigue_fill_style.border_color = color.lightened(0.2)
-
-
-func _get_fatigue_speed_multiplier() -> float:
-	if fatigue < 70.0:
-		return 1.0
-	return lerpf(1.0, FATIGUE_SPEED_MIN, inverse_lerp(70.0, FATIGUE_MAX, fatigue))
 
 
 func _set_facing_from_world_direction(direction: Vector3) -> void:

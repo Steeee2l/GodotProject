@@ -259,7 +259,7 @@ func _rebuild_ui() -> void:
 	if GameState.resident_cat_ids.is_empty():
 		body.add_child(_empty_resident_state(
 			"구출한 주민이 없습니다.",
-			"도시에서 구출하거나 영입소에서 불러오면 배치할 수 있습니다.",
+			"도시에서 구출해 오거나, 시간이 지나면 소문을 듣고 찾아옵니다.",
 			compact
 		))
 	else:

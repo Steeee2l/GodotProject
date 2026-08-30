@@ -170,17 +170,12 @@ const FIELD_INTERACTION_FACING_WEIGHT := 1.35
 const FIELD_INTERACTION_SIGHT_HEIGHT := 0.48
 const SALVAGE_HOLD_DURATION := 2.4
 const RESCUE_HOLD_DURATION := 1.8
-const FATIGUE_MAX := 100.0
-const FATIGUE_MOVING_RATE := 0.055
-const FATIGUE_IDLE_RATE := 0.0
-const FATIGUE_AIM_HOLD_RATE := 0.09
-const FATIGUE_MELEE_GAIN := 1.1
-const FATIGUE_LOOT_GAIN := 0.85
-const FATIGUE_SALVAGE_GAIN := 3.5
-const FATIGUE_RESCUE_GAIN := 2.2
-const FATIGUE_ROLL_GAIN := 0.45
-const FATIGUE_DAMAGE_PER_POINT := 0.045
-const FATIGUE_SPEED_MIN := 0.58
+# ── 포위망(시간 위험도) — 피로도 대체(2026-08-30 유저 확정) ─────────
+# 판에 오래 머물수록 게이지가 차고, 찰수록 적이 많아지고 강해진다.
+# 플레이어 디버프는 없다 — 압박은 내 몸이 아니라 도시가 만든다.
+const DANGER_RAMP_SECONDS := 600.0   # 10분에 100%
+const DANGER_DENSITY_BONUS := 12.0   # 100%일 때 상시 배치 목표 +12
+const DANGER_THREAT_SCALE := 0.85    # 100%일 때 위협 바닥 0.85
 const ESCORT_SPEED_PENALTY := 0.07
 const LORE_CLUE_COUNT := 6
 const RAID_PRESSURE_REVEAL_SECONDS := 3.4
@@ -349,8 +344,8 @@ var field_interaction_candidate_signature := ""
 var field_interaction_keyboard_held := false
 var field_interaction_hold_time := 0.0
 var rescued_followers: Array[CharacterBody3D] = []
-var fatigue := 0.0
-var fatigue_warning_band := -1
+var raid_danger := 0.0
+var danger_warning_band := -1
 var run_started_msec := 0
 var run_kills := 0
 var run_damage_dealt := 0
@@ -514,8 +509,8 @@ func _ready() -> void:
 	equipped_weapon_mods.assign(GameState.equipped_weapon_mods)
 	weapon_durability = GameState.weapon_durability
 	if not bool(BuildingRunState.pending_field_return):
-		GameState.fatigue = 0.0
-	fatigue = clampf(GameState.fatigue, 0.0, FATIGUE_MAX)
+		GameState.raid_danger = 0.0
+	raid_danger = clampf(GameState.raid_danger, 0.0, 1.0)
 	_refresh_weapon_stats()
 	reserve_ammo = GameState.get_ammo_count(GameState.equipped_ammo_id)
 	GameState.reserve_ammo = reserve_ammo
@@ -804,6 +799,7 @@ func _physics_process(delta: float) -> void:
 		stealth._update_enemy_visibility(delta)
 		return
 	_update_day_night(delta)
+	_update_raid_danger(delta)
 	_update_zone_rule(delta)
 	_update_lightning(delta)
 	_update_enemy_pressure(delta)
@@ -888,7 +884,6 @@ func _physics_process(delta: float) -> void:
 	# 예전에는 여기서 피격 경직(player_hit_stun_time) 동안 input_vector를 통째로
 	# 0으로 만들었다. 연사에 맞으면 0.18~0.24초 잠금이 계속 겹쳐 조작이 죽었다.
 	# 피격은 이제 화면(비네트·방향 호·체력바 잔상)과 진동으로만 알린다.
-	_update_fatigue(delta, input_vector.length_squared() > 0.01)
 	weapon_combat._update_weapon_ballistics(delta, input_vector.length_squared() > 0.01)
 
 	var world_direction := Vector3(input_vector.x + input_vector.y, 0, -input_vector.x + input_vector.y)
@@ -910,7 +905,6 @@ func _physics_process(delta: float) -> void:
 	elif world_direction.length_squared() > 0.01:
 		world_direction = world_direction.normalized()
 		var movement_speed := MOVE_SPEED * GameState.get_move_speed_multiplier() * (LOAF_MOVE_MULTIPLIER if loafing else 1.0)
-		movement_speed *= _get_fatigue_speed_multiplier()
 		movement_speed *= _get_escort_speed_multiplier()
 		# 보급 카트를 끄는 동안 걸음 x0.88 — 판정·상태는 deployables가 안다.
 		movement_speed *= deployables.get_cart_speed_multiplier()
@@ -1059,7 +1053,6 @@ func _try_start_roll() -> void:
 	_set_facing_from_world_direction(roll_direction)
 	roll_active = true
 	roll_stamina = maxf(0.0, roll_stamina - stamina_cost)
-	_add_fatigue(FATIGUE_ROLL_GAIN)
 	roll_elapsed = 0.0
 	roll_afterimage_timer = 0.0
 	recoil_velocity = Vector3.ZERO
@@ -1524,7 +1517,6 @@ func _try_melee_attack() -> void:
 		return
 	melee_attack_cooldown = MELEE_ATTACK_COOLDOWN
 	break_raid_entry_grace()
-	_add_fatigue(FATIGUE_MELEE_GAIN)
 	var attack_direction := weapon_combat._get_mouse_world_direction() if weapon_combat._uses_mouse_aim() else _get_current_facing_world_direction()
 	_lock_aim_direction(attack_direction)
 	_set_facing_from_world_direction(attack_direction)
@@ -2166,7 +2158,7 @@ func _show_boss_alert(display_name: String) -> void:
 	boss_alert_subtitle.text = (
 		"지하철 통신에서 포착한 포격 신호의 주인이 접근합니다."
 		if GameState.subway_story_stage >= 1
-		else "피로가 쌓인 생존자의 흔적을 추적해 접근합니다."
+		else "너무 오래 머문 침입자를 잡으러 옵니다."
 	)
 	boss_alert_active = true
 	_layout_center_top_banners()
@@ -2209,7 +2201,6 @@ func _capture_raid_start_snapshot() -> void:
 		"equipped_magazine_id": GameState.equipped_magazine_id,
 		"equipped_ammo_id": GameState.equipped_ammo_id,
 		"has_ak": GameState.has_ak,
-		"fatigue": GameState.fatigue,
 	}
 
 
@@ -2220,7 +2211,6 @@ func _clear_carried_inventory_after_death() -> void:
 	# 시큐어 슬롯이 지킨 것을 돌려준다. 이 호출이 빠져 있어서 슬롯 시스템 전체가
 	# 죽은 코드였고, 사망은 예외 없는 100% 손실이었다.
 	RAID_LOSS_MANAGER.restore_secure_items_after_death()
-	GameState.fatigue = minf(fatigue + 18.0, FATIGUE_MAX)
 	GameState.player_health = mini(82, GameState.get_max_health())
 	GameState.returning_from_shelter = false
 	GameState.world_time_hours = 9.0
@@ -2239,8 +2229,8 @@ func _build_death_lesson() -> String:
 	# 문제였나"다. 죽는 순간의 상태에서 가장 큰 원인 하나만 짚어 준다.
 	# 사망이 처벌로만 끝나면 배우는 게 없다.
 	# 나비 독백 톤(짧은 현재형) — building_interior의 사망 교훈과 같은 세트.
-	if fatigue >= 65.0:
-		return "피로 %d%%. 발이 느렸고 탄이 퍼졌다. 더 일찍 나왔어야 했다." % roundi(fatigue)
+	if raid_danger >= 0.65:
+		return "포위망 %d%%. 너무 오래 머물렀다. 다음엔 더 빨리 빠진다." % roundi(raid_danger * 100.0)
 	if magazine_ammo <= 0 and reserve_ammo <= 0:
 		return "탄이 바닥났다. 다음엔 다 떨어지기 전에 빠진다."
 	if raid_pressure_level >= 2:
@@ -2808,28 +2798,24 @@ func _apply_hud_layout() -> void:
 	var left_column_limit := viewport_size.y - bottom_margin - 10.0
 	if touch_available:
 		left_column_limit -= touch_stick_size
-	# 좌측 열 순서: 체력 → 피로 → 목표. 커서로 쌓아 서로 밀어낸다.
+	# 좌측 열 순서: 체력 → 포위망 → 목표. 커서로 쌓아 서로 밀어낸다.
 	var left_column_cursor := (
 		top_left_status_panel.offset_bottom + 6.0
 		if top_left_status_panel.visible
 		else top_margin
 	)
 
-	if hud.fatigue_panel:
-		# 우상단으로 옮겼더니 이번엔 가방 버튼(top-right +68~106px)과 겹쳤다.
-		# 애초에 체력과 피로는 둘 다 "내 상태"라 떨어져 있을 이유가 없다.
-		# 좌상단 체력 바로 아래, 얇은 띠로 붙인다.
-		var fatigue_w := minf(300.0, maxf(190.0, safe_left_width))
-		var fatigue_compact := viewport_size.y < 430.0
-		# 라벨("피로도")+퍼센트+바를 항상 보여주므로 높이는 일정하게. 세로 중앙 정렬은
-		# 패널 내부(row/box의 SHRINK_CENTER)가 맡는다.
-		var fatigue_h := 46.0 if fatigue_compact else 54.0
-		hud.fatigue_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		hud.fatigue_panel.offset_left = side_margin
-		hud.fatigue_panel.offset_right = side_margin + fatigue_w
-		hud.fatigue_panel.offset_top = left_column_cursor
-		hud.fatigue_panel.offset_bottom = left_column_cursor + fatigue_h
-		left_column_cursor = hud.fatigue_panel.offset_bottom + 6.0
+	if hud.danger_panel:
+		# 좌상단 체력 바로 아래, 얇은 띠 — 판에 얼마나 오래 머물렀는지의 게이지.
+		var danger_w := minf(300.0, maxf(190.0, safe_left_width))
+		var danger_compact := viewport_size.y < 430.0
+		var danger_h := 46.0 if danger_compact else 54.0
+		hud.danger_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		hud.danger_panel.offset_left = side_margin
+		hud.danger_panel.offset_right = side_margin + danger_w
+		hud.danger_panel.offset_top = left_column_cursor
+		hud.danger_panel.offset_bottom = left_column_cursor + danger_h
+		left_column_cursor = hud.danger_panel.offset_bottom + 6.0
 
 	objective_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	objective_panel.offset_left = side_margin
@@ -3642,14 +3628,13 @@ func _update_equipment_ui() -> void:
 			GameState.canned_food,
 			_get_stored_weapon_count(),
 			GameState.mod_component_inventory,
-			GameState.rescued_workers,
-			fatigue
+			GameState.rescued_workers
 		)
 	_refresh_top_status_label()
 
 
 func _refresh_top_status_label() -> void:
-	# Stats 한 줄(체력·피로·총알·구급약 텍스트)은 체력바·피로 게이지·탄약 패널·
+	# Stats 한 줄(체력·총알·구급약 텍스트)은 체력바·포위망 게이지·탄약 패널·
 	# 구급약 버튼과 전부 중복이라 삭제됐다. 갱신 훅은 구급약 버튼만 남는다.
 	_update_medkit_button()
 
@@ -3992,8 +3977,8 @@ func _spawn_enemies() -> void:
 	# 엘리트 — 판당 1~2명을 초기 배치에 섞는다(안전 반경 밖). 상세 규칙은
 	# enemy_director.spawn_initial_elites 참조.
 	enemy_director.spawn_initial_elites(world)
-	# Bosses enter only after fatigue reaches the raid threshold. This keeps the
-	# opening route readable and makes the arrival alert match the actual spawn.
+	# 보스는 포위망이 절반을 넘긴 뒤에만 온다 — 초반 동선이 읽히고, 경보와
+	# 실제 스폰이 맞아떨어진다.
 
 
 func _find_squad_member_position(
@@ -4091,7 +4076,10 @@ func _update_enemy_pressure(delta: float) -> void:
 	# 종로도 전부 threat 0으로 굴렀다 — 공격력·명중률·연사 곡선이 전부 죽어
 	# 존 난이도가 HP 말고는 작동하지 않았다. 밤은 그 위에 얹히는 가산 요소다.
 	var zone_threat := float(raid_zone_data.get("threat", 0.0))
-	var effective_threat := clampf(maxf(night_intensity, zone_threat), 0.0, 1.0)
+	# 포위망이 위협의 바닥을 끌어올린다 — 오래 머물수록 오는 적이 세진다.
+	var effective_threat := clampf(
+		maxf(maxf(night_intensity, zone_threat), raid_danger * DANGER_THREAT_SCALE), 0.0, 1.0
+	)
 	for index in range(enemies.size() - 1, -1, -1):
 		var enemy := enemies[index]
 		if not is_instance_valid(enemy):
@@ -4109,6 +4097,8 @@ func _update_enemy_pressure(delta: float) -> void:
 	var target_count := (
 		BASE_ENEMY_COUNT
 		+ roundi(night_intensity * float(MAX_NIGHT_ENEMY_COUNT - BASE_ENEMY_COUNT))
+		# 포위망이 조여들수록 도시에 적이 는다(시간 위험도의 밀도 효과).
+		+ roundi(raid_danger * DANGER_DENSITY_BONUS)
 	)
 	if enemies.size() >= target_count:
 		# 예전엔 여기서 타이머를 3초로 당겨 뒀다 — 한 명 죽이는 순간 곧바로
@@ -4300,7 +4290,6 @@ func take_damage(amount: int) -> void:
 	var applied_damage := maxi(1, roundi(float(amount) * GameState.get_damage_taken_multiplier()))
 	# 방어구 돌파 +50 — 직전 피격 1.5s 안의 추가 피해 −20%(피격 시각 기록도 GameState가 맡는다).
 	applied_damage = GameState.apply_post_hit_guard(applied_damage)
-	_add_fatigue(minf(1.8, float(applied_damage) * FATIGUE_DAMAGE_PER_POINT))
 	player_health = maxi(0, player_health - applied_damage)
 	GameState.player_health = player_health
 	player_hit_flash_time = 0.32
@@ -6905,7 +6894,6 @@ func _complete_field_interaction(point: Node3D) -> void:
 		"high_value_cache", "dynamic_incident_cache":
 			_complete_raid_opportunity(point)
 		"salvage":
-			_add_fatigue(FATIGUE_SALVAGE_GAIN)
 			_spawn_salvage_rewards(point.global_position)
 			_advance_contract_progress("salvage")
 			_show_field_notice("분해 완료 · 개조 부품 획득")
@@ -6920,7 +6908,6 @@ func _complete_field_interaction(point: Node3D) -> void:
 				else "지하철역 진입로 조사 완료 · 포격 신호를 기록했습니다."
 			)
 		"rescue":
-			_add_fatigue(FATIGUE_RESCUE_GAIN)
 			_add_rescued_follower(point.global_position)
 			_show_field_notice("생존자 구조 · 호송 중 이동 속도가 감소합니다.")
 		"companion_revive":
@@ -7010,7 +6997,6 @@ func _open_field_loot_container(point: Node3D) -> void:
 			data
 		)
 		spawned_count += 1
-	_add_fatigue(FATIGUE_LOOT_GAIN)
 	if spawned_count == 0:
 		_show_field_notice("%s · 비어 있다" % LOOT_ECONOMY.get_container_display_name(container_type))
 	else:
@@ -7130,95 +7116,60 @@ func _show_field_notice(message: String) -> void:
 	hud.push_toast(message, HudStyle.GOLD, 2.0 + 0.9 * float(notice_lines))
 
 
-func _update_fatigue(delta: float, is_moving: bool) -> void:
-	var rate := FATIGUE_MOVING_RATE if is_moving else FATIGUE_IDLE_RATE
-	if rescued_followers.size() > 0 and is_moving:
-		rate *= 1.0 + minf(0.6, rescued_followers.size() * 0.12)
-	if laser_aim_held:
-		rate += FATIGUE_AIM_HOLD_RATE
-	_add_fatigue(rate * delta)
-	GameState.fatigue = fatigue
-	_refresh_fatigue_hud()
-	enemy_director._trigger_fatigue_boss_event()
+func _update_raid_danger(delta: float) -> void:
+	# 포위망 — 시간만이 올린다. 회복 수단도, 플레이어 디버프도 없다.
+	# 효과는 전부 적 쪽: 밀도(+DANGER_DENSITY_BONUS)·위협 바닥(DANGER_THREAT_SCALE)·
+	# 50%에 사냥꾼 보스(enemy_director._trigger_danger_boss_event).
+	raid_danger = minf(1.0, raid_danger + delta / DANGER_RAMP_SECONDS)
+	GameState.raid_danger = raid_danger
+	_refresh_danger_hud()
+	enemy_director._trigger_danger_boss_event()
 
 
-func _add_fatigue(amount: float) -> void:
-	if amount <= 0.0:
-		return
-	fatigue = clampf(
-		fatigue
-		+ amount * GameState.get_fatigue_gain_multiplier(),
-		0.0,
-		FATIGUE_MAX
-	)
-	GameState.fatigue = fatigue
-	_refresh_fatigue_hud()
-	# 피로는 체력이 아니라 "얼마나 더 머무를 수 있는가"다. 보스가 튀어나오는
-	# 50에 도달하기 전에 한 번은 그 규칙을 말해 줘야 한다.
-	if fatigue >= 25.0 and not GameState.fatigue_lesson_seen:
-		GameState.fatigue_lesson_seen = true
-		GameState.save_persistent_state()
-		_show_field_notice(
-			"피로가 쌓이고 있다.\n"
-			+ "체력과 달리 피로는 회복되지 않는다. 이 판에 남은 시간 그 자체다.\n"
-			+ "절반을 넘기면 도시가 사냥꾼을 보낸다."
-		)
-	enemy_director._trigger_fatigue_boss_event()
-
-
-func _refresh_fatigue_hud() -> void:
-	if hud.fatigue_bar:
-		hud.fatigue_bar.value = fatigue
-	var status := "안정"
-	var color := Color("#78b993")
+func _refresh_danger_hud() -> void:
+	var danger_percent := raid_danger * 100.0
+	if hud.danger_bar:
+		hud.danger_bar.value = danger_percent
+	var status := "조용함"
+	var color := Color("#5fc9b4")
 	var next_warning_band := 0
-	if fatigue >= 90.0:
-		status = "탈진"
+	if raid_danger >= 0.9:
+		status = "최악"
 		color = Color("#e06c62")
 		next_warning_band = 3
-	elif fatigue >= 65.0:
-		status = "과부하"
+	elif raid_danger >= 0.65:
+		status = "위험"
 		color = Color("#e3ad61")
 		next_warning_band = 2
-	elif fatigue >= 35.0:
-		status = "피곤"
+	elif raid_danger >= 0.35:
+		status = "수색 중"
 		color = Color("#d5c16b")
 		next_warning_band = 1
-	# 정보가 있는 쪽은 바다. 예전에는 35 미만에서 바를 숨기고 "안정"이라는
-	# 글자만 남겨서, 정작 배워야 할 게이지가 안 보였다. 뒤집는다.
-	if hud.fatigue_status_label:
-		# 퍼센트는 늘 보이고(라벨 옆 정렬이 살아난다), 경고 단어는 임계치부터 붙는다.
-		hud.fatigue_status_label.text = (
-			"%d%%" % roundi(fatigue)
+	if hud.danger_status_label:
+		hud.danger_status_label.text = (
+			"%d%%" % roundi(danger_percent)
 			if next_warning_band <= 0
-			else "%d%% · %s" % [roundi(fatigue), status]
+			else "%d%% · %s" % [roundi(danger_percent), status]
 		)
-		hud.fatigue_status_label.visible = true
-		hud.fatigue_status_label.add_theme_color_override("font_color", color)
-	if hud.fatigue_fill_style:
-		hud.fatigue_fill_style.bg_color = color
-		hud.fatigue_fill_style.border_color = color.lightened(0.2)
-	if fatigue_warning_band < 0:
-		fatigue_warning_band = next_warning_band
-	elif fatigue_warning_band != next_warning_band:
-		if next_warning_band > fatigue_warning_band:
+		hud.danger_status_label.visible = true
+		hud.danger_status_label.add_theme_color_override("font_color", color)
+	if hud.danger_fill_style:
+		hud.danger_fill_style.bg_color = color
+		hud.danger_fill_style.border_color = color.lightened(0.2)
+	if danger_warning_band < 0:
+		danger_warning_band = next_warning_band
+	elif danger_warning_band != next_warning_band:
+		if next_warning_band > danger_warning_band:
 			var warning_text: String = str({
-				1: "피로 누적 · 조준과 전투 행동이 피로를 빠르게 높입니다.",
-				2: "피로 과부하 · 이동 성능이 곧 저하됩니다.",
-				3: "탈진 직전 · 지금 나가거나, 숨을 곳을 찾는다.",
+				1: "포위망이 조여든다 · 도시에 적이 늘기 시작한다",
+				2: "포위망 위험 · 더 많은 적이, 더 세게 온다",
+				3: "포위망 최악 · 오래 버틸 곳이 아니다 — 챙긴 걸 들고 나가라",
 			}.get(next_warning_band, ""))
 			if not warning_text.is_empty():
 				_show_field_notice(warning_text)
-		fatigue_warning_band = next_warning_band
+		danger_warning_band = next_warning_band
 		_apply_hud_layout()
 	_refresh_top_status_label()
-
-
-func _get_fatigue_speed_multiplier() -> float:
-	if fatigue < 70.0:
-		return 1.0
-	var exhaustion := inverse_lerp(70.0, FATIGUE_MAX, fatigue)
-	return lerpf(1.0, FATIGUE_SPEED_MIN, exhaustion)
 
 
 func _get_escort_speed_multiplier() -> float:
@@ -7276,7 +7227,7 @@ func _save_run_state() -> void:
 	GameState.equipped_weapon_id = equipped_weapon_id
 	GameState.weapon_durability = weapon_durability
 	GameState.equipped_weapon_mods.assign(equipped_weapon_mods)
-	GameState.fatigue = fatigue
+	GameState.raid_danger = raid_danger
 	GameState.save_persistent_state()
 
 
@@ -7789,8 +7740,8 @@ func _spawn_rocket_boss_at(spawn_position: Vector3,
 	boss_name: String) -> CharacterBody3D:
 	return enemy_director._spawn_rocket_boss_at(spawn_position, boss_threat, boss_name)
 
-func _trigger_fatigue_boss_event() -> void:
-	enemy_director._trigger_fatigue_boss_event()
+func _trigger_danger_boss_event() -> void:
+	enemy_director._trigger_danger_boss_event()
 
 func _update_reinforcement_call(delta: float, effective_threat: float) -> void:
 	enemy_director._update_reinforcement_call(delta, effective_threat)

@@ -95,7 +95,6 @@ var canned_food_state := 0
 var stored_weapons_state := 0
 var mod_components_state: Dictionary = {}
 var rescued_workers_state := 0
-var fatigue_state := 0.0
 var bag_filter_buttons: Dictionary = {}
 var bag_filter_button_tweens: Dictionary = {}
 var bag_filter_hover_states: Dictionary = {}
@@ -154,8 +153,7 @@ func update_state(
 	canned_food: int = 0,
 	stored_weapons: int = 0,
 	mod_components: Dictionary = {},
-	rescued_workers: int = 0,
-	fatigue: float = 0.0
+	rescued_workers: int = 0
 ) -> void:
 	has_weapon_state = has_weapon
 	magazine_state = magazine
@@ -168,7 +166,6 @@ func update_state(
 	stored_weapons_state = stored_weapons
 	mod_components_state = mod_components.duplicate(true)
 	rescued_workers_state = rescued_workers
-	fatigue_state = fatigue
 	if opened:
 		_refresh_contents()
 

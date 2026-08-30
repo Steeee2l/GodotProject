@@ -181,7 +181,7 @@ func _rebuild_ui() -> void:
 	_add_summary_chip(summary, "health", "최대 체력", "%d" % GameState.get_max_health(), Color("#e87668"))
 	_add_summary_chip(summary, "stamina", "스태미나", "%d" % roundi(GameState.get_max_stamina()), Color("#e4ca6c"))
 	_add_summary_chip(summary, "speed", "이동 배율", "x%.2f" % GameState.get_move_speed_multiplier(), Color("#77c5a1"))
-	_add_summary_chip(summary, "fitness", "피로 획득", "x%.2f" % GameState.get_fatigue_gain_multiplier(), Color("#8db5d1"))
+	_add_summary_chip(summary, "fitness", "반동 제어", "x%.2f" % GameState.get_recoil_control_multiplier(), Color("#8db5d1"))
 
 	var divider := HSeparator.new()
 	content.add_child(divider)

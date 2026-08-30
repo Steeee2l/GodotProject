@@ -45,11 +45,6 @@ const DIRECTION_VECTORS := {
 	"w": Vector2(-1, 0),
 	"nw": Vector2(-1, -1),
 }
-const FATIGUE_MAX := 100.0
-const FATIGUE_MELEE_GAIN := 1.1
-const FATIGUE_RELOAD_GAIN := 0.8
-const FATIGUE_ROLL_GAIN := 0.45
-const FATIGUE_SHOT_GAIN := 0.28
 const FIELD_LOOT_CACHE_TEXTURE := preload("res://assets/interiors/office_dungeon/modules/office_salvage_loot_v1.png")
 const FIRST_STAGE_ZONE_ID := "jongno_outskirts"
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
@@ -149,7 +144,6 @@ func _fire_ak47() -> void:
 		host.weapon_spread_deg + float(host.weapon_stats.get("spread_per_shot_deg", 1.0)),
 		float(host.weapon_stats.get("max_spread_deg", 14.0))
 	)
-	host._add_fatigue(FATIGUE_SHOT_GAIN)
 	if host.has_method("break_raid_entry_grace"):
 		host.break_raid_entry_grace()
 	_apply_weapon_recoil(aim_direction)
@@ -258,7 +252,6 @@ func _reload_ak47() -> void:
 	SFX.play("reload_start")
 	host.reload_timer = float(host.weapon_stats.get("reload_time", 2.15))
 	host.fire_cooldown = host.reload_timer
-	host._add_fatigue(FATIGUE_RELOAD_GAIN)
 	host.hud.push_toast(
 		"%s 재장전 · %.1f초" % [
 			str(host.weapon_stats.get("display_name", "무기")).split("\"")[0].strip_edges(),
@@ -305,10 +298,6 @@ func _update_weapon_ballistics(delta: float, is_moving: bool) -> void:
 		target_spread *= float(host.weapon_stats.get("injured_spread_multiplier", 1.0))
 	if host.loafing:
 		target_spread *= float(host.weapon_stats.get("loaf_spread_multiplier", 1.0))
-	# 피로 60% 이상부터 탄이 퍼지기 시작한다. 정산 화면이 "탄이 퍼진 상태였다"고
-	# 말해 왔는데 정작 탄도에는 피로가 없던 것을 실제로 구현한다.
-	target_spread *= lerpf(1.0, 1.35, clampf(inverse_lerp(60.0, 100.0, host.fatigue), 0.0, 1.0))
-	# 캣닢 급여 '집중' — 한 판짜리 탄퍼짐 보정.
 	var durability_penalty := 1.0 + clampf((50.0 - host.weapon_durability) / 50.0, 0.0, 1.0) * 0.7
 	target_spread *= durability_penalty
 	var recovery := float(host.weapon_stats.get("spread_recovery_deg", 5.0))

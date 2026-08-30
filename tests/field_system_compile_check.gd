@@ -73,8 +73,8 @@ func _initialize() -> void:
 		push_error("FIELD_SYSTEM_COMPILE: merchant sales must pay scrap through GameState.settle_merchant_sale")
 		quit(1)
 		return
-	if not main_source.contains("fatigue_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)"):
-		push_error("FIELD_SYSTEM_COMPILE: fatigue HUD must stay clear of mobile movement controls")
+	if not main_source.contains("danger_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)"):
+		push_error("FIELD_SYSTEM_COMPILE: danger HUD must stay clear of mobile movement controls")
 		quit(1)
 		return
 	var mission_catalog_source := FileAccess.get_file_as_string(

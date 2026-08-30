@@ -355,7 +355,7 @@ func _check_breakthrough_perks() -> void:
 	_check(str(game_state.call("describe_breakthrough_perk", "weapon", 30)).contains("관통") and str(game_state.call("describe_breakthrough_perk", "armor", 90)).contains("시큐어"), "⑦ describe_breakthrough_perk 문구")
 	_check(str(game_state.call("describe_breakthrough_perk", "weapon", 40)).is_empty(), "⑦ 표에 없는 단계는 빈 문자열")
 	levels["k2"] = 0
-	# 방어구 — 몸 +30 넉백 · +50 가드 · +70 피로 · +90 시큐어
+	# 방어구 — 몸 +30 넉백 · +50 가드 · +70 이동 속도 · +90 시큐어
 	game_state.call("reset_run")
 	var armor_levels: Dictionary = game_state.get("armor_enhancement_levels")
 	game_state.call("add_equipment", "military_vest", 1)
@@ -367,9 +367,9 @@ func _check_breakthrough_perks() -> void:
 	_check(is_equal_approx(float(game_state.call("get_armor_knockback_multiplier")), 1.0), "⑦ 머리 +35는 넉백 저항 없음(몸 전용)")
 	armor_levels["military_vest"] = 35
 	_check(is_equal_approx(float(game_state.call("get_armor_knockback_multiplier")), 0.5), "⑦ 몸 +35 → 넉백 저항 50%")
-	var fatigue_base := float(game_state.call("get_fatigue_gain_multiplier"))
+	var speed_base := float(game_state.call("get_move_speed_multiplier"))
 	armor_levels["military_helmet"] = 71
-	_check(absf(float(game_state.call("get_fatigue_gain_multiplier")) - fatigue_base * 0.85) < 0.001, "⑦ 방어구 +70 피로 −15%")
+	_check(absf(float(game_state.call("get_move_speed_multiplier")) - speed_base * 1.04) < 0.001, "⑦ 방어구 +70 이동 속도 +4%")
 	# 피격 후 가드: +50 이상이면 1.5s 안의 두 번째 피격이 −20%
 	game_state.set("last_player_hit_msec", -100000)
 	var first := int(game_state.call("apply_post_hit_guard", 100))
