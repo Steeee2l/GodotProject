@@ -3777,7 +3777,8 @@ func _use_quick_medkit() -> void:
 
 
 func _show_action_notice(message: String) -> void:
-	hud.push_toast(message, HudStyle.GREEN, 1.4)
+	# 구급약 없음/회복은 조용한 한 줄로(2026-09-02).
+	hud.push_toast_minor(message, HudStyle.GREEN, 1.4)
 
 
 func _get_stored_weapon_count() -> int:
@@ -4441,13 +4442,7 @@ func take_damage(amount: int) -> void:
 	if health_bar:
 		health_bar.value = player_health
 	_refresh_top_status_label()
-	if hud.ammo_notice:
-		hud.push_toast(
-			"피격  -%d   체력 %d/%d" % [applied_damage, player_health, GameState.get_max_health()],
-			HudStyle.DANGER,
-			1.1
-		)
-		ammo_notice_time = 1.1
+	# 피격 토스트는 폐지(2026-09-02) — 세그먼트 체력바·피해 숫자·비네트가 이미 말한다.
 	if player_health <= 0:
 		fire_button_held = false
 		player.velocity = Vector3.ZERO
@@ -4538,7 +4533,7 @@ func take_hostile_hit(
 			var cover_hints := int(get_meta("cover_block_hint_count", 0))
 			if cover_hints < 2:
 				set_meta("cover_block_hint_count", cover_hints + 1)
-				hud.push_toast("엄폐가 총알을 막았다 — 폭발·근접은 못 막는다", HudStyle.GREEN, 1.1)
+				hud.push_toast_minor("엄폐가 총알을 막았다. 폭발과 근접은 못 막는다", HudStyle.GREEN, 1.6)
 		return
 	last_cover_blocked = 0
 	var multiplier := GameState.get_damage_taken_multiplier()
@@ -4556,7 +4551,7 @@ func take_hostile_hit(
 		var armor_hints := int(get_meta("armor_block_hint_count", 0))
 		if armor_hints < 2:
 			set_meta("armor_block_hint_count", armor_hints + 1)
-			hud.push_toast("방어구가 피해 %d을 막았다" % last_damage_blocked, Color("#8ed9ff"), 1.1)
+			hud.push_toast_minor("방어구가 피해 %d을 막았다" % last_damage_blocked, Color("#8ed9ff"), 1.4)
 
 
 var last_cover_blocked := 0

@@ -245,8 +245,8 @@ func grant_sortie_supply() -> void:
 	host.reserve_ammo = GameState.get_ammo_count(ammo_id)
 	GameState.reserve_ammo = host.reserve_ammo
 	var caliber := str(WEAPON_SYSTEM.get_ammo(ammo_id).get("display_name", ammo_id)).split(" ")[0]
-	host.hud.push_toast(
-		"출정 보급 · %s %d발 ×%d" % [caliber, magazine_size, magazines], HudStyle.GOLD, 3.0
+	host.hud.push_toast_minor(
+		"출정 보급 · %s %d발 ×%d" % [caliber, magazine_size, magazines], HudStyle.GOLD, 2.4
 	)
 	host._update_equipment_ui()
 
@@ -264,7 +264,7 @@ func _reload_ak47() -> void:
 	SFX.play("reload_start")
 	host.reload_timer = float(host.weapon_stats.get("reload_time", 2.15))
 	host.fire_cooldown = host.reload_timer
-	host.hud.push_toast(
+	host.hud.push_toast_minor(
 		"%s 재장전 · %.1f초" % [
 			str(host.weapon_stats.get("display_name", "무기")).split("\"")[0].strip_edges(),
 			host.reload_timer,

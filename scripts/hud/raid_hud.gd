@@ -695,7 +695,12 @@ func hide_field_combat_hud() -> void:
 # 서로 덮어쓰던 문제를 끝낸다: 최대 3장이 스택으로 쌓이고, 각자 수명을 갖고,
 # 같은 메시지는 ×N으로 합쳐진다. 등장·퇴장 전부 HudStyle 모션 문법을 탄다 —
 # 툭 나타나는 알림은 없다.
-const TOAST_LIMIT := 3
+# 굵은 알림은 둘까지(2026-09-02 유저: "하단에도 너무 많이 뜰 때가 있어").
+const TOAST_LIMIT := 2
+# 조용한 한 줄(push_toast_minor) 기본 수명.
+const QUIET_TOAST_LIFE := 1.3
+# 조용한 한 줄은 스택 맨 아래 자리 하나를 돌려 쓴다 — 쌓이지 않는다.
+var quiet_toast: PanelContainer
 
 
 func _build_toast_stack() -> void:
@@ -719,19 +724,18 @@ func push_toast(message: String, accent: Color = HudStyle.GOLD, duration: float 
 	if toast_stack == null or message.is_empty():
 		return
 	# 같은 메시지 연타는 마지막 장에 ×N으로 합치고 수명을 새로 준다.
-	if toast_stack.get_child_count() > 0:
-		var last := toast_stack.get_child(toast_stack.get_child_count() - 1) as PanelContainer
-		if is_instance_valid(last) and str(last.get_meta("base_text", "")) == message:
-			var repeat := int(last.get_meta("repeat_count", 1)) + 1
-			last.set_meta("repeat_count", repeat)
-			var last_label := last.get_meta("label") as Label
-			if is_instance_valid(last_label):
-				last_label.text = "%s   ×%d" % [message, repeat]
-			var old_life = last.get_meta("life_tween")
-			if old_life is Tween and (old_life as Tween).is_valid():
-				(old_life as Tween).kill()
-			_start_toast_life(last, duration)
-			return
+	var last := _last_loud_toast()
+	if last != null and str(last.get_meta("base_text", "")) == message:
+		var repeat := int(last.get_meta("repeat_count", 1)) + 1
+		last.set_meta("repeat_count", repeat)
+		var last_label := last.get_meta("label") as Label
+		if is_instance_valid(last_label):
+			last_label.text = "%s   ×%d" % [message, repeat]
+		var old_life = last.get_meta("life_tween") if last.has_meta("life_tween") else null
+		if old_life is Tween and (old_life as Tween).is_valid():
+			(old_life as Tween).kill()
+		_start_toast_life(last, duration)
+		return
 	var toast := PanelContainer.new()
 	toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	toast.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -760,14 +764,18 @@ func push_toast(message: String, accent: Color = HudStyle.GOLD, duration: float 
 	toast.set_meta("repeat_count", 1)
 	toast.set_meta("label", label)
 	toast_stack.add_child(toast)
+	# 조용한 한 줄은 언제나 맨 아래.
+	if quiet_toast != null and is_instance_valid(quiet_toast):
+		toast_stack.move_child(quiet_toast, toast_stack.get_child_count() - 1)
 	# 새 장이 등장할 때만 아주 작게 "톡"(같은 메시지 ×N 합치기는 조용히).
 	SFX.play("toast_pop")
 	# 넘치면 가장 오래된 장부터 빠르게 물러난다.
-	while toast_stack.get_child_count() > TOAST_LIMIT:
-		var oldest := toast_stack.get_child(0) as Control
-		if is_instance_valid(oldest):
-			toast_stack.remove_child(oldest)
-			oldest.queue_free()
+	while _loud_toast_count() > TOAST_LIMIT:
+		var oldest := _oldest_loud_toast()
+		if oldest == null:
+			break
+		toast_stack.remove_child(oldest)
+		oldest.queue_free()
 	# 등장: 페이드 + 미세 스케일 (스택 안이라 position 트윈 대신 scale).
 	toast.call_deferred("set_pivot_offset", Vector2(240.0, 16.0))
 	toast.modulate.a = 0.0
@@ -787,6 +795,96 @@ func _start_toast_life(toast: PanelContainer, duration: float) -> void:
 	life.tween_property(toast, "modulate:a", 0.0, 0.22).set_trans(Tween.TRANS_SINE)
 	life.parallel().tween_property(toast, "scale", Vector2(0.97, 0.97), 0.22)
 	life.tween_callback(toast.queue_free)
+
+
+func _is_quiet_toast(node: Node) -> bool:
+	return quiet_toast != null and node == quiet_toast
+
+
+func _loud_toast_count() -> int:
+	var count := 0
+	for child in toast_stack.get_children():
+		if not _is_quiet_toast(child):
+			count += 1
+	return count
+
+
+func _last_loud_toast() -> PanelContainer:
+	for index in range(toast_stack.get_child_count() - 1, -1, -1):
+		var child := toast_stack.get_child(index)
+		if not _is_quiet_toast(child):
+			return child as PanelContainer
+	return null
+
+
+func _oldest_loud_toast() -> Control:
+	for child in toast_stack.get_children():
+		if not _is_quiet_toast(child):
+			return child as Control
+	return null
+
+
+func push_toast_minor(
+	message: String,
+	accent: Color = HudStyle.TEXT_DIM,
+	duration: float = QUIET_TOAST_LIFE
+) -> void:
+	# 조용한 한 줄(2026-09-02 유저: "생략 가능한 건 안 보여줘도 돼").
+	# 줍기·재장전·구급약·포탑 상태 같은 잡음은 스택에 쌓지 않고 자리 하나에서
+	# 서로 교체된다. 굵은 알림이 둘 서 있으면 아예 띄우지 않는다.
+	if toast_stack == null or message.is_empty():
+		return
+	if _loud_toast_count() >= 2:
+		return
+	if quiet_toast == null or not is_instance_valid(quiet_toast):
+		quiet_toast = PanelContainer.new()
+		quiet_toast.name = "QuietToast"
+		quiet_toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		quiet_toast.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		var label := Label.new()
+		label.name = "Label"
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.add_theme_font_override("font", HudStyle.FONT)
+		label.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION)
+		label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+		label.add_theme_constant_override("outline_size", 4)
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		quiet_toast.add_child(label)
+		quiet_toast.set_meta("label", label)
+		toast_stack.add_child(quiet_toast)
+	var style := HudStyle.panel(
+		Color(HudStyle.INK.r, HudStyle.INK.g, HudStyle.INK.b, 0.72),
+		Color(accent, 0.28),
+		HudStyle.RADIUS_CHIP
+	)
+	style.content_margin_left = 10.0
+	style.content_margin_right = 10.0
+	style.content_margin_top = 4.0
+	style.content_margin_bottom = 5.0
+	quiet_toast.add_theme_stylebox_override("panel", style)
+	var quiet_label := quiet_toast.get_meta("label") as Label
+	var repeat := 1
+	if quiet_toast.visible and str(quiet_toast.get_meta("base_text", "")) == message:
+		repeat = int(quiet_toast.get_meta("repeat_count", 1)) + 1
+	quiet_toast.set_meta("base_text", message)
+	quiet_toast.set_meta("repeat_count", repeat)
+	if is_instance_valid(quiet_label):
+		quiet_label.text = message if repeat <= 1 else "%s   ×%d" % [message, repeat]
+		quiet_label.add_theme_color_override("font_color", accent.lerp(HudStyle.TEXT, 0.35))
+	toast_stack.move_child(quiet_toast, toast_stack.get_child_count() - 1)
+	var old_life = quiet_toast.get_meta("life_tween") if quiet_toast.has_meta("life_tween") else null
+	if old_life is Tween and (old_life as Tween).is_valid():
+		(old_life as Tween).kill()
+	quiet_toast.visible = true
+	quiet_toast.modulate.a = 1.0
+	var life := quiet_toast.create_tween()
+	quiet_toast.set_meta("life_tween", life)
+	life.tween_interval(maxf(0.5, duration))
+	life.tween_property(quiet_toast, "modulate:a", 0.0, 0.2).set_trans(Tween.TRANS_SINE)
+	life.tween_callback(func() -> void:
+		if is_instance_valid(quiet_toast):
+			quiet_toast.visible = false
+	)
 
 
 func build_raid_opportunity_hud() -> void:

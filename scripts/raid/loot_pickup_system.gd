@@ -414,13 +414,22 @@ func _collect_nearby_ammo() -> void:
 				str(host.nearby_ammo_pickup.get_meta("display_name", "탄약")),
 				updated_ammo_count,
 			]
-	host.hud.push_toast(toast_text, toast_accent, toast_seconds)
+	# 굵게 남길 건 임무 품목·장비·설계도처럼 "한 번뿐인" 획득. 탄약·고철·통조림·
+	# 부품은 조용한 한 줄에서 서로 교체된다(2026-09-02 유저: "생략 가능한 건 안 보여줘도 돼").
+	var loud_pickup := (
+		loot_type in ["progression_item", "weapon", "armor", "weapon_mod"]
+		or bool(host.nearby_ammo_pickup.get_meta("mission_item", false))
+	)
+	if loud_pickup:
+		host.hud.push_toast(toast_text, toast_accent, toast_seconds)
+	else:
+		host.hud.push_toast_minor(toast_text, toast_accent, minf(toast_seconds, 1.6))
 	# 쉘터 다음 목표(티어 확장)에 필요한 품목이면 진행도를 한 줄 더 — 필드에서
 	# "왜 줍나"가 쉘터 화면의 목표 줄과 같은 숫자로 이어진다.
 	if loot_type == "churu":
 		var goal_note: String = SHELTER_REQUISITION.describe_progress_after_pickup("churu")
 		if not goal_note.is_empty():
-			host.hud.push_toast(goal_note, HudStyle.GOLD, 2.6)
+			host.hud.push_toast_minor(goal_note, HudStyle.GOLD, 2.2)
 	SFX.play("pickup")
 	host._update_equipment_ui()
 	host._update_medkit_button()

@@ -50,7 +50,9 @@ func _run() -> void:
 			break
 	assert(squad.size() == 2)
 
-	# ① 호출 시작
+	# ① 호출 시작 — 첫 존은 첫 호출까지 20초 지연(FIRST_STAGE_REINFORCEMENT_FIRST_WAVE_DELAY)이
+	# 걸려 있으므로 테스트는 쿨다운을 비우고 시작한다.
+	director.reinforcement_call_cooldown = 0.0
 	director.sustained_combat_time = director.REINFORCEMENT_CALL_TRIGGER_TIME + 1.0
 	director._update_reinforcement_call(0.016, 0.5)
 	var caller := director.active_reinforcement_caller as CharacterBody3D

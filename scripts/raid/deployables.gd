@@ -147,7 +147,7 @@ func place_turret(target: Vector3) -> void:
 	active_turret = turret
 	turrets_placed += 1
 	if host.hud != null and host.hud.has_method("push_toast"):
-		host.hud.push_toast("감시포탑 가동 — %d초" % int(TURRET_LIFETIME), TEAL, 2.0)
+		host.hud.push_toast_minor("감시포탑 가동 — %d초" % int(TURRET_LIFETIME), TEAL, 2.0)
 
 
 func notify_turret_gone(reason: String) -> void:
@@ -156,7 +156,7 @@ func notify_turret_gone(reason: String) -> void:
 		return
 	if reason == "replaced":
 		return
-	host.hud.push_toast("포탑 가동 종료", TEAL_DIM, 1.8)
+	host.hud.push_toast_minor("포탑 가동 종료", TEAL_DIM, 1.8)
 
 
 # ── 로켓 발사기 ──────────────────────────────────────────────────
@@ -186,7 +186,7 @@ func fire_rocket(target: Vector3) -> bool:
 		if host.hud != null and host.hud.has_method("push_toast"):
 			host.hud.push_toast("3발을 다 썼다 — 발사기를 버렸다", Color("#e2a35e"), 2.2)
 	elif host.hud != null and host.hud.has_method("push_toast"):
-		host.hud.push_toast("로켓 %d발 남음" % rocket_charges_left, TEAL, 1.2)
+		host.hud.push_toast_minor("로켓 %d발 남음" % rocket_charges_left, TEAL, 1.2)
 	return true
 
 
@@ -206,7 +206,7 @@ func deploy_drone() -> void:
 	active_drone = drone
 	drones_deployed += 1
 	if host.hud != null and host.hud.has_method("push_toast"):
-		host.hud.push_toast("호위 드론 가동 — 배터리 %d초" % int(DRONE_LIFETIME), TEAL, 2.0)
+		host.hud.push_toast_minor("호위 드론 가동 — 배터리 %d초" % int(DRONE_LIFETIME), TEAL, 2.0)
 
 
 func notify_drone_gone(reason: String) -> void:
@@ -215,9 +215,9 @@ func notify_drone_gone(reason: String) -> void:
 		return
 	match reason:
 		"expired":
-			host.hud.push_toast("드론 배터리 소진", TEAL_DIM, 2.0)
+			host.hud.push_toast_minor("드론 배터리 소진", TEAL_DIM, 2.0)
 		"destroyed":
-			host.hud.push_toast("호위 드론 격추", Color("#e2724e"), 2.0)
+			host.hud.push_toast_minor("호위 드론 격추", Color("#e2724e"), 2.0)
 		# "replaced"는 새 드론 토스트가 대신 말한다.
 
 
@@ -314,7 +314,7 @@ func _end_strike_mode() -> void:
 		tween.parallel().tween_property(drone, "scale", Vector3.ONE * 0.2, 0.8)
 		tween.tween_callback(drone.queue_free)
 		if host.hud != null and host.hud.has_method("push_toast"):
-			host.hud.push_toast("타격 드론 귀환", TEAL_DIM, 1.6)
+			host.hud.push_toast_minor("타격 드론 귀환", TEAL_DIM, 1.6)
 
 
 func _resolve_strike_target(screen_position: Vector2) -> CharacterBody3D:
@@ -399,7 +399,7 @@ func strike_at_screen(screen_position: Vector2) -> bool:
 		target = strike_lock_target
 	if target == null or not is_instance_valid(target):
 		if host.hud != null and host.hud.has_method("push_toast"):
-			host.hud.push_toast("표적 없음 — 적 위에서 클릭", TEAL_DIM, 1.0)
+			host.hud.push_toast_minor("표적 없음 — 적 위에서 클릭", TEAL_DIM, 1.0)
 		return true
 	strike_bursts_left -= 1
 	strike_burst_queue.append({

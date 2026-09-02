@@ -195,7 +195,7 @@ func cycle_selection() -> void:
 	_apply_ring_style()
 	aim_timeout_left = AIM_TIMEOUT
 	var info := KIND_INFO[selected_kind] as Dictionary
-	host.hud.push_toast(
+	host.hud.push_toast_minor(
 		"%s x%d 선택" % [str(info.get("toast", "")), get_kind_count(selected_kind)],
 		info.get("color", Color("#79b98d")) as Color,
 		1.4

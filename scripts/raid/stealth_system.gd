@@ -201,7 +201,7 @@ func _install_scent_system() -> void:
 		var hint_count := int(host.get_meta("scent_hint_count", 0))
 		if active and hint_count < 1:
 			host.set_meta("scent_hint_count", hint_count + 1)
-			host.hud.push_toast(
+			host.hud.push_toast_minor(
 				"킁킁. 붉은 냄새는 적이 지나간 길이다. 진할수록 방금 지나갔다. 초록은 생존자다.",
 				HudStyle.GREEN,
 				3.4
