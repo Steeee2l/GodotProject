@@ -406,6 +406,13 @@ func handle_point(point_node: Node3D) -> void:
 
 
 func _finish_point(index: int, point: Dictionary) -> void:
+	# 거점 하나를 끝낼 때마다 크게 축하한다(유저 요청) — 메인 체인의 한 걸음이
+	# 토스트 한 줄로 지나가면 진행감이 죽는다. 상세는 여전히 토스트·독백이 맡는다.
+	host.mission_celebration.celebrate(
+		str(point.get("map_label", "메인 임무 거점")),
+		"메인 임무 %d/%d 지점 확보" % [index + 1, points.size()],
+		"메인 임무"
+	)
 	var notice := str(point.get("complete_notice", ""))
 	if not notice.is_empty():
 		host._show_field_notice(notice)

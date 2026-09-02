@@ -25,7 +25,8 @@ func setup(host_node: Node) -> void:
 	host = host_node
 	# 일시정지 중에도 눌려야 한다 — 멈춰 놓고 상태를 바꾸는 게 대부분이다.
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	layer = 120
+	# 140 — 일시정지(135)보다 위. 개발 도구는 무엇이 떠 있어도 눌려야 한다.
+	layer = 140
 	_build_open_button()
 	_build_panel()
 	set_open(false)

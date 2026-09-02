@@ -90,7 +90,9 @@ const HIT_FEEDBACK_MIN_INTERVAL_MSEC := 70
 # 여기 숫자는 이제 곧바로 월드 단위 진폭이다 — 함부로 키우면 멀미가 온다.
 const HIT_SHAKE_MAX := 0.10
 # 발사 반동 펀치 누적 상한 — 연사 중 카메라가 통째로 밀려나지 않게.
-const CAMERA_PUNCH_MAX := 0.085
+# 0.085 → 0.30: 발사 킥을 체감 크기(3~5px)로 올리면서 같이 연다. 지수 감쇠
+# (-11/s)라 연사 중 실측 누적은 ~0.2 언저리에서 평형이 잡힌다.
+const CAMERA_PUNCH_MAX := 0.30
 const WEAPON_FRAME_SIZE := Vector2(192, 192)
 const WEAPON_VISUAL_PIXEL_SIZE := 0.0018
 const AK_DIRECTIONAL_TEXTURE := preload("res://assets/weapons/ak47_directional.png")
@@ -408,6 +410,8 @@ var can_throw := CanThrowSystem.new()
 var deployables := preload("res://scripts/raid/deployables.gd").new()
 # 적 잡담 — 평소엔 서로 떠들고, 혼자면 혼잣말, 싸울 땐 가끔 소리친다.
 var enemy_chatter := preload("res://scripts/raid/enemy_chatter.gd").new()
+# 미션 축하 배너 — 임무가 끝나는 순간 중앙에 크게 + 팡파르(유저 요청).
+var mission_celebration := preload("res://scripts/hud/mission_celebration.gd").new()
 # 개발자 디버그 메뉴 — 9키(PC) / 좌하단 DEV 버튼(모바일).
 # class_name 캐시(.godot)에 기대지 않도록 Node로 두고 call()로 부른다
 # (deployables·tactical_map과 같은 규약 — 헤드리스 콜드 스타트 안전).
@@ -610,6 +614,7 @@ func _ready() -> void:
 	can_throw.attach(self)
 	deployables.attach(self)
 	enemy_chatter.attach(self)
+	mission_celebration.attach(self)
 	debug_menu = preload("res://scripts/hud/debug_menu.gd").new()
 	debug_menu.name = "DebugMenu"
 	add_child(debug_menu)
@@ -6035,6 +6040,9 @@ func _advance_basic_mission(mission_id: String, amount: int = 1) -> void:
 			if not completed_mission_titles.has(mission_title):
 				completed_mission_titles.append(mission_title)
 				completed_mission_xp += xp_reward
+			mission_celebration.celebrate(
+				mission_title, "경험치 +%d" % xp_reward, "기본 목표 완료"
+			)
 			_show_field_notice("기본 목표 완료 · %s · 경험치 +%d" % [mission_title, xp_reward])
 			_handle_basic_mission_chain_completion(mission_id)
 		_refresh_objective_panel()

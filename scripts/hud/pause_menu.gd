@@ -59,7 +59,9 @@ func _open() -> void:
 	layer.name = "PauseMenuLayer"
 	# 96에서는 필드 HUD(장전 바·조준선 등 높은 레이어)가 창 위로 뚫고 나왔다
 	# (유저 스크린샷). 일시정지는 화면의 최상단이어야 한다.
-	layer.layer = 120
+	# 135 — 피격 피드백(129)·조준(130) 캔버스 위. 120이던 시절엔 일시정지 딤
+	# 위로 체력바·레티클이 떠서 화면이 정리되지 않았다(유저 신고).
+	layer.layer = 135
 	layer.process_mode = Node.PROCESS_MODE_ALWAYS
 	add_child(layer)
 

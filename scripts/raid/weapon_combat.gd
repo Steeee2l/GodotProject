@@ -153,14 +153,18 @@ func _fire_ak47() -> void:
 	# 발사 반동을 화면에도 싣는다(화면 킥). 산탄(다연발)은 더 묵직하게.
 	# 셰이크가 카메라에 제대로 도달하게 고친 뒤(main._update_camera_follow) 다시
 	# 잡은 값 — 랜덤 흔들림 + 쏜 방향 반대로 밀리는 펀치 두 겹이다.
-	var recoil_kick := 0.032 if pellet_count <= 1 else 0.058
-	host.camera_shake_time = maxf(host.camera_shake_time, 0.09)
+	# 0.032는 직교 사이즈 28 기준 화면 1픽셀 미만이라 반동이 전혀 안 읽혔다
+	# (유저 신고: "발사할 때 반동이 전혀 느껴지지 않아"). 처치 때 느껴지던 건
+	# 셰이크가 아니라 히트스톱이었다. 발사는 3~5픽셀급으로 올린다 — 랜덤
+	# 흔들림은 짧게, 방향 펀치는 쏜 반대쪽으로 또렷하게.
+	var recoil_kick := 0.10 if pellet_count <= 1 else 0.17
+	host.camera_shake_time = maxf(host.camera_shake_time, 0.10)
 	host.camera_shake_strength = maxf(host.camera_shake_strength, recoil_kick)
 	var punch_back := aim_direction
 	punch_back.y = 0.0
 	if punch_back.length_squared() > 0.01:
 		host.camera_punch_offset -= punch_back.normalized() * (
-			0.030 if pellet_count <= 1 else 0.062
+			0.11 if pellet_count <= 1 else 0.20
 		)
 	# 총성은 도시가 듣는다. 소음기를 달면 그만큼 덜 들린다.
 	var sound_scale := clampf(float(host.weapon_stats.get("sound_radius", 1.0)), 0.15, 2.0)

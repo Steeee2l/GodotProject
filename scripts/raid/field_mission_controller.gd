@@ -686,6 +686,9 @@ func _complete_field_mission() -> void:
 		"보상  %s · 경험치 +70" % reward_text,
 		Color("#7de0a8")
 	)
+	host.mission_celebration.celebrate(
+		mission_title, "보상  %s · 경험치 +70" % reward_text, "현장 임무 완료"
+	)
 	host._show_field_notice("임무 완료 · %s" % reward_text)
 	host._advance_contract_progress("field_mission")
 	field_mission_result_timer = FIELD_MISSION_RESULT_DURATION
@@ -693,6 +696,7 @@ func _complete_field_mission() -> void:
 	field_mission_prepare_timer = 0.0
 	host.active_field_mission = null
 	host._clear_active_mission_collectibles()
+	_schedule_site_despawn(completed_site)
 
 
 func _fail_field_mission(reason: String) -> void:
@@ -712,6 +716,34 @@ func _fail_field_mission(reason: String) -> void:
 	field_mission_prepare_timer = 0.0
 	host.active_field_mission = null
 	host._clear_active_mission_collectibles()
+	_schedule_site_despawn(failed_site)
+
+
+func _schedule_site_despawn(site: Node3D) -> void:
+	# 끝난 임무 거점은 치운다(유저 신고: "임무 완료하면 저 상호작용 오브젝트
+	# 사라져야 되는 거 아니야?"). 예전에는 링을 초록으로 칠하고 '완료' 라벨만
+	# 바꾼 채 영원히 남아, 이미 끝난 자리가 계속 상호작용처럼 읽혔다.
+	# 결과를 읽을 시간(3.5s)을 주고 0.8s 페이드로 사라진다.
+	if not is_instance_valid(site):
+		return
+	field_mission_sites.erase(site)
+	# 혹시 상호작용 목록에 남아 있으면 프롬프트가 계속 뜬다 — 여기서도 끊는다.
+	host.field_interactions.erase(site)
+	var tween := host.create_tween()
+	tween.tween_interval(3.5)
+	var fade := func(alpha: float) -> void:
+		if not is_instance_valid(site):
+			return
+		for child in site.find_children("*", "Node3D", true, false):
+			if child is GeometryInstance3D:
+				(child as GeometryInstance3D).transparency = 1.0 - alpha
+			elif child is Label3D:
+				(child as Label3D).modulate.a = alpha
+	tween.tween_method(fade, 1.0, 0.0, 0.8)
+	tween.tween_callback(func() -> void:
+		if is_instance_valid(site):
+			site.queue_free()
+	)
 
 
 func _grant_field_mission_reward(reward: Dictionary) -> String:
