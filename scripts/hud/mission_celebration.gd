@@ -10,7 +10,11 @@ extends RefCounted
 # host 패턴: main이 attach(host) 후 celebrate(제목, 부제)만 부른다.
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
-const HOLD_SECONDS := 2.6
+# 크게 떠 있는 시간(0.5s) → 상단 띠로 수축해 머무는 시간(2.0s).
+const BIG_HOLD_SECONDS := 0.5
+const STRIP_HOLD_SECONDS := 2.0
+const STRIP_SCALE := 0.55
+const STRIP_TOP_MARGIN := 10.0
 const LAYER := 98
 
 var host: Node
@@ -41,12 +45,19 @@ func celebrate(title: String, subtitle: String = "", eyebrow: String = "임무 �
 	subtitle_label.visible = not subtitle.is_empty()
 	panel.visible = true
 	panel.reset_size()
-	# 화면 상단 1/4 지점, 가로 중앙. 십자선을 가리지 않으면서 시선은 확실히 끈다.
+	# 크게 터뜨리고 → 상단 띠로 수축(유저 확정 1안). 큰 상태로 오래 두면
+	# 상단 시야를 3초 넘게 가려 전투 중 위에서 오는 적을 놓친다. 팝은 0.5초만,
+	# 그 뒤엔 화면 맨 위의 얇은 띠로 물러나 2초 머물다 사라진다.
 	var viewport_size := (host.get_viewport() as Viewport).get_visible_rect().size
-	panel.position = Vector2(
+	var big_position := Vector2(
 		(viewport_size.x - panel.size.x) * 0.5,
 		viewport_size.y * 0.22 - panel.size.y * 0.5
 	)
+	# pivot이 중심이라 scale을 줄여도 중심은 그대로다 — 띠의 '위 가장자리'가
+	# STRIP_TOP_MARGIN에 오도록 중심 y를 역산한다.
+	var strip_center_y := STRIP_TOP_MARGIN + panel.size.y * STRIP_SCALE * 0.5
+	var strip_position := Vector2(big_position.x, strip_center_y - panel.size.y * 0.5)
+	panel.position = big_position
 	panel.pivot_offset = panel.size * 0.5
 	panel.modulate = Color(1.0, 1.0, 1.0, 0.0)
 	panel.scale = Vector2(0.7, 0.7)
@@ -54,15 +65,19 @@ func celebrate(title: String, subtitle: String = "", eyebrow: String = "임무 �
 	banner_tween = host.create_tween()
 	banner_tween.set_parallel(true)
 	banner_tween.tween_property(panel, "modulate:a", 1.0, 0.18)
-	banner_tween.tween_property(panel, "scale", Vector2(1.06, 1.06), 0.26) \
-		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	banner_tween.tween_property(panel, "scale", Vector2(1.06, 1.06), 0.26).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	banner_tween.set_parallel(false)
-	banner_tween.tween_property(panel, "scale", Vector2.ONE, 0.14) \
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	banner_tween.tween_interval(HOLD_SECONDS)
+	banner_tween.tween_property(panel, "scale", Vector2.ONE, 0.14).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	banner_tween.tween_interval(BIG_HOLD_SECONDS)
+	# 수축 — 크기와 위치를 같이 움직여 위로 '물러나는' 동작으로 읽히게.
 	banner_tween.set_parallel(true)
-	banner_tween.tween_property(panel, "modulate:a", 0.0, 0.5)
-	banner_tween.tween_property(panel, "scale", Vector2(0.94, 0.94), 0.5)
+	banner_tween.tween_property(panel, "scale", Vector2(STRIP_SCALE, STRIP_SCALE), 0.32).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	banner_tween.tween_property(panel, "position", strip_position, 0.32).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	banner_tween.set_parallel(false)
+	banner_tween.tween_interval(STRIP_HOLD_SECONDS)
+	banner_tween.set_parallel(true)
+	banner_tween.tween_property(panel, "modulate:a", 0.0, 0.4)
+	banner_tween.tween_property(panel, "scale", Vector2(STRIP_SCALE * 0.92, STRIP_SCALE * 0.92), 0.4)
 	banner_tween.set_parallel(false)
 	banner_tween.tween_callback(func() -> void:
 		if is_instance_valid(panel):

@@ -704,8 +704,11 @@ func _build_toast_stack() -> void:
 	toast_stack.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	toast_stack.offset_left = -240
 	toast_stack.offset_right = 240
-	toast_stack.offset_top = -560
-	toast_stack.offset_bottom = -300
+	# 기본값은 건물 내부가 그대로 쓴다(필드는 main._apply_hud_layout이 덮어쓴다).
+	# 예전 -300~-560은 건물 화면(높이 ~760)에서 정중앙이라 캐릭터를 가렸다.
+	# 하단 1/5 띠로 내린다 — 스택은 아래 정렬(ALIGNMENT_END)이라 첫 줄이 -150에 선다.
+	toast_stack.offset_top = -410
+	toast_stack.offset_bottom = -150
 	host.get_node("HUD").add_child(toast_stack)
 
 

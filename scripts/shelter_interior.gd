@@ -2246,11 +2246,14 @@ func _build_interface() -> void:
 	# 토스트는 월드 위에 맨몸 텍스트로 떠 있으면 배경과 섞여 안 읽힌다.
 	status_panel = PanelContainer.new()
 	status_panel.name = "ShelterStatusToast"
-	status_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	# 하단 중앙(2026-08-30). 예전엔 좌상단 스탯 패널 '아래'에 붙였는데 그 패널이
+	# 목표 카드까지 키우면 토스트가 화면 정중앙까지 밀려 캐릭터·NPC를 가렸다
+	# (유저 신고: "가운데 나와서 캐릭터를 가리는 게 경험이 전혀 좋지 않아").
+	status_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	status_panel.offset_left = -270.0
-	status_panel.offset_top = 24.0
+	status_panel.offset_top = -172.0
 	status_panel.offset_right = 270.0
-	status_panel.offset_bottom = 76.0
+	status_panel.offset_bottom = -120.0
 	status_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	status_panel.modulate.a = 0.0
 	status_panel.visible = false
@@ -3712,8 +3715,9 @@ func _apply_shelter_safe_layout() -> void:
 		var status_half := minf(270.0, viewport_size.x * 0.5 - 16.0)
 		status_panel.offset_left = -status_half
 		status_panel.offset_right = status_half
-		status_panel.offset_top = top_stack_bottom + 10.0
-		status_panel.offset_bottom = status_panel.offset_top + 52.0
+		# 하단 안전 영역 위 — 조이스틱(좌하단)·무기 패널(우하단) 사이의 빈 띠.
+		status_panel.offset_bottom = -(120.0 + safe.w)
+		status_panel.offset_top = status_panel.offset_bottom - 52.0
 	if ops_console != null:
 		ops_console.apply_layout(safe)
 
