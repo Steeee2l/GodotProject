@@ -7,7 +7,7 @@ extends SceneTree
 #   ② 세 단계를 끝낸 구역에서는 메인 미션이 사라지고 반복 사건이 대신 뜨는가
 #   ③ 완주 안내가 다음 도시(남대문)를 가리키는가
 #   ④ 세이브 왕복 뒤에도 진행도·선택 기록이 남는가
-#   ⑤ 시네마틱 중에는 나비가 피해를 입지 않는가
+#   ⑤ 시네마틱 중에는 먼지가 피해를 입지 않는가
 
 const MAIN_MISSION_CATALOG := preload("res://scripts/raid/main_mission_catalog.gd")
 
@@ -54,7 +54,7 @@ func _run() -> void:
 		print("  MARKERS=%s" % ", ".join(marker_labels))
 		print("  OBJECTIVE_PANEL=%s" % objective_label.text.replace("\n", " | "))
 
-		# ⑤ 연출이 도는 동안 나비는 무적이다(연출 보다가 죽는 사고 방지).
+		# ⑤ 연출이 도는 동안 먼지는 무적이다(연출 보다가 죽는 사고 방지).
 		if bool(main_scene.call("is_cinematic_active")):
 			var health_before := int(main_scene.get("player_health"))
 			main_scene.call("take_damage", 40)
@@ -62,7 +62,7 @@ func _run() -> void:
 			print("  CINEMATIC_INVULNERABLE ok (health %d)" % health_before)
 		elif bool(main_scene.call("is_bark_active")):
 			# 바크 모드 연출(인트로 등 대사뿐인 장면): 조작 잠금도 무적도 없다 — 대사는
-			# 하단 자막으로 흐르고 나비는 제 할 일을 한다(유저 신고 반영).
+			# 하단 자막으로 흐르고 먼지는 제 할 일을 한다(유저 신고 반영).
 			assert(not bool(main_scene.get("monologue").get("queue") == null))
 			print("  CINEMATIC_BARK ok (controls unlocked)")
 

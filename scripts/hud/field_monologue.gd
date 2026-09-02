@@ -1,7 +1,7 @@
 class_name FieldMonologue
 extends RefCounted
 
-# 필드용 자막 독백 — 메인 미션(격리 신호 등)의 순간마다 나비가 한마디씩 한다.
+# 필드용 자막 독백 — 메인 미션(격리 신호 등)의 순간마다 먼지가 한마디씩 한다.
 #
 # 전투 중에도 안전해야 하므로 입력을 전혀 잡지 않는 자동 진행형이다:
 # 한 줄이 타자기로 흐르고, 잠시 머물렀다가 다음 줄로, 끝나면 스르르 사라진다.
@@ -52,7 +52,7 @@ func attach(owner_node: Node) -> void:
 	host = owner_node
 
 
-func play(lines: Array, speaker := "나비") -> void:
+func play(lines: Array, speaker := "먼지") -> void:
 	# host(Variant) 경유 호출은 Array[String] 리터럴을 무타입 Array로 만든다.
 	# 무타입으로 받아 내부에서 문자열화한다 — 모듈화 규약의 그 함정.
 	for line in lines:
@@ -60,7 +60,7 @@ func play(lines: Array, speaker := "나비") -> void:
 	_start_if_idle()
 
 
-func play_bark(lines: Array, speaker := "나비", on_done := Callable()) -> void:
+func play_bark(lines: Array, speaker := "먼지", on_done := Callable()) -> void:
 	# 시네마틱 바크 — 독백과 같은 큐에 선다. 마지막 줄이 끝나면 on_done을 부른다
 	# (시네마틱이 다음 단계로 넘어가는 신호). 건너뛰기로 접혀도 콜백은 온다.
 	var appended := 0
@@ -166,7 +166,7 @@ func _ensure_panel() -> void:
 	box.add_theme_constant_override("separation", 2)
 	panel.add_child(box)
 	speaker_label = Label.new()
-	speaker_label.text = "나비"
+	speaker_label.text = "먼지"
 	speaker_label.add_theme_font_override("font", FONT)
 	speaker_label.add_theme_font_size_override("font_size", 12)
 	speaker_label.add_theme_color_override("font_color", SPEAKER_DEFAULT)
@@ -225,7 +225,7 @@ func _next_line() -> void:
 		return
 	current = queue.pop_front()
 	var bark := bool(current.get("bark", false))
-	speaker_label.text = str(current.get("speaker", "나비"))
+	speaker_label.text = str(current.get("speaker", "먼지"))
 	_apply_style(bark)
 	_fast_hold = false
 	_line_started_msec = Time.get_ticks_msec()

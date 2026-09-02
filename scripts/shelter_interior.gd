@@ -36,6 +36,7 @@ const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
 # 쉘터 "다음 목표"(티어 확장 요구) 문구·판정 — 데이터는 GameState, 말은 이 모듈.
 const SHELTER_REQUISITION := preload("res://scripts/shelter/requisition.gd")
+const MAIN_MISSION_CATALOG := preload("res://scripts/raid/main_mission_catalog.gd")
 const AMMO_TEXTURE := preload("res://assets/items/ammo_762.png")
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
 const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
@@ -273,10 +274,10 @@ var raid_zone_detail_requirement: Label
 #   전리품(무엇이 나오나) · 출정 준비(내가 갖췄나) · 권장 장비(이 구역 기준).
 # 셋 다 존을 고를 때마다 다시 채워진다.
 var raid_zone_loot_chips: HFlowContainer
-var raid_zone_loadout_chips: HFlowContainer
-var raid_zone_loadout_warning: Label
-var raid_zone_gear_chips: HFlowContainer
-var raid_zone_death_note: Label
+# 브리핑 정보 칩 — 단계 · 메인 임무 진행 · 주홍 동행(2026-08-30 정리안).
+# 출정 준비(내 장비 나열)·권장 장비·사망 규칙 각주는 유저 지시로 걷어냈다:
+# "권장 장비, 지금 장비 이런 거 필요 없잖아". 대신 구역 자체의 정보로 채운다.
+var raid_zone_info_chips: HFlowContainer
 var raid_zone_launch_button: Button
 var raid_zone_resupply_button: Button
 var auto_paused_for_background := false
@@ -3884,7 +3885,7 @@ func _interact() -> void:
 const RESIDENT_CHAT_LINES := [
 	"사이렌은 늘 남쪽에서만 울려.",
 	"사람 냄새가 하나도 안 남았어. 하룻밤 만에 그렇게 되나.",
-	"캣닢 배급 늘었대. 나비 덕이라던데.",
+	"캣닢 배급 늘었대. 먼지 덕이라던데.",
 	"땅 밑에서 신호가 온대. 나는 안 들었어.",
 	"발톱 관리는 게으름이 아니야. 생존이지.",
 	"고철 더미에서 라디오가 지직거렸대.",
@@ -3911,7 +3912,7 @@ const CATNIP_FEVER_LINES := [
 	"이 냄새… 이 냄새를 평생 기억할 거야!",
 	"손이 안 멈춰! 아무도 날 못 막아!",
 	"꾹꾹, 꾹꾹, 꾹꾹— 아, 좋다!",
-	"나비야, 우리 오늘 밤은 부자다!",
+	"먼지야, 우리 오늘 밤은 부자다!",
 	"이게 행복이구나. 이게 행복이야.",
 	"조금만 더… 조금만 더 줘!",
 ]
@@ -4855,32 +4856,13 @@ func _open_raid_zone_select() -> void:
 	raid_zone_loot_chips.add_theme_constant_override("h_separation", 6)
 	raid_zone_loot_chips.add_theme_constant_override("v_separation", 5)
 	detail_box.add_child(raid_zone_loot_chips)
-	# 출정 준비 — 지금 몸에 걸친 것. 무기·가방·탄약·구급약을 칩 하나씩.
-	# 모자란 칩만 경고색이 되므로, 읽지 않아도 부족한 것이 먼저 보인다.
-	detail_box.add_child(_build_raid_zone_section_caption("출정 준비"))
-	raid_zone_loadout_chips = HFlowContainer.new()
-	raid_zone_loadout_chips.name = "RaidZoneLoadoutChips"
-	raid_zone_loadout_chips.add_theme_constant_override("h_separation", 6)
-	raid_zone_loadout_chips.add_theme_constant_override("v_separation", 5)
-	detail_box.add_child(raid_zone_loadout_chips)
-	raid_zone_loadout_warning = Label.new()
-	raid_zone_loadout_warning.name = "RaidZoneLoadoutWarning"
-	raid_zone_loadout_warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	raid_zone_loadout_warning.add_theme_font_override("font", FONT)
-	raid_zone_loadout_warning.add_theme_font_size_override("font_size", 12)
-	raid_zone_loadout_warning.add_theme_color_override("font_color", Color("#ee806c"))
-	raid_zone_loadout_warning.visible = false
-	detail_box.add_child(raid_zone_loadout_warning)
-	# 존 장비 목표 — "권장: T1 세트 제작 0/3 · AK +0/5" 문장을 칩 둘로.
-	detail_box.add_child(_build_raid_zone_section_caption("이 구역 권장 장비"))
-	raid_zone_gear_chips = HFlowContainer.new()
-	raid_zone_gear_chips.name = "RaidZoneGearChips"
-	raid_zone_gear_chips.add_theme_constant_override("h_separation", 6)
-	raid_zone_gear_chips.add_theme_constant_override("v_separation", 5)
-	detail_box.add_child(raid_zone_gear_chips)
-	# 사망 페널티 — 세 줄 문단이었다. 규칙은 한 줄이면 충분하고, 강조가 필요한
-	# 건 아직 한 번도 안 나가 본 플레이어뿐이다(그 뒤엔 각주 색으로 물러난다).
-	detail_box.add_child(_build_raid_zone_death_note())
+	# 구역 정보 — 단계 · 메인 임무 진행 · 주홍 동행. 결정에 쓰이는 것만.
+	detail_box.add_child(_build_raid_zone_section_caption("구역 정보"))
+	raid_zone_info_chips = HFlowContainer.new()
+	raid_zone_info_chips.name = "RaidZoneInfoChips"
+	raid_zone_info_chips.add_theme_constant_override("h_separation", 6)
+	raid_zone_info_chips.add_theme_constant_override("v_separation", 5)
+	detail_box.add_child(raid_zone_info_chips)
 	# 잠긴 구역일 때만 뜨는 상태 문구(키카드/티어 필요). 평상시엔 숨긴다.
 	raid_zone_detail_requirement = Label.new()
 	raid_zone_detail_requirement.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -5036,27 +5018,6 @@ func _briefing_loot_icon(text: String) -> String:
 	return "loot"
 
 
-func _build_raid_zone_death_note() -> Control:
-	var row := HBoxContainer.new()
-	row.name = "RaidDeathPenaltyNotice"
-	row.add_theme_constant_override("separation", 7)
-	var icon := TextureRect.new()
-	icon.custom_minimum_size = Vector2(16, 16)
-	icon.texture = UI_ICONS.get_icon("secure", 16, Color("#9b8b6a"))
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(icon)
-	# 영구 귀속(2026-08) 반영 — 이 고지가 거짓이 되면 안 된다.
-	raid_zone_death_note = HudStyle.label(
-		"죽어도 장비·창고·고철은 안전 — 가방 재료만 남긴다", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_FAINT
-	)
-	raid_zone_death_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	raid_zone_death_note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(raid_zone_death_note)
-	return row
-
-
 func _refresh_raid_zone_loot_chips(zone: Dictionary) -> void:
 	if not is_instance_valid(raid_zone_loot_chips):
 		return
@@ -5074,44 +5035,30 @@ func _refresh_raid_zone_loot_chips(zone: Dictionary) -> void:
 	HudStyle.pop_in(raid_zone_loot_chips, 0.18)
 
 
-func _refresh_raid_zone_loadout_chips(manifest: Dictionary) -> void:
-	# 무기 · 가방(미니 게이지) · 탄약 · 구급약. 모자란 칩만 색이 바뀐다.
-	if not is_instance_valid(raid_zone_loadout_chips):
+func _refresh_raid_zone_info_chips(zone_id: String, zone: Dictionary) -> void:
+	# 단계 · 메인 임무 진행 · 주홍 동행 — 이 구역을 고를 때 실제로 보는 세 가지.
+	if not is_instance_valid(raid_zone_info_chips):
 		return
-	for child in raid_zone_loadout_chips.get_children():
-		raid_zone_loadout_chips.remove_child(child)
+	for child in raid_zone_info_chips.get_children():
+		raid_zone_info_chips.remove_child(child)
 		child.queue_free()
-	var weapon_id := str(manifest.get("weapon_id", ""))
-	var weapon_text := "맨손 · 현장 조달"
-	var weapon_color := BRIEFING_CHIP_WARN_COLOR
-	if not weapon_id.is_empty():
-		var short_name := str(
-			WEAPON_SYSTEM.get_weapon(weapon_id).get("display_name", weapon_id)
-		).split("\"")[0].strip_edges()
-		weapon_text = "%s +%d" % [short_name, GameState.get_weapon_enhancement_level(weapon_id)]
-		weapon_color = BRIEFING_CHIP_OK_COLOR
-	raid_zone_loadout_chips.add_child(_briefing_chip("weapon", weapon_text, weapon_color))
-	# 가방 칩·초과 경고는 가방 무제한화(2026-08-30)로 폐지 — 만재라는 상태가 없다.
-	var ammo_count := int(manifest.get("ammo_count", 0))
-	raid_zone_loadout_chips.add_child(_briefing_chip(
-		"ammo",
-		"%d발" % ammo_count,
-		BRIEFING_CHIP_OK_COLOR if ammo_count >= 60 else (
-			BRIEFING_CHIP_DANGER_COLOR if ammo_count <= 0 else BRIEFING_CHIP_WARN_COLOR
+	var stage_tier := int(zone.get("stage_tier", zone.get("required_tier", 1)))
+	raid_zone_info_chips.add_child(_briefing_chip(
+		"raid", "%d단계 구역" % stage_tier, BRIEFING_CHIP_OK_COLOR
+	))
+	if MAIN_MISSION_CATALOG.has_chain(zone_id):
+		var total := MAIN_MISSION_CATALOG.get_stage_count(zone_id)
+		var done := mini(total, GameState.get_main_mission_progress(zone_id))
+		var mission_chip := (
+			_briefing_chip("check", "메인 임무 완료", Color("#7fc79e"))
+			if done >= total
+			else _briefing_chip("secure", "메인 임무 %d/%d" % [done, total], Color("#e3cf67"))
 		)
-	))
-	var medkit_count := int(manifest.get("medkits", 0))
-	raid_zone_loadout_chips.add_child(_briefing_chip(
-		"medkit",
-		"%d개" % medkit_count,
-		BRIEFING_CHIP_OK_COLOR if medkit_count > 0 else BRIEFING_CHIP_WARN_COLOR
-	))
-	# 주홍 동행 토글 — 해금(companion_unlocked)돼야 보인다. 같은 칩 문법에
-	# 초상만 얹고, 누르면 GameState.companion_enabled를 뒤집어 저장한다.
+		raid_zone_info_chips.add_child(mission_chip)
+	# 주홍 동행 토글 — 해금(companion_unlocked)돼야 보인다. 이 줄의 유일한 누르는 칩.
 	if GameState.companion_unlocked:
-		raid_zone_loadout_chips.add_child(_build_companion_toggle_chip())
-	raid_zone_loadout_warning.visible = false
-	HudStyle.pop_in(raid_zone_loadout_chips, 0.18)
+		raid_zone_info_chips.add_child(_build_companion_toggle_chip())
+	HudStyle.pop_in(raid_zone_info_chips, 0.18)
 
 
 const JUHONG_CHIP_ACCENT := Color("#41e0c9")
@@ -5165,36 +5112,9 @@ func _build_companion_toggle_chip() -> PanelContainer:
 			else "주홍 대기 — 이번엔 혼자 나간다"
 		)
 		# 칩 줄을 다시 그려 상태를 반영한다.
-		var manifest := GameState.build_raid_loadout_manifest(raid_zone_selected_id)
-		_refresh_raid_zone_loadout_chips(manifest)
+		_refresh_raid_zone_info_chips(raid_zone_selected_id, GameState.get_raid_zone(raid_zone_selected_id))
 	)
 	return chip
-
-
-func _refresh_raid_zone_gear_chips(zone_id: String) -> void:
-	if not is_instance_valid(raid_zone_gear_chips):
-		return
-	for child in raid_zone_gear_chips.get_children():
-		raid_zone_gear_chips.remove_child(child)
-		child.queue_free()
-	for entry in SHELTER_REQUISITION.build_zone_gear_chips(zone_id):
-		var chip_data := entry as Dictionary
-		var ok := bool(chip_data.get("ok", false))
-		var accent: Color = (
-			SHELTER_REQUISITION.GEAR_GOAL_OK_COLOR
-			if ok
-			else SHELTER_REQUISITION.GEAR_GOAL_PENDING_COLOR
-		)
-		var chip := _briefing_chip(
-			str(chip_data.get("icon", "loot")),
-			str(chip_data.get("text", "")),
-			accent
-		)
-		# 왜 모자란지는 툴팁으로 — 칩 위에 문장을 다시 늘어놓지 않는다.
-		chip.tooltip_text = str(chip_data.get("tooltip", ""))
-		chip.mouse_filter = Control.MOUSE_FILTER_STOP
-		raid_zone_gear_chips.add_child(chip)
-	HudStyle.pop_in(raid_zone_gear_chips, 0.18)
 
 
 func _select_raid_zone_preview(zone_id: String) -> void:
@@ -5238,19 +5158,13 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 		else base_description
 	)
 	_refresh_raid_zone_loot_chips(zone)
-	_refresh_raid_zone_gear_chips(zone_id)
-	# 사망 규칙은 아직 한 번도 안 나가 본 플레이어에게만 눈에 띈다.
-	if is_instance_valid(raid_zone_death_note):
-		raid_zone_death_note.add_theme_color_override(
-			"font_color", Color("#c9b47f") if GameState.raid_serial <= 0 else HudStyle.TEXT_FAINT
-		)
+	_refresh_raid_zone_info_chips(zone_id, zone)
 	var threat_percent := roundi(float(zone.get("threat", 0.0)) * 100.0)
 	# 로드아웃은 구역이 아니라 '나'의 상태다 — 봉쇄 구역을 보고 있어도 그대로 보인다.
 	# 문장 한 덩어리였던 출정 준비를 칩 넷으로. 모자란 칩만 색이 바뀐다.
 	var manifest := GameState.build_raid_loadout_manifest(zone_id)
 	var ammo_count := int(manifest.get("ammo_count", 0))
 	var medkit_count := int(manifest.get("medkits", 0))
-	_refresh_raid_zone_loadout_chips(manifest)
 	if unlocked:
 		# 위협도는 헤더 칩에 등급으로만. 낮음/보통/높음/극심.
 		var tier_label := "위협 낮음"
@@ -5500,10 +5414,7 @@ func _close_raid_zone_select() -> void:
 	raid_zone_detail_description = null
 	raid_zone_detail_rule = null
 	raid_zone_loot_chips = null
-	raid_zone_loadout_chips = null
-	raid_zone_loadout_warning = null
-	raid_zone_gear_chips = null
-	raid_zone_death_note = null
+	raid_zone_info_chips = null
 	raid_zone_detail_requirement = null
 	raid_zone_resupply_button = null
 	raid_zone_launch_button = null

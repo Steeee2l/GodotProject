@@ -7,7 +7,7 @@ extends RefCounted
 # 더 이상 뜨지 않는다 — 흔적이 다음 구역으로 넘어간다.
 #
 # ── 이야기 뼈대(한 줄 요약) ───────────────────────────────────
-#   사람은 도망친 게 아니라 "수거"됐다. 나비는 그 수거를 지휘한 시스템을 찾아 끄러 간다.
+#   사람은 도망친 게 아니라 "수거"됐다. 먼지는 그 수거를 지휘한 시스템을 찾아 끄러 간다.
 #   종로   신호의 정체    → 사람들은 걸어 나갔다(녹음 방송이 불렀다)
 #   남대문 명단의 출처    → 명단을 받아 적은 건 고양이 손이다
 #   을지로 수거 방법      → 지하 수송로. 승인 서명은 "사자"
@@ -18,7 +18,7 @@ extends RefCounted
 #   1) 한 장면에 새 고유명사는 1개까지. 이미 나온 것만 반복해 쓴다.
 #   2) 모든 단계는 "무엇을 알아냈다"로 끝난다. 분위기로 끝내지 않는다.
 #   3) 한 줄은 한 가지만 말한다. 은유로 두 겹 싸지 않는다.
-#   4) 목소리 분리 — 나비: 짧고 건조. 사자: 공무원 말투. 주홍: 거칠고 정직.
+#   4) 목소리 분리 — 먼지: 짧고 건조. 사자: 공무원 말투. 주홍: 거칠고 정직.
 #      행상인: 수다스럽고 물건 얘기로 돌아감. 주민/생존자: 겁먹은 짧은 문장.
 #   5) 정보는 구체적인 물건·숫자·목격담으로 준다(명단 27명, 도장, 녹음 방송, 발자국).
 #
@@ -99,7 +99,7 @@ const CHAINS := {
 					{"type": "flash", "color": "#62c9ca", "pulses": 2, "duration": 0.9},
 					{
 						"type": "lines",
-						"speaker": "나비",
+						"speaker": "먼지",
 						"title": "신호를 보낸 것",
 						"portrait": PORTRAIT_NABI_PATH,
 						"lines": [
@@ -290,7 +290,7 @@ const CHAINS := {
 					{"type": "focus", "at": "site", "hold": 1.0},
 					{
 						"type": "lines",
-						"speaker": "나비",
+						"speaker": "먼지",
 						"title": "끊긴 물길",
 						"portrait": PORTRAIT_NABI_PATH,
 						"lines": [
@@ -308,7 +308,7 @@ const CHAINS := {
 					{"type": "flash", "color": "#6fb7d8", "pulses": 2, "duration": 0.8},
 					{
 						"type": "lines",
-						"speaker": "나비",
+						"speaker": "먼지",
 						"title": "도로 건너편",
 						"portrait": PORTRAIT_NABI_PATH,
 						"lines": [
@@ -445,7 +445,7 @@ const CHAINS := {
 					{"type": "flash", "color": "#e2c15f", "pulses": 3, "duration": 1.0},
 					{
 						"type": "lines",
-						"speaker": "나비",
+						"speaker": "먼지",
 						"title": "잠긴 방송국",
 						"portrait": PORTRAIT_NABI_PATH,
 						"lines": [
@@ -588,7 +588,7 @@ const CHAINS := {
 					{"type": "focus", "at": "site", "hold": 1.0},
 					{
 						"type": "lines",
-						"speaker": "나비",
+						"speaker": "먼지",
 						"title": "밥그릇을 채우는 손",
 						"portrait": PORTRAIT_NABI_PATH,
 						"lines": [
@@ -757,7 +757,7 @@ const CHAINS := {
 					{"type": "flash", "color": "#e7a847", "pulses": 3, "duration": 1.0},
 					{
 						"type": "lines",
-						"speaker": "나비",
+						"speaker": "먼지",
 						"title": "들어가기만 한 창고",
 						"portrait": PORTRAIT_NABI_PATH,
 						"lines": [
@@ -851,7 +851,7 @@ const CHAINS := {
 					{"type": "focus", "at": "site", "hold": 1.0},
 					{
 						"type": "lines",
-						"speaker": "나비",
+						"speaker": "먼지",
 						"title": "명단을 쓴 손",
 						"portrait": PORTRAIT_NABI_PATH,
 						"lines": [
@@ -1026,7 +1026,7 @@ const CHAINS := {
 					{"type": "focus", "at": "site", "hold": 1.0},
 					{
 						"type": "lines",
-						"speaker": "나비",
+						"speaker": "먼지",
 						"title": "살아 있는 전기",
 						"portrait": PORTRAIT_NABI_PATH,
 						"lines": [
@@ -1117,7 +1117,7 @@ const CHAINS := {
 					{"type": "focus", "at": "site", "hold": 1.0},
 					{
 						"type": "lines",
-						"speaker": "나비",
+						"speaker": "먼지",
 						"title": "무엇을 실었나",
 						"portrait": PORTRAIT_NABI_PATH,
 						"lines": [
@@ -1196,7 +1196,7 @@ const CHAINS := {
 					{"type": "focus", "at": "site", "hold": 1.0},
 					{
 						"type": "lines",
-						"speaker": "나비",
+						"speaker": "먼지",
 						"title": "승인한 이름",
 						"portrait": PORTRAIT_NABI_PATH,
 						"lines": [
@@ -1335,7 +1335,7 @@ const CHAINS := {
 					{"type": "focus", "at": "site", "hold": 1.0},
 					{
 						"type": "lines",
-						"speaker": "나비",
+						"speaker": "먼지",
 						"title": "통과 인원 0",
 						"portrait": PORTRAIT_NABI_PATH,
 						"lines": [
@@ -1426,7 +1426,7 @@ const CHAINS := {
 					{"type": "focus", "at": "site", "hold": 1.0},
 					{
 						"type": "lines",
-						"speaker": "나비",
+						"speaker": "먼지",
 						"title": "총구의 방향",
 						"portrait": PORTRAIT_NABI_PATH,
 						"lines": [
@@ -1503,7 +1503,7 @@ const CHAINS := {
 					{"type": "focus", "at": "site", "hold": 1.0},
 					{
 						"type": "lines",
-						"speaker": "나비",
+						"speaker": "먼지",
 						"title": "협조 각서",
 						"portrait": PORTRAIT_NABI_PATH,
 						"lines": [
@@ -1641,7 +1641,7 @@ const CHAINS := {
 					{"type": "focus", "at": "site", "hold": 1.0},
 					{
 						"type": "lines",
-						"speaker": "나비",
+						"speaker": "먼지",
 						"title": "거짓 수치",
 						"portrait": PORTRAIT_NABI_PATH,
 						"lines": [
@@ -1732,7 +1732,7 @@ const CHAINS := {
 					{"type": "focus", "at": "site", "hold": 1.0},
 					{
 						"type": "lines",
-						"speaker": "나비",
+						"speaker": "먼지",
 						"title": "아직 돌아가는 기계",
 						"portrait": PORTRAIT_NABI_PATH,
 						"lines": [
@@ -1810,7 +1810,7 @@ const CHAINS := {
 					{"type": "flash", "color": "#e2c15f", "pulses": 3, "duration": 1.0},
 					{
 						"type": "lines",
-						"speaker": "나비",
+						"speaker": "먼지",
 						"title": "스위치",
 						"portrait": PORTRAIT_NABI_PATH,
 						"lines": [

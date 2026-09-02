@@ -1689,7 +1689,7 @@ func update_companion_chip(shown: bool, health_ratio: float, status: String, acc
 
 
 func update_companion_revive_gauge(shown: bool, anchor: Vector2, ratio: float, caption: String) -> void:
-	# 플레이어 다운 중 주홍의 4s 채널 — 다운된 나비 머리 위 링 게이지 + 캡션.
+	# 플레이어 다운 중 주홍의 4s 채널 — 다운된 먼지 머리 위 링 게이지 + 캡션.
 	if companion_revive_gauge == null or not is_instance_valid(companion_revive_gauge):
 		if aim_canvas == null:
 			return

@@ -567,7 +567,7 @@ static func build_rip_marker(name_text: String, accent: Color) -> Node3D:
 func _set_player_rip(active: bool) -> void:
 	if active:
 		if player_rip_marker == null or not is_instance_valid(player_rip_marker):
-			player_rip_marker = CompanionSystem.build_rip_marker("나비", Color("#e8b64c"))
+			player_rip_marker = CompanionSystem.build_rip_marker("먼지", Color("#e8b64c"))
 			host.player.add_child(player_rip_marker)
 			player_rip_marker.position = Vector3.ZERO
 		player_rip_marker.visible = true
@@ -1163,7 +1163,7 @@ class JuhongBody:
 		return nearest
 
 
-	# ── 사격(더블배럴 지원 화력 — 주인공은 나비다) ───────────────────
+	# ── 사격(더블배럴 지원 화력 — 주인공은 먼지다) ───────────────────
 
 	func _update_reload(delta: float) -> void:
 		if reload_remaining > 0.0:

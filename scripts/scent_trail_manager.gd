@@ -119,7 +119,7 @@ func set_focus_active(active: bool) -> void:
 
 
 func _update_auto_sniff(delta: float) -> void:
-	# 후각 대개편: 버튼 없이, 멈춰 서면 나비가 자동으로 냄새를 읽는다.
+	# 후각 대개편: 버튼 없이, 멈춰 서면 먼지가 자동으로 냄새를 읽는다.
 	# 고양이는 걸음을 멈추고 킁킁거린다 — 조작이 아니라 습성이다.
 	var moving := true
 	if is_instance_valid(player):

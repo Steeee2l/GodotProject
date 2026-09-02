@@ -550,7 +550,7 @@ func _format_building_survival_time() -> String:
 
 
 func _build_building_death_lesson() -> String:
-	# 나비 독백 톤(짧은 현재형) — main의 사망 교훈과 같은 세트.
+	# 먼지 독백 톤(짧은 현재형) — main의 사망 교훈과 같은 세트.
 	if GameState.medkits > 0:
 		return "구급약이 %d개 남아 있었다. 다음엔 더 일찍 쓴다." % GameState.medkits
 	if _get_reserve_ammo() <= 0:

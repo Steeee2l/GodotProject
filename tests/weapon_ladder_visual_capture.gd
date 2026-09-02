@@ -72,7 +72,7 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 
-	# ── 샷 2: 필드 — AKM을 들고 있는 나비 ──
+	# ── 샷 2: 필드 — AKM을 들고 있는 먼지 ──
 	game_state.call("add_weapon", "akm", 1)
 	game_state.call("equip_weapon", "akm")
 	game_state.set("magazine_ammo", 40)

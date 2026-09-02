@@ -17,7 +17,7 @@ extends RefCounted
 #   {"type": "wait", "duration": 0.6}
 #   {"type": "notice", "text": "..."}                     필드 알림 배너
 #   {"type": "focus", "position": Vector3, "hold": 1.0}   카메라를 그쪽으로
-#   {"type": "focus_player"}                              카메라를 나비에게로
+#   {"type": "focus_player"}                              카메라를 먼지에게로
 #   {"type": "flash", "color": Color, "pulses": 3}        경보 섬광
 #   {"type": "shake", "strength": 0.32, "duration": 0.45}
 #   {"type": "spawn_actor", "key":"juhong", "root":"res://assets/characters/juhong",
@@ -316,7 +316,7 @@ func _run_step(step: Dictionary) -> bool:
 			if mode == MODE_BARK:
 				# 바크: 하단 패널로 자동 진행. 마지막 줄이 끝나면 다음 스텝.
 				host.monologue.play_bark(
-					step.get("lines", []), str(step.get("speaker", "나비")), _advance
+					step.get("lines", []), str(step.get("speaker", "먼지")), _advance
 				)
 				return true
 			_open_dialogue(step)
@@ -697,7 +697,7 @@ func _open_dialogue(step: Dictionary) -> void:
 	var speaker_row := HBoxContainer.new()
 	text_box.add_child(speaker_row)
 	dialogue_speaker_label = Label.new()
-	dialogue_speaker_label.text = str(step.get("speaker", "나비"))
+	dialogue_speaker_label.text = str(step.get("speaker", "먼지"))
 	dialogue_speaker_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dialogue_speaker_label.add_theme_font_override("font", FONT)
 	dialogue_speaker_label.add_theme_font_size_override("font_size", 16)

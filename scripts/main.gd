@@ -2285,7 +2285,7 @@ func _build_death_lesson() -> String:
 	# "누가 나를 죽였나"는 이미 보여준다. 정작 필요한 건 "그래서 무엇이
 	# 문제였나"다. 죽는 순간의 상태에서 가장 큰 원인 하나만 짚어 준다.
 	# 사망이 처벌로만 끝나면 배우는 게 없다.
-	# 나비 독백 톤(짧은 현재형) — building_interior의 사망 교훈과 같은 세트.
+	# 먼지 독백 톤(짧은 현재형) — building_interior의 사망 교훈과 같은 세트.
 	if raid_danger >= 0.65:
 		return "위험도 %d%%. 너무 오래 머물렀다. 다음엔 더 빨리 빠진다." % roundi(raid_danger * 100.0)
 	if magazine_ammo <= 0 and reserve_ammo <= 0:
@@ -4336,7 +4336,7 @@ func take_damage(amount: int) -> void:
 		or extraction_transition_active
 		or player_death_sequence_active
 		or boss_defeat_sequence_active
-		# 시네마틱 중에는 아무것도 나비를 때릴 수 없다 — 연출 보는 동안 죽는 사고 방지.
+		# 시네마틱 중에는 아무것도 먼지를 때릴 수 없다 — 연출 보는 동안 죽는 사고 방지.
 		or main_mission.is_cinematic_active()
 	):
 		return

@@ -31,6 +31,8 @@ const GAMEPLAY_PHASES := [
 	"tutorial_combat",
 	"tutorial_extract",
 ]
+# DIALOGUE_LINES 앞에서 몇 줄이 라디오(무전) 육성인가 — 화자 라벨이 이걸 본다.
+const RADIO_LINE_COUNT := 1
 const DIALOGUE_LINES := [
 	# 첫 줄은 반드시 라디오 육성이다 — 설명 이전에 목소리부터 들려주는 훅.
 	# 앞 3줄(리빌 전) = 지금 벌어진 일, 뒤 3줄(리빌 후) = 그래서 어디로 가는가.
@@ -71,6 +73,7 @@ var show_vehicle_collision_debug := false
 
 var phase := "intro_walk"
 var dialogue_index := 0
+var dialogue_speaker_label: Label
 var player: CharacterBody3D
 var player_sprite: AnimatedSprite3D
 var weapon_sprite: Sprite3D
@@ -940,12 +943,11 @@ func _build_dialogue_ui(hud: CanvasLayer) -> void:
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 5)
 	margin.add_child(column)
-	var speaker := Label.new()
-	speaker.text = "나비"
-	speaker.add_theme_font_override("font", FONT)
-	speaker.add_theme_font_size_override("font_size", 18)
-	speaker.add_theme_color_override("font_color", Color("#d7b765"))
-	column.add_child(speaker)
+	dialogue_speaker_label = Label.new()
+	dialogue_speaker_label.add_theme_font_override("font", FONT)
+	dialogue_speaker_label.add_theme_font_size_override("font_size", 18)
+	column.add_child(dialogue_speaker_label)
+	_refresh_dialogue_speaker()
 	dialogue_text = Label.new()
 	dialogue_text.add_theme_font_override("font", FONT)
 	dialogue_text.add_theme_font_size_override("font_size", 24)
@@ -953,7 +955,7 @@ func _build_dialogue_ui(hud: CanvasLayer) -> void:
 	dialogue_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	dialogue_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.add_child(dialogue_text)
-	# 나비의 독백도 한 글자씩 소리와 함께 흐른다.
+	# 먼지의 독백도 한 글자씩 소리와 함께 흐른다.
 	dialogue_typewriter = Typewriter.new()
 	add_child(dialogue_typewriter)
 	dialogue_typewriter.attach(dialogue_text)
@@ -1450,10 +1452,23 @@ func _show_dialogue() -> void:
 	dialogue_panel.modulate.a = 0.0
 	var tween := create_tween()
 	tween.tween_property(dialogue_panel, "modulate:a", 1.0, 0.18)
+	_refresh_dialogue_speaker()
 	if dialogue_typewriter != null:
 		dialogue_typewriter.start(DIALOGUE_LINES[dialogue_index])
 	else:
 		dialogue_text.text = DIALOGUE_LINES[dialogue_index]
+
+
+func _refresh_dialogue_speaker() -> void:
+	# 첫 줄은 라디오 육성이다 — 화자 칸에 주인공 이름이 붙으면 주인공이 스스로
+	# "강을 건너와"라고 말하는 꼴이 된다(유저 신고). 무전은 무전 색으로 갈라 둔다.
+	if dialogue_speaker_label == null:
+		return
+	var is_radio := dialogue_index < RADIO_LINE_COUNT
+	dialogue_speaker_label.text = "무전 · 잡음 섞인 목소리" if is_radio else "먼지"
+	dialogue_speaker_label.add_theme_color_override(
+		"font_color", Color("#9fb6c9") if is_radio else Color("#d7b765")
+	)
 
 
 func _advance_dialogue() -> void:
@@ -1727,7 +1742,7 @@ func _start_tutorial_extract() -> void:
 	for child in sewer_exit.get_children():
 		if child.has_meta("tutorial_extraction_visual"):
 			child.visible = true
-	# 신호는 여기서 죽는다 — 나비가 쉘터를 '발견'하는 게 아니라, 신호가 끊긴
+	# 신호는 여기서 죽는다 — 먼지가 쉘터를 '발견'하는 게 아니라, 신호가 끊긴
 	# 자리에 쉘터가 있다. 사자의 "다들 그 소리를 듣고 왔다"로 이어지는 이음새.
 	_show_objective(
 		"신호가 끊겼다",
