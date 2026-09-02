@@ -202,7 +202,7 @@ func _install_scent_system() -> void:
 		if active and hint_count < 1:
 			host.set_meta("scent_hint_count", hint_count + 1)
 			host.hud.push_toast(
-				"킁킁 — 붉은 냄새는 적이 지나간 길, 진할수록 방금이다 · 초록=생존자",
+				"킁킁. 붉은 냄새는 적이 지나간 길이다. 진할수록 방금 지나갔다. 초록은 생존자다.",
 				HudStyle.GREEN,
 				3.4
 			)
@@ -506,12 +506,12 @@ func _play_stealth_takedown_impact() -> void:
 
 func _update_stealth_mission(delta: float, distance_to_site: float) -> void:
 	if host.field_mission_noise_breached:
-		host.field_missions._fail_field_mission("총성이 울려 잠복 위치가 노출됐습니다.")
+		host.field_missions._fail_field_mission("총성이 울렸다. 잠복 위치가 드러났다.")
 		return
 	var detected: bool = host.field_missions._update_field_mission_detection(delta)
 	var detection_grace := float(host.active_field_mission.get_meta("detection_grace", 1.25))
 	if host.field_mission_detection_time >= detection_grace:
-		host.field_missions._fail_field_mission("수색대에게 위치를 들켰습니다.")
+		host.field_missions._fail_field_mission("수색대가 나를 봤다. 잠복은 끝났다.")
 		return
 	# 은신 유지 반경도 존 작전 반경에 비례한다. 고정 14m는 넓은 후반 구역에서
 	# 지나치게 답답했다. 반경의 60%(약 15~24m)를 엄폐 구역으로 준다.
@@ -546,16 +546,16 @@ func _update_stealth_mission(delta: float, distance_to_site: float) -> void:
 
 func _update_stealth_reach_mission(delta: float) -> void:
 	if host.field_mission_noise_breached:
-		host.field_missions._fail_field_mission("총성이 울려 우회 경로가 차단됐습니다.")
+		host.field_missions._fail_field_mission("총성이 울렸다. 우회 경로가 막혔다.")
 		return
 	var detected: bool = host.field_missions._update_field_mission_detection(delta)
 	var detection_grace := float(host.active_field_mission.get_meta("detection_grace", 1.0))
 	if host.field_mission_detection_time >= detection_grace:
-		host.field_missions._fail_field_mission("순찰대에게 우회 이동을 들켰습니다.")
+		host.field_missions._fail_field_mission("순찰대가 나를 봤다. 우회는 끝났다.")
 		return
 	var target: Node3D = host.active_mission_collectibles[0] if not host.active_mission_collectibles.is_empty() else null
 	if not is_instance_valid(target):
-		host.field_missions._fail_field_mission("안전 지점 신호를 찾을 수 없습니다.")
+		host.field_missions._fail_field_mission("안전 지점 신호가 끊겼다.")
 		return
 	var target_distance := player.global_position.distance_to((target as Node3D).global_position)
 	var detail := "안전 지점까지 %.1fm · 시야에 들지 마세요." % target_distance
