@@ -134,10 +134,10 @@ func _play_field_intro() -> void:
 	# 이게 없으면 아무 설명 없이 옆에 서 있는 낯선 아군이 된다(유저 지적).
 	if not is_juhong_alive():
 		return
-	juhong.bark("나야. 말했잖아 — 다음 출정부터라고.")
+	juhong.bark("나야. 다음 출정부터 같이 간다고 했잖아.")
 	if host.get("hud") != null and host.hud.has_method("push_toast"):
 		host.hud.push_toast(
-			"주홍 동행 — 어느 쪽이 쓰러지면 서로 일으킬 수 있다 (판당 각 1회)",
+			"주홍 동행. 한쪽이 쓰러지면 다른 쪽이 일으킬 수 있다. (판당 각 1회)",
 			JUHONG_ACCENT,
 			4.4
 		)
@@ -145,7 +145,7 @@ func _play_field_intro() -> void:
 	if tree != null:
 		tree.create_timer(4.6).timeout.connect(func() -> void:
 			if is_juhong_alive():
-				juhong.bark("앞장 서. 네 뒤는 내가 본다.")
+				juhong.bark("앞장 서. 네 뒤는 내가 봐 줄게. 공짜는 아니야.")
 		)
 
 
@@ -242,7 +242,7 @@ func _update_squad_clear_bark() -> void:
 	elif had_alerted_combat:
 		had_alerted_combat = false
 		if is_juhong_alive():
-			juhong.bark("조용해졌군.")
+			juhong.bark("조용해졌네. 다 정리된 것 같아.")
 
 
 func _update_extraction_bark() -> void:
@@ -254,7 +254,7 @@ func _update_extraction_bark() -> void:
 			continue
 		if host.player.global_position.distance_to((site as Node3D).global_position) <= EXTRACTION_BARK_DISTANCE:
 			extraction_bark_done = true
-			juhong.bark("먼저 가. 뒤는 내가 본다.")
+			juhong.bark("먼저 나가. 뒤는 내가 막을게.")
 			return
 
 
@@ -263,7 +263,7 @@ func _update_extraction_bark() -> void:
 func on_juhong_down() -> void:
 	_release_enemy_aggro_from_juhong()
 	if host.get("hud") != null and host.hud.has_method("push_toast"):
-		host.hud.push_toast("주홍 다운 — %.0f초 안에 [F]로 소생" % juhong.down_remaining, HudStyle.DANGER, 3.2)
+		host.hud.push_toast("주홍이 쓰러졌다. %.0f초 안에 [F]로 일으킨다" % juhong.down_remaining, HudStyle.DANGER, 3.2)
 	# 기존 상호작용 캡슐+링 게이지 문법을 그대로 태운다(main이 홀드·완료를 처리).
 	revive_point = host._create_field_interaction(
 		"companion_revive",
@@ -296,7 +296,7 @@ func on_juhong_retreated() -> void:
 		_drop_radio(juhong.global_position)
 	if host.get("hud") != null and host.hud.has_method("push_toast"):
 		host.hud.push_toast(
-			"주홍 이탈 — 쓰러진 자리에 무전기가 남았다. 회수하면 복귀한다",
+			"주홍이 빠져나갔다. 쓰러진 자리에 무전기가 남았다. 무전기를 주우면 주홍이 돌아온다",
 			HudStyle.WARN,
 			3.6
 		)
@@ -437,7 +437,7 @@ func _complete_player_revive() -> void:
 			)
 		if host.hud.has_method("update_companion_revive_gauge"):
 			host.hud.update_companion_revive_gauge(false, Vector2.ZERO, 0.0, "")
-	juhong.bark("일어나. 아직 안 끝났어.")
+	juhong.bark("일어나. 아직 안 끝났어. 이건 빚 하나야.")
 	SFX.play("cover_enter")
 
 
@@ -477,7 +477,7 @@ func _apply_down_visuals() -> void:
 		(weapon_sprite as Node3D).visible = false
 	_set_player_rip(true)
 	if host.get("state_label") != null:
-		host.state_label.text = "행동 불능 — 주홍이 온다"
+		host.state_label.text = "행동 불능. 주홍이 오고 있다"
 
 
 func _restore_down_visuals() -> void:
@@ -603,12 +603,12 @@ func _refresh_hud_chip() -> void:
 		host.hud.update_companion_chip(false, 0.0, "", HudStyle.TEXT_DIM)
 		return
 	if juhong.retreated:
-		host.hud.update_companion_chip(true, 0.0, "이탈 — 무전기를 찾아라", HudStyle.TEXT_FAINT)
+		host.hud.update_companion_chip(true, 0.0, "이탈. 무전기를 찾아라", HudStyle.TEXT_FAINT)
 		return
 	var ratio := clampf(float(juhong.health) / float(juhong.max_health), 0.0, 1.0)
 	if juhong.downed:
 		host.hud.update_companion_chip(
-			true, ratio, "다운 %.0f초 — 일으켜라" % maxf(0.0, juhong.down_remaining), HudStyle.DANGER
+			true, ratio, "다운 %.0f초. 일으켜라" % maxf(0.0, juhong.down_remaining), HudStyle.DANGER
 		)
 	elif juhong.state == "rescue":
 		host.hud.update_companion_chip(true, ratio, "구조하러 가는 중", HudStyle.WARN)
@@ -924,7 +924,7 @@ class JuhongBody:
 		state = "rescue"
 		if not rescue_barked:
 			rescue_barked = true
-			bark("버텨! 간다!")
+			bark("버텨! 내가 지금 간다!")
 		var offset := player.global_position - global_position
 		offset.y = 0.0
 		var distance := offset.length()
@@ -992,7 +992,7 @@ class JuhongBody:
 			return false
 		if state != "loot":
 			state = "loot"
-			bark("잠깐 — 챙길 게 있어.")
+			bark("잠깐만. 챙길 게 있어.")
 		var spot: Vector3 = system.loot_spots[0]
 		var offset := spot - global_position
 		offset.y = 0.0
@@ -1236,7 +1236,7 @@ class JuhongBody:
 		if not is_instance_valid(last_shot_target) or bool(last_shot_target.get("dying")):
 			if Time.get_ticks_msec() - last_shot_msec <= 1600:
 				kill_count += 1
-				bark("하나." if kill_count % 2 == 1 else "됐고, 다음.")
+				bark("하나 잡았어." if kill_count % 2 == 1 else "됐고, 다음 놈.")
 			last_shot_target = null
 
 
@@ -1245,7 +1245,7 @@ class JuhongBody:
 			return
 		engage_barked = true
 		if combat_target == null or not is_instance_valid(combat_target):
-			bark("냄새 나. 온다.")
+			bark("적이야. 이쪽으로 온다.")
 			return
 		# 방향은 실제 표적 방위(플레이어 시선 기준)로 좌/우/뒤 치환.
 		var player: CharacterBody3D = host.player
@@ -1254,19 +1254,19 @@ class JuhongBody:
 		var to_threat := combat_target.global_position - player.global_position
 		to_threat.y = 0.0
 		if heading.length_squared() < 0.01 or to_threat.length_squared() < 0.01:
-			bark("냄새 나. 온다.")
+			bark("적이야. 이쪽으로 온다.")
 			return
 		heading = heading.normalized()
 		to_threat = to_threat.normalized()
 		var forward_dot := heading.dot(to_threat)
 		if forward_dot < -0.5:
-			bark("뒤쪽!")
+			bark("적이 뒤에 있어!")
 		elif heading.cross(to_threat).y > 0.0:
-			bark("왼쪽!")
+			bark("적이 왼쪽에 있어!")
 		elif forward_dot < 0.85:
-			bark("오른쪽!")
+			bark("적이 오른쪽에 있어!")
 		else:
-			bark("냄새 나. 온다.")
+			bark("적이야. 이쪽으로 온다.")
 
 
 	# ── 바크(말풍선 — 적 유인 대사 인프라 문법, 4s 스로틀) ───────────
@@ -1414,7 +1414,7 @@ class JuhongBody:
 			cover_arc.visible = false
 		_update_health_bar()
 		bark_cooldown = 0.0
-		bark("…젠장. 이쪽 좀.")
+		bark("젠장. 나 맞았어. 이쪽 좀 봐.")
 		system.on_juhong_down()
 
 
@@ -1436,7 +1436,7 @@ class JuhongBody:
 			weapon_visual.visible = true
 		_update_health_bar()
 		bark_cooldown = 0.0
-		bark("빚졌네. 갚을게.")
+		bark("빚졌네. 이건 꼭 갚을게.")
 		SFX.play("cover_enter")
 
 
@@ -1495,7 +1495,7 @@ class JuhongBody:
 		if host != null and host.has_method("_spawn_smoke_cloud"):
 			host._spawn_smoke_cloud(global_position + Vector3(0, 0.4, 0), Vector3.UP)
 		bark_cooldown = 0.0
-		bark("…무전 잘 받았어. 빚 하나 추가야.")
+		bark("무전 잘 받았어. 빚 하나 추가야.")
 		SFX.play("cover_enter")
 
 

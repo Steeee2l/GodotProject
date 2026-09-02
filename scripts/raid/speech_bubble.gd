@@ -12,21 +12,23 @@ extends RefCounted
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const BUBBLE_NAME := "FieldSpeechBubble"
-# 직교 카메라 기준으로 실측해 잡은 값 — 글자 78pt에 픽셀 0.0042면
-# 화면에서 데미지 숫자와 비슷한 크기로 읽힌다.
+# 직교 카메라(사이즈 28, 세로 ~780px)에서 1m ≈ 28px다. 0.0042는 글자 높이가
+# 0.33m = 9px라 읽을 수가 없었다(유저 신고: "회색이라 잘 안 보이고 작다").
+# 0.012면 0.94m ≈ 26px — 피해 숫자(0.84m)보다 한 뼘 크다.
 const FONT_SIZE := 78
-const PIXEL_SIZE := 0.0042
-const OUTLINE_SIZE := 22
+const PIXEL_SIZE := 0.012
+const OUTLINE_SIZE := 24
 const DEFAULT_HOLD_SECONDS := 2.6
 const FADE_SECONDS := 0.45
 const DEFAULT_HEIGHT := 2.15
 const BACKING_TEXTURE_SIZE := 48
 
-# 말투 색 — 누가 말하는지 색만 봐도 갈린다.
-const TONE_ENEMY := Color("#f0e2bb")
-const TONE_ENEMY_GOSSIP := Color("#e7c9a6")
-const TONE_ENEMY_SECRET := Color("#c8b6e8")
-const TONE_ALLY := Color("#d9f3ec")
+# 말투 색 — 전부 흰색에 가깝게(유저: "흰색으로 잘 나와야"). 구분은 아주 옅은
+# 기운으로만 두고, 가독성은 검은 외곽선 + 배경 판이 맡는다.
+const TONE_ENEMY := Color("#ffffff")
+const TONE_ENEMY_GOSSIP := Color("#fff1dc")
+const TONE_ENEMY_SECRET := Color("#ece2ff")
+const TONE_ALLY := Color("#e6fff8")
 
 
 static func show_line(

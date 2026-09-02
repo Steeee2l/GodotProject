@@ -37,12 +37,12 @@ const DIALOGUE_LINES := [
 	# 첫 줄은 반드시 라디오 육성이다 — 설명 이전에 목소리부터 들려주는 훅.
 	# 앞 3줄(리빌 전) = 지금 벌어진 일, 뒤 3줄(리빌 후) = 그래서 어디로 가는가.
 	# 짧게, 현재형으로. "삼백 밤"·"밥은 식탁에" 같은 문어체 비유는 쓰지 않는다.
-	"— 들리나. …들리면, 강을 건너와.",
-	"죽은 라디오가 방금 말을 했다. 사람들이 사라진 뒤 처음으로.",
-	"그날 밤 무슨 일이 있었는지 나는 모른다. 아침에 눈을 떴을 때, 도시에 사람이 한 명도 없었다.",
-	"그리고 지금, 강 건너에서 누군가 나를 부른다.",
-	"사람일까. 사람이면 — 왜 하필 지금일까.",
-	"총 한 자루, 통조림 두 개. 확인하러 간다.",
+	"— 들리나. …들리면 강을 건너와. 다리 끝에 문이 있다.",
+	"라디오가 방금 말을 했다. 사람들이 사라진 뒤로 이 라디오는 한 번도 켜진 적이 없다.",
+	"그날 밤에 무슨 일이 있었는지 나는 모른다. 아침에 눈을 떴더니 도시에 사람이 한 명도 없었다.",
+	"그런데 지금, 강 건너에서 누군가 나를 부르고 있다.",
+	"사람일까. 사람이라면, 왜 하필 지금일까.",
+	"총 한 자루. 통조림 두 개. 가서 확인해 본다.",
 ]
 
 const PLAYER_SPEED := 5.2
@@ -981,34 +981,36 @@ func _build_objective_ui(hud: CanvasLayer) -> void:
 	var objective_half := minf(270.0, (get_viewport().get_visible_rect().size.x - 24.0) * 0.5)
 	objective_panel.offset_left = -objective_half
 	objective_panel.offset_right = objective_half
-	objective_panel.offset_top = 78
-	objective_panel.offset_bottom = 194
+	# 컴팩트(2026-08-30 유저 신고: "상하 폭이 커서 화면을 가려"). 116px → 82px.
+	# 여백·글자를 줄이고 카드는 내용 높이에 맞춰 스스로 줄어들게 둔다.
+	objective_panel.offset_top = 62
+	objective_panel.offset_bottom = 144
 	objective_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.014, 0.021, 0.022, 0.94), Color("#79a994"), 1, 7))
 	hud.add_child(objective_panel)
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 24)
-	margin.add_theme_constant_override("margin_right", 24)
-	margin.add_theme_constant_override("margin_top", 15)
-	margin.add_theme_constant_override("margin_bottom", 14)
+	margin.add_theme_constant_override("margin_left", 16)
+	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_bottom", 8)
 	objective_panel.add_child(margin)
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 3)
+	column.add_theme_constant_override("separation", 1)
 	margin.add_child(column)
 	objective_title = Label.new()
 	objective_title.add_theme_font_override("font", FONT)
-	objective_title.add_theme_font_size_override("font_size", 22)
+	objective_title.add_theme_font_size_override("font_size", 18)
 	objective_title.add_theme_color_override("font_color", Color("#f1d37c"))
 	column.add_child(objective_title)
 	objective_detail = Label.new()
 	objective_detail.add_theme_font_override("font", FONT)
-	objective_detail.add_theme_font_size_override("font_size", 17)
+	objective_detail.add_theme_font_size_override("font_size", 14)
 	objective_detail.add_theme_color_override("font_color", Color("#d4ded9"))
 	objective_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(objective_detail)
 	objective_progress = Label.new()
 	objective_progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	objective_progress.add_theme_font_override("font", FONT)
-	objective_progress.add_theme_font_size_override("font_size", 15)
+	objective_progress.add_theme_font_size_override("font_size", 13)
 	objective_progress.add_theme_color_override("font_color", Color("#80e4bd"))
 	column.add_child(objective_progress)
 	objective_panel.visible = false
@@ -1521,8 +1523,8 @@ func _start_tutorial_move() -> void:
 	camera_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	camera_tween.tween_property(camera, "size", GAMEPLAY_CAMERA_SIZE, 0.6)
 	_show_objective(
-		"걷는다",
-		"왼쪽 스틱 — 다리부터 푼다." if touch_enabled else "W·A·S·D — 다리부터 푼다.",
+		"먼저 걷는다",
+		"왼쪽 스틱으로 움직인다. 다리를 따라 앞으로 간다." if touch_enabled else "W·A·S·D로 움직인다. 다리를 따라 앞으로 간다.",
 		"이동 0 / 3m"
 	)
 	_set_letterbox(false)
@@ -1653,11 +1655,11 @@ func _start_tutorial_dash() -> void:
 	phase = "tutorial_dash"
 	tutorial_transitioning = false
 	_show_objective(
-		"구른다",
+		"구르기",
 		(
-			"대시로 굴러라. 구르는 동안은 총알이 안 맞는다."
+			"대시 버튼을 누르면 구른다. 구르는 동안에는 총알을 맞지 않는다."
 			if touch_enabled
-			else "SPACE로 굴러라. 구르는 동안은 총알이 안 맞는다."
+			else "SPACE를 누르면 구른다. 구르는 동안에는 총알을 맞지 않는다."
 		),
 		"입력 대기"
 	)
@@ -1667,9 +1669,9 @@ func _start_tutorial_aim() -> void:
 	phase = "tutorial_aim"
 	tutorial_transitioning = false
 	_show_objective(
-		"본다",
+		"조준",
 		# 이 단계에서 총이 처음 손에 들린다 — 문구가 그 순간을 가리킨다.
-		"조준을 누른 채 — 총이 올라오고, 멀리까지 보인다." if touch_enabled else "우클릭을 누른 채 — 총이 올라오고, 멀리까지 보인다.",
+		"조준 버튼을 누르고 있으면 총을 들고 멀리까지 본다." if touch_enabled else "우클릭을 누르고 있으면 총을 들고 멀리까지 본다.",
 		"조준 유지 0.5초"
 	)
 
@@ -1681,7 +1683,7 @@ func _start_tutorial_combat() -> void:
 	tutorial_enemies_activated = false
 	_show_objective(
 		"다리를 건넌다",
-		"조준하고 쏜다. 막힌 길은 뚫는다." if touch_enabled else "우클릭 조준, 좌클릭 사격. 막힌 길은 뚫는다.",
+		"앞에 경계병이 있다. 조준하고 쏴서 길을 연다." if touch_enabled else "앞에 경계병이 있다. 우클릭으로 조준하고 좌클릭으로 쏴서 길을 연다.",
 		"경계병 %d — 접근한다" % enemies_remaining
 	)
 
@@ -1745,8 +1747,8 @@ func _start_tutorial_extract() -> void:
 	# 신호는 여기서 죽는다 — 먼지가 쉘터를 '발견'하는 게 아니라, 신호가 끊긴
 	# 자리에 쉘터가 있다. 사자의 "다들 그 소리를 듣고 왔다"로 이어지는 이음새.
 	_show_objective(
-		"신호가 끊겼다",
-		"다리를 건너자 목소리가 죽었다. 하수구 아래에서 불빛이 샌다.",
+		"무전이 끊겼다",
+		"다리를 건넌 뒤로 라디오가 조용하다. 하수구 뚜껑 밑에서 불빛이 새어 나온다.",
 		"하수구까지 %.0fm" % player.global_position.distance_to(sewer_exit.global_position)
 	)
 
@@ -1840,7 +1842,7 @@ func _try_enter_shelter() -> void:
 	restarting = true
 	player.velocity = Vector3.ZERO
 	objective_title.text = "쉘터 진입"
-	objective_detail.text = "쇠문 너머에서 발전기가 돌고 있다. 누가 아직 불을 켜 두었다."
+	objective_detail.text = "쇠문 너머에서 발전기 소리가 난다. 누군가 아직 여기서 불을 켜 두고 있다."
 	objective_progress.text = ""
 	var tween := create_tween()
 	tween.tween_property(fade_rect, "color:a", 1.0, 0.9)

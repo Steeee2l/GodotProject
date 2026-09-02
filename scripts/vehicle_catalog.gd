@@ -10,7 +10,7 @@ const DEFINITIONS := {
 	"sedan": {
 		"texture_path": "res://assets/vehicles/wrecked_sedan.png",
 		"collision_profile": "vehicle_standard",
-		"collision_size": Vector3(4.65, 1.45, 1.82),
+		"collision_size": Vector3(4.11, 1.45, 2.36),
 		"footprint_corners_px": [
 			Vector2(8, 358),
 			Vector2(455, 134),
@@ -21,7 +21,7 @@ const DEFINITIONS := {
 	"truck": {
 		"texture_path": "res://assets/vehicles/wrecked_truck.png",
 		"collision_profile": "vehicle_heavy",
-		"collision_size": Vector3(6.65, 2.85, 2.28),
+		"collision_size": Vector3(5.63, 2.85, 3.30),
 		"footprint_corners_px": [
 			Vector2(15, 590),
 			Vector2(491, 352),
@@ -32,7 +32,7 @@ const DEFINITIONS := {
 	"bus": {
 		"texture_path": "res://assets/vehicles/wrecked_bus.png",
 		"collision_profile": "vehicle_heavy",
-		"collision_size": Vector3(10.6, 3.15, 2.55),
+		"collision_size": Vector3(8.90, 3.15, 4.26),
 		"footprint_corners_px": [
 			Vector2(10, 487),
 			Vector2(578, 203),
@@ -44,7 +44,7 @@ const DEFINITIONS := {
 		"texture_path": "res://assets/vehicles/wrecked_luxury_sedan_v1.png",
 		"collision_profile": "vehicle_standard",
 		"source_size": Vector2i(1254, 1254),
-		"collision_size": Vector3(5.25, 1.5, 1.95),
+		"collision_size": Vector3(4.48, 1.5, 2.72),
 		"footprint_corners_px": [
 			Vector2(28, 811),
 			Vector2(770, 440),
@@ -56,7 +56,7 @@ const DEFINITIONS := {
 		"texture_path": "res://assets/vehicles/wrecked_suv_v1.png",
 		"collision_profile": "vehicle_standard",
 		"source_size": Vector2i(1774, 887),
-		"collision_size": Vector3(4.78, 1.72, 1.92),
+		"collision_size": Vector3(3.78, 1.72, 2.92),
 		"footprint_corners_px": [
 			Vector2(313, 700),
 			Vector2(980, 365),
@@ -68,7 +68,7 @@ const DEFINITIONS := {
 		"texture_path": "res://assets/vehicles/wrecked_taxi_v1.png",
 		"collision_profile": "vehicle_standard",
 		"source_size": Vector2i(1774, 887),
-		"collision_size": Vector3(4.82, 1.48, 1.84),
+		"collision_size": Vector3(3.81, 1.48, 2.85),
 		"footprint_corners_px": [
 			Vector2(230, 715),
 			Vector2(1000, 330),

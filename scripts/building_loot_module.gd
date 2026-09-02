@@ -166,7 +166,11 @@ func _grant_definition(definition: Dictionary) -> String:
 	var grant_amount: int = int(raid_item.get("amount", 1))
 	# 탄약 휴대 훈련(+15%/랭크)은 건물 루팅에도 같은 배율로 붙는다.
 	if str(raid_item.get("type", "")) == "ammo":
-		grant_amount = maxi(1, roundi(float(grant_amount) * GameState.get_ammo_pickup_multiplier()))
+		grant_amount = maxi(1, roundi(
+			float(grant_amount)
+			* GameState.get_ammo_pickup_multiplier()
+			* GameState.get_ammo_scarcity_multiplier(str(raid_item.get("id", "")))
+		))
 		item_amount = grant_amount
 	if not GameState.try_add_raid_item(
 		str(raid_item.get("type", "")),

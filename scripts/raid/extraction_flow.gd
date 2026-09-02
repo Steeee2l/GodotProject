@@ -154,9 +154,8 @@ func _setup_extraction_site(world: ProceduralCityMap) -> void:
 		var site := _create_extraction_beacon(positions[index], index)
 		host.extraction_sites.append(site)
 		host.field_interactions.append(site)
-		if index == 0:
-			site.set_meta("map_discovered", true)
-			host.discovered_extraction_indices[index] = true
+		# 시작부터 아는 탈출구는 없다(2026-08-30 유저: "돌아다니다가 전방에
+		# 하수구가 있으면 그때 발견"). 예전엔 0번 하수구가 처음부터 지도에 있었다.
 	host.extraction_site = host.extraction_sites[0]
 	extraction_position = host.extraction_site.global_position
 	extraction_prompt = host.hud.field_interaction_panel
@@ -658,18 +657,26 @@ func _update_extraction_discovery() -> void:
 		host.discovered_extraction_indices[index] = true
 		if is_instance_valid(host.tactical_map):
 			host.tactical_map.call("discover_extraction", index)
-		host._show_field_notice("탈출구 발견 · 전술 지도에 하수구 위치가 기록되었습니다.")
+		# 발견은 순간이다 — 배너로 크게, 그리고 8초간 가장자리 화살표.
+		var distance := roundi(player.global_position.distance_to(site.global_position))
+		host.mission_celebration.celebrate(
+			"하수구 발견", "%dm 앞 · 지도에 기록됐다" % distance, "탈출구"
+		)
+		host.show_objective_ping(site.global_position, "하수구", 8.0)
 
 
 func _is_extraction_in_player_sight(site: Node3D) -> bool:
 	var offset := site.global_position - player.global_position
 	offset.y = 0.0
 	var distance := offset.length()
-	var in_visibility_shape := distance <= 10.5
-	if not in_visibility_shape and host.laser_aim_held and distance <= 32.0:
-		var aim_direction: Vector3 = host._get_perception_aim_direction()
-		aim_direction.y = 0.0
-		in_visibility_shape = aim_direction.normalized().dot(offset.normalized()) >= cos(deg_to_rad(58.0))
+	# 가까우면 무조건, 전방(향하는 방향 ±60°)이면 넉넉히 34m까지 — 조준하지
+	# 않아도 걷다가 눈에 들어오면 발견이다(유저: "전방 범위 내 좀 여유 있게").
+	var in_visibility_shape := distance <= 14.0
+	if not in_visibility_shape and distance <= 34.0:
+		var facing: Vector3 = host._get_current_facing_world_direction()
+		facing.y = 0.0
+		if facing.length_squared() > 0.01:
+			in_visibility_shape = facing.normalized().dot(offset.normalized()) >= cos(deg_to_rad(60.0))
 	if not in_visibility_shape:
 		return false
 	var query := PhysicsRayQueryParameters3D.create(

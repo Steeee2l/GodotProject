@@ -707,7 +707,7 @@ func _on_squad_cleared(cleared_squad_id: int, last_enemy: CharacterBody3D) -> vo
 	# 소탕 = 안전. 네 가지가 한 프레임에 함께 온다:
 	# ① 배너(토스트)+골드 펄스 ② 긴장도 즉시 완화 ③ 보너스 드랍 1회
 	# ④ 4분간(SQUAD_CLEAR_SAFE_SECONDS) 그 앵커 반경(18m)은 증원·보충 목적지에서
-	#    제외 + 지도 청록 원. 만료 후엔 다시 채워질 수 있다(리스폰 리듬).
+	#    제외. 만료 후엔 다시 채워질 수 있다(리스폰 리듬). 지도 표식은 없다.
 	run_squads_cleared += 1
 	var corpse_position := last_enemy.global_position
 	var anchor: Vector3 = corpse_position
@@ -724,16 +724,9 @@ func _on_squad_cleared(cleared_squad_id: int, last_enemy: CharacterBody3D) -> vo
 		host.hud.pulse_squad_clear()
 	host._add_raid_pressure(-SQUAD_CLEAR_PRESSURE_RELIEF)
 	_spawn_squad_clear_bonus(corpse_position)
-	if is_instance_valid(host.tactical_map) and host.tactical_map.has_method("register_raid_marker"):
-		host.tactical_map.call(
-			"register_raid_marker",
-			"squad_cleared_%d" % cleared_squad_id,
-			anchor,
-			"cleared",
-			"소탕 구역",
-			true,
-			SQUAD_CLEAR_ANCHOR_RADIUS
-		)
+	# 지도의 '소탕 구역' 청록 원은 없앴다(2026-08-30 유저: "TAB 누르면 왜 이렇게
+	# 지저분해, 소탕 구역이 남을 필요는 없지 않나"). 소탕 후 4분 안전은 그대로
+	# 굴러가되(cleared_squad_anchors), 표식은 판이 길어질수록 쌓여 지도를 덮었다.
 
 
 func _spawn_squad_clear_bonus(drop_position: Vector3) -> void:
@@ -858,7 +851,11 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 	# 일반 드랍(방어구·식량·부품) 테이블과 독립이라 그쪽 비중은 안 건드린다.
 	# 45→60→85% 이력: "어지간하면 적을 죽이면 내 총 탄약이 나와야 한다"(유저 확정).
 	# 국소 교전 개편과 세트 — 교전 횟수가 줄어든 만큼 한 번의 교전이 남아야 한다.
-	if str(enemy.get("enemy_kind")) != "melee" and spawn_random.randf() < 0.85:
+	# 소프트캡 — 예비탄이 쌓여 있을수록 호환탄이 덜 남는다(85% × 희소 배율).
+	var ammo_drop_chance := 0.85 * GameState.get_ammo_scarcity_multiplier(
+		str(GameState.equipped_ammo_id)
+	)
+	if str(enemy.get("enemy_kind")) != "melee" and spawn_random.randf() < ammo_drop_chance:
 		var ammo_recovery: Dictionary = LOOT_ECONOMY.roll_matched_ammo_recovery(
 			stage_tier, spawn_random
 		)

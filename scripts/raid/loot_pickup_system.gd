@@ -394,7 +394,12 @@ func _collect_nearby_ammo() -> void:
 		_:
 			var pickup_ammo_id := str(host.nearby_ammo_pickup.get_meta("ammo_id", "762_fmj"))
 			# 탄약 휴대 훈련 — 칸당 발수(폐지)에서 "주워 담는 발수 +15%/랭크"로 재정의.
-			var gained: int = maxi(1, roundi(float(amount) * GameState.get_ammo_pickup_multiplier()))
+			# 소프트캡: 예비탄이 쌓여 있으면 같은 더미에서 덜 줍는다(쟁이기 억제).
+			var gained: int = maxi(1, roundi(
+				float(amount)
+				* GameState.get_ammo_pickup_multiplier()
+				* GameState.get_ammo_scarcity_multiplier(pickup_ammo_id)
+			))
 			var updated_ammo_count: int = GameState.get_ammo_count(pickup_ammo_id) + gained
 			GameState.set_ammo_count(pickup_ammo_id, updated_ammo_count)
 			if GameState.equipped_ammo_id == pickup_ammo_id:

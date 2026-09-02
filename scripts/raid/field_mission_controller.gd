@@ -208,14 +208,14 @@ func _update_field_missions(delta: float) -> void:
 
 	var distance_to_site := player.global_position.distance_to(host.active_field_mission.global_position)
 	if distance_to_site > _get_field_mission_fail_radius():
-		_fail_field_mission("작전 구역을 너무 멀리 이탈했습니다.")
+		_fail_field_mission("내가 작전 구역에서 너무 멀리 벗어났다.")
 		return
 
 	if field_mission_phase == "preparing":
 		field_mission_prepare_timer = maxf(0.0, field_mission_prepare_timer - delta)
 		_set_field_mission_objective(
 			"작전 준비 · %s" % str(host.active_field_mission.get_meta("title", "현장 임무")),
-			"시작까지 %.1f초 · 주변을 살피고 자리를 잡는다." % field_mission_prepare_timer,
+			"시작까지 %.1f초 남았다. 나는 주변을 살피고 자리를 잡는다." % field_mission_prepare_timer,
 			Color("#f0c96d")
 		)
 		if field_mission_prepare_timer <= 0.0:
@@ -262,7 +262,7 @@ func _start_field_mission(site: Node3D) -> void:
 	# +활성화 알림까지 세 번 같은 말을 해서 두세 곳에서 뜨는 것처럼 보였다.
 	_set_field_mission_objective(
 		"작전 준비 · %s" % str(site.get_meta("title", "현장 임무")),
-		"시작까지 %.1f초 · 준비가 끝나기 전에는 적이 투입되지 않습니다." % field_mission_prepare_timer,
+		"시작까지 %.1f초 남았다. 그 전에는 적이 오지 않는다." % field_mission_prepare_timer,
 		Color("#f0c96d")
 	)
 
@@ -285,11 +285,11 @@ func _activate_field_mission() -> void:
 			_spawn_field_mission_reach_target(float(host.active_field_mission.get_meta("target_distance", 13.5)))
 	_set_field_mission_objective(
 		str(host.active_field_mission.get_meta("title", "현장 임무")),
-		str(host.active_field_mission.get_meta("description", "현장 목표를 따른다.")),
+		str(host.active_field_mission.get_meta("description", "나는 현장 목표대로 움직인다.")),
 		Color("#efd06f")
 	)
 	# 개시 순간에만 짧게 번쩍이는 신호. 세부 목표는 목표 패널이 계속 추적한다.
-	host._show_field_notice("▶ 현장 임무 개시")
+	host._show_field_notice("▶ 현장 임무 시작")
 
 
 func _get_field_mission_enemy_total() -> int:
@@ -842,7 +842,7 @@ func _set_field_mission_objective(title: String, detail: String, color: Color) -
 				var compact_detail := (
 					compact_detail_lines[0]
 					if not compact_detail_lines.is_empty()
-					else "현장 목표 수행 중"
+					else "현장 목표 진행 중"
 				)
 				objective_detail = "%s · %s" % [
 					compact_detail,

@@ -221,7 +221,8 @@ func _label3d(text_value: String, local_position: Vector3, size: int, color: Col
     label.render_priority = 127
     label.font = FONT
     label.font_size = size
-    label.pixel_size = 0.0056
+    # 0.0056 → 0.0095: 쉘터 카메라 거리에서 이름·직함이 안 읽혔다(유저 신고).
+    label.pixel_size = 0.0095
     label.modulate = color
     label.outline_modulate = Color(0.01, 0.016, 0.014, 0.96)
     label.outline_size = 11

@@ -249,7 +249,7 @@ var fire_button_held := false
 var mouse_fire_held := false
 var has_ak := false
 var magazine_ammo := 30
-var reserve_ammo := 240
+var reserve_ammo := 150
 var roll_audio_player: AudioStreamPlayer3D
 var building_canvas: CanvasLayer
 var building_overlays := {}
@@ -447,6 +447,10 @@ var boss_alert_subtitle: Label
 var boss_alert_tween: Tween
 # 다음 임무 지점 핑 — 지점 하나를 끝내면 다음 지점 방향을 잠깐 가리킨다(유저 요청).
 var objective_ping: EdgeIndicator
+# TAB 지도에 찍은 개인 표식 — 가장자리 화살표로 상시 안내(유저: "우상단엔 표식을").
+var manual_marker_ping: EdgeIndicator
+# 위험도 리마인더 — 65% 이상에서 주기적으로 "지금이 나갈 때"를 상기시킨다.
+var danger_reminder_timer := 0.0
 var objective_ping_until_msec := 0
 var objective_ping_position := Vector3.INF
 var objective_ping_label := ""
@@ -2287,14 +2291,14 @@ func _build_death_lesson() -> String:
 	# 사망이 처벌로만 끝나면 배우는 게 없다.
 	# 먼지 독백 톤(짧은 현재형) — building_interior의 사망 교훈과 같은 세트.
 	if raid_danger >= 0.65:
-		return "위험도 %d%%. 너무 오래 머물렀다. 다음엔 더 빨리 빠진다." % roundi(raid_danger * 100.0)
+		return "위험도 %d%%. 너무 오래 머물렀다. 다음엔 위험도가 60%%를 넘으면 바로 탈출구로 간다." % roundi(raid_danger * 100.0)
 	if magazine_ammo <= 0 and reserve_ammo <= 0:
-		return "탄이 바닥났다. 다음엔 다 떨어지기 전에 빠진다."
+		return "탄약이 다 떨어져서 죽었다. 다음엔 탄약이 한 탄창 남으면 탈출구로 간다."
 	if raid_pressure_level >= 2:
-		return "긴장도가 높았다. 증원은 계속 온다 — 그럴 땐 탈출구가 답이다."
+		return "긴장도가 높아서 증원이 계속 왔다. 다음엔 긴장도가 2단계가 되면 탈출구로 간다."
 	if GameState.medkits > 0:
-		return "구급약이 %d개 남아 있었다. 다음엔 더 일찍 쓴다." % GameState.medkits
-	return "무리한 교전 하나가 판 전체를 가져간다. 물러서는 것도 선택이다."
+		return "구급약이 %d개 남아 있었다. 다음엔 체력이 반 아래로 떨어지면 바로 쓴다." % GameState.medkits
+	return "적이 너무 많은데 계속 싸웠다. 다음엔 적이 셋 넘게 보이면 물러난다."
 
 
 func _begin_player_death_sequence() -> void:
@@ -2811,6 +2815,10 @@ func _layout_center_top_banners() -> void:
 		banner.pivot_offset = Vector2(banner_w * 0.5, banner_h * 0.5)
 		banner_cursor += banner_h + banner_gap
 		banner_shown += 1
+	# 토스트 스택은 배너들 바로 아래에서 시작한다 — 배너가 뜨고 질 때마다 따라간다.
+	if hud.toast_stack:
+		hud.toast_stack.offset_top = banner_cursor + banner_gap
+		hud.toast_stack.offset_bottom = banner_cursor + banner_gap + 220.0
 
 
 func _apply_hud_layout() -> void:
@@ -3026,21 +3034,28 @@ func _apply_hud_layout() -> void:
 		hud.equipment_panel.visible = not hud_blocked
 
 	if hud.toast_stack:
-		hud.toast_stack.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		# 토스트는 상단 중앙(배너 스택 바로 아래)으로 옮겼다(2026-08-30). 하단
+		# 중앙은 상호작용 캡슐·탄약 경고·탈출 카드가 이미 쓰는 띠라 셋이 겹쳐
+		# "위치 겹치고 난리"(유저 신고)가 됐다. 세로 위치는 배너 수에 따라
+		# _layout_center_top_banners가 정한다.
+		hud.toast_stack.set_anchors_preset(Control.PRESET_CENTER_TOP)
+		hud.toast_stack.alignment = BoxContainer.ALIGNMENT_BEGIN
 		var toast_w := minf(viewport_size.x * 0.9, 500.0)
 		hud.toast_stack.offset_left = -toast_w * 0.5
 		hud.toast_stack.offset_right = toast_w * 0.5
-		# 화면 34% 위는 사실상 정중앙이었다(유저: 가운데에 메시지가 너무 많다) —
-		# 하단 소모품 버튼 바로 위, 아래쪽 1/4 지점으로 내린다.
-		hud.toast_stack.offset_bottom = -maxf(176.0, viewport_size.y * 0.245)
-		hud.toast_stack.offset_top = hud.toast_stack.offset_bottom - 250.0
 	if hud.ammo_notice:
 		hud.ammo_notice.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 		var notice_w := minf(viewport_size.x * 0.62, 500.0)
 		var notice_h := 54.0
 		hud.ammo_notice.offset_left = -notice_w * 0.5
 		hud.ammo_notice.offset_right = notice_w * 0.5
-		hud.ammo_notice.offset_bottom = -maxf(266.0, viewport_size.y - (viewport_size.y * 0.68))
+		# 상호작용 캡슐 바로 위 — 둘이 같은 자리를 다투던 겹침을 끊는다.
+		var prompt_top := (
+			hud.field_interaction_panel.offset_top
+			if hud.field_interaction_panel
+			else -maxf(bottom_margin + 154.0, viewport_size.y * 0.24)
+		)
+		hud.ammo_notice.offset_bottom = prompt_top - 8.0
 		hud.ammo_notice.offset_top = hud.ammo_notice.offset_bottom - notice_h
 
 	game_over_screen.apply_layout(viewport_size)
@@ -3787,7 +3802,25 @@ func show_objective_ping(world_position: Vector3, label_text: String, seconds: f
 	objective_ping_until_msec = Time.get_ticks_msec() + int(seconds * 1000.0)
 
 
+func _update_manual_marker_ping() -> void:
+	# 지도(TAB)에서 클릭으로 찍은 표식을 화면 가장자리 화살표+거리로 상시 안내한다.
+	var marker_position := Vector3.INF
+	if is_instance_valid(tactical_map):
+		marker_position = tactical_map.get("manual_marker_position") as Vector3
+	if marker_position == Vector3.INF or _is_tactical_map_open():
+		if manual_marker_ping != null:
+			manual_marker_ping.hide()
+		return
+	if manual_marker_ping == null or not manual_marker_ping.is_valid():
+		manual_marker_ping = EdgeIndicator.create(self, Color("#7fd7c4"), 86)
+	manual_marker_ping.point_at(
+		marker_position,
+		"표식 %dm" % roundi(player.global_position.distance_to(marker_position))
+	)
+
+
 func _update_objective_ping() -> void:
+	_update_manual_marker_ping()
 	var ping_active := (
 		objective_ping_position != Vector3.INF
 		and Time.get_ticks_msec() < objective_ping_until_msec
@@ -4206,9 +4239,11 @@ func _update_enemy_pressure(delta: float) -> void:
 			kinds,
 			effective_threat
 		)
+	# 위험도가 오를수록 보충 간격이 짧아진다(100%에서 절반) — "점점 옥죈다"는
+	# 체감은 밀도(+12)만으로는 약했다. 조우 빈도 자체가 올라야 한다.
 	reinforcement_timer = lerpf(
 		REINFORCEMENT_INTERVAL_CALM, REINFORCEMENT_INTERVAL_TENSE, effective_threat
-	)
+	) * lerpf(1.0, 0.5, raid_danger)
 
 
 func _count_enemies_near_player(radius: float) -> int:
@@ -4731,7 +4766,15 @@ func _update_building_overlays() -> void:
 		overlay.offset = source.offset
 		overlay.flip_h = source.flip_h
 		overlay.modulate = source.modulate
-		overlay.z_index = OVERLAY_DEPTH_SORT.world_depth(vehicle.global_position)
+		# 차량도 건물과 같은 겹침·가림 스냅을 탄다(2026-08-30). 예전엔 원점 x+z
+		# 한 값만 써서, 버스 남쪽 절반 어디에 서도 버스가 통째로 플레이어 뒤로
+		# 갔다 — "플레이어가 버스 위에 올라가 있다"(유저 신고)의 직접 원인.
+		overlay.z_index = OVERLAY_DEPTH_SORT.building_depth(
+			vehicle.global_position,
+			player.global_position,
+			bool(vehicle.get_meta("overlay_overlaps_player", false)),
+			bool(vehicle.get_meta("overlay_occludes_player", false))
+		)
 	var survivor_texture := survivor.sprite_frames.get_frame_texture(survivor.animation, survivor.frame)
 	if survivor_texture:
 		survivor_overlay.texture = survivor_texture
@@ -4825,8 +4868,24 @@ func _update_camera_occluders(delta: float) -> void:
 			continue
 		var touches_facing_sector := _structure_touches_visibility_sector(vehicle)
 		vehicle.set_meta("overlay_in_facing_sector", touches_facing_sector)
+		# 건물과 같은 판정 — 화면상 겹치고 카메라 쪽(x+z 큰 쪽)에 있으면 가린다.
+		var vehicle_offset := Vector2(vehicle.global_position.x, vehicle.global_position.z) - player_position
+		var vehicle_depth := vehicle_offset.dot(camera_direction)
+		var vehicle_lateral := absf(vehicle_offset.cross(camera_direction))
+		var vehicle_overlaps := _is_player_inside_sprite_screen_rect(vehicle_sprite)
+		var vehicle_occludes := (
+			vehicle_overlaps
+			and vehicle_depth > 0.4
+			and vehicle_depth < 9.0
+			and vehicle_lateral < 6.5
+		)
+		vehicle.set_meta("overlay_overlaps_player", vehicle_overlaps)
+		vehicle.set_meta("overlay_occludes_player", vehicle_occludes)
+		player_is_occluded = player_is_occluded or vehicle_occludes
 		var vehicle_color := vehicle_sprite.modulate
-		var vehicle_target_alpha := STRUCTURE_REVEAL_VEHICLE_ALPHA if touches_facing_sector else 1.0
+		var vehicle_target_alpha := (
+			STRUCTURE_REVEAL_VEHICLE_ALPHA if (touches_facing_sector or vehicle_occludes) else 1.0
+		)
 		vehicle_color.a = move_toward(vehicle_color.a, vehicle_target_alpha, delta * 4.8)
 		vehicle_sprite.modulate = vehicle_color
 	var target_player_color := SILHOUETTE_COLOR if player_is_occluded else Color.WHITE
@@ -5178,7 +5237,7 @@ func _apply_zone_rule_on_start() -> void:
 		"toxic":
 			if not GameState.is_tutorial_step_done("zone_rule_toxic_notice"):
 				GameState.mark_tutorial_step_done("zone_rule_toxic_notice")
-				_show_field_notice("오염 지대 진입 · 머무는 동안 체력이 깎인다. 빠르게 움직여라.")
+				_show_field_notice("오염 지대에 들어왔다. 여기 있으면 체력이 계속 깎인다. 나는 빨리 지나간다.")
 	# 존 규칙 안내는 그 존 첫 진입에만 — 브리핑 패널이 이미 같은 문장을 보여 주고,
 	# 매 판 반복되면 출정 직후 중앙이 공지로 도배된다(유저 신고).
 	if not active_zone_rule.is_empty() and active_zone_rule != "darkness":
@@ -6062,13 +6121,13 @@ func _handle_basic_mission_chain_completion(mission_id: String) -> void:
 				basic_raid_missions.append(
 					FIELD_MISSION_CATALOG.get_basic_mission("subway_boss")
 				)
-			_show_field_notice("연속 임무 해금 · 폐허의 포격수 묘르의 신호를 추적합니다.")
+			_show_field_notice("새 임무가 열렸다. 포격 신호의 주인은 묘르다. 나는 묘르를 추적한다.")
 		"subway_boss":
 			GameState.set_subway_story_stage(2)
-			_show_field_notice("묘르 처치 · 다음 탐사에서 지하 보급로 봉쇄 가능")
+			_show_field_notice("묘르를 처치했다. 다음 출정에서 지하 보급로를 막을 수 있다.")
 		"subway_return":
 			GameState.set_subway_story_stage(3)
-			_show_field_notice("연속 임무 완료 · 종로 지하선 생존 통로 확보")
+			_show_field_notice("연속 임무를 끝냈다. 종로 지하선 통로는 이제 안전하다.")
 
 
 func _get_basic_mission_lines() -> Array[String]:
@@ -6194,7 +6253,7 @@ func _update_defense_mission(delta: float, distance_to_site: float) -> void:
 		"구역 방어  %.1f초 · 접근 중인 적 %d명"
 		% [remaining, maxi(0, enemy_count - field_mission_spawned_enemies)]
 		if inside_hold_area
-		else "방어 구역으로 복귀한다 · 이탈 %.0fm"
+		else "나는 방어 구역으로 돌아간다 · 이탈 %.0fm"
 		% distance_to_site
 	)
 	field_missions._set_field_mission_objective(
@@ -6240,12 +6299,12 @@ func _update_collect_mission() -> void:
 func _update_investigation_mission(delta: float) -> void:
 	var silence_required := bool(active_field_mission.get_meta("silence_required", false))
 	if silence_required and field_mission_noise_breached:
-		field_missions._fail_field_mission("총성으로 조사 현장이 노출됐습니다.")
+		field_missions._fail_field_mission("총소리가 났다. 적이 조사 현장을 알아챘다.")
 		return
 	var detected := field_missions._update_field_mission_detection(delta)
 	var detection_grace := float(active_field_mission.get_meta("detection_grace", 1.25))
 	if silence_required and field_mission_detection_time >= detection_grace:
-		field_missions._fail_field_mission("감시망에 발각되어 기록을 확보하지 못했습니다.")
+		field_missions._fail_field_mission("감시병이 나를 봤다. 기록을 챙기지 못했다.")
 		return
 	var nearest: Node3D
 	var nearest_distance := INF
@@ -6279,7 +6338,7 @@ func _update_investigation_mission(delta: float) -> void:
 	]
 	var color := Color("#e3ca82")
 	if detected:
-		detail = "적의 시야를 끊어야 조사를 계속할 수 있습니다."
+		detail = "적이 나를 보고 있다. 적의 시야를 벗어나야 조사를 계속할 수 있다."
 		color = Color("#ff9b77")
 	elif is_instance_valid(nearest) and nearest_distance <= 1.6:
 		detail = "단서 분석  %.1f / %.1f초 · %d / %d" % [
@@ -6362,7 +6421,7 @@ func _guard_corpse_recovery_site(world: ProceduralCityMap, recovery_position: Ve
 	var remaining := GameState.get_corpse_returns_remaining()
 	var intact := GameState.get_corpse_intact_ratio()
 	_show_field_notice(
-		"장비가 남아 있는 자리에 약탈자가 붙었다.\n잔존 %d%% · 앞으로 %d회 안에 회수하지 않으면 사라진다."
+		"내 장비가 남은 자리에 약탈자가 서 있다.\n장비는 %d%% 남았다. 앞으로 %d번 안에 회수하지 않으면 장비가 사라진다."
 		% [roundi(intact * 100.0), remaining]
 	)
 
@@ -6799,8 +6858,9 @@ func _update_field_interactions(delta: float) -> void:
 		GameState.save_persistent_state()
 		_show_field_notice(
 			"탈출로를 찾았다.\n"
-			+ "지금 나가면 가방에 든 것이 전부 내 것이 된다. 죽으면 장비는 전부 남고 가방의 재료·탄약·귀중품만 놓고 간다.\n"
-			+ "더 버티면 전리품 배율이 오른다. 어느 쪽을 고를지는 네 몫이다."
+			+ "지금 나가면 가방에 든 것을 전부 가져간다.\n"
+			+ "죽어도 장비는 남는다. 가방 속 재료와 탄약과 귀중품은 잃는다.\n"
+			+ "더 버티면 전리품 배율이 오른다. 나갈지 버틸지는 내가 정한다."
 		)
 	if hud.field_interaction_button:
 		hud.field_interaction_button.disabled = bool(prompt_state.get("disabled", false))
@@ -6944,7 +7004,7 @@ func _complete_field_interaction(point: Node3D) -> void:
 	if interaction_type == "rescue":
 		var occupied_after_escort: int = GameState.rescued_workers + rescued_followers.size()
 		if occupied_after_escort >= GameState.get_resident_capacity():
-			_show_field_notice("쉘터 수용량 부족 · 티어를 올려야 더 구조할 수 있다")
+			_show_field_notice("쉘터가 꽉 찼다. 쉘터 티어를 올려야 더 구조할 수 있다.")
 			field_interaction_hold_time = 0.0
 			return
 	point.set_meta("completed", true)
@@ -6965,13 +7025,13 @@ func _complete_field_interaction(point: Node3D) -> void:
 			if is_instance_valid(tactical_map) and tactical_map.has_method("remove_raid_marker"):
 				tactical_map.call("remove_raid_marker", "basic_mission_subway")
 			_show_field_notice(
-				"지하 보급로 확인 완료 · 종로 지하선을 확보했습니다."
+				"지하 보급로를 확인했다. 종로 지하선은 이제 안전하다."
 				if subway_mission_id == "subway_return"
-				else "지하철역 진입로 조사 완료 · 포격 신호를 기록했습니다."
+				else "지하철역 입구를 조사했다. 포격 신호를 기록했다."
 			)
 		"rescue":
 			_add_rescued_follower(point.global_position)
-			_show_field_notice("생존자 구조 · 호송 중 이동 속도가 감소합니다.")
+			_show_field_notice("생존자를 구조했다. 데리고 가는 동안 나는 느리게 움직인다.")
 		"companion_revive":
 			# 주홍 소생 — [F] 홀드 3s 완료. HP 40%·판당 1회는 companion_system이 안다.
 			companion_system.finish_juhong_revive()
@@ -7186,6 +7246,7 @@ func _update_raid_danger(delta: float) -> void:
 	GameState.raid_danger = raid_danger
 	_refresh_danger_hud()
 	enemy_director._trigger_danger_boss_event()
+	_update_danger_reminder(delta)
 	# 하드캡 영파 방지 — 100%에서 버틸수록 처형자가 계속 온다.
 	if raid_danger >= 1.0:
 		danger_overcap_seconds += delta
@@ -7196,6 +7257,41 @@ func _update_raid_danger(delta: float) -> void:
 		if danger_overcap_seconds >= next_enforcer_at:
 			danger_enforcers_spawned += 1
 			enemy_director.spawn_danger_enforcer(danger_enforcers_spawned)
+
+
+func _update_danger_reminder(delta: float) -> void:
+	# 65% 이상이면 45초마다 한 번씩 "지금 나가야 하나"를 되묻게 한다. 100%에선
+	# 처형자 도착까지 남은 시간을 센다 — 위험도는 언제 하수구로 갈지 정하는
+	# 시계라서, 게이지 하나로는 부족하고 말로 밀어야 한다(유저 확정).
+	if raid_danger < 0.65:
+		danger_reminder_timer = 0.0
+		if hud.danger_panel:
+			hud.danger_panel.modulate = Color.WHITE
+		return
+	danger_reminder_timer -= delta
+	# 위험도 패널이 붉게 맥동한다 — 눈이 HUD 구석을 안 봐도 색이 먼저 온다.
+	if hud.danger_panel:
+		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * (0.006 if raid_danger >= 0.9 else 0.003))
+		hud.danger_panel.modulate = Color(1.0, 1.0 - 0.35 * pulse, 1.0 - 0.4 * pulse)
+	if danger_reminder_timer > 0.0:
+		return
+	danger_reminder_timer = 45.0
+	if raid_danger >= 1.0:
+		var next_enforcer_at := (
+			DANGER_ENFORCER_DELAY_SECONDS
+			+ float(danger_enforcers_spawned) * DANGER_ENFORCER_INTERVAL_SECONDS
+		)
+		var seconds_left := maxi(0, roundi(next_enforcer_at - danger_overcap_seconds))
+		hud.push_toast(
+			"위험도 한계 · 회수반 도착까지 %d초 — 지금 나가지 않으면 못 나간다" % seconds_left,
+			HudStyle.DANGER, 4.0
+		)
+		SFX.play("alert_sting")
+		return
+	hud.push_toast(
+		"위험도 %d%% · 적이 계속 늘고 있다 — 하수구로 갈 때를 정해라" % roundi(raid_danger * 100.0),
+		HudStyle.DANGER if raid_danger >= 0.9 else HudStyle.WARN, 3.6
+	)
 
 
 func _refresh_danger_hud() -> void:

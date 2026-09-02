@@ -43,7 +43,7 @@ const STEPS := [
 		# 마커(3D 위치 투영)를, 가까이 오면 상호작용 버튼을 가리킨다.
 		# 필드 도착 후는 RaidTutorial(이동→조준→수색→가방→탈출)이 이어받는다.
 		"id": "first_sortie_gate", "zone": "shelter", "title": "첫 출정",
-		"text": "쉘터의 물자는 바깥에서 온다 — 배수관 출구로 가서 작전 브리핑을 여세요.",
+		"text": "쉘터의 물자는 전부 바깥에서 가져옵니다. 배수관 출구로 가서 작전 브리핑을 여세요.",
 		"targets": ["pipe_exit"],
 	},
 	{
@@ -54,7 +54,7 @@ const STEPS := [
 	},
 	{
 		"id": "seat_worker", "zone": "shelter", "title": "쉘터 입문",
-		"text": "운영 독 · 생산을 열고 주민을 좌석에 앉히세요 — 앉은 주민이 고철을 만듭니다.",
+		"text": "운영 독에서 생산을 열고 주민을 좌석에 앉히세요. 앉은 주민이 고철을 만듭니다.",
 		"targets": ["dock:scratcher_bank", "prefix:ResidentCard_"],
 	},
 	{
@@ -64,13 +64,13 @@ const STEPS := [
 	},
 	{
 		"id": "train_magazine", "zone": "shelter", "title": "훈련장 — 탄약 운용",
-		"text": "훈련은 통조림으로 삽니다. 주워 온 통조림을 부어 탄창 숙련을 올리세요 — 장탄이 늘어납니다.",
+		"text": "훈련은 통조림으로 삽니다. 주워 온 통조림을 부어 탄창 숙련을 올리세요. 장탄 수가 늘어납니다.",
 		"targets": ["dock:training", "find:TrainingCard_magazine_drill"],
 	},
 	{
 		# 2단계 강화 보드: 독 버튼 → 강화 카드 → [강화 +1] 버튼(WorkbenchEnhanceButton) 순으로 깊어진다.
 		"id": "workbench_craft", "zone": "shelter", "title": "작업대 — 강화",
-		"text": "첫 강화를 해보세요 — 장비는 평생 내 것이고 끝없이 오릅니다.",
+		"text": "첫 강화를 해보세요. 장비는 한 번 만들면 평생 내 것이고, 강화는 끝없이 올라갑니다.",
 		"targets": ["dock:workbench", "find:WorkbenchEnhanceCard", "find:WorkbenchEnhanceButton"],
 	},
 	{
@@ -98,12 +98,12 @@ const STEPS := [
 	},
 	{
 		"id": "salvage_notice", "zone": "shelter", "title": "잉여 장비 분해",
-		"text": "잉여 장비는 부품이 됩니다 — 장착 1 + 슬롯별 예비 1만 남고 나머지는 자동 분해돼요.",
+		"text": "남는 장비는 부품이 됩니다. 장착한 것 하나와 예비 하나만 남고 나머지는 자동으로 분해됩니다.",
 		"targets": ["settlement:salvage"],
 	},
 	{
 		"id": "train_supply", "zone": "shelter", "title": "훈련장 — 출정 보급",
-		"text": "탄창 숙련 다음은 휴대와 보급입니다 — 탄약 휴대는 필드에서 줍는 탄약량을, 출정 보급은 시작 탄창을 늘립니다.",
+		"text": "탄창 숙련 다음은 휴대와 보급입니다. 탄약 휴대는 필드에서 줍는 탄약량을 늘리고, 출정 보급은 시작 탄창을 늘립니다.",
 		"targets": ["dock:training", "find:TrainingCard_ammo_carry", "find:TrainingCard_sortie_supply"],
 	},
 ]

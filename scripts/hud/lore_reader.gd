@@ -150,7 +150,7 @@ func show_entry(point: Node3D) -> void:
 			marker_label.modulate = Color("#8eb7a6")
 	title_label.text = str(entry.get("title", "이름 없는 기록"))
 	source_label.text = str(entry.get("source", "출처 불명"))
-	body_label.text = str(entry.get("body", "기록이 심하게 훼손되어 있습니다."))
+	body_label.text = str(entry.get("body", "기록이 심하게 망가져서 읽을 수 없다."))
 	progress_label.text = "발견한 세계 기록  %d / %d" % [
 		clues_discovered,
 		LORE_ENTRIES.size(),

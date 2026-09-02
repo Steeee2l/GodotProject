@@ -135,9 +135,9 @@ const PIPE_EXIT_LABEL := "파이프를 타고 도시로 올라가기"
 # 행상인 입장 첫마디 — 수다스럽고, 무슨 얘기를 하든 결국 물건 얘기로 돌아간다.
 # 떠도는 소문만 안다. 그 이상은 모른다.
 const MERCHANT_ENTRY_LINES := [
-	"“이거? 남산 쪽에서 주웠다냥. 어디서 났는진 묻지 마라냥. 값이나 쳐 보라냥.”",
-	"“땅 밑에서 신호가 돈다더라냥. 소문은 공짜다냥. 물건은 아니다냥.”",
-	"“살아 있는 쉘터는 냄새부터 다르다냥. 자, 물건부터 보라냥.”",
+	"“이거? 남산 쪽에서 주운 거다냥. 어디서 났는지는 묻지 마라냥. 값이나 쳐 보라냥.”",
+	"“땅 밑에서 무전 신호가 돈다는 소문이 있다냥. 소문은 공짜다냥. 물건은 아니다냥.”",
+	"“사람이 사는 쉘터는 냄새부터 다르다냥. 자, 물건부터 보라냥.”",
 ]
 var player: CharacterBody3D
 var survivor: AnimatedSprite3D
@@ -1329,7 +1329,7 @@ func _open_iron_mission_dialog() -> void:
 			lines.append(str(definition.get("accept_dialogue", "몸부터 단련하고 다시 와.")))
 			lines.append("시험 목표 · %s" % str(definition.get("brief", "생존 시험을 완수하세요.")))
 		"active":
-			lines.append("아직 안 끝났다. 숫자 말고, 살아 돌아오는 걸 보여.")
+			lines.append("아직 안 끝났다. 숫자 채우는 것보다 살아서 돌아오는 게 먼저다.")
 			lines.append("현재 진행 · %d / %d\n%s" % [
 				int(state.get("progress", 0)),
 				int(state.get("target", 1)),
@@ -1345,7 +1345,7 @@ func _open_iron_mission_dialog() -> void:
 			_update_stats()
 		_:
 			title = "철근의 생존 훈련"
-			lines.append("가르칠 건 다 가르쳤다. 살아 돌아오는 건 네 몫이다.")
+			lines.append("가르칠 건 다 가르쳤다. 살아서 돌아오는 건 네가 할 일이다.")
 	_open_contract_story(title, lines, "철근", _character_portrait(iron_trainer))
 
 
@@ -2691,13 +2691,13 @@ func _add_contract_reward_chips(
 func _accept_current_contract() -> void:
 	var result := GameState.accept_current_contract()
 	if not bool(result.get("ok", false)):
-		contract_report_message = "사자: 지금 맡은 일부터 끝내고 와라. 욕심내면 몸 상한다."
+		contract_report_message = "사자: 지금 맡은 일부터 끝내고 와라. 욕심부리면 몸 상한다."
 	else:
 		var definition := result.get("definition", {}) as Dictionary
 		var story_lines: Array[String] = []
 		for line in definition.get("accept_dialogue", []) as Array:
 			story_lines.append(str(line))
-		story_lines.append("할 일은 %s. …뭐가 됐든, 살아서 돌아오는 게 먼저다." % str(
+		story_lines.append("할 일은 %s. 뭐가 됐든 살아서 돌아오는 게 먼저다." % str(
 			definition.get("objective", "현장 목표 완수")
 		))
 		_show_status("사자에게서 시설 건설 계약을 받았습니다.")
@@ -2713,7 +2713,7 @@ func _accept_current_contract() -> void:
 func _claim_current_contract() -> void:
 	var result := GameState.claim_current_contract_reward()
 	if not bool(result.get("ok", false)):
-		contract_report_message = "사자: 아직 좀 모자란다. 급할 거 없다, 천천히 챙겨 와라."
+		contract_report_message = "사자: 아직 좀 모자란다. 급할 거 없어. 천천히 챙겨 와라."
 	else:
 		var definition := result.get("definition", {}) as Dictionary
 		var construction_line := ""
@@ -2886,9 +2886,9 @@ func _open_merchant_intro_story() -> void:
 	# 사자 계약 대화 패널(타자기)을 재사용한다. 떠돌이 소문 장사꾼의 자기소개 —
 	# 세계관 비밀은 소문 수준까지만.
 	var intro_lines: Array[String] = [
-		"처음 보는 얼굴이다냥. 봉쇄선 밖을 도는 행상인이다냥. 이름은 묻지 마라냥.",
-		"고철만 주면 뭐든 구해 온다냥. 탄이든 부품이든 다 된다냥. 출처는 묻지 마라냥.",
-		"소문도 판다냥. 첫 거래니까 하나 얹어 준다냥 — 땅 밑에서 신호가 돈다더라냥. 자, 물건부터 보라냥.",
+		"처음 보는 얼굴이다냥. 나는 봉쇄선 바깥을 돌며 장사하는 행상인이다냥. 이름은 묻지 마라냥.",
+		"고철만 주면 뭐든 구해 온다냥. 탄약이든 부품이든 다 된다냥. 어디서 났는지는 묻지 마라냥.",
+		"소문도 판다냥. 첫 거래니까 하나는 공짜로 준다냥. 땅 밑에서 무전 신호가 돈다더라냥. 자, 물건부터 보라냥.",
 	]
 	_open_contract_story(
 		"떠돌이 행상인의 첫 인사",
@@ -3883,19 +3883,19 @@ func _interact() -> void:
 # 잡담은 정보가 아니라 공기다. 겁먹은 보통 사람 말투, 짧은 문장.
 # 다만 그 공기에 사자에 대한 위화감이 한 방울씩 섞여 나온다.
 const RESIDENT_CHAT_LINES := [
-	"사이렌은 늘 남쪽에서만 울려.",
-	"사람 냄새가 하나도 안 남았어. 하룻밤 만에 그렇게 되나.",
-	"캣닢 배급 늘었대. 먼지 덕이라던데.",
-	"땅 밑에서 신호가 온대. 나는 안 들었어.",
-	"발톱 관리는 게으름이 아니야. 생존이지.",
-	"고철 더미에서 라디오가 지직거렸대.",
-	"같은 문장만 반복되는 방송이 있대. 무서워서 껐대.",
-	"철근 교관 무섭지. 근데 그 덕에 다들 살아 있잖아.",
-	"바깥은 어때? …아니, 말 안 해도 돼.",
-	"꾹꾹이도 하다 보면 요령이 붙어.",
-	"사자님은 뭘 알고 있어. 말을 안 할 뿐이야.",
-	"사자님이 내 이름 적을 때, 손이 하나도 안 떨리더라.",
-	"비 오는 날엔 도시가 조용해. 그게 더 무서워.",
+	"사이렌 소리는 늘 남쪽에서만 들려. 왜 남쪽만일까.",
+	"도시에 사람 냄새가 하나도 안 남았어. 하룻밤 만에 그렇게 될 수가 있나.",
+	"캣닢 배급이 늘었대. 먼지가 밖에서 가져온 덕이라던데.",
+	"땅 밑에서 무전 신호가 온다는 얘기가 있어. 나는 못 들었지만.",
+	"발톱 손질은 게으름이 아니야. 살아남으려면 해야 하는 거야.",
+	"고철 더미 속 라디오가 지직거렸대. 누가 켠 것도 아닌데.",
+	"같은 문장만 계속 반복하는 방송이 있대. 무서워서 껐다더라.",
+	"철근 교관은 무섭지. 그래도 그 사람 덕에 다들 살아 있잖아.",
+	"바깥은 어때? …아니야, 말 안 해도 돼.",
+	"꾹꾹이도 계속 하다 보면 요령이 붙어.",
+	"사자님은 뭔가 알고 있는 것 같아. 말을 안 할 뿐이지.",
+	"사자님이 내 이름을 적을 때 손이 하나도 안 떨리더라. 익숙한 손이었어.",
+	"비 오는 날에는 도시가 조용해져. 조용한 게 더 무서워.",
 ]
 
 
@@ -3907,14 +3907,14 @@ const RESIDENT_CHAT_LINES := [
 const CATNIP_FEVER_LINES := [
 	"머리가 핑 도는데 기분은 최고야!",
 	"오늘은 발톱이 저절로 움직여!",
-	"세상이 초록색으로 보여…",
+	"세상이 다 초록색으로 보여!",
 	"고철이 스스로 걸어오는 것 같아!",
 	"이 냄새… 이 냄새를 평생 기억할 거야!",
 	"손이 안 멈춰! 아무도 날 못 막아!",
-	"꾹꾹, 꾹꾹, 꾹꾹— 아, 좋다!",
+	"꾹꾹, 꾹꾹, 꾹꾹. 아, 좋다!",
 	"먼지야, 우리 오늘 밤은 부자다!",
 	"이게 행복이구나. 이게 행복이야.",
-	"조금만 더… 조금만 더 줘!",
+	"조금만 더, 조금만 더 줘!",
 ]
 
 var catnip_fever_speed_applied := false
@@ -4161,11 +4161,12 @@ func _update_shelter_medkit_button() -> void:
 
 
 func _use_shelter_medkit() -> void:
+	# 쉘터에서는 구급약을 쓰지 않는다(복귀 = 완전 회복). 여기서 "구급약이
+	# 없습니다"가 뜨면 쓸 수 있는 곳이라는 거짓 신호가 된다(유저 신고).
 	if _ui_blocks_player():
 		return
 	var maximum_health := GameState.get_max_health()
 	if GameState.medkits <= 0:
-		_show_status("보유한 구급약이 없습니다.")
 		return
 	if GameState.player_health >= maximum_health:
 		_show_status("체력이 이미 가득 찼습니다.")

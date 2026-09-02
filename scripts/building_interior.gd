@@ -552,10 +552,10 @@ func _format_building_survival_time() -> String:
 func _build_building_death_lesson() -> String:
 	# 먼지 독백 톤(짧은 현재형) — main의 사망 교훈과 같은 세트.
 	if GameState.medkits > 0:
-		return "구급약이 %d개 남아 있었다. 다음엔 더 일찍 쓴다." % GameState.medkits
+		return "구급약이 %d개 남아 있었다. 다음엔 체력이 반 아래로 떨어지면 바로 쓴다." % GameState.medkits
 	if _get_reserve_ammo() <= 0:
-		return "탄이 바닥났다. 건물 안에선 물러설 자리도 좁다."
-	return "건물 안은 사방이 막혀 있다. 1층 출구까지의 거리를 늘 세어 둔다."
+		return "탄약이 다 떨어져서 죽었다. 다음엔 탄약이 한 탄창 남으면 건물에서 나간다."
+	return "건물 안에서 도망갈 길이 없었다. 다음엔 1층 출구와 가까운 곳에서만 싸운다."
 
 
 func _continue_after_death() -> void:

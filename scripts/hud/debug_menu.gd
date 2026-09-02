@@ -180,7 +180,8 @@ func _build_panel() -> void:
 			count += 1
 		return "무기 %d종 지급" % count
 	)
-	_add_action("주홍 동행 해금", func() -> String:
+	# 정상 경로는 생환 3회 뒤(4번째 출정부터) 합류다 — 이건 그걸 건너뛰는 치트.
+	_add_action("주홍 즉시 해금 (정상: 4번째 출정부터)", func() -> String:
 		GameState.companion_unlocked = true
 		GameState.companion_enabled = true
 		return "주홍 동행 해금"
