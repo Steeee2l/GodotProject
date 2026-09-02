@@ -53,6 +53,7 @@ extends RefCounted
 #     해 주지 않는다.
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
+const DIALOGUE_PORTRAIT := preload("res://scripts/hud/dialogue_portrait.gd")
 const STORY_CHARACTER_SCRIPT := preload("res://scripts/shelter_story_character.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 
@@ -414,7 +415,9 @@ func _finish() -> void:
 func _build_layer() -> void:
 	layer = CanvasLayer.new()
 	layer.name = "FieldCinematicLayer"
-	layer.layer = 94
+	# 133 — 피격 피드백(129)·조준(130) 캔버스 위, 일시정지(135) 아래. 94이던
+	# 시절엔 레티클과 체력바가 컷 화면 위로 떠서 연출이 지저분했다(유저 신고).
+	layer.layer = 133
 	# 트리가 일시정지돼도 연출 UI는 살아 있어야 한다. 실기기(PC 웹) 신고:
 	# 대화 1/3에서 모든 입력이 죽는 멈춤 — 포커스 전환 자동 일시정지 등으로
 	# 트리가 멈추면 pausable 버튼은 클릭을 못 받아 게임이 벽돌이 됐다.
@@ -676,20 +679,13 @@ func _open_dialogue(step: Dictionary) -> void:
 	margin.add_child(row)
 	var portrait_texture := _resolve_texture(step.get("portrait", null))
 	if portrait_texture != null:
-		var portrait_frame := PanelContainer.new()
-		var portrait_size := 64.0 if compact else 72.0
-		portrait_frame.custom_minimum_size = Vector2(portrait_size, portrait_size)
-		portrait_frame.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		portrait_frame.add_theme_stylebox_override(
-			"panel", _panel_style(Color("#101815"), Color("#6e856f"))
-		)
-		row.add_child(portrait_frame)
-		var portrait := TextureRect.new()
-		portrait.texture = portrait_texture
-		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		portrait_frame.add_child(portrait)
+		# 큰 상반신 초상화 — 쉘터 대화창과 같은 문법(DialoguePortrait).
+		var portrait_slot := Control.new()
+		var portrait_width := 118.0 if compact else 150.0
+		portrait_slot.custom_minimum_size = Vector2(portrait_width, 0)
+		portrait_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(portrait_slot)
+		DIALOGUE_PORTRAIT.attach(layer, dialogue_panel, portrait_texture, portrait_width, compact, Color("#9fc7b8"))
 	var text_box := VBoxContainer.new()
 	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text_box.add_theme_constant_override("separation", 7)
@@ -798,11 +794,21 @@ func _open_image_cut(step: Dictionary) -> void:
 	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	var viewport_size: Vector2 = host.get_viewport().get_visible_rect().size
-	var picture_size := minf(viewport_size.x * 0.52, viewport_size.y * 0.46)
+	# 캡션 높이를 먼저 잡고(제목 + 줄 수 × 행높이 + 버튼) 그림은 남는 자리에 맞춘다.
+	# 예전엔 캡션이 118px 고정이라 넉 줄만 넘어도 글이 아래로 잘렸다(유저 신고).
+	var caption_line_count := lines.size()
+	var caption_height := clampf(
+		74.0 + 24.0 * float(caption_line_count) + 58.0, 150.0, viewport_size.y * 0.58
+	)
+	var caption_top_y := viewport_size.y - 28.0 - caption_height
+	var picture_size := minf(viewport_size.x * 0.52, maxf(120.0, caption_top_y - 60.0))
 	picture.offset_left = -picture_size * 0.5
 	picture.offset_right = picture_size * 0.5
-	picture.offset_top = -picture_size * 0.5 - 42.0
-	picture.offset_bottom = picture_size * 0.5 - 42.0
+	# 그림은 캡션 위 빈 공간의 가운데에.
+	var picture_center_y := caption_top_y * 0.5 + 10.0
+	picture.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	picture.offset_top = picture_center_y - picture_size * 0.5
+	picture.offset_bottom = picture_center_y + picture_size * 0.5
 	picture.modulate = Color(1.0, 0.96, 0.86, 0.0)
 	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	image_cut_root.add_child(picture)
@@ -811,8 +817,8 @@ func _open_image_cut(step: Dictionary) -> void:
 	var half := minf(430.0, (viewport_size.x - 32.0) * 0.5)
 	caption_panel.offset_left = -half
 	caption_panel.offset_right = half
-	caption_panel.offset_bottom = -96.0
-	caption_panel.offset_top = -96.0 - 118.0
+	caption_panel.offset_bottom = -28.0
+	caption_panel.offset_top = -28.0 - caption_height
 	caption_panel.add_theme_stylebox_override(
 		"panel", _panel_style(Color(0.02, 0.03, 0.028, 0.92), Color("#8a7b4c"))
 	)

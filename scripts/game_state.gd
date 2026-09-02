@@ -1151,7 +1151,28 @@ func start_new_raid() -> void:
 		corpse_recovery_attempt_active = false
 	world_time_hours = 9.0
 	reset_raid_supply_counters()
+	_guarantee_minimum_sortie_ammo()
 	save_persistent_state()
+
+
+func _guarantee_minimum_sortie_ammo() -> void:
+	# 죽고 나오면 예비탄이 0인 채로 다음 출정을 나가야 했다(유저 신고). 최소한
+	# 탄창은 꽉 채우고 예비 두 탄창은 쥐여 준다 — 무기를 든 채 빈손으로 나가는
+	# 판은 게임이 아니라 벌이다. 소프트캡 기준선(120발) 아래라 쟁이기와는 무관.
+	if not has_ak or equipped_weapon_id.is_empty() or equipped_ammo_id.is_empty():
+		return
+	var stats := build_player_weapon_stats(
+		equipped_weapon_id, equipped_weapon_mods, get_weapon_enhancement_level(equipped_weapon_id)
+	)
+	var magazine_size := maxi(1, int(stats.get("magazine_size", 30)))
+	magazine_ammo = maxi(magazine_ammo, magazine_size)
+	var minimum_reserve := magazine_size * MINIMUM_SORTIE_RESERVE_MAGAZINES
+	if get_ammo_count(equipped_ammo_id) < minimum_reserve:
+		set_ammo_count(equipped_ammo_id, minimum_reserve)
+	reserve_ammo = get_ammo_count(equipped_ammo_id)
+
+
+const MINIMUM_SORTIE_RESERVE_MAGAZINES := 2
 
 
 func reset_raid_supply_counters() -> void:

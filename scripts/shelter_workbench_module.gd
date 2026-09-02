@@ -327,6 +327,10 @@ const TAB_NAMES := {"enhance": "강화", "craft": "제작"}
 # 제작 = 무기+방어구 16종 + 하단 '보급품'(수리·확장 — 소모품 제작 경로는 못 없앤다).
 # "mods"는 어느 탭에도 없다 — 개조 기능 폐지(별도 재설계 예정), 데이터만 유지.
 const TAB_CATEGORIES := {"craft": ["weapons", "armor", "heavy", "supplies"], "enhance": []}
+# 제작 탭 서브탭(2026-08-30) — 한 목록에 16종+중장비+보급품을 다 늘어놓던 걸 나눴다.
+const CRAFT_SUBCATEGORIES := ["weapons", "armor", "heavy", "supplies"]
+const CRAFT_SUBCATEGORY_NAMES := {"weapons": "무기", "armor": "방어구", "heavy": "중장비", "supplies": "보급품"}
+var craft_subcategory := "weapons"
 # 옛 카테고리 이름으로 selected_category를 잡는 코드(테스트·프로브·구세이브)는 그대로
 # 탭으로 접힌다 — 저장값이 "supply"/"mods"여도 크래시 없이 제작 탭으로 열린다.
 const LEGACY_CATEGORY_TAB := {
@@ -601,7 +605,7 @@ func _build_header(stacked: bool) -> Control:
 	title_box.clip_contents = true
 	title_box.add_theme_constant_override("separation", 2)
 	top_row.add_child(title_box)
-	var eyebrow := _label("NABI · WORKBENCH %02d · SHELTER Lv.%d" % [GameState.shelter_workbench_level, GameState.shelter_tier], 10, FAINT)
+	var eyebrow := _label("MEONJI · WORKBENCH %02d · SHELTER Lv.%d" % [GameState.shelter_workbench_level, GameState.shelter_tier], 10, FAINT)
 	eyebrow.name = "WorkbenchEyebrow"
 	eyebrow.autowrap_mode = TextServer.AUTOWRAP_OFF
 	eyebrow.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -763,7 +767,8 @@ func _build_resource_strip() -> Control:
 	strip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	strip.add_theme_constant_override("h_separation", 7)
 	strip.add_theme_constant_override("v_separation", 6)
-	var compact := get_viewport().get_visible_rect().size.x < 1040.0
+	# 항상 아이콘+수치만(2026-08-30 유저: "재화 표시를 컴팩트하게"). 이름은 툴팁.
+	var compact := true
 	# 통조림은 제작 재료가 아니므로 자원 띠에서 뺐다(플레이어 소모품).
 	# 캣닢도 뺐다(2026-08-29) — 캣닢 비용은 개조품 전용이었는데 개조 탭이 폐지됐다.
 	for key in ["scrap", "scope_lens", "rubber_gasket", "magazine_spring", "precision_gear", "military_alloy"]:
@@ -977,9 +982,10 @@ func _gear_entries() -> Array[Dictionary]:
 				owned.append(entry)
 			else:
 				locked.append(entry)
+	# 강화 보드에는 보유 장비만(2026-08-30 유저: "작업대에서는 내가 보유한
+	# 장비들만 나와야지"). 미제작 장비는 제작 탭이 맡는다.
 	var result: Array[Dictionary] = []
 	result.append_array(owned)
-	result.append_array(locked)
 	return result
 
 
@@ -1780,11 +1786,31 @@ func _refresh_enhance_actions() -> void:
 		enhance_max_button.disabled = true
 		return
 	primary_mode = "enhance"
-	enhance_primary_button.text = "강화 +1\n길게 누르면 연타" if level < max_level else "최고 단계 +%d" % max_level
+	enhance_primary_button.text = (
+		"강화 +1  [SPACE]\n길게 누르면 연타"
+		if level < max_level
+		else "최고 단계 +%d" % max_level
+	)
 	enhance_primary_button.disabled = level >= max_level
 	_style_action_button(enhance_primary_button, "enhance")
 	enhance_max_button.text = "가능한 만큼"
 	enhance_max_button.disabled = level >= max_level
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	# SPACE = 강화 +1(길게 누르면 연타) — 버튼과 같은 경로(유저 요청: 키 가이드 포함).
+	if not is_instance_valid(enhance_primary_button) or not enhance_primary_button.is_visible_in_tree():
+		return
+	if primary_mode != "enhance" or enhance_primary_button.disabled:
+		return
+	var key := event as InputEventKey
+	if key == null or key.keycode != KEY_SPACE or key.echo:
+		return
+	if key.pressed:
+		_on_primary_button_down()
+	else:
+		_on_primary_button_up()
+	get_viewport().set_input_as_handled()
 
 
 func _on_primary_button_down() -> void:
@@ -2026,10 +2052,34 @@ func _build_recipe_list() -> Control:
 	margin.add_child(column)
 	if not stacked:
 		# 강화 보드의 목록 제목("보유 장비 · 평생 귀속")과 같은 문법.
-		var list_title := _label("설계도 · 장비 16종 + 중장비 + 보급품", 11, DIM)
+		var list_title := _label("설계도 · 아직 만들지 않은 것만", 11, DIM)
 		list_title.autowrap_mode = TextServer.AUTOWRAP_OFF
 		list_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		column.add_child(list_title)
+	# 카테고리 서브탭 — 무기 / 방어구 / 중장비 / 보급품(유저: "카테고리별로 탭").
+	var subtabs := HBoxContainer.new()
+	subtabs.name = "WorkbenchCraftSubtabs"
+	subtabs.add_theme_constant_override("separation", 4)
+	for sub_value in CRAFT_SUBCATEGORIES:
+		var sub_id := str(sub_value)
+		var sub_button := _button(str(CRAFT_SUBCATEGORY_NAMES.get(sub_id, sub_id)), "")
+		sub_button.name = "WorkbenchCraftSubtab_%s" % sub_id
+		sub_button.toggle_mode = true
+		sub_button.button_pressed = craft_subcategory == sub_id
+		sub_button.focus_mode = Control.FOCUS_NONE
+		sub_button.custom_minimum_size = Vector2(0, 34)
+		sub_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sub_button.clip_text = true
+		_style_tab(sub_button, sub_button.button_pressed)
+		sub_button.pressed.connect(func() -> void:
+			craft_subcategory = sub_id
+			var sub_recipes: Array = _recipes_for_category(sub_id)
+			if not sub_recipes.is_empty():
+				selected_recipe_id = str((sub_recipes[0] as Dictionary).get("id", ""))
+			_rebuild_ui()
+		)
+		subtabs.add_child(sub_button)
+	column.add_child(subtabs)
 	var scroll := HudStyle.make_scroll()
 	scroll.name = "WorkbenchRecipeScroll"
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2086,7 +2136,19 @@ func _refresh_recipe_list() -> void:
 	if not is_instance_valid(recipe_list):
 		return
 	_clear(recipe_list)
-	var recipes: Array = _recipes_for_category(selected_category)
+	var recipes: Array = _recipes_for_category(
+		craft_subcategory if selected_category == "craft" else selected_category
+	)
+	# 이미 만든 장비(영구 귀속·1개)는 제작 목록에서 뺀다 — 재제작 불가라 눌러도
+	# 거절만 나온다(유저: "제작 탭에는 이미 제작한 무기는 없어야").
+	var visible_recipes: Array = []
+	for recipe_raw in recipes:
+		var candidate: Dictionary = recipe_raw
+		var candidate_gear := str(candidate.get("gear_id", ""))
+		if not candidate_gear.is_empty() and bool(GameState.is_gear_owned(candidate_gear)):
+			continue
+		visible_recipes.append(candidate)
+	recipes = visible_recipes
 	# 섹션 구분선 — 중장비(소모성 화력)는 보급품 위에, 강화 보드와 같은 11px DIM 문법.
 	# 보급품(수리·확장·소모품 제작)은 제작 탭 하단 섹션으로 합류(개조·보급 탭 폐지).
 	var heavy_ids := {}

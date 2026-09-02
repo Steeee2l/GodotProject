@@ -65,6 +65,9 @@ var squad_clear_pulse_material: ShaderMaterial
 var squad_clear_pulse_tween: Tween
 var damage_direction_indicator: TextureRect
 var player_world_health_bar: Control
+const PLAYER_HEALTH_BAR_WIDTH := 64.0
+const PLAYER_HEALTH_SEGMENT_COUNT := 10
+const PLAYER_HEALTH_SEGMENTS_SCRIPT := preload("res://scripts/hud/health_segments.gd")
 var player_world_health_fill: Panel
 var player_health_fill_style: StyleBoxFlat
 # 피격 잔상(흰색) — 깎인 만큼이 잠깐 남았다 따라 줄어든다.
@@ -1426,15 +1429,18 @@ void fragment() {
 	damage_direction_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	damage_feedback_canvas.add_child(damage_direction_indicator)
 
+	# 세그먼트 체력바(2026-08-30 유저: "둔탁하고 커. 칸막이식으로, 맞으면 칸이
+	# 날아가는 느낌"). 10칸짜리 얇은 띠 — 채움/잔상 Panel은 칸 위에 그대로 두고
+	# 칸 구분선을 위에 얹는다. 칸이 깨질 때의 파편은 main이 spawn_health_chip으로.
 	player_world_health_bar = Control.new()
 	player_world_health_bar.name = "PlayerWorldHealthBar"
-	player_world_health_bar.custom_minimum_size = Vector2(48, 7)
-	player_world_health_bar.size = Vector2(48, 7)
+	player_world_health_bar.custom_minimum_size = Vector2(PLAYER_HEALTH_BAR_WIDTH, 5)
+	player_world_health_bar.size = Vector2(PLAYER_HEALTH_BAR_WIDTH, 5)
 	player_world_health_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var health_background_panel := Panel.new()
 	health_background_panel.name = "Background"
 	health_background_panel.position = Vector2.ZERO
-	health_background_panel.size = Vector2(48, 7)
+	health_background_panel.size = Vector2(PLAYER_HEALTH_BAR_WIDTH, 5)
 	health_background_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var health_background := StyleBoxFlat.new()
 	health_background.bg_color = Color(0.018, 0.022, 0.024, 0.84)
@@ -1456,7 +1462,7 @@ void fragment() {
 	player_world_health_trail = Panel.new()
 	player_world_health_trail.name = "Trail"
 	player_world_health_trail.position = Vector2(1, 1)
-	player_world_health_trail.size = Vector2(46, 5)
+	player_world_health_trail.size = Vector2(PLAYER_HEALTH_BAR_WIDTH - 2.0, 3)
 	player_world_health_trail.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	player_health_trail_style = StyleBoxFlat.new()
 	player_health_trail_style.bg_color = Color(0.96, 0.96, 0.93, 0.96)
@@ -1470,7 +1476,7 @@ void fragment() {
 	player_world_health_fill = Panel.new()
 	player_world_health_fill.name = "Fill"
 	player_world_health_fill.position = Vector2(1, 1)
-	player_world_health_fill.size = Vector2(46, 5)
+	player_world_health_fill.size = Vector2(PLAYER_HEALTH_BAR_WIDTH - 2.0, 3)
 	player_world_health_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	player_health_fill_style = StyleBoxFlat.new()
 	player_health_fill_style.bg_color = Color(0.28, 0.86, 0.48, 0.96)
@@ -1481,6 +1487,13 @@ void fragment() {
 	player_health_fill_style.anti_aliasing = true
 	player_world_health_fill.add_theme_stylebox_override("panel", player_health_fill_style)
 	player_world_health_bar.add_child(player_world_health_fill)
+	# 칸 구분선 — 채움 위에 검은 눈금을 얹어 10칸으로 읽히게 한다.
+	var segment_overlay := PLAYER_HEALTH_SEGMENTS_SCRIPT.new() as Control
+	segment_overlay.name = "Segments"
+	segment_overlay.position = Vector2.ZERO
+	segment_overlay.size = Vector2(PLAYER_HEALTH_BAR_WIDTH, 5)
+	segment_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	player_world_health_bar.add_child(segment_overlay)
 	aim_canvas.add_child(player_world_health_bar)
 	roll_cooldown_indicator = ROLL_COOLDOWN_INDICATOR_SCRIPT.new() as Control
 	roll_cooldown_indicator.name = "RollCooldownIndicator"

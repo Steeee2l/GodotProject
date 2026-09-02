@@ -312,6 +312,8 @@ var laser_glow_materials: Array[StandardMaterial3D] = []
 var damage_direction_tween: Tween
 var camera_shake_time := 0.0
 var camera_shake_strength := 0.0
+# 세그먼트 체력바 — 마지막으로 살아 있던 칸 수(파편 연출 트리거).
+var last_health_segment_count := -1
 # 지난 프레임에 카메라에 얹은 흔들림 오프셋. 추종 보간 전에 도로 걷어내
 # 흔들림이 위치 드리프트로 눌어붙지 않게 한다(_update_camera_follow 참조).
 var camera_shake_applied_offset := Vector3.ZERO
@@ -449,6 +451,8 @@ var boss_alert_tween: Tween
 var objective_ping: EdgeIndicator
 # TAB 지도에 찍은 개인 표식 — 가장자리 화살표로 상시 안내(유저: "우상단엔 표식을").
 var manual_marker_ping: EdgeIndicator
+# 돌발 사건 — 화면 밖일 때만 가장자리 화살표(화면 안이면 현장 마커가 보인다).
+var incident_ping: EdgeIndicator
 # 위험도 리마인더 — 65% 이상에서 주기적으로 "지금이 나갈 때"를 상기시킨다.
 var danger_reminder_timer := 0.0
 var objective_ping_until_msec := 0
@@ -1930,10 +1934,46 @@ func _update_laser_beam(aim_direction: Vector3) -> void:
 		hud.laser_endpoint.scale = Vector3.ONE * lerpf(0.82, 1.28, pulse)
 
 
+func _spawn_health_chip(segment_index: int) -> void:
+	# 깨진 칸 자리에서 작은 파편이 위로 튀어 오르며 사라진다.
+	if hud.player_world_health_bar == null or hud.aim_canvas == null:
+		return
+	var segment_width := hud.PLAYER_HEALTH_BAR_WIDTH / float(hud.PLAYER_HEALTH_SEGMENT_COUNT)
+	var chip := ColorRect.new()
+	chip.name = "HealthChip"
+	chip.color = Color(0.96, 0.62, 0.42, 1.0)
+	chip.size = Vector2(maxf(2.0, segment_width - 2.0), 3.0)
+	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chip.position = (
+		hud.player_world_health_bar.position
+		+ Vector2(1.0 + float(segment_index) * segment_width, 1.0)
+	)
+	hud.aim_canvas.add_child(chip)
+	var drift := Vector2(randf_range(-14.0, 14.0), randf_range(-26.0, -14.0))
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(chip, "position", chip.position + drift, 0.42).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(chip, "rotation", randf_range(-1.2, 1.2), 0.42)
+	tween.tween_property(chip, "modulate:a", 0.0, 0.42).set_delay(0.12)
+	tween.set_parallel(false)
+	tween.tween_callback(chip.queue_free)
+
+
 func _update_player_combat_feedback(delta: float) -> void:
 	var health_ratio := clampf(float(player_health) / float(GameState.get_max_health()), 0.0, 1.0)
 	if hud.player_world_health_bar:
-		hud.player_world_health_fill.size.x = 46.0 * health_ratio
+		var bar_inner := hud.PLAYER_HEALTH_BAR_WIDTH - 2.0
+		hud.player_world_health_fill.size.x = bar_inner * health_ratio
+		# 칸이 깨지는 순간 파편이 튄다 — "맞으면 칸이 날아간다"(유저 요구).
+		var segments_now := ceili(health_ratio * float(hud.PLAYER_HEALTH_SEGMENT_COUNT) - 0.0001)
+		if last_health_segment_count < 0:
+			last_health_segment_count = segments_now
+		elif segments_now < last_health_segment_count:
+			for lost_index in range(segments_now, last_health_segment_count):
+				_spawn_health_chip(lost_index)
+			last_health_segment_count = segments_now
+		elif segments_now > last_health_segment_count:
+			last_health_segment_count = segments_now
 		# 흰 잔상 — 방금 깎인 만큼이 흰색으로 잠깐 남았다가 따라 줄어든다
 		# (보스 체력바 damage_trail과 같은 패턴, 지연 0.28s · 초당 46px 추적).
 		hud.update_player_health_trail(health_ratio, delta)
@@ -1943,7 +1983,7 @@ func _update_player_combat_feedback(delta: float) -> void:
 			else Color(0.28, 0.86, 0.48, 0.96)
 		)
 		var head_position := camera.unproject_position(player.global_position + Vector3(0, 2.15, 0))
-		hud.player_world_health_bar.position = head_position - Vector2(hud.player_world_health_bar.size.x * 0.5, 3.0)
+		hud.player_world_health_bar.position = head_position - Vector2(hud.player_world_health_bar.size.x * 0.5, 4.0)
 		hud.player_world_health_bar.visible = not camera.is_position_behind(player.global_position)
 		if hud.roll_cooldown_indicator:
 			var stamina_ratio := clampf(roll_stamina / GameState.get_max_stamina(), 0.0, 1.0)
@@ -2785,8 +2825,10 @@ func _layout_center_top_banners() -> void:
 			clampf(74.0 * ui_scale, 64.0, 84.0),
 		],
 		[
+			# 돌발 사건 배너는 폐지(2026-08-30 유저) — 현장 원형 마커 + 가장자리
+			# 화살표(field_incidents)가 대신한다. 항목은 남겨 두되 절대 안 뜬다.
 			hud.dynamic_incident_hud,
-			dynamic_incident_state == "active" and not hud_blocked,
+			false,
 			clampf(viewport_size.x * 0.46, 330.0, 500.0),
 			clampf(76.0 * ui_scale, 68.0, 84.0),
 		],

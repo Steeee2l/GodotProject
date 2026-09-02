@@ -37,6 +37,7 @@ const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
 # 쉘터 "다음 목표"(티어 확장 요구) 문구·판정 — 데이터는 GameState, 말은 이 모듈.
 const SHELTER_REQUISITION := preload("res://scripts/shelter/requisition.gd")
 const MAIN_MISSION_CATALOG := preload("res://scripts/raid/main_mission_catalog.gd")
+const DIALOGUE_PORTRAIT := preload("res://scripts/hud/dialogue_portrait.gd")
 const AMMO_TEXTURE := preload("res://assets/items/ammo_762.png")
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
 const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
@@ -1446,24 +1447,19 @@ func _open_contract_story(
 	var row: BoxContainer = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
 	margin.add_child(row)
-	var portrait_frame := PanelContainer.new()
-	var portrait_size := 64.0 if compact_layout else 72.0
-	portrait_frame.custom_minimum_size = Vector2(portrait_size, portrait_size)
-	portrait_frame.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	portrait_frame.add_theme_stylebox_override(
-		"panel",
-		_rounded_panel_style(Color("#101815"), Color("#6e856f"), 6)
-	)
-	row.add_child(portrait_frame)
-	var portrait := TextureRect.new()
-	if contract_story_portrait != null:
-		portrait.texture = contract_story_portrait
-	elif is_instance_valid(contract_agent) and contract_agent.has_method("get_portrait_texture"):
-		portrait.texture = contract_agent.call("get_portrait_texture") as Texture2D
-	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	portrait_frame.add_child(portrait)
+	# 초상화(2026-08-30 유저: "크게, 상반신 크롭, 프레임보다 크게"). 행 안의
+	# 작은 칸 대신, 패널 왼쪽에 폭 넓은 자리만 비워 두고 초상화는 패널 밖
+	# 별도 노드로 띄운다 — 위로 삐져나오게. 스프라이트를 확대해 머리·상반신만
+	# 보이도록 클립한다.
+	var story_portrait: Texture2D = contract_story_portrait
+	if story_portrait == null and is_instance_valid(contract_agent) and contract_agent.has_method("get_portrait_texture"):
+		story_portrait = contract_agent.call("get_portrait_texture") as Texture2D
+	var portrait_slot := Control.new()
+	var portrait_width := 118.0 if compact_layout else 150.0
+	portrait_slot.custom_minimum_size = Vector2(portrait_width, 0)
+	portrait_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(portrait_slot)
+	DIALOGUE_PORTRAIT.attach(root, panel, story_portrait, portrait_width, compact_layout, Color("#b89545"))
 	var text_box := VBoxContainer.new()
 	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text_box.add_theme_constant_override("separation", 7)

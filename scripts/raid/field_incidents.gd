@@ -222,8 +222,11 @@ func _update_dynamic_incident(delta: float) -> void:
 	# 발동 시점은 이제 raid_event_director가 정한다. 여기서는 진행 중인
 	# 사건의 남은 시간과 HUD만 돌본다.
 	if host.dynamic_incident_state != "active":
+		if host.incident_ping != null:
+			host.incident_ping.hide()
 		return
 	host.dynamic_incident_timer = maxf(0.0, host.dynamic_incident_timer - delta)
+	_update_incident_edge_ping()
 	if is_instance_valid(host.hud.dynamic_incident_hud):
 		var distance: float = (
 			player.global_position.distance_to(host.dynamic_incident_site.global_position)
@@ -257,7 +260,38 @@ func _update_dynamic_incident(delta: float) -> void:
 		_expire_dynamic_incident()
 
 
+func _update_incident_edge_ping() -> void:
+	# 화면 밖이면 가장자리 화살표, 화면 안에 들어오면 화살표는 사라지고 현장 마커만
+	# 남는다(유저: "화면 밖일 땐 방향에 걸쳐 보이고, 안에 들어오면 스윽 사라지는").
+	if not is_instance_valid(host.dynamic_incident_site):
+		return
+	var site_position: Vector3 = host.dynamic_incident_site.global_position
+	var camera: Camera3D = host.camera
+	var on_screen := false
+	if is_instance_valid(camera) and not camera.is_position_behind(site_position):
+		var screen_point: Vector2 = camera.unproject_position(site_position)
+		var rect: Rect2 = host.get_viewport().get_visible_rect().grow(-48.0)
+		on_screen = rect.has_point(screen_point)
+	if on_screen:
+		if host.incident_ping != null:
+			host.incident_ping.hide()
+		return
+	if host.incident_ping == null or not host.incident_ping.is_valid():
+		host.incident_ping = EdgeIndicator.create(host, Color("#e06c62"), 86)
+	var remaining := ceili(host.dynamic_incident_timer)
+	host.incident_ping.point_at(
+		site_position,
+		"돌발 사건 %dm · %02d:%02d" % [
+			roundi(player.global_position.distance_to(site_position)),
+			remaining / 60,
+			remaining % 60,
+		]
+	)
+
+
 func _expire_dynamic_incident() -> void:
+	if host.incident_ping != null:
+		host.incident_ping.hide()
 	host.dynamic_incident_state = "expired"
 	host._layout_center_top_banners()
 	if is_instance_valid(host.tactical_map) and host.tactical_map.has_method("remove_raid_marker"):
@@ -386,6 +420,24 @@ func _spawn_dynamic_convoy_incident(world: ProceduralCityMap) -> void:
 			enemy.call("set_combat_target", first_squad[0])
 	host.dynamic_incident_state = "active"
 	host.dynamic_incident_timer = DYNAMIC_INCIDENT_DURATION
+	# 현장 표시 — 실제 벌어진 자리에 붉은 원과 라벨(유저: "실제 위치에 동그랗게").
+	if is_instance_valid(host.dynamic_incident_site):
+		host._add_interaction_marker(host.dynamic_incident_site, Color("#e06c62"), 2.6, true)
+		var site_label := Label3D.new()
+		site_label.name = "IncidentSiteLabel"
+		site_label.text = "돌발 사건 · 약탈대 충돌"
+		site_label.font = load("res://assets/fonts/Pretendard-Regular.otf")
+		site_label.font_size = 44
+		site_label.pixel_size = 0.0075
+		site_label.modulate = Color("#ffb0a6")
+		site_label.outline_size = 12
+		site_label.outline_modulate = Color(0.05, 0.02, 0.02, 0.95)
+		site_label.position = Vector3(0.0, 2.6, 0.0)
+		site_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		site_label.no_depth_test = true
+		site_label.render_priority = 118
+		host.dynamic_incident_site.add_child(site_label)
+	host.mission_celebration.celebrate("약탈대 충돌", "수송품을 두고 두 무리가 싸운다 — 먼저 챙기는 쪽이 임자", "돌발 사건")
 	# 표시 여부와 위치는 중앙 상단 배너 스택이 정한다. 직접 visible을 켜면
 	# 보스 경고나 긴장도 알림과 같은 자리에 겹쳐 뜬다.
 	host._layout_center_top_banners()

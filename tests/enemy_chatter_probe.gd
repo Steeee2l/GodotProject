@@ -153,6 +153,7 @@ func _run() -> void:
 	if failures.is_empty():
 		print("ENEMY_CHATTER_PROBE_OK")
 		quit(0)
+		return
 	for failure in failures:
 		print("CHATTER|FAIL|%s" % failure)
 	push_error("ENEMY_CHATTER_PROBE_FAIL %d" % failures.size())
