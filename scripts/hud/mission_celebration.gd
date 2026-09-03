@@ -26,6 +26,8 @@ var subtitle_label: Label
 var banner_tween: Tween
 var fanfare_players: Array[AudioStreamPlayer] = []
 var fanfare_index := 0
+# 상단 띠 상태 — main._layout_center_top_banners가 토스트를 이 아래로 내린다.
+var strip_active := false
 static var fanfare_stream: AudioStreamWAV
 
 
@@ -39,6 +41,8 @@ func celebrate(title: String, subtitle: String = "", eyebrow: String = "임무 �
 	_ensure_banner()
 	if banner_tween != null and banner_tween.is_valid():
 		banner_tween.kill()
+	strip_active = false
+	_relayout_host_banners()
 	eyebrow_label.text = "—  %s  —" % eyebrow
 	title_label.text = title
 	subtitle_label.text = subtitle
@@ -55,34 +59,69 @@ func celebrate(title: String, subtitle: String = "", eyebrow: String = "임무 �
 	)
 	# pivot이 중심이라 scale을 줄여도 중심은 그대로다 — 띠의 '위 가장자리'가
 	# STRIP_TOP_MARGIN에 오도록 중심 y를 역산한다.
-	var strip_center_y := STRIP_TOP_MARGIN + panel.size.y * STRIP_SCALE * 0.5
-	var strip_position := Vector2(big_position.x, strip_center_y - panel.size.y * 0.5)
+	# 띠는 상단 배너 스택(보스 경고·증원·임무 배너) 바로 아래에 선다 — 배너와
+	# 겹치던 문제(2026-09-02 캡처 검수) 수정. 배너가 없으면 화면 맨 위.
+	var strip_top := STRIP_TOP_MARGIN
+	if host.has_method("get_center_banner_bottom"):
+		strip_top = maxf(STRIP_TOP_MARGIN, float(host.call("get_center_banner_bottom")) + 6.0)
+	var strip_position := Vector2(big_position.x, _strip_y_for_top(strip_top))
 	panel.position = big_position
 	panel.pivot_offset = panel.size * 0.5
 	panel.modulate = Color(1.0, 1.0, 1.0, 0.0)
 	panel.scale = Vector2(0.7, 0.7)
 	_play_fanfare()
 	banner_tween = host.create_tween()
-	banner_tween.set_parallel(true)
+	# 단계는 순차가 기본, parallel()로만 같은 단계에 묶는다 — set_parallel 토글은
+	# 다음 트위너를 '직전 단계'에 붙여 버려 수축 직후 페이드가 겹쳤다(2026-09-02).
 	banner_tween.tween_property(panel, "modulate:a", 1.0, 0.18)
-	banner_tween.tween_property(panel, "scale", Vector2(1.06, 1.06), 0.26).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	banner_tween.set_parallel(false)
-	banner_tween.tween_property(panel, "scale", Vector2.ONE, 0.14).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	banner_tween.parallel().tween_property(panel, "scale", Vector2(1.06, 1.06), 0.26).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	banner_tween.chain().tween_property(panel, "scale", Vector2.ONE, 0.14).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	banner_tween.tween_interval(BIG_HOLD_SECONDS)
-	# 수축 — 크기와 위치를 같이 움직여 위로 '물러나는' 동작으로 읽히게.
-	banner_tween.set_parallel(true)
-	banner_tween.tween_property(panel, "scale", Vector2(STRIP_SCALE, STRIP_SCALE), 0.32).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	banner_tween.tween_property(panel, "position", strip_position, 0.32).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	banner_tween.set_parallel(false)
-	banner_tween.tween_interval(STRIP_HOLD_SECONDS)
-	banner_tween.set_parallel(true)
-	banner_tween.tween_property(panel, "modulate:a", 0.0, 0.4)
-	banner_tween.tween_property(panel, "scale", Vector2(STRIP_SCALE * 0.92, STRIP_SCALE * 0.92), 0.4)
-	banner_tween.set_parallel(false)
 	banner_tween.tween_callback(func() -> void:
+		strip_active = true
+		_relayout_host_banners()
+	)
+	# 수축 — 크기와 위치를 같이 움직여 위로 '물러나는' 동작으로 읽히게.
+	banner_tween.tween_property(panel, "scale", Vector2(STRIP_SCALE, STRIP_SCALE), 0.32).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	banner_tween.parallel().tween_property(panel, "position", strip_position, 0.32).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	banner_tween.chain().tween_interval(STRIP_HOLD_SECONDS)
+	banner_tween.tween_property(panel, "modulate:a", 0.0, 0.4)
+	banner_tween.parallel().tween_property(panel, "scale", Vector2(STRIP_SCALE * 0.92, STRIP_SCALE * 0.92), 0.4)
+	banner_tween.chain().tween_callback(func() -> void:
 		if is_instance_valid(panel):
 			panel.visible = false
+		strip_active = false
+		_relayout_host_banners()
 	)
+
+
+func _strip_y_for_top(top: float) -> float:
+	# pivot이 중심이라 scale을 줄여도 중심은 그대로다 — 띠의 '위 가장자리'가
+	# top에 오도록 position.y를 역산한다.
+	var strip_center_y := top + panel.size.y * STRIP_SCALE * 0.5
+	return strip_center_y - panel.size.y * 0.5
+
+
+func reposition_strip(top: float) -> void:
+	# 배너가 뜨고 질 때 main이 부른다 — 띠가 배너 스택을 따라 오르내린다.
+	if not is_strip_active():
+		return
+	panel.position.y = _strip_y_for_top(maxf(STRIP_TOP_MARGIN, top))
+
+
+func is_strip_active() -> bool:
+	return strip_active and panel != null and is_instance_valid(panel) and panel.visible
+
+
+func get_strip_height() -> float:
+	if not is_strip_active():
+		return 0.0
+	return panel.size.y * STRIP_SCALE
+
+
+func _relayout_host_banners() -> void:
+	if host != null and is_instance_valid(host) and host.has_method("_layout_center_top_banners"):
+		host.call("_layout_center_top_banners")
 
 
 func _ensure_banner() -> void:

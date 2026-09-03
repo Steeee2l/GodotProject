@@ -451,6 +451,8 @@ var boss_alert_tween: Tween
 var objective_ping: EdgeIndicator
 # TAB 지도에 찍은 개인 표식 — 가장자리 화살표로 상시 안내(유저: "우상단엔 표식을").
 var manual_marker_ping: EdgeIndicator
+# 상단 중앙 배너 스택의 바닥 y — 축하 띠(mission_celebration)가 이 아래에 선다.
+var center_banner_bottom := 0.0
 # 돌발 사건 — 화면 밖일 때만 가장자리 화살표(화면 안이면 현장 마커가 보인다).
 var incident_ping: EdgeIndicator
 # 위험도 리마인더 — 65% 이상에서 주기적으로 "지금이 나갈 때"를 상기시킨다.
@@ -906,6 +908,7 @@ func _physics_process(delta: float) -> void:
 	_update_objective_reveal(delta)
 	extraction._update_extraction_discovery()
 	_update_combat_overlay_visibility()
+	_update_cinematic_hud_hiding()
 	stealth._update_stealth_takedown_prompt()
 	if (
 		_is_inventory_open()
@@ -2699,7 +2702,10 @@ func _layout_mobile_utility_row() -> float:
 		# 생기면서 이 버튼까지 같이 숨어 버린 회귀를 여기서 복구한다.
 		if mobile_medkit_button != null:
 			mobile_medkit_button.visible = not (
-				_is_inventory_open() or _is_tactical_map_open() or lore_reader.is_open()
+				_is_inventory_open()
+				or _is_tactical_map_open()
+				or lore_reader.is_open()
+				or main_mission.is_cinematic_active()
 			)
 		if mobile_can_button != null and mobile_medkit_button != null:
 			mobile_can_button.visible = mobile_medkit_button.visible
@@ -2857,10 +2863,20 @@ func _layout_center_top_banners() -> void:
 		banner.pivot_offset = Vector2(banner_w * 0.5, banner_h * 0.5)
 		banner_cursor += banner_h + banner_gap
 		banner_shown += 1
+	center_banner_bottom = banner_cursor
+	# 축하 띠가 서 있으면 그 높이만큼 토스트를 더 내린다.
+	var strip_extra := 0.0
+	if mission_celebration != null and mission_celebration.is_strip_active():
+		strip_extra = mission_celebration.get_strip_height() + banner_gap
+		mission_celebration.reposition_strip(center_banner_bottom + 6.0)
 	# 토스트 스택은 배너들 바로 아래에서 시작한다 — 배너가 뜨고 질 때마다 따라간다.
 	if hud.toast_stack:
-		hud.toast_stack.offset_top = banner_cursor + banner_gap
-		hud.toast_stack.offset_bottom = banner_cursor + banner_gap + 220.0
+		hud.toast_stack.offset_top = banner_cursor + strip_extra + banner_gap
+		hud.toast_stack.offset_bottom = banner_cursor + strip_extra + banner_gap + 220.0
+
+
+func get_center_banner_bottom() -> float:
+	return center_banner_bottom
 
 
 func _apply_hud_layout() -> void:
@@ -3897,6 +3913,26 @@ func _is_pointer_ui_active() -> bool:
 	)
 
 
+func _update_cinematic_hud_hiding() -> void:
+	# 시네마틱 중엔 조작 안내 줄과 하단 빠른 버튼을 숨긴다(2026-09-02 캡처 검수:
+	# 대사창 아래로 구급약·통조림 버튼이 겹치고 키 안내 줄이 화면 가운데 남았다).
+	# 바크(하단 대사 슬롯)도 포함 — 인트로 연출이 바크 모드라 대사창이 구급약·
+	# 통조림 버튼 위에 겹쳤다. 조작은 살아 있으니 SHIFT/T 키는 그대로 먹는다.
+	var cinematic := main_mission.is_cinematic_active() or main_mission.is_bark_active()
+	var lesson := get_node_or_null("HUD/FieldControlsLesson") as Control
+	if lesson != null:
+		lesson.visible = not cinematic
+	if DisplayServer.is_touchscreen_available():
+		return
+	var buttons_visible := not (
+		cinematic or _is_inventory_open() or _is_tactical_map_open() or lore_reader.is_open()
+	)
+	if mobile_medkit_button != null:
+		mobile_medkit_button.visible = buttons_visible
+	if mobile_can_button != null:
+		mobile_can_button.visible = buttons_visible
+
+
 func _refresh_pointer_mode() -> void:
 	if DisplayServer.is_touchscreen_available():
 		return
@@ -4582,7 +4618,7 @@ func notify_enemy_telegraph(kind: String, _enemy: Node) -> void:
 		"grenade":
 			_show_mastery_lesson("telegraph", "붉은 원은 착탄 지점 — 벗어나세요", "telegraph_grenade")
 		"ranged":
-			_show_mastery_lesson("telegraph", "깜빡이는 조준선 — 첫 발이 온다, 옆으로 비키세요", "telegraph_ranged")
+			_show_mastery_lesson("telegraph", "조준선이 깜빡이면 첫 발이 온다. 옆으로 비켜라", "telegraph_ranged")
 		"melee":
 			_show_mastery_lesson("telegraph", "바닥 화살표는 돌진 방향 — 옆으로 비키세요", "telegraph_melee")
 

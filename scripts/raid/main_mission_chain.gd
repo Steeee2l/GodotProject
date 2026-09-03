@@ -289,8 +289,9 @@ func _set_step(title: String, detail: String, step: int) -> void:
 	host.hud.jackpot_detail_label.text = localize_control_hint(detail)
 	host.hud.jackpot_progress.max_value = _total_steps()
 	host.hud.jackpot_progress.value = clampi(step, 0, _total_steps())
-	# 단계 갱신 순간에만 10초 노출. 운반 중엔 탈출 안내라 상시 유지.
-	host.jackpot_banner_reveal_time = 999999.0 if step >= _total_steps() else 10.0
+	# 단계 갱신 순간에만 5초 노출(좌상단 목표 카드와 내용이 같다 — 2026-09-02
+	# "생략 가능한 건 안 보여줘도 돼"). 운반 중엔 탈출 안내라 상시 유지.
+	host.jackpot_banner_reveal_time = 999999.0 if step >= _total_steps() else 5.0
 	host.call_deferred("_layout_center_top_banners")
 	# 좌상단 상시 목표 패널에도 단계를 반영한다.
 	host.call_deferred("_refresh_objective_panel")

@@ -1454,12 +1454,13 @@ func _open_contract_story(
 	var story_portrait: Texture2D = contract_story_portrait
 	if story_portrait == null and is_instance_valid(contract_agent) and contract_agent.has_method("get_portrait_texture"):
 		story_portrait = contract_agent.call("get_portrait_texture") as Texture2D
-	var portrait_slot := Control.new()
-	var portrait_width := 118.0 if compact_layout else 150.0
-	portrait_slot.custom_minimum_size = Vector2(portrait_width, 0)
-	portrait_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(portrait_slot)
-	DIALOGUE_PORTRAIT.attach(root, panel, story_portrait, portrait_width, compact_layout, Color("#b89545"))
+	if story_portrait != null:
+		var portrait_slot := Control.new()
+		var portrait_width := 118.0 if compact_layout else 150.0
+		portrait_slot.custom_minimum_size = Vector2(portrait_width, 0)
+		portrait_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(portrait_slot)
+		DIALOGUE_PORTRAIT.attach(root, panel, story_portrait, portrait_width, compact_layout, Color("#b89545"))
 	var text_box := VBoxContainer.new()
 	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text_box.add_theme_constant_override("separation", 7)
