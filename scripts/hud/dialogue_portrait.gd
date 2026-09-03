@@ -25,6 +25,7 @@ static func attach(
 ) -> Control:
 	if texture == null or parent == null or panel == null:
 		return null
+	texture = _normalize_portrait_texture(texture)
 	var frame := PanelContainer.new()
 	frame.name = "DialoguePortrait"
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -47,15 +48,9 @@ static func attach(
 	parent.add_child(frame)
 	# 프레임 위치: 패널 왼쪽 여백 안쪽, 패널 위 테두리에서 OVERHANG만큼 위.
 	# 패널은 앵커 기반이라 실제 rect는 한 프레임 뒤에 잡힌다 — deferred로 맞춘다.
-	var place := func() -> void:
-		if not is_instance_valid(frame) or not is_instance_valid(panel):
-			return
-		var panel_rect := panel.get_global_rect()
-		frame.global_position = Vector2(
-			panel_rect.position.x + (14.0 if compact else 18.0),
-			panel_rect.position.y - OVERHANG
-		)
-	place.call_deferred()
+	# 람다로 frame/panel을 캡처하면 같은 프레임에 대화창이 닫힐 때 "Lambda capture
+	# was freed" 오류가 난다 — 바인딩 인자는 is_instance_valid로 조용히 걸러진다.
+	Callable(DialoguePortraitPlacer, "place").bind(frame, panel, compact).call_deferred()
 	# 클립 컨테이너 — 확대한 스프라이트의 상반신만 보이게.
 	var clip := Control.new()
 	clip.name = "PortraitClip"
@@ -111,3 +106,32 @@ static func attach(
 		var tween := tree.create_tween()
 		tween.tween_property(frame, "modulate:a", 1.0, 0.22)
 	return frame
+
+
+static func _normalize_portrait_texture(texture: Texture2D) -> Texture2D:
+	# 행상인은 4프레임 시트에서 얼굴만 잘라 온 AtlasTexture를 넘긴다. 그 조각을
+	# 전신 기준으로 1.9배 키우면 얼굴이 프레임을 넘친다(2026-09-02 유저: "상인
+	# 초상화 너무 크게 나와"). 시트라면 첫 프레임 전체(정사각)로 바꿔 사자와
+	# 같은 상반신 크롭 규칙을 태운다.
+	var atlas_texture := texture as AtlasTexture
+	if atlas_texture == null or atlas_texture.atlas == null:
+		return texture
+	var sheet := atlas_texture.atlas
+	var sheet_height := float(sheet.get_height())
+	if float(sheet.get_width()) < sheet_height * 1.5:
+		return texture
+	var frame := AtlasTexture.new()
+	frame.atlas = sheet
+	frame.region = Rect2(0.0, 0.0, sheet_height, sheet_height)
+	return frame
+
+
+class DialoguePortraitPlacer:
+	static func place(frame: Control, panel: Control, compact: bool) -> void:
+		if not is_instance_valid(frame) or not is_instance_valid(panel):
+			return
+		var panel_rect := panel.get_global_rect()
+		frame.global_position = Vector2(
+			panel_rect.position.x + (14.0 if compact else 18.0),
+			panel_rect.position.y - OVERHANG
+		)

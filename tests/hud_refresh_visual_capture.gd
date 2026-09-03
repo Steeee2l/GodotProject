@@ -88,6 +88,23 @@ func _run() -> void:
 		)
 	await _wait(0.8)
 	await _capture("shelter_dialogue_portrait")
+	# 행상인 초상화(시트에서 잘라 온 AtlasTexture) — 사자와 같은 크기로 나와야 한다.
+	# 타자기가 도는 중엔 첫 입력이 '전부 표시'로 소비된다 — 닫힐 때까지 넘긴다.
+	var close_guard := 0
+	while bool(shelter.get("contract_story_open")) and close_guard < 12:
+		shelter.call("_advance_contract_story")
+		close_guard += 1
+		await _wait(0.15)
+	await _wait(0.3)
+	shelter.call(
+		"_open_contract_story",
+		"떠돌이 행상인의 첫 인사",
+		["처음 보는 얼굴이다냥. 나는 봉쇄선 바깥을 돌며 장사하는 행상인이다냥."] as Array[String],
+		"행상인",
+		shelter.call("_merchant_face_texture")
+	)
+	await _wait(0.8)
+	await _capture("shelter_dialogue_merchant")
 	print("HUD_REFRESH_VISUAL_CAPTURE_OK")
 	quit(0)
 

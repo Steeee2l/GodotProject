@@ -735,7 +735,7 @@ func attempt_take_recovery(point_node: Node3D) -> void:
 	# 메인 미션 회수물은 가방과 무관하게 먹힌다(칸 0·만재 검사 없음·교체 모달 없음).
 	# 유일한 거절 사유는 "이미 하나 들고 있다"뿐이다.
 	if not GameState.try_take_story_cargo(cargo):
-		host._show_field_notice("이미 회수물을 들고 있다 — 먼저 탈출해서 정산하라")
+		host._show_field_notice("이미 회수물을 들고 있다 · 먼저 탈출해서 정산하라")
 		return
 	host.hud.push_toast(
 		"%s 확보 · 임무 품목" % str(cargo.get("title", "회수물")),
@@ -889,9 +889,9 @@ func get_zone_completion_text(completed_zone_id: String) -> String:
 	var current_name := str(GameState.get_raid_zone(completed_zone_id).get("name", "이 구역"))
 	var next_zone := MAIN_MISSION_CATALOG.get_next_zone(completed_zone_id)
 	if next_zone.is_empty():
-		return "%s의 마지막 기록까지 손에 넣었다. 서울에서 더 쫓을 흔적은 없다." % current_name
+		return "%s의 마지막 기록까지 손에 넣었다. 서울에서 더 알아낼 것은 없다." % current_name
 	var next_name := str(GameState.get_raid_zone(next_zone).get("name", "다음 구역"))
-	var text := "%s의 흔적은 여기서 끊긴다 — 다음은 %s." % [current_name, next_name]
+	var text := "%s에서 알아낼 것은 다 알아냈다. 다음은 %s이다." % [current_name, next_name]
 	if not GameState.is_raid_zone_unlocked(next_zone):
 		text += " %s" % GameState.get_zone_unlock_hint(next_zone)
 	return text

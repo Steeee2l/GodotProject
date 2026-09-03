@@ -64,7 +64,7 @@ func point_at(world_position: Vector3, text: String) -> void:
 	if not is_valid() or host == null or not is_instance_valid(host):
 		return
 	var camera: Camera3D = host.get_viewport().get_camera_3d()
-	if camera == null:
+	if camera == null or _host_ui_blocks_arrows():
 		layer.visible = false
 		return
 	layer.visible = true
@@ -100,6 +100,19 @@ func point_at(world_position: Vector3, text: String) -> void:
 	label_position.x = clampf(label_position.x, 8.0, viewport_size.x - label.size.x - 8.0)
 	label_position.y = clampf(label_position.y, MARGIN_TOP - 40.0, viewport_size.y - 34.0)
 	label.position = label_position
+
+
+func _host_ui_blocks_arrows() -> bool:
+	# 가방·지도·기록·탈출 정산·사망 화면 위로 가장자리 화살표가 비쳤다
+	# (2026-09-02 유저: 결과창에 "하수구 1m"). 포인터 UI가 떠 있으면 숨긴다.
+	if host.has_method("_is_pointer_ui_active") and bool(host.call("_is_pointer_ui_active")):
+		return true
+	var hud: Object = host.get("hud")
+	if hud != null:
+		var result_panel := hud.get("extraction_result_panel") as Control
+		if result_panel != null and is_instance_valid(result_panel) and result_panel.visible:
+			return true
+	return false
 
 
 func destroy() -> void:

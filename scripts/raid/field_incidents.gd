@@ -247,7 +247,7 @@ func _update_dynamic_incident(delta: float) -> void:
 		var phase_text := (
 			"수거 경쟁 %d마리 남음" % contenders
 			if contenders > 0
-			else "경쟁자 정리 — 수송품을 회수하라"
+			else "경쟁자 정리 · 수송품을 회수하라"
 		)
 		host.hud.dynamic_incident_detail.text = "%s · %dm · %02d:%02d" % [
 			phase_text,
@@ -301,7 +301,7 @@ func _expire_dynamic_incident() -> void:
 		host.field_loot_containers.erase(host.dynamic_incident_site)
 		host.dynamic_incident_site.queue_free()
 	host.dynamic_incident_site = null
-	host._show_field_notice("돌발 사건 종료 · 한발 늦었다, 수송품은 딴 놈들 차지다")
+	host._show_field_notice("돌발 사건 종료 · 내가 한발 늦었다 · 수송품은 딴 놈들이 챙겼다")
 
 
 func _spawn_dynamic_incident_rewards(origin: Vector3) -> int:
@@ -437,7 +437,7 @@ func _spawn_dynamic_convoy_incident(world: ProceduralCityMap) -> void:
 		site_label.no_depth_test = true
 		site_label.render_priority = 118
 		host.dynamic_incident_site.add_child(site_label)
-	host.mission_celebration.celebrate("약탈대 충돌", "수송품을 두고 두 무리가 싸운다 — 먼저 챙기는 쪽이 임자", "돌발 사건")
+	host.mission_celebration.celebrate("약탈대 충돌", "수송품을 두고 두 무리가 싸운다. 먼저 챙기는 쪽이 임자다", "돌발 사건")
 	# 표시 여부와 위치는 중앙 상단 배너 스택이 정한다. 직접 visible을 켜면
 	# 보스 경고나 긴장도 알림과 같은 자리에 겹쳐 뜬다.
 	host._layout_center_top_banners()

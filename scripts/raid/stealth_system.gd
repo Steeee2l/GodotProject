@@ -202,7 +202,7 @@ func _install_scent_system() -> void:
 		if active and hint_count < 1:
 			host.set_meta("scent_hint_count", hint_count + 1)
 			host.hud.push_toast_minor(
-				"킁킁. 붉은 냄새는 적이 지나간 길이다. 진할수록 방금 지나갔다. 초록은 생존자다.",
+				"킁킁. 붉은 냄새 자국은 적이 지나간 길이다. 냄새가 진할수록 적이 방금 지나갔다는 뜻이다. 초록 냄새 자국은 생존자가 남긴 것이다.",
 				HudStyle.GREEN,
 				3.4
 			)
@@ -506,7 +506,7 @@ func _play_stealth_takedown_impact() -> void:
 
 func _update_stealth_mission(delta: float, distance_to_site: float) -> void:
 	if host.field_mission_noise_breached:
-		host.field_missions._fail_field_mission("총성이 울렸다. 잠복 위치가 드러났다.")
+		host.field_missions._fail_field_mission("총소리가 났다. 내 잠복 위치가 드러났다.")
 		return
 	var detected: bool = host.field_missions._update_field_mission_detection(delta)
 	var detection_grace := float(host.active_field_mission.get_meta("detection_grace", 1.25))
@@ -546,7 +546,7 @@ func _update_stealth_mission(delta: float, distance_to_site: float) -> void:
 
 func _update_stealth_reach_mission(delta: float) -> void:
 	if host.field_mission_noise_breached:
-		host.field_missions._fail_field_mission("총성이 울렸다. 우회 경로가 막혔다.")
+		host.field_missions._fail_field_mission("총소리가 났다. 우회는 실패다.")
 		return
 	var detected: bool = host.field_missions._update_field_mission_detection(delta)
 	var detection_grace := float(host.active_field_mission.get_meta("detection_grace", 1.0))

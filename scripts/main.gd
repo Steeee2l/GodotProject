@@ -2208,9 +2208,9 @@ func _play_boss_defeat_sequence(enemy: CharacterBody3D) -> void:
 	boss_defeat_title.text = "%s, 침묵" % display_name
 	# 처치는 끝이 아니라 시작이다. 총성은 도시 전체가 들었다.
 	boss_defeat_subtitle.text = (
-		"소리가 멎었다. 그리고 도시가 이쪽을 본다.\n챙길 것을 챙기고, 나가라."
+		"총소리가 멎었다. 도시 전체가 그 소리를 들었다.\n챙길 것을 챙기고 나가라."
 		if raid_pressure_level >= RAID_EVENT_DIRECTOR.LEVEL_HUNT
-		else "소리가 멎었다. 남은 것을 챙기고 빠져나가라."
+		else "총소리가 멎었다. 남은 것을 챙기고 빠져나가라."
 	)
 	boss_defeat_overlay.visible = true
 	boss_defeat_overlay.modulate.a = 1.0
@@ -2334,14 +2334,14 @@ func _build_death_lesson() -> String:
 	# 사망이 처벌로만 끝나면 배우는 게 없다.
 	# 먼지 독백 톤(짧은 현재형) — building_interior의 사망 교훈과 같은 세트.
 	if raid_danger >= 0.65:
-		return "위험도 %d%%. 너무 오래 머물렀다. 다음엔 위험도가 60%%를 넘으면 바로 탈출구로 간다." % roundi(raid_danger * 100.0)
+		return "위험도가 %d%%까지 올랐다. 나는 너무 오래 머물렀다. 다음엔 위험도가 60%%를 넘으면 바로 탈출구로 간다." % roundi(raid_danger * 100.0)
 	if magazine_ammo <= 0 and reserve_ammo <= 0:
-		return "탄약이 다 떨어져서 죽었다. 다음엔 탄약이 한 탄창 남으면 탈출구로 간다."
+		return "탄약이 다 떨어졌다. 그래서 나는 죽었다. 다음엔 탄창이 하나 남았을 때 탈출구로 간다."
 	if raid_pressure_level >= 2:
-		return "긴장도가 높아서 증원이 계속 왔다. 다음엔 긴장도가 2단계가 되면 탈출구로 간다."
+		return "긴장도가 높았다. 그래서 적 증원이 계속 왔다. 다음엔 긴장도가 2단계가 되면 탈출구로 간다."
 	if GameState.medkits > 0:
-		return "구급약이 %d개 남아 있었다. 다음엔 체력이 반 아래로 떨어지면 바로 쓴다." % GameState.medkits
-	return "적이 너무 많은데 계속 싸웠다. 다음엔 적이 셋 넘게 보이면 물러난다."
+		return "구급약이 %d개 남아 있었다. 나는 그걸 안 썼다. 다음엔 체력이 반 아래로 떨어지면 바로 쓴다." % GameState.medkits
+	return "적이 너무 많았다. 그런데 나는 계속 싸웠다. 다음엔 적이 셋 넘게 보이면 물러난다."
 
 
 func _begin_player_death_sequence() -> void:
@@ -4616,11 +4616,11 @@ func notify_enemy_telegraph(kind: String, _enemy: Node) -> void:
 	# 첫 예고 목격 레슨 — 종류별 문장(판 안에서 종류당 1회, 저장은 첫 1회).
 	match kind:
 		"grenade":
-			_show_mastery_lesson("telegraph", "붉은 원은 착탄 지점 — 벗어나세요", "telegraph_grenade")
+			_show_mastery_lesson("telegraph", "붉은 원은 착탄 지점이다. 원 밖으로 벗어나라", "telegraph_grenade")
 		"ranged":
 			_show_mastery_lesson("telegraph", "조준선이 깜빡이면 첫 발이 온다. 옆으로 비켜라", "telegraph_ranged")
 		"melee":
-			_show_mastery_lesson("telegraph", "바닥 화살표는 돌진 방향 — 옆으로 비키세요", "telegraph_melee")
+			_show_mastery_lesson("telegraph", "바닥 화살표는 돌진 방향이다. 옆으로 비켜라", "telegraph_melee")
 
 
 func _show_mastery_lesson(key: String, text: String, run_key: String = "") -> void:

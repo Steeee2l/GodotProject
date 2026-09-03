@@ -548,11 +548,12 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"title": "부품 세 개",
 		"brief": "도시에서 기초 부품 3개를 확보해 사자에게 전달하세요.",
 		"accept_dialogue": [
-			"쉘터에 벽만 남았다. 생산기 하나만 세우면 애들이 일을 할 수 있는데.",
-			"부품 세 개면 된다. 무리는 하지 마라. 없으면 그냥 와라. 그게 더 중요하다.",
+			"쉘터에는 아직 생산기가 하나도 없다. 생산기 하나만 세우면 애들이 일을 시작한다.",
+			"생산기를 세우려면 기초 부품 세 개가 필요하다.",
+			"무리는 하지 마라. 없으면 그냥 와라. 그게 더 중요하다.",
 		],
 		"complete_dialogue": [
-			"세 개나 가져왔냐. …고맙다. 애들을 불러서 바로 세운다.",
+			"세 개나 가져왔냐. 고맙다. 애들을 불러서 바로 세운다.",
 			"이제 이 쉘터도 제 밥벌이를 시작하는 거다. 네 덕이다.",
 		],
 		"objective": "기초 부품 확보",
@@ -568,12 +569,12 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"title": "운반로 정리",
 		"brief": "주변 위협 4명을 정리해 캣닢 재배 장비를 옮길 길을 확보하세요.",
 		"accept_dialogue": [
-			"캣닢 재배 장비를 옮겨야 하는데, 길목에 그놈들이 버티고 있다.",
-			"넷이다. 조심해라. 장비보다 네가 먼저다.",
+			"캣닢 재배 장비를 쉘터로 옮겨야 한다. 그런데 길목에 약탈대가 버티고 있다.",
+			"망루에서 세어 보니 넷이다. 조심해라. 장비보다 네가 먼저다.",
 		],
 		"complete_dialogue": [
 			"길이 뚫렸다고 애들이 만세를 부르더라.",
-			"캣닢 냄새가 나면 쉘터가 살아 있는 것 같다. 고맙다.",
+			"캣닢 냄새가 나면 애들이 잘 잔다. 고맙다.",
 		],
 		"objective": "운반로 위협 제거",
 		"metric": "kills",
@@ -589,7 +590,7 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"brief": "현장 기록 2개를 조사해 폐쇄된 정비 구역의 위치를 찾으세요.",
 		"accept_dialogue": [
 			"망가진 총들을 좀 살려 보고 싶다. 그러려면 옛날 정비 기록이 필요하다.",
-			"현장 기록 두 건이면 된다. 종이 쪼가리라 무겁지도 않다.",
+			"도시에 남은 현장 기록 두 건이면 된다. 종이라서 무겁지도 않다.",
 		],
 		"complete_dialogue": [
 			"이거다, 이거. 보고 있으니 옛날 생각이 난다.",
@@ -631,7 +632,7 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		],
 		"complete_dialogue": [
 			"따뜻한 물부터 데워 줬다. 많이 지쳤더라.",
-			"이름도 적어 뒀다. …이제 식구다.",
+			"이름도 적어 뒀다. 이제 식구다.",
 		],
 		"objective": "주민 구출",
 		"metric": "rescue",
@@ -645,12 +646,12 @@ const SAJA_FACILITY_CONTRACTS: Array[Dictionary] = [
 		"title": "현장 작전 한 건",
 		"brief": "필드 작전 1개를 수락하고 완수한 뒤 생환하세요.",
 		"accept_dialogue": [
-			"이제 너는 남이 낸 길만 다닐 놈이 아니다.",
+			"이제 너는 내가 시킨 일만 할 놈이 아니다.",
 			"현장 작전 하나를 네 방식대로 끝내고 와라. 나는 여기서 기다린다.",
 		],
 		"complete_dialogue": [
 			"돌아온 얼굴을 보니 잘 끝났구나. 그럼 됐다.",
-			"이 쉘터가 네 덕에 거점 소리를 듣는다. …다음 일도 맡아 주겠냐.",
+			"이 쉘터가 네 덕에 거점 소리를 듣는다. 다음 일도 맡아 주겠냐.",
 		],
 		"objective": "현장 작전 완료",
 		"metric": "field_mission",
@@ -669,7 +670,7 @@ const IRON_SPECIAL_MISSIONS: Array[Dictionary] = [
 		"target": 8,
 		"training_id": "vitality",
 		"reward_text": "영구 최대 체력 +10",
-		"accept_dialogue": "총만 믿고 서 있으면 첫 탄창에서 죽는다. 한 출정에서 여덟을 상대해라. 살아서 돌아오면 인정한다.",
+		"accept_dialogue": "총만 믿고 서 있으면 탄약이 먼저 떨어진다. 탄약이 떨어지면 죽는다. 한 출정에서 적 여덟을 상대해라. 살아서 돌아오면 인정한다.",
 		"complete_dialogue": "버텼군. 이제 총소리를 들어도 먼저 움츠러들지는 않을 거다.",
 	},
 	{
@@ -691,7 +692,7 @@ const IRON_SPECIAL_MISSIONS: Array[Dictionary] = [
 		"target": 1,
 		"training_id": "fieldcraft",
 		"reward_text": "사격 자세 훈련 해금(반동 제어)",
-		"accept_dialogue": "잔챙이 백 마리보다 이름 붙은 놈 하나가 낫다. 그놈을 잡아 와라.",
+		"accept_dialogue": "잔챙이 백 마리를 잡는 것보다 이름 붙은 놈 하나를 잡는 게 낫다. 그놈을 잡아 와라.",
 		"complete_dialogue": "잡았군. 이제 이 도시 놈들이 네 이름을 알게 된다.",
 	},
 ]
@@ -995,12 +996,12 @@ const MILESTONE_UNLOCKS := {
 	},
 	"craft_akm": {
 		"title": "AKM 개조 해금",
-		"body": "AKM 설계도 조각을 전부 맞췄다. 작업대에서 AKM 개조형을 만들 수 있다 — AK의 강화를 60% 이어받는다.",
+		"body": "AKM 설계도 조각을 전부 맞췄다. 작업대에서 AKM 개조형을 만들 수 있다. AK의 강화를 60% 이어받는다.",
 		"requires_blueprint": "akm",
 	},
 	"craft_pump": {
 		"title": "펌프 산탄총 해금",
-		"body": "펌프 산탄총 설계도 조각을 전부 맞췄다. 작업대에서 만들 수 있다 — 참치 헌터의 강화를 60% 이어받는다.",
+		"body": "펌프 산탄총 설계도 조각을 전부 맞췄다. 작업대에서 만들 수 있다. 참치 헌터의 강화를 60% 이어받는다.",
 		"requires_blueprint": "pump_shotgun",
 	},
 	"craft_shotgun": {
@@ -1801,7 +1802,7 @@ func sync_shelter_progression_milestones() -> Array[String]:
 const SAJA_CHATTER := {
 	"early": [
 		{"title": "흙먼지", "lines": [
-			"얼굴에 흙먼지 묻었다. 이리 와 봐. …됐다. 이제 사람 꼴 났네.",
+			"얼굴에 흙먼지 묻었다. 이리 와 봐. 됐다. 이제 좀 봐줄 만하네.",
 			"종로에서 무슨 일이 있어도 이 문만 두드려라. 내가 열어 준다.",
 		]},
 		{"title": "네 몫", "lines": [
@@ -1876,7 +1877,7 @@ const SAJA_CHATTER := {
 			"왜 가냐고는 안 묻는다. 너는 늘 이유가 있었으니까.",
 		]},
 		{"title": "사나운 꿈", "lines": [
-			"네가 못 돌아오는 꿈을 꿨다. …웃지 마라.",
+			"네가 못 돌아오는 꿈을 꿨다. 웃지 마라.",
 			"늙으면 꿈이 사나워진다. 그러니까 꼭 돌아와라. 내 꿈이 틀렸다는 걸 보여 줘.",
 		]},
 	],
@@ -1929,11 +1930,11 @@ func get_pending_shelter_story_event() -> Dictionary:
 				# 빼먹지 않는다. "다리 망루가 한 시간 전부터 봤다" 같은 압축문은 금지.
 				"총 내려. 네가 다리 건너오는 거, 우리 망루에서 한 시간 전부터 보고 있었다.",
 				"위험한 놈이었으면 문을 안 열었지. 여긴 쉘터다. 갈 데 없는 고양이들이 모여 산다.",
-				"나는 사자. 시설이랑 살림을 본다. …라디오 듣고 왔지? 안 물어봐도 안다.",
+				"나는 사자다. 시설이랑 살림을 본다. 라디오 듣고 왔지. 안 물어봐도 안다.",
 				"여기 있는 애들도 전부 그 방송을 듣고 왔다. 웃기지. 송신기를 가진 놈은 하나도 없는데.",
-				"방송은 종로 쪽에서 온다. 거기까지 가 본 놈은 없어. 총 든 놈이 없었거든. …네가 처음이다.",
+				"방송은 종로 쪽에서 온다. 거기까지 가 본 놈은 없어. 총 든 놈이 없었거든. 네가 처음이다.",
 				"규칙은 하나. 밖에서 가져온 건 값을 제대로 쳐준다. 대신 안에서는 아무도 안 굶는다.",
-				"이름이 뭐야. …먼지. 적어 둔다. 버릇이야. 적어 두면 안 잊어버리거든.",
+				"이름이 뭐야. 먼지라고. 적어 둔다. 버릇이야. 적어 두면 안 잊어버리거든.",
 				"오늘은 자라. 종로는 내일도 거기 있다. 밥부터 먹어. 식는다.",
 			],
 		}
@@ -1949,7 +1950,7 @@ func get_pending_shelter_story_event() -> Dictionary:
 			"lines": [
 				"주홍이야. 사자가 내 얘기 했지? '걸러 들으라'고.",
 				"그래, 걸러 들어. 대신 이것도 걸러 봐. 그 방송, 나도 들었어. 강 건너까지 따라왔지.",
-				"사자는 자기가 송신기를 쓴 적이 없다고 해. 나는 그 대답이 왜 그렇게 빨리 나오는지가 궁금하고.",
+				"사자는 자기가 송신기를 쓴 적이 없다고 해. 나는 그 대답이 왜 그렇게 빨리 나오는지 궁금해.",
 				"혼자 다니는 고양이는 오래 못 가. 다음 출정부터 나도 같이 간다.",
 				"네 뒤는 내가 본다. 내 몫은 내가 챙긴다. 조건은 그게 다야.",
 			],
@@ -1962,8 +1963,8 @@ func get_pending_shelter_story_event() -> Dictionary:
 			# 보상·시설 안내는 대사에서 뺀다(몰입 붕괴, 유저 확정) — 해금 알림은
 			# 쉘터 진입 토스트가 맡는다. 대사는 안부와 이야기만.
 			"lines": [
-				"…왔냐. 문소리가 나서 나와 봤다.",
-				"밖은 어땠냐. …아니다. 밥부터 먹어. 국 데워 놨다. 식는다.",
+				"왔냐. 문소리가 나서 나와 봤다.",
+				"밖은 어땠냐. 아니다. 밥부터 먹어. 국 데워 놨다. 식는다.",
 				"네가 다녀온 종로 지하철역 말이다.",
 				"사람들이 사라진 날 밤에 거기는 마지막까지 불이 켜져 있었다.",
 				"밖에서 뭘 보고 왔든 나한테 말해라. 무서운 얘기는 나누면 가벼워진다.",
@@ -1995,7 +1996,7 @@ func get_pending_shelter_story_event() -> Dictionary:
 			"speaker": "사자",
 			"title": "새 식구",
 			"lines": [
-				"하나 데려왔냐. …잘했다.",
+				"하나 데려왔냐. 잘했다.",
 				"이름부터 물어봐라. 내가 적어 둬야지. 오늘부터 우리 식구다.",
 				"밥은 내가 챙긴다. 너는 몸 성하게만 다녀라.",
 			],
@@ -2008,7 +2009,7 @@ func get_pending_shelter_story_event() -> Dictionary:
 			"lines": [
 				"밖이 시끄러웠다며. 네가 이름 있는 놈을 잡았다고 애들이 떠들더라.",
 				"무리하지 마라. 그런 놈 자리는 금방 다른 놈이 채운다. 이 도시는 원래 그렇다.",
-				"…그래도 오늘은 자랑해도 된다. 국 한 그릇 더 퍼 줄게.",
+				"그래도 오늘은 자랑해도 된다. 국 한 그릇 더 퍼 줄게.",
 			],
 		}
 	if recovered_story_cargo_ids.size() > saja_seen_story_cargo_count:
@@ -2020,7 +2021,7 @@ func get_pending_shelter_story_event() -> Dictionary:
 			"lines": [
 				"이 표식은 옛날 수송 서식이다. 사람이 있던 시절에 관공서에서 쓰던 거다.",
 				"잉크가 아직 안 말랐네. 요즘도 이런 걸 쓰는 놈이 있나.",
-				"…무거운 얘기는 그만하자. 다친 데는 없냐. 없으면 됐다. 그게 제일 중요하다.",
+				"무거운 얘기는 그만하자. 다친 데는 없냐. 없으면 됐다. 그게 제일 중요하다.",
 			],
 		}
 	# 한 구역의 메인 미션 셋을 다 끝냈으면 사자가 다음 도시를 가리킨다.
@@ -2034,11 +2035,11 @@ func get_pending_shelter_story_event() -> Dictionary:
 		var zone_name := str((RAID_ZONES.get(chain_zone_id, {}) as Dictionary).get("name", "그 구역"))
 		var next_zone_id := MAIN_MISSION_CATALOG.get_next_zone(chain_zone_id)
 		var closing_lines: Array[String] = [
-			"%s 일은 애들한테 들었다. 네가 거기 끝까지 갔다 왔다며. …일단 앉아라." % zone_name,
+			"%s 일은 애들한테 들었다. 네가 거기 끝까지 갔다 왔다며. 일단 앉아라." % zone_name,
 			"네가 가져온 기록은 내가 잘 보관하고 있다. 다 이어서 보면 뭐가 보일 거다.",
 		]
 		if next_zone_id.is_empty():
-			closing_lines.append("…이제 남산만 남았다. 끝을 보고 와라. 나는 여기서 기다린다.")
+			closing_lines.append("이제 남산만 남았다. 끝을 보고 와라. 나는 여기서 기다린다.")
 		else:
 			var next_name := str(
 				(RAID_ZONES.get(next_zone_id, {}) as Dictionary).get("name", "다음 구역")
@@ -2051,7 +2052,7 @@ func get_pending_shelter_story_event() -> Dictionary:
 				var hint_notice := "%s 진입 조건 · %s" % [next_name, hint]
 				if not pending_facility_unlock_notices.has(hint_notice):
 					pending_facility_unlock_notices.append(hint_notice)
-			closing_lines.append("준비가 되면 길은 열린다. 서두를 거 없다.")
+			closing_lines.append("준비가 되면 그쪽 길도 열린다. 서두를 거 없다.")
 			closing_lines.append("밥 든든히 먹고 가라. 그거 하나만 약속해라.")
 		return {
 			"id": "saja_main_chain_%s" % chain_zone_id,
@@ -2066,7 +2067,7 @@ func get_pending_shelter_story_event() -> Dictionary:
 			"title": "지하의 소리",
 			"lines": [
 				"지하에서 신호가 다시 잡힌단다. 기계는 저 혼자 켜지지 않는다. 누가 켠 거다.",
-				"…괜한 소리를 했다. 내려가 볼 거지. 조심해라. 진심이다.",
+				"괜한 소리를 했다. 내려가 볼 거지. 조심해라. 진심이다.",
 				"주홍이 먼저 내려갔을 거다. 만나면 내 안부나 전해라.",
 				"걔는 내 말을 안 믿겠지만 그래도 전해 줘.",
 			],
@@ -2138,11 +2139,11 @@ func get_pending_juhong_event() -> Dictionary:
 			"speaker": "주홍",
 			"title": "붉은 앞치마",
 			"lines": [
-				"그 표식은 어디서 났어. …됐어. 네가 훔친 건 아닌 것 같네.",
+				"그 표식은 어디서 났어. 됐어. 네가 훔친 건 아닌 것 같네.",
 				"사람들이 사라진 날에 봉쇄선 안으로 들어간 수송대가 있었어.",
 				"그 수송대가 밖으로 나왔다는 기록은 없어.",
 				"네가 주운 표식은 그 수송대가 흘린 거야.",
-				"그걸 모으면 그날 무슨 일이 있었는지 보일 거다.",
+				"그걸 모으면 그날 무슨 일이 있었는지 보일 거야.",
 				"나는 주홍이야. 여기 오래 안 있어. 신호가 움직이면 나도 따라 움직여.",
 			],
 		}
@@ -4778,7 +4779,7 @@ const BREAKTHROUGH_PERKS := {
 	"armor": {
 		30: {"id": "knockback_resist", "label": "넉백 저항 50% (몸 방어구)", "description": "피격 밀림이 절반으로 준다."},
 		50: {"id": "post_hit_guard", "label": "피격 후 1.5초 추가 피해 −20%", "description": "연타를 맞을 때 뒤이은 피해가 줄어든다."},
-		70: {"id": "light_frame", "label": "이동 속도 +4%", "description": "무게가 몸에 붙는다 — 걸음이 빨라진다."},
+		70: {"id": "light_frame", "label": "이동 속도 +4%", "description": "무게가 몸에 익는다. 걸음이 빨라진다."},
 		90: {"id": "secure_slot", "label": "시큐어 슬롯 +1", "description": "죽어도 지키는 칸이 하나 늘어난다."},
 	},
 }
