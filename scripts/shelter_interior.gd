@@ -1521,9 +1521,9 @@ func _refresh_contract_story() -> void:
 	if not is_instance_valid(contract_story_body_label):
 		return
 	if is_instance_valid(contract_story_typewriter):
-		contract_story_typewriter.start(contract_story_lines[contract_story_index])
+		contract_story_typewriter.start(GameState.apply_player_name(contract_story_lines[contract_story_index]))
 	else:
-		contract_story_body_label.text = contract_story_lines[contract_story_index]
+		contract_story_body_label.text = GameState.apply_player_name(contract_story_lines[contract_story_index])
 	# 주홍 대사는 줄마다 감정 이모트가 머리 위에 뜬다.
 	if contract_story_completion_owner == "juhong" and is_instance_valid(juhong_character):
 		_emote_for_story_line(juhong_character, contract_story_lines[contract_story_index])
@@ -3962,7 +3962,7 @@ func _interact() -> void:
 const RESIDENT_CHAT_LINES := [
 	"사이렌 소리는 늘 남쪽에서만 들려. 왜 남쪽만일까.",
 	"도시에 사람 냄새가 하나도 안 남았어. 하룻밤 만에 그렇게 될 수가 있나.",
-	"캣닢 배급이 늘었대. 먼지가 밖에서 가져온 덕이라던데.",
+	"캣닢 배급이 늘었대. {name:이/가} 밖에서 가져온 덕이라던데.",
 	"땅 밑에서 무전 신호가 온다는 얘기가 있어. 나는 못 들었지만.",
 	"발톱 손질은 게으름이 아니야. 살아남으려면 해야 하는 거야.",
 	"고철 더미 속 라디오가 지직거렸대. 누가 켠 것도 아닌데.",
@@ -3989,7 +3989,7 @@ const CATNIP_FEVER_LINES := [
 	"이 냄새! 이 냄새를 평생 기억할 거야!",
 	"손이 안 멈춰! 아무도 날 못 막아!",
 	"꾹꾹, 꾹꾹, 꾹꾹. 아, 좋다!",
-	"먼지야, 우리 오늘 밤은 부자다!",
+	"{name:아/야}, 우리 오늘 밤은 부자다!",
 	"이게 행복이구나. 이게 행복이야.",
 	"조금만 더, 조금만 더 줘!",
 ]
@@ -4129,7 +4129,7 @@ func _spawn_resident_chat_bubble(resident: Node3D, forced_line := "") -> void:
 	label.text = (
 		forced_line
 		if not forced_line.is_empty()
-		else RESIDENT_CHAT_LINES[resident_chat_random.randi_range(0, RESIDENT_CHAT_LINES.size() - 1)]
+		else GameState.apply_player_name(RESIDENT_CHAT_LINES[resident_chat_random.randi_range(0, RESIDENT_CHAT_LINES.size() - 1)])
 	)
 	label.font = FONT
 	# 30pt는 PC·모바일 모두 안 읽혔다(스크린샷 확인) — 2배로 키우고 외곽선도

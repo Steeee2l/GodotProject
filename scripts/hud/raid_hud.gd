@@ -65,7 +65,11 @@ var squad_clear_pulse_material: ShaderMaterial
 var squad_clear_pulse_tween: Tween
 var damage_direction_indicator: TextureRect
 var player_world_health_bar: Control
-const PLAYER_HEALTH_BAR_WIDTH := 64.0
+# 2026-09-03 유저: "체력바 너무 못생겼어, 해상도도 별로". 64×5는 눈금이 뭉개졌다.
+# 100×9, 안쪽 2px 여백, 칸 사이 2px 홈으로 다시 그린다.
+const PLAYER_HEALTH_BAR_WIDTH := 100.0
+const PLAYER_HEALTH_BAR_HEIGHT := 9.0
+const PLAYER_HEALTH_BAR_INSET := 2.0
 const PLAYER_HEALTH_SEGMENT_COUNT := 10
 const PLAYER_HEALTH_SEGMENTS_SCRIPT := preload("res://scripts/hud/health_segments.gd")
 var player_world_health_fill: Panel
@@ -1532,25 +1536,25 @@ void fragment() {
 	# 칸 구분선을 위에 얹는다. 칸이 깨질 때의 파편은 main이 spawn_health_chip으로.
 	player_world_health_bar = Control.new()
 	player_world_health_bar.name = "PlayerWorldHealthBar"
-	player_world_health_bar.custom_minimum_size = Vector2(PLAYER_HEALTH_BAR_WIDTH, 5)
-	player_world_health_bar.size = Vector2(PLAYER_HEALTH_BAR_WIDTH, 5)
+	player_world_health_bar.custom_minimum_size = Vector2(PLAYER_HEALTH_BAR_WIDTH, PLAYER_HEALTH_BAR_HEIGHT)
+	player_world_health_bar.size = Vector2(PLAYER_HEALTH_BAR_WIDTH, PLAYER_HEALTH_BAR_HEIGHT)
 	player_world_health_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var health_background_panel := Panel.new()
 	health_background_panel.name = "Background"
 	health_background_panel.position = Vector2.ZERO
-	health_background_panel.size = Vector2(PLAYER_HEALTH_BAR_WIDTH, 5)
+	health_background_panel.size = Vector2(PLAYER_HEALTH_BAR_WIDTH, PLAYER_HEALTH_BAR_HEIGHT)
 	health_background_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var health_background := StyleBoxFlat.new()
-	health_background.bg_color = Color(0.018, 0.022, 0.024, 0.84)
+	health_background.bg_color = Color(0.03, 0.04, 0.045, 0.92)
 	health_background.border_width_left = 1
 	health_background.border_width_top = 1
 	health_background.border_width_right = 1
 	health_background.border_width_bottom = 1
-	health_background.border_color = Color(0.82, 0.86, 0.8, 0.38)
-	health_background.corner_radius_top_left = 4
-	health_background.corner_radius_top_right = 4
-	health_background.corner_radius_bottom_left = 4
-	health_background.corner_radius_bottom_right = 4
+	health_background.border_color = Color(0.86, 0.9, 0.86, 0.3)
+	health_background.corner_radius_top_left = 3
+	health_background.corner_radius_top_right = 3
+	health_background.corner_radius_bottom_left = 3
+	health_background.corner_radius_bottom_right = 3
 	health_background.anti_aliasing = true
 	health_background_panel.add_theme_stylebox_override("panel", health_background)
 	player_world_health_bar.add_child(health_background_panel)
@@ -1559,29 +1563,29 @@ void fragment() {
 	# 보스 체력바(enemy.gd의 trail_white)와 같은 읽기 규칙이다.
 	player_world_health_trail = Panel.new()
 	player_world_health_trail.name = "Trail"
-	player_world_health_trail.position = Vector2(1, 1)
-	player_world_health_trail.size = Vector2(PLAYER_HEALTH_BAR_WIDTH - 2.0, 3)
+	player_world_health_trail.position = Vector2(PLAYER_HEALTH_BAR_INSET, PLAYER_HEALTH_BAR_INSET)
+	player_world_health_trail.size = Vector2(PLAYER_HEALTH_BAR_WIDTH - PLAYER_HEALTH_BAR_INSET * 2.0, PLAYER_HEALTH_BAR_HEIGHT - PLAYER_HEALTH_BAR_INSET * 2.0)
 	player_world_health_trail.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	player_health_trail_style = StyleBoxFlat.new()
 	player_health_trail_style.bg_color = Color(0.96, 0.96, 0.93, 0.96)
-	player_health_trail_style.corner_radius_top_left = 3
-	player_health_trail_style.corner_radius_top_right = 3
-	player_health_trail_style.corner_radius_bottom_left = 3
-	player_health_trail_style.corner_radius_bottom_right = 3
+	player_health_trail_style.corner_radius_top_left = 2
+	player_health_trail_style.corner_radius_top_right = 2
+	player_health_trail_style.corner_radius_bottom_left = 2
+	player_health_trail_style.corner_radius_bottom_right = 2
 	player_health_trail_style.anti_aliasing = true
 	player_world_health_trail.add_theme_stylebox_override("panel", player_health_trail_style)
 	player_world_health_bar.add_child(player_world_health_trail)
 	player_world_health_fill = Panel.new()
 	player_world_health_fill.name = "Fill"
-	player_world_health_fill.position = Vector2(1, 1)
-	player_world_health_fill.size = Vector2(PLAYER_HEALTH_BAR_WIDTH - 2.0, 3)
+	player_world_health_fill.position = Vector2(PLAYER_HEALTH_BAR_INSET, PLAYER_HEALTH_BAR_INSET)
+	player_world_health_fill.size = Vector2(PLAYER_HEALTH_BAR_WIDTH - PLAYER_HEALTH_BAR_INSET * 2.0, PLAYER_HEALTH_BAR_HEIGHT - PLAYER_HEALTH_BAR_INSET * 2.0)
 	player_world_health_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	player_health_fill_style = StyleBoxFlat.new()
 	player_health_fill_style.bg_color = Color(0.28, 0.86, 0.48, 0.96)
-	player_health_fill_style.corner_radius_top_left = 3
-	player_health_fill_style.corner_radius_top_right = 3
-	player_health_fill_style.corner_radius_bottom_left = 3
-	player_health_fill_style.corner_radius_bottom_right = 3
+	player_health_fill_style.corner_radius_top_left = 2
+	player_health_fill_style.corner_radius_top_right = 2
+	player_health_fill_style.corner_radius_bottom_left = 2
+	player_health_fill_style.corner_radius_bottom_right = 2
 	player_health_fill_style.anti_aliasing = true
 	player_world_health_fill.add_theme_stylebox_override("panel", player_health_fill_style)
 	player_world_health_bar.add_child(player_world_health_fill)
@@ -1589,7 +1593,7 @@ void fragment() {
 	var segment_overlay := PLAYER_HEALTH_SEGMENTS_SCRIPT.new() as Control
 	segment_overlay.name = "Segments"
 	segment_overlay.position = Vector2.ZERO
-	segment_overlay.size = Vector2(PLAYER_HEALTH_BAR_WIDTH, 5)
+	segment_overlay.size = Vector2(PLAYER_HEALTH_BAR_WIDTH, PLAYER_HEALTH_BAR_HEIGHT)
 	segment_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	player_world_health_bar.add_child(segment_overlay)
 	aim_canvas.add_child(player_world_health_bar)

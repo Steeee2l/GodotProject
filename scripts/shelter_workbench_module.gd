@@ -605,7 +605,7 @@ func _build_header(stacked: bool) -> Control:
 	title_box.clip_contents = true
 	title_box.add_theme_constant_override("separation", 2)
 	top_row.add_child(title_box)
-	var eyebrow := _label("MEONJI · WORKBENCH %02d · SHELTER Lv.%d" % [GameState.shelter_workbench_level, GameState.shelter_tier], 10, FAINT)
+	var eyebrow := _label("%s · WORKBENCH %02d · SHELTER Lv.%d" % [GameState.player_name, GameState.shelter_workbench_level, GameState.shelter_tier], 10, FAINT)
 	eyebrow.name = "WorkbenchEyebrow"
 	eyebrow.autowrap_mode = TextServer.AUTOWRAP_OFF
 	eyebrow.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS

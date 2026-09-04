@@ -317,7 +317,7 @@ func _run_step(step: Dictionary) -> bool:
 			if mode == MODE_BARK:
 				# 바크: 하단 패널로 자동 진행. 마지막 줄이 끝나면 다음 스텝.
 				host.monologue.play_bark(
-					step.get("lines", []), str(step.get("speaker", "먼지")), _advance
+					step.get("lines", []), GameState.resolve_speaker(str(step.get("speaker", "먼지"))), _advance
 				)
 				return true
 			_open_dialogue(step)
@@ -649,7 +649,9 @@ func _actor_fall(step: Dictionary) -> bool:
 
 
 func _open_dialogue(step: Dictionary) -> void:
-	dialogue_lines.assign(step.get("lines", []))
+	dialogue_lines.clear()
+	for raw_line in step.get("lines", []) as Array:
+		dialogue_lines.append(GameState.apply_player_name(str(raw_line)))
 	if dialogue_lines.is_empty():
 		_advance()
 		return
@@ -693,7 +695,7 @@ func _open_dialogue(step: Dictionary) -> void:
 	var speaker_row := HBoxContainer.new()
 	text_box.add_child(speaker_row)
 	dialogue_speaker_label = Label.new()
-	dialogue_speaker_label.text = str(step.get("speaker", "먼지"))
+	dialogue_speaker_label.text = GameState.resolve_speaker(str(step.get("speaker", "먼지")))
 	dialogue_speaker_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dialogue_speaker_label.add_theme_font_override("font", FONT)
 	dialogue_speaker_label.add_theme_font_size_override("font_size", 16)

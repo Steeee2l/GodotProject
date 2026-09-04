@@ -1965,7 +1965,7 @@ func _spawn_health_chip(segment_index: int) -> void:
 func _update_player_combat_feedback(delta: float) -> void:
 	var health_ratio := clampf(float(player_health) / float(GameState.get_max_health()), 0.0, 1.0)
 	if hud.player_world_health_bar:
-		var bar_inner := hud.PLAYER_HEALTH_BAR_WIDTH - 2.0
+		var bar_inner := hud.PLAYER_HEALTH_BAR_WIDTH - hud.PLAYER_HEALTH_BAR_INSET * 2.0
 		hud.player_world_health_fill.size.x = bar_inner * health_ratio
 		# 칸이 깨지는 순간 파편이 튄다 — "맞으면 칸이 날아간다"(유저 요구).
 		var segments_now := ceili(health_ratio * float(hud.PLAYER_HEALTH_SEGMENT_COUNT) - 0.0001)

@@ -428,6 +428,11 @@ var saja_chatter_serial_seen: int = -1
 var saja_chatter_indices: Dictionary = {}
 # 복귀에서 새로 열린 시설 — 쉘터 진입 토스트가 소비한다(대사 언급 금지).
 var pending_facility_unlock_notices: Array[String] = []
+# 플레이어 이름(2026-09-03 캐릭터 생성 플로우). 기본 '먼지'. 대사는 {name} 토큰과
+# 화자 '먼지'를 이 이름으로 바꿔 보여 준다(apply_player_name / resolve_speaker).
+const DEFAULT_PLAYER_NAME := "먼지"
+var player_name: String = DEFAULT_PLAYER_NAME
+var _player_name_regex: RegEx
 # ── 주홍 동행(2026-08-30) — 생환 3회째에 쉘터로 찾아와 합류한다. ──
 # unlocked = 동행 시스템 해금(주홍 등장 이벤트 확인 시), enabled = 브리핑 토글
 # (잠입 판은 끄고 갈 수 있다 — 기본 켬).
@@ -1934,7 +1939,7 @@ func get_pending_shelter_story_event() -> Dictionary:
 				"여기 있는 애들도 전부 그 방송을 듣고 왔다. 웃기지. 송신기를 가진 놈은 하나도 없는데.",
 				"방송은 종로 쪽에서 온다. 거기까지 가 본 놈은 없어. 총 든 놈이 없었거든. 네가 처음이다.",
 				"규칙은 하나. 밖에서 가져온 건 값을 제대로 쳐준다. 대신 안에서는 아무도 안 굶는다.",
-				"이름이 뭐야. 먼지라고. 적어 둔다. 버릇이야. 적어 두면 안 잊어버리거든.",
+				"이름이 뭐야. {name:이라고/라고}. 적어 둔다. 버릇이야. 적어 두면 안 잊어버리거든.",
 				"오늘은 자라. 종로는 내일도 거기 있다. 밥부터 먹어. 식는다.",
 			],
 		}
@@ -5694,6 +5699,7 @@ func save_persistent_state() -> bool:
 		"iron_mission_progress": iron_mission_progress,
 		"completed_iron_mission_ids": completed_iron_mission_ids,
 		"opening_completed": opening_completed,
+		"player_name": player_name,
 	}
 	# 원자적 저장: 임시 파일에 다 쓴 뒤 교체한다. 어느 순간에 크래시가 나도
 	# 본 파일은 항상 완전한 JSON이다. 교체 직전 본은 .bak으로 남겨,
@@ -5967,6 +5973,7 @@ func load_persistent_state() -> bool:
 	completed_iron_mission_ids = _to_string_array(data.get("completed_iron_mission_ids", []))
 	# Saves made before the opening existed should continue from the shelter.
 	opening_completed = bool(data.get("opening_completed", true))
+	player_name = _sanitize_player_name(str(data.get("player_name", DEFAULT_PLAYER_NAME)))
 	_normalize_contract_state()
 	_normalize_iron_mission_state()
 	sync_shelter_progression_milestones()
@@ -6211,6 +6218,10 @@ func reset_run() -> void:
 
 
 func reset_all_progress_for_opening() -> bool:
+	# 2026-09-03: 예전엔 판 상태와 몇 필드만 되돌려서 주홍 해금·사자 첫 만남·이름
+	# 같은 진행 플래그가 메모리에 남았다가 새 세이브에 다시 적혔다(유저: "주홍이가
+	# 왜 첫 런부터 같이 있어"). 새 인스턴스의 기본값으로 스크립트 변수 전부를 되돌린다.
+	_restore_default_state()
 	reset_run()
 	opening_completed = false
 	map_seed = 47291
@@ -6227,6 +6238,79 @@ func reset_all_progress_for_opening() -> bool:
 		if remove_result != OK:
 			push_warning("Could not remove previous save before reset: %s" % absolute_path)
 	return save_persistent_state() if persistence_enabled else true
+
+
+func _restore_default_state() -> void:
+	var script := get_script() as GDScript
+	var fresh: Object = script.new()
+	for property in script.get_script_property_list():
+		var property_name := str(property.get("name", ""))
+		if property_name.is_empty():
+			continue
+		# 저장 경로·저장 여부는 테스트/런타임 환경 설정이라 건드리지 않는다.
+		if property_name in ["persistence_enabled", "persistence_path"]:
+			continue
+		set(property_name, fresh.get(property_name))
+	if fresh is Node:
+		(fresh as Node).free()
+	else:
+		fresh = null
+
+
+func set_player_name(value: String) -> void:
+	player_name = _sanitize_player_name(value)
+	save_persistent_state()
+
+
+func get_player_name() -> String:
+	return player_name
+
+
+func _sanitize_player_name(value: String) -> String:
+	var trimmed := value.strip_edges()
+	if trimmed.is_empty() or trimmed.length() > 8:
+		return DEFAULT_PLAYER_NAME
+	var pattern := RegEx.new()
+	pattern.compile("^[가-힣A-Za-z0-9]+$")
+	return trimmed if pattern.search(trimmed) != null else DEFAULT_PLAYER_NAME
+
+
+static func korean_ends_with_consonant(word: String) -> bool:
+	# 조사 선택용. 한글은 받침 유무, 영문은 끝 글자 모음 여부, 숫자는 읽는 소리.
+	if word.is_empty():
+		return false
+	var last := word.unicode_at(word.length() - 1)
+	if last >= 0xAC00 and last <= 0xD7A3:
+		return (last - 0xAC00) % 28 != 0
+	var last_char := word.substr(word.length() - 1, 1).to_lower()
+	if last_char in ["a", "e", "i", "o", "u"]:
+		return false
+	if last_char in ["2", "4", "5", "9"]:
+		return false
+	if last_char in ["0", "1", "3", "6", "7", "8"]:
+		return true
+	return true
+
+
+func apply_player_name(text: String) -> String:
+	# {name} → 이름, {name:이/가} → 이름 + 받침에 맞는 조사(앞이 받침 있음용).
+	if text.find("{name") < 0:
+		return text
+	if _player_name_regex == null:
+		_player_name_regex = RegEx.new()
+		_player_name_regex.compile(r"\{name(?::([^/}]*)/([^}]*))?\}")
+	var result := text
+	var consonant := korean_ends_with_consonant(player_name)
+	for match_value in _player_name_regex.search_all(text):
+		var replacement := player_name
+		if match_value.get_group_count() >= 2 and not match_value.get_string(0).ends_with("{name}"):
+			replacement += match_value.get_string(1) if consonant else match_value.get_string(2)
+		result = result.replace(match_value.get_string(0), replacement)
+	return result
+
+
+func resolve_speaker(speaker: String) -> String:
+	return player_name if speaker == DEFAULT_PLAYER_NAME else speaker
 
 
 func complete_opening_and_prepare_shelter() -> void:

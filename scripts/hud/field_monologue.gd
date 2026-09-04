@@ -166,7 +166,7 @@ func _ensure_panel() -> void:
 	box.add_theme_constant_override("separation", 2)
 	panel.add_child(box)
 	speaker_label = Label.new()
-	speaker_label.text = "먼지"
+	speaker_label.text = GameState.player_name
 	speaker_label.add_theme_font_override("font", FONT)
 	speaker_label.add_theme_font_size_override("font_size", 12)
 	speaker_label.add_theme_color_override("font_color", SPEAKER_DEFAULT)
@@ -225,11 +225,11 @@ func _next_line() -> void:
 		return
 	current = queue.pop_front()
 	var bark := bool(current.get("bark", false))
-	speaker_label.text = str(current.get("speaker", "먼지"))
+	speaker_label.text = GameState.resolve_speaker(str(current.get("speaker", "먼지")))
 	_apply_style(bark)
 	_fast_hold = false
 	_line_started_msec = Time.get_ticks_msec()
-	typewriter.start(str(current.get("text", "")))
+	typewriter.start(GameState.apply_player_name(str(current.get("text", ""))))
 
 
 func _on_line_finished() -> void:

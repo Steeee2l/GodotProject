@@ -567,7 +567,7 @@ static func build_rip_marker(name_text: String, accent: Color) -> Node3D:
 func _set_player_rip(active: bool) -> void:
 	if active:
 		if player_rip_marker == null or not is_instance_valid(player_rip_marker):
-			player_rip_marker = CompanionSystem.build_rip_marker("먼지", Color("#e8b64c"))
+			player_rip_marker = CompanionSystem.build_rip_marker(GameState.player_name, Color("#e8b64c"))
 			host.player.add_child(player_rip_marker)
 			player_rip_marker.position = Vector3.ZERO
 		player_rip_marker.visible = true

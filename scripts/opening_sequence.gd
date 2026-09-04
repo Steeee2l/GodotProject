@@ -12,6 +12,7 @@ const TOUCH_JOYSTICK := preload("res://scripts/hud/touch_joystick.gd")
 const CAT_ROOT := "res://assets/characters/cat_8way"
 const ROLL_ROOT := "res://assets/characters/cat_roll"
 const SHELTER_SCENE := "res://scenes/shelter_interior.tscn"
+const CHARACTER_NAMING := preload("res://scripts/character_naming.gd")
 const OPENING_SCENE := "res://scenes/opening_sequence.tscn"
 const SCREEN_DIRECTIONS := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const CAT_DIRECTION_STATES := {
@@ -1467,7 +1468,7 @@ func _refresh_dialogue_speaker() -> void:
 	if dialogue_speaker_label == null:
 		return
 	var is_radio := dialogue_index < RADIO_LINE_COUNT
-	dialogue_speaker_label.text = "무전 · 잡음 섞인 목소리" if is_radio else "먼지"
+	dialogue_speaker_label.text = "무전 · 잡음 섞인 목소리" if is_radio else "나"
 	dialogue_speaker_label.add_theme_color_override(
 		"font_color", Color("#9fb6c9") if is_radio else Color("#d7b765")
 	)
@@ -1847,6 +1848,9 @@ func _try_enter_shelter() -> void:
 	var tween := create_tween()
 	tween.tween_property(fade_rect, "color:a", 1.0, 0.9)
 	await tween.finished
+	# 암전 뒤 캐릭터 생성 — 이름을 받고 나서 쉘터로 내려간다(2026-09-03).
+	var naming: CanvasLayer = CHARACTER_NAMING.run(self)
+	await naming.finished
 	GameState.complete_opening_and_prepare_shelter()
 	if not SceneTransition.transition_to(SHELTER_SCENE, OPENING_SCENE):
 		restarting = false
