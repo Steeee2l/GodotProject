@@ -15,11 +15,13 @@ const BUBBLE_NAME := "FieldSpeechBubble"
 # 직교 카메라(사이즈 28, 세로 ~780px)에서 1m ≈ 28px다. 0.0042는 글자 높이가
 # 0.33m = 9px라 읽을 수가 없었다(유저 신고: "회색이라 잘 안 보이고 작다").
 # 0.012면 0.94m ≈ 26px — 피해 숫자(0.84m)보다 한 뼘 크다.
+# 0.012는 한 문장이 화면 폭을 다 먹었다(2026-09-03 유저: "머리 위 텍스트가 너무
+# 크잖아"). 0.0085면 글자 높이 0.66m ≈ 19px — 피해 숫자보다 조금 작다.
 const FONT_SIZE := 78
-const PIXEL_SIZE := 0.012
-const OUTLINE_SIZE := 24
+const PIXEL_SIZE := 0.0085
+const OUTLINE_SIZE := 18
 const DEFAULT_HOLD_SECONDS := 2.6
-const FADE_SECONDS := 0.45
+const FADE_SECONDS := 0.3
 const DEFAULT_HEIGHT := 2.15
 const BACKING_TEXTURE_SIZE := 48
 
@@ -72,12 +74,13 @@ static func show_line(
 	tween.tween_interval(maxf(0.2, hold_seconds))
 	# 글자와 배경 판은 따로 그려지는 노드다 — 같이 사라지게 나란히 물린다.
 	# (예전 구조 그대로 글자만 페이드하면 검은 판만 남아 더 눈에 띈다.)
-	tween.set_parallel(true)
+	# 글자만 투명해지면 검은 외곽선이 그대로 남아 흰 글자가 '회색'으로 보였다
+	# (유저: "처음엔 흰색이다가 회색빛으로 바뀐다"). 외곽선도 같이 뺀다.
 	tween.tween_property(label, "modulate:a", 0.0, FADE_SECONDS)
+	tween.parallel().tween_property(label, "outline_modulate:a", 0.0, FADE_SECONDS)
 	if backing != null:
-		tween.tween_property(backing, "modulate:a", 0.0, FADE_SECONDS)
-	tween.set_parallel(false)
-	tween.tween_callback(func() -> void:
+		tween.parallel().tween_property(backing, "modulate:a", 0.0, FADE_SECONDS)
+	tween.chain().tween_callback(func() -> void:
 		if is_instance_valid(label):
 			label.queue_free()
 	)

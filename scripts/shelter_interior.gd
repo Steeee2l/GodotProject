@@ -151,6 +151,10 @@ var current_module: Node3D
 var prompt_label: Label
 var status_label: Label
 var status_panel: PanelContainer
+# 상단 시스템 알림(2026-09-03 유저: "보상·완공 정산은 사자가 말하는 게 아니라
+# 위에 시스템 토스트로"). 대화창이 열려 있는 동안엔 모아 뒀다가 닫히면 띄운다.
+var system_notice_stack: VBoxContainer
+var pending_system_notices: Array[String] = []
 var status_hold := 0.0
 var stats_label: Label
 var health_bar: ProgressBar
@@ -1328,10 +1332,10 @@ func _open_iron_mission_dialog() -> void:
 				_show_status(_iron_mission_failure_reason(str(accept_result.get("reason", ""))))
 				return
 			lines.append(str(definition.get("accept_dialogue", "몸부터 단련하고 다시 와.")))
-			lines.append("시험 목표 · %s" % str(definition.get("brief", "생존 시험을 완수하세요.")))
+			_queue_system_notice("시험 목표 · %s" % str(definition.get("brief", "생존 시험을 완수하세요.")))
 		"active":
 			lines.append("아직 안 끝났다. 숫자 채우는 것보다 살아서 돌아오는 게 먼저다.")
-			lines.append("현재 진행 · %d / %d\n%s" % [
+			_queue_system_notice("시험 진행 · %d / %d · %s" % [
 				int(state.get("progress", 0)),
 				int(state.get("target", 1)),
 				str(definition.get("brief", "")),
@@ -1342,7 +1346,7 @@ func _open_iron_mission_dialog() -> void:
 				_show_status(_iron_mission_failure_reason(str(claim_result.get("reason", ""))))
 				return
 			lines.append(str(definition.get("complete_dialogue", "이번 시험은 통과다.")))
-			lines.append("영구 강화 획득 · %s" % str(definition.get("reward_text", "생존 능력 강화")))
+			_queue_system_notice("영구 강화 획득 · %s" % str(definition.get("reward_text", "생존 능력 강화")))
 			_update_stats()
 		_:
 			title = "철근의 생존 훈련"
@@ -1603,6 +1607,88 @@ func _advance_contract_story() -> void:
 	contract_story_portrait = null
 	contract_story_completion_owner = ""
 	contract_story_completion_id = ""
+	call_deferred("_flush_system_notices")
+
+
+func _queue_system_notice(text: String) -> void:
+	if text.strip_edges().is_empty():
+		return
+	if contract_story_open:
+		pending_system_notices.append(text)
+		return
+	_show_system_notice(text)
+
+
+func _flush_system_notices() -> void:
+	if contract_story_open:
+		return
+	var queued := pending_system_notices.duplicate()
+	pending_system_notices.clear()
+	for text in queued:
+		_show_system_notice(str(text))
+
+
+func _ensure_system_notice_stack() -> void:
+	if is_instance_valid(system_notice_stack):
+		return
+	var layer := CanvasLayer.new()
+	layer.name = "SystemNoticeLayer"
+	layer.layer = 60
+	add_child(layer)
+	system_notice_stack = VBoxContainer.new()
+	system_notice_stack.name = "SystemNoticeStack"
+	system_notice_stack.alignment = BoxContainer.ALIGNMENT_BEGIN
+	system_notice_stack.add_theme_constant_override("separation", 6)
+	system_notice_stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	system_notice_stack.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	var viewport_size := get_viewport().get_visible_rect().size
+	var safe := UISafeArea.get_margins(viewport_size)
+	var stack_w := minf(viewport_size.x * 0.8, 520.0)
+	system_notice_stack.offset_left = -stack_w * 0.5
+	system_notice_stack.offset_right = stack_w * 0.5
+	system_notice_stack.offset_top = 16.0 + safe.y
+	system_notice_stack.offset_bottom = system_notice_stack.offset_top + 240.0
+	layer.add_child(system_notice_stack)
+
+
+func _show_system_notice(text: String) -> void:
+	# 상단 중앙 시스템 토스트 — 필드 토스트 스택과 같은 문법(굵은 알림).
+	_ensure_system_notice_stack()
+	var toast := PanelContainer.new()
+	toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	toast.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var style := HudStyle.panel(
+		Color(HudStyle.INK.r, HudStyle.INK.g, HudStyle.INK.b, 0.94),
+		Color(HudStyle.GOLD, 0.62),
+		HudStyle.RADIUS_CARD
+	)
+	style.content_margin_left = 14.0
+	style.content_margin_right = 14.0
+	style.content_margin_top = 7.0
+	style.content_margin_bottom = 8.0
+	toast.add_theme_stylebox_override("panel", style)
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_override("font", FONT)
+	label.add_theme_font_size_override("font_size", HudStyle.TYPE_BODY)
+	label.add_theme_color_override("font_color", HudStyle.GOLD.lerp(HudStyle.TEXT, 0.45))
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if text.length() > 34:
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.custom_minimum_size.x = 440.0
+	toast.add_child(label)
+	system_notice_stack.add_child(toast)
+	while system_notice_stack.get_child_count() > 3:
+		var oldest := system_notice_stack.get_child(0)
+		system_notice_stack.remove_child(oldest)
+		oldest.queue_free()
+	toast.modulate.a = 0.0
+	var tween := toast.create_tween()
+	tween.tween_property(toast, "modulate:a", 1.0, 0.16)
+	tween.tween_interval(3.4 + 0.02 * float(text.length()))
+	tween.tween_property(toast, "modulate:a", 0.0, 0.3)
+	tween.tween_callback(toast.queue_free)
 
 
 func _setup_merchant_visit() -> void:
@@ -2713,34 +2799,28 @@ func _claim_current_contract() -> void:
 		contract_report_message = "사자: 아직 좀 모자란다. 급할 거 없어. 천천히 챙겨 와라."
 	else:
 		var definition := result.get("definition", {}) as Dictionary
-		var construction_line := ""
 		var facility_id := str(result.get("facility_id", ""))
 		if not facility_id.is_empty():
 			_refresh_unlocked_facilities()
-			construction_line = "\n시설 완공 · %s" % str(result.get("facility_name", facility_id))
 		var story_lines: Array[String] = []
 		for line in definition.get("complete_dialogue", []) as Array:
 			story_lines.append(str(line))
-		story_lines.append("기록 해독 · %s\n%s" % [
-			str(definition.get("lore_title", "사자의 기록")),
-			str(definition.get("lore", "")),
-		])
-		var reward_line := "보고 보상 · %s" % _format_contract_reward_text(
+		# 기록 본문은 사자가 읽어 주는 말이라 대화에 남긴다. "기록 해독 ·" 라벨과
+		# 보상·완공 정산은 시스템 문장이라 대화창이 닫힌 뒤 상단 알림으로 나간다.
+		var lore_text := str(definition.get("lore", ""))
+		if not lore_text.is_empty():
+			story_lines.append(lore_text)
+		_queue_system_notice("기록 해독 · %s" % str(definition.get("lore_title", "사자의 기록")))
+		_queue_system_notice("보고 보상 · %s" % _format_contract_reward_text(
 			result.get("reward", {}) as Dictionary
-		)
-		if not construction_line.is_empty():
-			reward_line += construction_line
+		))
+		if not facility_id.is_empty():
+			_queue_system_notice("시설 완공 · %s" % str(result.get("facility_name", facility_id)))
 		# 계약 보상에 츄르가 있었으면 쉘터 다음 목표 진행도를 한 줄 더.
 		if int((result.get("reward", {}) as Dictionary).get("churu", 0)) > 0:
 			var goal_note: String = SHELTER_REQUISITION.describe_progress_after_pickup("churu")
 			if not goal_note.is_empty():
-				reward_line += "\n%s" % goal_note
-		story_lines.append(reward_line)
-		_show_status(
-			"사자가 %s 공사를 완료했습니다." % str(result.get("facility_name", "새 시설"))
-			if not facility_id.is_empty()
-			else "계약 보상을 받고 새로운 세계 기록을 해금했습니다."
-		)
+				_queue_system_notice(goal_note)
 		_update_stats()
 		_close_contract_ui()
 		_open_contract_story(
