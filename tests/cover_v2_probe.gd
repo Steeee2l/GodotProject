@@ -321,9 +321,12 @@ func _probe_player_cover() -> void:
 		var arc := cover_system.get("arc_pivot") as Node3D
 		_assert(arc != null and arc.visible, "① covered 중 발밑 방패 호가 보여야 합니다.")
 		_assert((cover_system.get("arc_fill") as Node3D).visible, "① covered 호는 채움이 보입니다.")
+		# v3: 내밈은 쏜 직후에만. 조준 입력이 아니라 사격 알림으로 peeking을 만든다.
 		main_scene.set("laser_aim_held", true)
+		cover_system.call("notify_player_fired")
 		cover_system.call("_update_player_visuals")
 		_assert(not (cover_system.get("arc_fill") as Node3D).visible, "② peeking 중 채움은 꺼지고 테두리만 남아야 합니다.")
+		cover_system.set("exposed_time", 0.0)
 		_assert((cover_system.get("arc_outline") as Node3D).visible, "② peeking 중 테두리 호는 보여야 합니다.")
 		main_scene.set("laser_aim_held", false)
 		main_scene.set_physics_process(true)
