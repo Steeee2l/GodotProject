@@ -30,6 +30,12 @@ func _run() -> void:
 	assert(ResourceLoader.exists(CATNIP_SCRAPER_TEXTURE_PATH))
 	assert(ResourceLoader.exists(TRAINING_TEXTURE_PATH))
 	assert(ResourceLoader.exists(STORAGE_TEXTURE_PATH))
+	# 시설은 사자 계약으로 해금된다(2026-08) — 전부 세워진 상태를 검사하려면 먼저 연다.
+	var unlock_state := root.get_node("GameState")
+	unlock_state.set("persistence_enabled", false)
+	unlock_state.call("reset_run")
+	unlock_state.set("opening_completed", true)
+	unlock_state.call("unlock_all_shelter_facilities")
 	var shelter := load(SHELTER_SCENE_PATH).instantiate() as Node3D
 	root.add_child(shelter)
 	await process_frame
@@ -63,8 +69,7 @@ func _run() -> void:
 	# 정원은 티어 표를 따른다(2026-08 티어 정원 개편 뒤 5→8).
 	assert(int(module_root.get_meta("cat_capacity")) == int((root.get_node("GameState").get("SHELTER_CAPACITY_BY_TIER") as Dictionary).get(1, 0)))
 	assert((module_root.get_meta("module_grid_size") as Vector2).is_equal_approx(Vector2(2.65, 3.45)))
-	assert(get_nodes_in_group("shelter_module_slot").size() == 1)
-	assert(get_nodes_in_group("shelter_bed").size() == 1)
+	# 모듈 슬롯·침대 기물은 폐지됐다(쉘터 UI 중심 설계 — 관리는 운영 독/모달로만).
 	assert(get_nodes_in_group("shelter_workbench").size() == 1)
 	assert(get_nodes_in_group("scratcher_bank").size() == 1)
 	assert(get_nodes_in_group("catnip_scraper").size() == 1)
@@ -104,7 +109,8 @@ func _run() -> void:
 	for facility_id in [
 		"scratcher_bank", "catnip_scraper", "workbench", "training", "storage",
 	]:
-		assert(ops_dock.get_node_or_null("OpsButton_%s" % facility_id) is Button)
+		# 재도색(2026-09-04) 뒤 버튼은 OpsButtons 컨테이너 안에 있다 — 재귀 탐색.
+		assert(ops_dock.find_child("OpsButton_%s" % facility_id, true, false) is Button)
 
 	assert(shelter.get_node("ShelterPlayer") is CharacterBody3D)
 	assert(shelter.get("dash_button") is Button)
