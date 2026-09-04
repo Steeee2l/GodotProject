@@ -4723,18 +4723,30 @@ func _show_goal_card_hint(text: String) -> void:
 		goal_card_hint_panel.add_theme_stylebox_override("panel", style)
 		var label := Label.new()
 		label.name = "Label"
-		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		# autowrap은 첫 프레임에 폭 0 기준으로 세로 768px짜리 최소 높이를 내놓아
+		# 패널이 화면 바닥까지 늘어났다(캡처 검수). 한 줄 + 말줄임으로 고정.
+		label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		label.add_theme_font_override("font", FONT)
 		label.add_theme_font_size_override("font_size", HudStyle.TYPE_BODY)
 		label.add_theme_color_override("font_color", HudStyle.GOLD.lerp(HudStyle.TEXT, 0.45))
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		goal_card_hint_panel.add_child(label)
-		stats_panel.get_parent().add_child(goal_card_hint_panel)
+		# 스탯 패널의 부모 컨테이너에 넣으면 레이아웃이 세로로 늘려 버린다 — 전용 레이어.
+		var hint_layer := CanvasLayer.new()
+		hint_layer.name = "GoalCardHintLayer"
+		hint_layer.layer = 60
+		add_child(hint_layer)
+		hint_layer.add_child(goal_card_hint_panel)
 	var hint_label := goal_card_hint_panel.get_node("Label") as Label
+	# 스탯 패널 노드는 보이는 카드보다 아래로 길다 — 목표 카드의 실제 rect 기준.
+	var rect := (
+		shelter_goal_card.get_global_rect()
+		if is_instance_valid(shelter_goal_card)
+		else stats_panel.get_global_rect()
+	)
+	hint_label.custom_minimum_size = Vector2(rect.size.x - 24.0, 0)
 	hint_label.text = text
-	var rect := stats_panel.get_global_rect()
-	goal_card_hint_panel.custom_minimum_size = Vector2(rect.size.x, 0)
-	goal_card_hint_panel.size = Vector2(rect.size.x, 0)
+	goal_card_hint_panel.size = goal_card_hint_panel.get_combined_minimum_size()
 	goal_card_hint_panel.global_position = Vector2(rect.position.x, rect.end.y + 8.0)
 	goal_card_hint_panel.visible = true
 	goal_card_hint_panel.modulate.a = 0.0

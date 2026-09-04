@@ -19,9 +19,9 @@ func _run() -> void:
 	game_state.set("opening_completed", true)
 	var shelter: Node = load("res://scenes/shelter_interior.tscn").instantiate()
 	root.add_child(shelter)
-	await _wait(1.2)
+	await _wait(2.0)
 	var guard := 0
-	while bool(shelter.get("contract_story_open")) and guard < 12:
+	while bool(shelter.get("contract_story_open")) and guard < 30:
 		shelter.call("_advance_contract_story")
 		guard += 1
 		await _wait(0.15)
