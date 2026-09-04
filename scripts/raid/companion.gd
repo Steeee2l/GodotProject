@@ -313,7 +313,7 @@ func _drop_radio(world_position: Vector3) -> void:
 	)
 	radio_point.set_meta("interaction_distance", JUHONG_REVIVE_DISTANCE)
 	# 이탈 지점의 십자가 — 주홍 노드는 통째로 숨었으니 독립 마커로 세운다.
-	radio_grave = CompanionSystem.build_rip_marker("주홍", JUHONG_ACCENT)
+	radio_grave = CompanionSystem.build_rip_marker("주홍", JUHONG_ACCENT, CompanionSystem.JUHONG_PORTRAIT_TEXTURE)
 	host.add_child(radio_grave)
 	radio_grave.global_position = Vector3(world_position.x, 0.78, world_position.z)
 
@@ -532,8 +532,51 @@ static func get_rip_cross_texture() -> Texture2D:
 	return _rip_cross_texture
 
 
-static func build_rip_marker(name_text: String, accent: Color) -> Node3D:
-	# 배치 규약: 액터 원점(지면 +0.78)에 붙인다 — 십자가가 발치에 서고 이름이 위에 뜬다.
+const PLAYER_PORTRAIT_TEXTURE := preload("res://assets/characters/cat_8way/down_idle_0.png")
+const JUHONG_PORTRAIT_TEXTURE := preload("res://assets/characters/juhong/down_idle-frame-0.png")
+# 256 전신 프레임에서 귀 끝~가슴 정사각.
+const PORTRAIT_BUST_REGION := Rect2i(48, 22, 160, 160)
+const PORTRAIT_PIXELS := 96
+static var _circle_portrait_cache: Dictionary = {}
+
+
+static func build_circle_portrait_texture(texture: Texture2D, accent: Color) -> ImageTexture:
+	# 상반신을 잘라 원형으로 마스킹하고 가장자리에 2px 테두리(accent)를 두른다.
+	var cache_key := "%s|%s" % [texture.resource_path, accent.to_html(false)]
+	if _circle_portrait_cache.has(cache_key):
+		return _circle_portrait_cache[cache_key]
+	var source := texture.get_image()
+	if source == null:
+		return null
+	if source.is_compressed():
+		source.decompress()
+	var bust := source.get_region(PORTRAIT_BUST_REGION)
+	bust.resize(PORTRAIT_PIXELS, PORTRAIT_PIXELS, Image.INTERPOLATE_NEAREST)
+	if bust.get_format() != Image.FORMAT_RGBA8:
+		bust.convert(Image.FORMAT_RGBA8)
+	var center := float(PORTRAIT_PIXELS) * 0.5
+	var radius := center - 1.0
+	var ring := 2.5
+	var background := Color(0.06, 0.08, 0.085, 1.0)
+	for y in PORTRAIT_PIXELS:
+		for x in PORTRAIT_PIXELS:
+			var distance := Vector2(float(x) + 0.5 - center, float(y) + 0.5 - center).length()
+			var pixel := bust.get_pixel(x, y)
+			if pixel.a < 0.5:
+				pixel = background
+			if distance > radius:
+				pixel.a = 0.0
+			elif distance > radius - ring:
+				pixel = accent
+			bust.set_pixel(x, y, pixel)
+	var result := ImageTexture.create_from_image(bust)
+	_circle_portrait_cache[cache_key] = result
+	return result
+
+
+static func build_rip_marker(name_text: String, accent: Color, portrait: Texture2D = null) -> Node3D:
+	# 배치 규약: 액터 원점(지면 +0.78)에 붙인다 — 십자가가 발치에 서고 이름이 위에,
+	# 그 위에 둥근 초상화(2026-09-03 유저: "십자가 위에 초상화 동그랗게").
 	var marker := Node3D.new()
 	marker.name = "RipMarker"
 	var cross := Sprite3D.new()
@@ -561,13 +604,27 @@ static func build_rip_marker(name_text: String, accent: Color) -> Node3D:
 	label.outline_modulate = Color(0.03, 0.05, 0.05, 0.94)
 	label.outline_size = 8
 	marker.add_child(label)
+	if portrait != null:
+		var circle := build_circle_portrait_texture(portrait, accent)
+		if circle != null:
+			var face := Sprite3D.new()
+			face.name = "RipPortrait"
+			face.texture = circle
+			face.pixel_size = 0.011
+			face.position = Vector3(0, 1.5, 0)
+			face.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			face.shaded = false
+			face.transparent = true
+			face.no_depth_test = true
+			face.render_priority = 119
+			marker.add_child(face)
 	return marker
 
 
 func _set_player_rip(active: bool) -> void:
 	if active:
 		if player_rip_marker == null or not is_instance_valid(player_rip_marker):
-			player_rip_marker = CompanionSystem.build_rip_marker(GameState.player_name, Color("#e8b64c"))
+			player_rip_marker = CompanionSystem.build_rip_marker(GameState.player_name, Color("#e8b64c"), CompanionSystem.PLAYER_PORTRAIT_TEXTURE)
 			host.player.add_child(player_rip_marker)
 			player_rip_marker.position = Vector3.ZERO
 		player_rip_marker.visible = true
@@ -1452,6 +1509,9 @@ class JuhongBody:
 		visible = false
 		collision_layer = 0
 		collision_mask = 0
+		# 십자가는 다운 상태의 표식이다 — 후퇴하면 치운다. 안 치우면 무전기로 복귀할 때
+		# 십자가를 단 채 따라다녔다(2026-09-03 유저 신고).
+		_set_rip_visible(false)
 		set_physics_process(false)
 		system.on_juhong_retreated()
 
@@ -1464,7 +1524,7 @@ class JuhongBody:
 	func _set_rip_visible(active: bool) -> void:
 		if active:
 			if rip_marker == null or not is_instance_valid(rip_marker):
-				rip_marker = CompanionSystem.build_rip_marker("주홍", CompanionSystem.JUHONG_ACCENT)
+				rip_marker = CompanionSystem.build_rip_marker("주홍", CompanionSystem.JUHONG_ACCENT, CompanionSystem.JUHONG_PORTRAIT_TEXTURE)
 				add_child(rip_marker)
 			rip_marker.visible = true
 		elif rip_marker != null and is_instance_valid(rip_marker):
@@ -1472,6 +1532,7 @@ class JuhongBody:
 
 
 	func return_from_retreat(origin: Vector3) -> void:
+		_set_rip_visible(false)
 		# 무전기 회수 — 연막에서 돌아온다. 체력 60%, 판당 소생 카운트는 그대로.
 		if not retreated:
 			return

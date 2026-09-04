@@ -21,9 +21,17 @@ const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd"
 const SFX := preload("res://scripts/sfx_bank.gd")
 const BLOCK_FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 
-const COVER_RANGE := 1.2
+# 2026-09-03 유저: "구조물 근처에 가면 바로 엄폐, 난 안 맞고 내 총알은 날아가게".
+#   · 엄폐 = 낮은 엄폐물(차량·기물)에 COVER_RANGE 안으로 붙어 있는 상태. 적이 있든
+#     없든 붙으면 즉시 엄폐다(예전엔 건너편에서 노리는 적이 있어야만 엄폐였다).
+#   · 엄폐물 쪽(COVER_ARC_DEGREES 안)에서 오는 총알은 막힌다. 조준만으로는 노출되지
+#     않고, 쏘는 순간 FIRE_EXPOSURE_SECONDS만 노출된다 — 숨어서 쏘는 리듬.
+#   · 내 총알은 붙어 있는 엄폐물을 통과한다(weapon_combat이 blocker RID를 넘긴다).
+const COVER_RANGE := 1.35
+const COVER_SCAN_RADIUS := 2.4
+const COVER_ARC_DEGREES := 78.0
 const LOW_COVER_MAX_HEIGHT := 1.7
-const FIRE_EXPOSURE_SECONDS := 0.5
+const FIRE_EXPOSURE_SECONDS := 0.35
 const LOW_RAY_HEIGHT := 0.55
 const HEAD_RAY_HEIGHT := 1.62
 const PLAYER_GROUND_OFFSET := 0.78
@@ -45,6 +53,8 @@ var player: CharacterBody3D
 var in_cover := false
 var exposed_time := 0.0
 var cover_body: Node3D
+# 플레이어 → 엄폐물 최근접점 방향(수평). 이 방향 ±COVER_ARC_DEGREES가 보호 범위.
+var cover_direction := Vector3.ZERO
 var scan_timer := 0.0
 var last_threat_source := Vector3.INF
 # 마지막으로 차단 판정에 성공한 낮은 레이의 명중점(엄폐물 표면) — 차단 FX 위치.
@@ -74,7 +84,9 @@ func update(delta: float) -> void:
 	scan_timer -= delta
 	if scan_timer <= 0.0:
 		scan_timer = SCAN_INTERVAL
-		_set_in_cover(_scan_threats())
+		_set_in_cover(_scan_cover())
+		if in_cover:
+			_scan_threats()
 	_update_player_visuals()
 
 
@@ -85,20 +97,76 @@ func get_state() -> String:
 
 
 func _is_peeking() -> bool:
-	# 별도 버튼 없음(모바일 대응) — 조준·사격 입력과 사격 후 노출 타이머가 곧 '내밈'.
-	if exposed_time > 0.0:
-		return true
-	if host == null:
+	# 조준만으로는 내밀지 않는다 — 쏜 직후 FIRE_EXPOSURE_SECONDS 동안만 노출.
+	return exposed_time > 0.0
+
+
+func _scan_cover() -> bool:
+	# 플레이어 주변의 낮은 엄폐물 중 가장 가까운 것에 붙어 있으면 엄폐.
+	if player == null or not is_instance_valid(player):
 		return false
-	return (
-		bool(host.get("laser_aim_held"))
-		or bool(host.get("fire_button_held"))
-		or bool(host.get("mouse_fire_held"))
+	var world := player.get_world_3d()
+	if world == null:
+		return false
+	var shape := SphereShape3D.new()
+	shape.radius = COVER_SCAN_RADIUS
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape
+	query.transform = Transform3D(Basis.IDENTITY, player.global_position + Vector3(0.0, 0.3, 0.0))
+	query.collision_mask = COLLISION_PROFILES.WORLD_ONLY_SIGHT_MASK
+	query.exclude = [player.get_rid()]
+	var best: Node3D = null
+	var best_distance := COVER_RANGE
+	var best_point := Vector3.INF
+	for hit in world.direct_space_state.intersect_shape(query, 16):
+		var collider := hit.get("collider") as Node3D
+		if collider == null or not _is_low_cover(collider):
+			continue
+		var closest := _closest_box_point(collider, player.global_position)
+		if closest == Vector3.INF:
+			continue
+		var flat := Vector3(closest.x - player.global_position.x, 0.0, closest.z - player.global_position.z)
+		var distance := flat.length()
+		if distance < best_distance:
+			best_distance = distance
+			best = collider
+			best_point = closest
+	if best == null:
+		cover_body = null
+		cover_direction = Vector3.ZERO
+		return false
+	cover_body = best
+	var toward := Vector3(best_point.x - player.global_position.x, 0.0, best_point.z - player.global_position.z)
+	if toward.length_squared() > 0.0001:
+		cover_direction = toward.normalized()
+	elif cover_direction == Vector3.ZERO:
+		cover_direction = Vector3.FORWARD
+	last_block_point = best_point
+	return true
+
+
+func get_cover_blocker_rid() -> RID:
+	if in_cover and cover_body != null and is_instance_valid(cover_body) and cover_body is CollisionObject3D:
+		return (cover_body as CollisionObject3D).get_rid()
+	return RID()
+
+
+static func _closest_box_point(blocker: Node3D, from_position: Vector3) -> Vector3:
+	var shape := _find_box_shape(blocker)
+	if shape == null:
+		return Vector3.INF
+	var size: Vector3 = (shape.shape as BoxShape3D).size
+	var local: Vector3 = shape.global_transform.affine_inverse() * from_position
+	var clamped := Vector3(
+		clampf(local.x, -size.x * 0.5, size.x * 0.5),
+		clampf(local.y, -size.y * 0.5, size.y * 0.5),
+		clampf(local.z, -size.z * 0.5, size.z * 0.5)
 	)
+	return shape.global_transform * clamped
 
 
 func _scan_threats() -> bool:
-	# 경계 상태로 나를 노리는 적 중 하나라도 '엄폐물 건너편'이면 엄폐 중이다.
+	# 경계 상태로 나를 노리는 적 중 엄폐물 건너편에 있는 놈 — 방패 호가 그쪽을 본다.
 	if player == null or not is_instance_valid(player):
 		return false
 	var enemies: Array = host.get("enemies") if host.get("enemies") != null else []
@@ -120,24 +188,37 @@ func _scan_threats() -> bool:
 
 
 func is_covered_from(source_position: Vector3) -> bool:
-	if player == null or not is_instance_valid(player):
+	# 엄폐 중이고, 공격원이 엄폐물 쪽 호(±COVER_ARC_DEGREES) 안에 있으면 막힌다.
+	# 레이 기하(낮은 레이 막힘·머리 레이 통과)가 성립하면 확정, 아니면 호 안쪽
+	# 절반(±COVER_ARC_DEGREES/2)까지는 방향만으로도 인정한다 — 상자 모서리를 스치는
+	# 레이 때문에 "붙어 있는데 맞는" 일을 막는다.
+	if not in_cover or player == null or not is_instance_valid(player):
+		return false
+	if source_position == Vector3.INF or cover_direction == Vector3.ZERO:
+		return false
+	var to_source := Vector3(
+		source_position.x - player.global_position.x, 0.0, source_position.z - player.global_position.z
+	)
+	if to_source.length_squared() < 0.04:
+		return false
+	var alignment := cover_direction.dot(to_source.normalized())
+	if alignment < cos(deg_to_rad(COVER_ARC_DEGREES)):
 		return false
 	var result := CoverSystem.evaluate_cover_for(
 		player,
 		source_position,
 		player.global_position.y - PLAYER_GROUND_OFFSET
 	)
-	if not bool(result.get("covered", false)):
-		return false
-	cover_body = result.get("blocker") as Node3D
-	last_block_point = result.get("point", Vector3.INF)
-	return true
+	if bool(result.get("covered", false)):
+		last_block_point = result.get("point", Vector3.INF)
+		return true
+	return alignment >= cos(deg_to_rad(COVER_ARC_DEGREES * 0.5))
 
 
 func try_block_ranged(source_position: Vector3) -> bool:
 	# 피격 순간 호출(총알만 — blast/melee는 호출부에서 거른다).
-	# covered 상태 + 그 공격원 기준 엄폐 기하 성립 = 완전 차단.
-	if source_position == Vector3.INF or get_state() != "covered":
+	# 엄폐 중 + 노출 아님 + 공격원이 엄폐물 쪽 = 완전 차단.
+	if source_position == Vector3.INF or not in_cover or is_exposed():
 		return false
 	if not is_covered_from(source_position):
 		return false
@@ -166,7 +247,7 @@ func _set_in_cover(value: bool) -> void:
 			host.call(
 				"_show_mastery_lesson",
 				"cover",
-				"엄폐 중 — 엄폐물 방향의 총알이 막힙니다. 조준하면 내밀어 쏩니다"
+				"엄폐 중. 엄폐물 쪽에서 오는 총알은 막힌다. 쏘는 순간만 잠깐 노출된다"
 			)
 	else:
 		exposed_time = 0.0

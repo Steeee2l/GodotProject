@@ -229,8 +229,8 @@ func _probe_jongno_static_tuning(main_scene: Node, director, world: Node, game_s
 	var jongno_data = main_scene.get("raid_zone_data")
 	main_scene.set("raid_zone_data", (game_state.get("RAID_ZONES") as Dictionary)["namdaemun_market"])
 	_assert(
-		int(director.call("get_max_concurrent_alerted")) == 6,
-		"② 타 존 동시 교전 상한은 6 유지: %d" % int(director.call("get_max_concurrent_alerted"))
+		int(director.call("get_max_concurrent_alerted")) == int(director.get("MAX_CONCURRENT_ALERTED")),
+		"② 타 존 동시 교전 상한은 MAX_CONCURRENT_ALERTED(%d) 유지: %d" % [int(director.get("MAX_CONCURRENT_ALERTED")), int(director.call("get_max_concurrent_alerted"))]
 	)
 	var other_request: Array[String] = ["grenadier"]
 	var other_spawned = director.call(
@@ -323,7 +323,8 @@ func _probe_squad_clear(main_scene: Node, director, player: CharacterBody3D) -> 
 		if str((marker as Dictionary).get("id", "")).begins_with("squad_cleared_"):
 			marker_found = str((marker as Dictionary).get("type", "")) == "cleared"
 			break
-	_assert(marker_found, "③ 전술 지도에 cleared 마커(청록 원)가 등록돼야 합니다.")
+	# 소탕 구역 지도 마커는 폐지됐다(2026-09-01 유저: "소탕 구역이 남을 필요는 없지").
+	_assert(not marker_found, "③ 전술 지도에 cleared 마커가 남지 않아야 합니다(폐지).")
 	# 증원 목적지 회피 — 앵커 26m 옆에서 자리를 뽑아도 18m 안은 나오지 않는다.
 	var anchor: Vector3 = (director.get("cleared_squad_anchors") as Array).back()
 	player.global_position = anchor + Vector3(26.0, 0.0, 0.0)

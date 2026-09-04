@@ -15,6 +15,8 @@ const FRIENDLY_ARM_DISTANCE := 0.4
 
 var direction := Vector3.FORWARD
 var source_body: Node3D
+# 통과할 몸체(엄폐 사격 — 붙어 있는 엄폐물). 스윕 레이·영역 진입 모두 무시한다.
+var ignored_body_rids: Array[RID] = []
 var damage := 20
 var hostile := false
 var critical_chance := 0.0
@@ -146,6 +148,8 @@ func _physics_process(delta: float) -> void:
 	var exclusions: Array[RID] = []
 	if is_instance_valid(source_body) and source_body is CollisionObject3D:
 		exclusions.append((source_body as CollisionObject3D).get_rid())
+	for ignored_rid in ignored_body_rids:
+		exclusions.append(ignored_rid)
 	for body_id in processed_body_ids:
 		var processed_body := instance_from_id(int(body_id))
 		if processed_body is CollisionObject3D:
@@ -165,6 +169,8 @@ func _physics_process(delta: float) -> void:
 
 func _on_body_entered(body: Node3D) -> void:
 	if body == source_body:
+		return
+	if body is CollisionObject3D and ignored_body_rids.has((body as CollisionObject3D).get_rid()):
 		return
 	if spawn_position.distance_to(global_position) < (ARM_DISTANCE if hostile else FRIENDLY_ARM_DISTANCE):
 		return

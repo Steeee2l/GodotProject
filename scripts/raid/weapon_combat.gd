@@ -197,6 +197,11 @@ func _spawn_weapon_projectile(direction: Vector3, pellet_index: int) -> void:
 	projectile.set_script(BULLET_PROJECTILE)
 	projectile.set("direction", direction)
 	projectile.set("source_body", player)
+	# 엄폐 중이면 붙어 있는 엄폐물을 내 총알이 통과한다(엄폐 사격의 핵심).
+	var cover_rid: RID = host.cover_system.get_cover_blocker_rid()
+	if cover_rid.is_valid():
+		var ignored: Array[RID] = [cover_rid]
+		projectile.set("ignored_body_rids", ignored)
 	projectile.set("damage", projectile_damage)
 	projectile.set("critical_chance", host._get_weapon_critical_chance())
 	projectile.set("critical_multiplier", 1.65)
