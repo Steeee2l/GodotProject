@@ -582,44 +582,44 @@ func _spawn_enemy(
 # 확정 드랍된다(_spawn_elite_loot). 스탯은 존 티어만 따른다 — 플레이어 장비
 # 참조(러버밴딩) 금지. 전술 지도에는 안 올린다 — 필드에서 아이콘으로 발견한다.
 const ELITE_DISPLAY_NAME := "약탈자 정예 · 무장 강탈자"
+const ELITE_CATALOG := preload("res://scripts/raid/elite_catalog.gd")
 
 
 func get_initial_elite_count(stage_tier: int) -> int:
-	return 1 if stage_tier <= 2 else 2
+	return ELITE_CATALOG.get_count(stage_tier)
 
 
 func spawn_initial_elites(world: ProceduralCityMap) -> void:
+	# 2026-09-03: 이름 있는 엘리트(elite_catalog). 단계별 1~3명, 각자 호위
+	# 분대(일반 적 1~2)를 데리고 진입 안전 반경 밖에 선다. 무장·종류·스탯 배율은
+	# 카탈로그가 정한다. 스탯은 존 단계만 따른다 — 러버밴딩 금지.
 	var stage_tier := LOOT_ECONOMY.get_stage_for_zone(host.raid_zone_data)
 	var elite_count := get_initial_elite_count(stage_tier)
-	# 존 티어 위협만 사용 — 야간 보정(night_intensity)도 안 태운다.
 	var zone_threat := clampf(float(host.raid_zone_data.get("threat", 0.0)), 0.0, 1.0)
-	for elite_index in elite_count:
+	var profiles: Array[Dictionary] = ELITE_CATALOG.pick_profiles(stage_tier, elite_count, spawn_random)
+	var escort_count := ELITE_CATALOG.get_escort_count(stage_tier)
+	for elite_index in profiles.size():
+		var profile := profiles[elite_index]
 		var anchor := _find_distributed_enemy_position(world, elite_index + 1, elite_count + 1)
 		anchor = _ensure_initial_enemy_safe_anchor(world, anchor, 91 + elite_index)
-		# 상위 무장 확정 — 드랍이 보상의 핵심이라 M1911 엘리트는 성립하지 않는다.
-		var weapon_roll := spawn_random.randf()
-		var elite_weapon_id := "mp5"
-		if weapon_roll >= 0.8:
-			elite_weapon_id = "double_barrel"
-		elif weapon_roll >= 0.45:
-			elite_weapon_id = "ak47"
-		# 존3+ 엘리트는 절반이 사다리 2단 무장 — 확정 드랍이 사다리를 올려 준다.
-		if zone_threat >= 0.5 and spawn_random.randf() < 0.5:
-			if elite_weapon_id == "ak47":
-				elite_weapon_id = "akm"
-			elif elite_weapon_id == "double_barrel":
-				elite_weapon_id = "pump_shotgun"
+		# 호위 분대 먼저 — 엘리트는 같은 squad_id로 붙어 "소탕"이 한 무리로 성립한다.
+		var escort_kinds: Array[String] = []
+		for _escort in escort_count:
+			escort_kinds.append("pistol")
+		var escorts := _spawn_enemy_squad(world, anchor, escort_kinds, zone_threat)
+		var squad_id := enemy_squad_serial - 1 if not escorts.is_empty() else -1
 		var elite := _spawn_enemy(
-			"pistol",
+			str(profile.get("kind", "pistol")),
 			anchor,
 			zone_threat,
-			-1,
+			squad_id,
+			anchor,
 			Vector3.ZERO,
-			Vector3.ZERO,
-			elite_weapon_id
+			str(profile.get("weapon", ""))
 		)
+		elite.call("set_power_scale", get_enemy_power_scale())
 		if elite.has_method("promote_to_elite"):
-			elite.call("promote_to_elite", ELITE_DISPLAY_NAME)
+			elite.call("promote_to_elite", profile)
 		if elite.has_method("configure_patrol"):
 			elite.call(
 				"configure_patrol",
@@ -630,6 +630,8 @@ func spawn_initial_elites(world: ProceduralCityMap) -> void:
 
 func _on_enemy_died(enemy: CharacterBody3D) -> void:
 	host.run_kills += 1
+	if host.enemy_chatter != null:
+		host.enemy_chatter.notify("ally_down", enemy)
 	GameState.raid_kills += 1
 	# 처치 확정 셰이크 — 타격 셰이크(0.12/0.16)보다 한 단계 굵게, 죽는
 	# 순간이 손에 남게 한다. 엘리트는 더 크게. 보스는 전용 연출이 있으므로
@@ -771,6 +773,9 @@ func _spawn_squad_clear_bonus(drop_position: Vector3) -> void:
 
 func _on_enemy_damaged(_enemy: CharacterBody3D, amount: int) -> void:
 	host.run_damage_dealt += maxi(0, amount)
+	# 피격 바크 — 살아남은 적만(죽는 타격은 ally_down이 맡는다).
+	if host.enemy_chatter != null and is_instance_valid(_enemy) and int(_enemy.get("health")) > 0:
+		host.enemy_chatter.notify("hit", _enemy)
 	# 예전 판정은 "한 발 피해 >= 20"이었다. MP5(18)와 샷건 펠릿(18)이 영원히
 	# 걸리지 않아서, 한 방에 144를 넣는 샷건이 가장 밋밋했다. 같은 프레임에
 	# 들어간 피해를 합산해서 본다.

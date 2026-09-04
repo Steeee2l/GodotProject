@@ -33,6 +33,51 @@ const REPLY_DELAY := 1.9
 # 전투 중 바크 확률 — 굴림마다. 낮게 둬야 '가끔 던지는 말'이 된다.
 const COMBAT_BARK_CHANCE := 0.28
 const COMBAT_BARK_COOLDOWN := 9.0
+# 상황 바크(2026-09-03 유저: "전투 중에도 머리 위 대사가 적합한 게 나오면").
+# 전역 간격·화자별 간격·종류별 확률. 엘리트는 카탈로그의 자기 대사가 먼저다.
+const CONTEXT_BARK_GLOBAL_COOLDOWN := 2.2
+const CONTEXT_SPEAKER_COOLDOWN := 5.5
+const CONTEXT_SCAN_INTERVAL := 0.3
+const LOST_SIGHT_SECONDS := 4.5
+const CONTEXT_CHANCE := {
+	"engage": 0.75,
+	"hit": 0.3,
+	"reload": 0.6,
+	"ally_down": 0.85,
+	"lost": 0.9,
+}
+const CONTEXT_LINES := {
+	"engage": [
+		"저기 있다! 고양이다!",
+		"총 들었다, 엄폐해!",
+		"왼쪽! 왼쪽으로 돌아!",
+		"쏴, 쏘라고!",
+		"무전 쳐! 한 놈 더 왔다!",
+	],
+	"hit": [
+		"윽! 맞았다!",
+		"이 자식이!",
+		"피 난다, 엄호해!",
+		"아직 안 죽었어!",
+	],
+	"reload": [
+		"재장전! 엄호해!",
+		"탄창 간다, 잠깐만!",
+		"탄이 없어, 막아!",
+	],
+	"ally_down": [
+		"한 놈 갔다!",
+		"야, 일어나! 일어나라고!",
+		"젠장, 죽었어!",
+		"저 고양이가 다 죽인다!",
+	],
+	"lost": [
+		"어디 갔어?",
+		"숨었다. 찾아!",
+		"조용히 해. 소리 들어봐.",
+		"저쪽 골목이다, 아마.",
+	],
+}
 
 # ── 대사 풀 ──────────────────────────────────────────────────────
 # 약탈자들이다. 배고프고, 지쳤고, 윗선을 믿지 않는다. 문어체·경구 금지.
@@ -96,6 +141,14 @@ const COMBAT_BARKS := [
 var host: Node
 var player: Node3D
 var chatter_timer := 0.0
+# 상황 바크 상태 — 적별 직전 경계/장전 상태와 시야 잃은 시간.
+var context_bark_timer := 0.0
+var context_speaker_cooldowns: Dictionary = {}
+var context_scan_timer := 0.0
+var last_alerted_state: Dictionary = {}
+var last_reloading_state: Dictionary = {}
+var lost_sight_seconds: Dictionary = {}
+var lost_bark_done: Dictionary = {}
 var random := RandomNumberGenerator.new()
 # enemy 인스턴스 ID → 다음에 말해도 되는 시각(초, 판 경과 시간 기준).
 var speaker_cooldowns: Dictionary = {}
@@ -123,6 +176,11 @@ func update(delta: float) -> void:
 		return
 	elapsed += delta
 	combat_bark_timer = maxf(0.0, combat_bark_timer - delta)
+	context_bark_timer = maxf(0.0, context_bark_timer - delta)
+	context_scan_timer -= delta
+	if context_scan_timer <= 0.0:
+		context_scan_timer = CONTEXT_SCAN_INTERVAL
+		_scan_context_events(CONTEXT_SCAN_INTERVAL)
 	chatter_timer -= delta
 	if chatter_timer > 0.0:
 		return
@@ -164,6 +222,107 @@ func _collect_nearby_enemies() -> Array[Node3D]:
 			continue
 		nearby.append(enemy)
 	return nearby
+
+
+func notify(kind: String, enemy: Node3D) -> void:
+	# 밖(디렉터)에서 오는 사건: hit(피격, 살아남음), ally_down(죽은 적).
+	if host == null or not is_instance_valid(player):
+		return
+	if kind == "ally_down":
+		# 죽은 놈은 말을 못 한다 — 가까운 교전 중인 동료가 대신 외친다.
+		var mourner := _find_nearby_alerted_ally(enemy, 14.0)
+		if mourner != null:
+			_try_context_bark("ally_down", mourner)
+		return
+	_try_context_bark(kind, enemy)
+
+
+func _scan_context_events(delta: float) -> void:
+	# 적별 상태 전이를 훑는다: 경계 진입(engage), 장전 시작(reload), 시야 상실(lost).
+	var enemies: Array = host.get("enemies") as Array
+	for raw_enemy in enemies:
+		var enemy := raw_enemy as Node3D
+		if not is_instance_valid(enemy) or bool(enemy.get("dying")):
+			continue
+		var enemy_id := enemy.get_instance_id()
+		var alerted_now := bool(enemy.get("alerted"))
+		var was_alerted := bool(last_alerted_state.get(enemy_id, false))
+		last_alerted_state[enemy_id] = alerted_now
+		var reloading_now := str(enemy.get("combat_state")) == "reloading"
+		var was_reloading := bool(last_reloading_state.get(enemy_id, false))
+		last_reloading_state[enemy_id] = reloading_now
+		if enemy.global_position.distance_to(player.global_position) > CHATTER_HEAR_RANGE:
+			continue
+		if alerted_now and not was_alerted:
+			_try_context_bark("engage", enemy)
+			lost_sight_seconds[enemy_id] = 0.0
+			lost_bark_done[enemy_id] = false
+			continue
+		if reloading_now and not was_reloading and alerted_now:
+			_try_context_bark("reload", enemy)
+		if alerted_now and not bool(enemy.get("has_current_line_of_sight")):
+			var lost := float(lost_sight_seconds.get(enemy_id, 0.0)) + delta
+			lost_sight_seconds[enemy_id] = lost
+			if lost >= LOST_SIGHT_SECONDS and not bool(lost_bark_done.get(enemy_id, false)):
+				lost_bark_done[enemy_id] = true
+				_try_context_bark("lost", enemy)
+		else:
+			lost_sight_seconds[enemy_id] = 0.0
+			lost_bark_done[enemy_id] = false
+
+
+func _find_nearby_alerted_ally(origin: Node3D, radius: float) -> Node3D:
+	if not is_instance_valid(origin):
+		return null
+	var best: Node3D = null
+	var best_distance := radius
+	for raw_enemy in host.get("enemies") as Array:
+		var enemy := raw_enemy as Node3D
+		if not is_instance_valid(enemy) or enemy == origin or bool(enemy.get("dying")):
+			continue
+		if not bool(enemy.get("alerted")):
+			continue
+		var distance := enemy.global_position.distance_to(origin.global_position)
+		if distance < best_distance:
+			best_distance = distance
+			best = enemy
+	return best
+
+
+func _try_context_bark(kind: String, enemy: Node3D) -> bool:
+	if not is_instance_valid(enemy) or bool(enemy.get("dying")):
+		return false
+	if enemy.global_position.distance_to(player.global_position) > CHATTER_HEAR_RANGE:
+		return false
+	if context_bark_timer > 0.0:
+		return false
+	var enemy_id := enemy.get_instance_id()
+	if float(context_speaker_cooldowns.get(enemy_id, 0.0)) > elapsed:
+		return false
+	var is_elite := bool(enemy.get_meta("elite", false))
+	var line := ""
+	if is_elite:
+		var elite_barks := enemy.get_meta("elite_barks", {}) as Dictionary
+		var elite_lines: Array = elite_barks.get(kind, []) as Array
+		if not elite_lines.is_empty():
+			line = str(elite_lines[random.randi() % elite_lines.size()])
+	# 엘리트는 자기 대사가 있으면 확률 없이 말한다 — 이름값이다.
+	if line.is_empty():
+		if random.randf() > float(CONTEXT_CHANCE.get(kind, 0.4)):
+			return false
+		var lines: Array = CONTEXT_LINES.get(kind, []) as Array
+		if lines.is_empty():
+			return false
+		line = str(lines[random.randi() % lines.size()])
+	context_bark_timer = CONTEXT_BARK_GLOBAL_COOLDOWN
+	context_speaker_cooldowns[enemy_id] = elapsed + CONTEXT_SPEAKER_COOLDOWN
+	SPEECH_BUBBLE.show_line(
+		enemy,
+		line,
+		SPEECH_BUBBLE.TONE_ELITE if is_elite else SPEECH_BUBBLE.TONE_ENEMY,
+		3.0 if is_elite else 2.4
+	)
+	return true
 
 
 func _roll_combat_bark(alerted: Array[Node3D]) -> void:

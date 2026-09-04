@@ -31,6 +31,8 @@ const TONE_ENEMY := Color("#ffffff")
 const TONE_ENEMY_GOSSIP := Color("#fff1dc")
 const TONE_ENEMY_SECRET := Color("#ece2ff")
 const TONE_ALLY := Color("#e6fff8")
+# 엘리트 — 이름표와 같은 붉은 기운. 흰 바탕 규칙은 지키되 살짝만 물들인다.
+const TONE_ELITE := Color("#ffd2c8")
 
 
 static func show_line(

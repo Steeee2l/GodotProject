@@ -384,26 +384,34 @@ func get_power_damage_multiplier() -> float:
 	return minf(POWER_SCALE_DAMAGE_MAX, pow(power_scale, POWER_SCALE_DAMAGE_EXPONENT))
 
 
-func promote_to_elite(elite_display_name: String) -> void:
+func promote_to_elite(profile = null) -> void:
 	# 엘리트 승격 — 스폰 직후(add_child 이후) 한 번만 호출한다.
-	# HP ~2.6배·피해 ~1.4배·이동 약간 빠르게. 새 스프라이트 없이 기존 리소스를
-	# 키우고(×1.18) 머리 위 경고 아이콘을 단다. 아이콘은 발각 전에도 보인다 —
+	# 프로필(elite_catalog)이 이름·배율·덩치를 정한다. 문자열을 넘기면 옛 방식
+	# (이름만, 기본 배율)으로 동작한다. 머리 위 경고 아이콘은 발각 전에도 보인다 —
 	# "쟤는 위험하다"를 접근 전에 알고 싸울지 말지 고를 수 있어야 한다.
 	if elite:
 		return
+	var elite_profile: Dictionary = {}
+	if profile is Dictionary:
+		elite_profile = profile
+	var elite_display_name := str(elite_profile.get("name", profile if profile is String else "엘리트"))
+	var health_multiplier := float(elite_profile.get("health", ELITE_HEALTH_MULTIPLIER))
+	var sprite_scale := float(elite_profile.get("scale", ELITE_SPRITE_SCALE))
 	elite = true
-	elite_damage_multiplier = ELITE_DAMAGE_MULTIPLIER
-	elite_speed_multiplier = ELITE_SPEED_MULTIPLIER
-	health = roundi(float(health) * ELITE_HEALTH_MULTIPLIER)
+	elite_damage_multiplier = float(elite_profile.get("damage", ELITE_DAMAGE_MULTIPLIER))
+	elite_speed_multiplier = float(elite_profile.get("speed", ELITE_SPEED_MULTIPLIER))
+	health = roundi(float(health) * health_multiplier)
 	max_health = health
 	set_meta("elite", true)
 	set_meta("display_name", elite_display_name)
+	set_meta("elite_id", str(elite_profile.get("id", "")))
+	set_meta("elite_barks", elite_profile.get("barks", {}))
 	if sprite:
-		sprite.scale *= ELITE_SPRITE_SCALE
+		sprite.scale *= sprite_scale
 	if shadow:
-		shadow.scale = Vector3(ELITE_SPRITE_SCALE, 1.0, ELITE_SPRITE_SCALE)
+		shadow.scale = Vector3(sprite_scale, 1.0, sprite_scale)
 	if weapon_visual:
-		weapon_visual.scale *= ELITE_SPRITE_SCALE
+		weapon_visual.scale *= sprite_scale
 	# 위협 아이콘 — 경고 삼각형(ui_icon_factory "alert")을 붉게. stealth의
 	# 가시성 페이드(set_player_visibility_factor)에 안 넣어서 상시 표시된다.
 	elite_icon = Sprite3D.new()
@@ -426,12 +434,13 @@ func promote_to_elite(elite_display_name: String) -> void:
 	elite_name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	elite_name_label.no_depth_test = true
 	elite_name_label.render_priority = 120
+	# 붉은 이름표(2026-09-03 유저: "위에 이름을 빨갛게 달고 있어야 구분된다").
 	elite_name_label.font = DAMAGE_FONT
-	elite_name_label.font_size = 30
-	elite_name_label.pixel_size = 0.005
-	elite_name_label.modulate = Color("#f3b7a4")
-	elite_name_label.outline_modulate = Color(0.1, 0.02, 0.01, 0.95)
-	elite_name_label.outline_size = 8
+	elite_name_label.font_size = 40
+	elite_name_label.pixel_size = 0.0058
+	elite_name_label.modulate = Color("#ff4b3a")
+	elite_name_label.outline_modulate = Color(0.08, 0.01, 0.01, 0.98)
+	elite_name_label.outline_size = 12
 	add_child(elite_name_label)
 
 
