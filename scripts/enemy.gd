@@ -156,9 +156,16 @@ const FACTION_COMBAT_DAMAGE_MULTIPLIER := 0.42
 # 6~16m 교전 중인 ranged만 시도 — 근접 돌격조·척탄병은 안 한다(수류탄이 곧
 # 엄폐 캠핑의 카운터다). 내밈 = ranged_windup~점사(조준선 예고 구간과 일치).
 const COVER_SYSTEM := preload("res://scripts/raid/cover_system.gd")
+# 적 엄폐(2026-09-04 유저: "적들도 근처에 엄폐물이 있다면 엄폐하게끔 AI가 잘
+# 구성돼 있어야"). 교전 거리 안에서 낮은 엄폐물의 플레이어 반대편으로 이동해 붙고,
+# 붙어 있는 동안은 자리를 지키며 점사할 때만 내민다.
 const COVER_ENGAGE_MIN_DISTANCE := 6.0
-const COVER_ENGAGE_MAX_DISTANCE := 16.0
+const COVER_ENGAGE_MAX_DISTANCE := 30.0
 const COVER_SCAN_INTERVAL := 0.25
+const COVER_SEEK_RADIUS := 9.0
+const COVER_SEEK_STAND_OFFSET := 0.85
+const COVER_SEEK_RETRY_SECONDS := 1.2
+const COVER_BREAK_SECONDS := 2.5
 const COVER_CROUCH_SCALE_Y := 0.8
 const COVER_CROUCH_SINK := 0.1
 
@@ -313,6 +320,11 @@ var cover_crouch_tween: Tween
 var cover_arc: Node3D
 var cover_shots_blocked := 0
 var last_cover_block_point := Vector3.INF
+# 능동 엄폐 — 찾아 둔 엄폐 자리와 타이머(재탐색·이탈 후 휴식·자리 지키기).
+var cover_seek_point := Vector3.INF
+var cover_seek_retry := 0.0
+var cover_seek_cooldown := 0.0
+var cover_hold_timer := 0.0
 static var weapon_texture_cache: Dictionary = {}
 static var health_bar_texture_cache: Dictionary = {}
 static var reload_texture_cache: Dictionary = {}
@@ -2369,6 +2381,8 @@ func _update_pistol(direction: Vector3, distance: float, delta: float) -> void:
 			_steer_around_obstacles(direction)
 			* maxf(movement_speed, OPENING_PRESSURE_SPEED * lerpf(1.0, 1.12, threat_level))
 		)
+	elif _update_cover_seek(direction, distance, delta):
+		return
 	elif _update_stationary_target_flank(direction, distance):
 		return
 	else:
@@ -2860,6 +2874,14 @@ func _reset_sprite_pose() -> void:
 # ── 엄폐 v2(적) — 상태·차단·웅크림 ────────────────────────────────
 
 func _update_enemy_cover(delta: float) -> void:
+	# 능동 엄폐 타이머는 매 프레임 흐른다 — 점사·장전 중에도 재탐색 시계가 가야
+	# 사격 사이 짧은 '평상' 구간에서 곧장 자리를 찾는다.
+	var was_holding := cover_hold_timer > 0.0
+	cover_seek_retry = maxf(0.0, cover_seek_retry - delta)
+	cover_seek_cooldown = maxf(0.0, cover_seek_cooldown - delta)
+	cover_hold_timer = maxf(0.0, cover_hold_timer - delta)
+	if was_holding and cover_hold_timer <= 0.0:
+		cover_seek_cooldown = maxf(cover_seek_cooldown, COVER_BREAK_SECONDS)
 	cover_scan_timer -= delta
 	if cover_scan_timer <= 0.0:
 		cover_scan_timer = COVER_SCAN_INTERVAL
@@ -2878,7 +2900,9 @@ func refresh_cover_state() -> void:
 
 
 func _evaluate_cover_now() -> bool:
-	if enemy_kind != "ranged" or dying or not alerted or not is_instance_valid(target):
+	# 예전엔 enemy_kind == "ranged"만 허용했는데 실제 종류는 pistol·grenadier·melee라
+	# 사수가 한 번도 엄폐하지 못했다. 근접만 뺀다.
+	if enemy_kind == "melee" or dying or not alerted or not is_instance_valid(target):
 		return false
 	var offset := target.global_position - global_position
 	offset.y = 0.0
@@ -2923,6 +2947,100 @@ func _cover_blocks_shot_from(attacker, hit_direction: Vector3) -> bool:
 		return false
 	last_cover_block_point = result.get("point", global_position)
 	return true
+
+
+func _update_cover_seek(direction: Vector3, distance: float, delta: float) -> bool:
+	# 능동 엄폐. true를 돌려주면 이번 프레임 이동은 여기서 끝난다.
+	# (타이머는 _update_enemy_cover가 매 프레임 흘린다.)
+	if cover_active:
+		if cover_hold_timer > 0.0 and distance >= COVER_ENGAGE_MIN_DISTANCE * 0.7:
+			# 엄폐 자리를 지킨다. 사격은 그대로(점사 상태가 곧 '내밈').
+			cover_seek_point = Vector3.INF
+			velocity = Vector3.ZERO
+			_set_motion_state("idle")
+			_set_facing_from_world_direction(direction)
+			if distance <= _get_weapon_engagement_range() and attack_cooldown <= 0.0:
+				_start_pistol_burst(direction)
+			return true
+		if cover_hold_timer <= 0.0 and cover_seek_cooldown <= 0.0 and cover_seek_point == Vector3.INF:
+			cover_hold_timer = weapon_random.randf_range(4.0, 7.0)
+			return false
+	if cover_seek_point == Vector3.INF:
+		if cover_seek_cooldown > 0.0 or cover_seek_retry > 0.0 or cover_active:
+			return false
+		if distance < COVER_ENGAGE_MIN_DISTANCE or distance > COVER_ENGAGE_MAX_DISTANCE + 6.0:
+			return false
+		cover_seek_retry = COVER_SEEK_RETRY_SECONDS
+		cover_seek_point = _find_cover_seek_point()
+		if cover_seek_point == Vector3.INF:
+			return false
+		tactical_waypoint = Vector3.INF
+	var offset := cover_seek_point - global_position
+	offset.y = 0.0
+	if offset.length() <= 0.7:
+		cover_seek_point = Vector3.INF
+		cover_seek_cooldown = 1.0
+		cover_hold_timer = weapon_random.randf_range(4.0, 7.0)
+		refresh_cover_state()
+		velocity = Vector3.ZERO
+		_set_motion_state("idle")
+		return true
+	# 장애물 회피 조향은 상자와 거리를 두려 해서 엄폐 자리 1m 앞에서 멈춘다 —
+	# 마지막 2.5m는 자리를 향해 곧장 간다.
+	var move_direction := (
+		offset.normalized() if offset.length() < 2.5 else _steer_around_obstacles(offset.normalized())
+	)
+	velocity = move_direction * PISTOL_SPEED * lerpf(1.15, 1.45, threat_level) * elite_speed_multiplier
+	_set_facing_from_world_direction(move_direction)
+	_set_motion_state("walk")
+	return true
+
+
+func _find_cover_seek_point() -> Vector3:
+	# 반경 안 낮은 엄폐물마다 '플레이어 반대편 면 + 0.85m' 자리를 만들고, 교전 거리
+	# 안이면서 가장 가까운 자리를 고른다.
+	if not is_instance_valid(target):
+		return Vector3.INF
+	var world := get_world_3d()
+	if world == null:
+		return Vector3.INF
+	var shape := SphereShape3D.new()
+	shape.radius = COVER_SEEK_RADIUS
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape
+	query.transform = Transform3D(Basis.IDENTITY, global_position)
+	query.collision_mask = COLLISION_PROFILES.WORLD_ONLY_SIGHT_MASK
+	query.exclude = [get_rid()]
+	var player_position := target.global_position
+	var best := Vector3.INF
+	var best_score := INF
+	for hit in world.direct_space_state.intersect_shape(query, 16):
+		var collider := hit.get("collider") as Node3D
+		if collider == null or not COVER_SYSTEM._is_low_cover(collider):
+			continue
+		var near_face: Vector3 = COVER_SYSTEM._closest_box_point(collider, player_position)
+		if near_face == Vector3.INF:
+			continue
+		var away := Vector3(near_face.x - player_position.x, 0.0, near_face.z - player_position.z)
+		if away.length_squared() < 0.01:
+			continue
+		away = away.normalized()
+		var far_face: Vector3 = COVER_SYSTEM._closest_box_point(collider, near_face + away * 8.0)
+		var stand := far_face + away * COVER_SEEK_STAND_OFFSET
+		stand.y = global_position.y
+		var to_player := Vector2(stand.x - player_position.x, stand.z - player_position.z).length()
+		if to_player < COVER_ENGAGE_MIN_DISTANCE or to_player > COVER_ENGAGE_MAX_DISTANCE:
+			continue
+		var travel := Vector2(stand.x - global_position.x, stand.z - global_position.z).length()
+		if travel > COVER_SEEK_RADIUS + 2.0:
+			continue
+		var score := travel + absf(to_player - 12.0) * 0.3
+		if score < best_score:
+			best_score = score
+			best = stand
+	if best != Vector3.INF:
+		best = _resolve_tactical_waypoint(best)
+	return best
 
 
 func _update_cover_visuals() -> void:

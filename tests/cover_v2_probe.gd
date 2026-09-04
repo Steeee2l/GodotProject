@@ -277,17 +277,21 @@ func _probe_player_cover() -> void:
 		_assert(int(main_scene.get("player_health")) == 9999, "① covered 중 엄폐물 방향 총알은 피해 0이어야 합니다.")
 		_assert(int(cover_system.get("shots_blocked_total")) == blocked_before + 1, "① 차단 카운트가 늘어야 합니다.")
 
-		# ② 조준 → peeking → 피해 정상.
+		# ② v3(2026-09-03): 조준만으로는 노출되지 않는다. 쏜 직후에만 peeking → 피해 정상.
 		main_scene.set("laser_aim_held", true)
-		_assert(str(cover_system.call("get_state")) == "peeking", "② 조준 중엔 peeking: %s" % str(cover_system.call("get_state")))
+		_assert(str(cover_system.call("get_state")) == "covered", "② 조준 중에도 covered: %s" % str(cover_system.call("get_state")))
+		cover_system.call("notify_player_fired")
+		_assert(str(cover_system.call("get_state")) == "peeking", "② 쏜 직후엔 peeking: %s" % str(cover_system.call("get_state")))
 		main_scene.call("take_hostile_hit", 37, Vector3.RIGHT, null, source_position)
 		_assert(int(main_scene.get("player_health")) < 9999, "② peeking 중엔 피해가 정상이어야 합니다.")
 		main_scene.set("laser_aim_held", false)
+		cover_system.set("exposed_time", 0.0)
 
-		# ③ 사격 후 0.5s 노출 — 실시간 대기(트윈·타이머는 create_timer 실측).
+		# ③ 사격 후 노출 시간은 FIRE_EXPOSURE_SECONDS — 실시간 대기(트윈·타이머는 create_timer 실측).
 		cover_system.set("in_cover", true)
 		cover_system.call("notify_player_fired")
-		_assert(absf(float(cover_system.get("exposed_time")) - 0.5) < 0.001, "③ 사격 노출은 0.5s: %.2f" % float(cover_system.get("exposed_time")))
+		var expected_exposure := float(cover_system.get("FIRE_EXPOSURE_SECONDS"))
+		_assert(absf(float(cover_system.get("exposed_time")) - expected_exposure) < 0.001, "③ 사격 노출은 %.2fs: %.2f" % [expected_exposure, float(cover_system.get("exposed_time"))])
 		main_scene.set("player_health", 9999)
 		main_scene.call("take_hostile_hit", 37, Vector3.RIGHT, null, source_position)
 		_assert(int(main_scene.get("player_health")) < 9999, "③ 사격 노출 중엔 피해가 정상이어야 합니다.")
