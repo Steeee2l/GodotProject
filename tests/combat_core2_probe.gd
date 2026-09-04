@@ -377,13 +377,19 @@ func _probe_hit_shake(main_scene: Node, player: CharacterBody3D) -> void:
 	main_scene.set_process(false)
 	main_scene.set_physics_process(false)
 	var hit_position: Vector3 = player.global_position + Vector3(2.0, 0.5, 2.0)
-	# (a) 피해 30 → kick 0.035 (0.02~0.05 사이 피해 비례).
+	# (a) 피해 30 → MIN~MAX 사이 피해 비례(상수 기준 — 셰이크 재조정에 따라온다).
+	var min_kick := float(main_scene.get("HIT_SHAKE_MIN_KICK"))
+	var max_kick := float(main_scene.get("HIT_SHAKE_MAX_KICK"))
+	var full_damage := float(main_scene.get("HIT_SHAKE_FULL_KICK_DAMAGE"))
+	var emphasis := float(main_scene.get("HIT_SHAKE_EMPHASIS_SCALE"))
+	var strength_cap := float(main_scene.get("HIT_SHAKE_STRENGTH_CAP"))
+	var expected_a := lerpf(min_kick, max_kick, clampf(30.0 / full_damage, 0.0, 1.0))
 	main_scene.set("camera_shake_strength", 0.0)
 	main_scene.set("camera_shake_time", 0.0)
 	main_scene.set("last_hit_shake_msec", 0)
 	main_scene.call("notify_player_projectile_hit", hit_position, false, 30, "body", false)
 	var strength := float(main_scene.get("camera_shake_strength"))
-	_assert(absf(strength - 0.035) < 0.001, "④ 피해 30 명중 셰이크는 0.035여야 합니다: %.4f" % strength)
+	_assert(absf(strength - expected_a) < 0.001, "④ 피해 30 명중 셰이크는 %.4f여야 합니다: %.4f" % [expected_a, strength])
 	_assert(float(main_scene.get("camera_shake_time")) >= 0.09, "④ 명중 셰이크 지속 ≥0.09s")
 	# (b) 스로틀 90ms — 같은 프레임 연속 명중은 가산되지 않는다.
 	main_scene.call("notify_player_projectile_hit", hit_position, false, 30, "body", false)
@@ -397,14 +403,16 @@ func _probe_hit_shake(main_scene: Node, player: CharacterBody3D) -> void:
 	await _wait_real_msec(150)
 	main_scene.call("notify_player_projectile_hit", hit_position, false, 30, "head", false)
 	var stacked := float(main_scene.get("camera_shake_strength"))
-	_assert(absf(stacked - 0.091) < 0.001, "④ 헤드샷 명중은 ×1.6 가산(0.091)이어야 합니다: %.4f" % stacked)
+	var expected_c := minf(strength_cap, expected_a + expected_a * emphasis)
+	_assert(absf(stacked - expected_c) < 0.001, "④ 헤드샷 명중은 ×%.1f 가산·상한(%.4f)이어야 합니다: %.4f" % [emphasis, expected_c, stacked])
 	# (d) 총 상한 0.2 — 처치 셰이크(0.26)보다 항상 작다.
 	await _wait_real_msec(150)
 	main_scene.set("camera_shake_strength", 0.19)
 	main_scene.call("notify_player_projectile_hit", hit_position, false, 60, "head", false)
 	var capped := float(main_scene.get("camera_shake_strength"))
-	_assert(absf(capped - 0.2) < 0.001, "④ 명중 셰이크 총 상한은 0.2여야 합니다: %.4f" % capped)
-	_assert(capped < 0.26, "④ 명중 셰이크 상한은 처치 셰이크(0.26)보다 작아야 합니다.")
+	# 이미 더 큰 셰이크(0.19)가 도는 중이면 깎지 않고(maxf), 명중 가산 상한은 처치 셰이크보다 작다.
+	_assert(absf(capped - 0.19) < 0.001, "④ 이미 큰 셰이크(0.19)는 명중 가산이 깎지 않는다: %.4f" % capped)
+	_assert(strength_cap < 0.26, "④ 명중 셰이크 상한(%.3f)은 처치 셰이크(0.26)보다 작아야 합니다." % strength_cap)
 	# (e) 더 큰 셰이크(처치·피격)가 도는 중이면 깎지 않는다.
 	await _wait_real_msec(150)
 	main_scene.set("camera_shake_strength", 0.5)
