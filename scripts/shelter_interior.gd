@@ -1739,14 +1739,15 @@ func _build_merchant_waiting_marker() -> void:
 	var dialogue := Label3D.new()
 	dialogue.name = "MerchantKnockLine"
 	dialogue.text = "행상인이 기다리는 중"
-	dialogue.position = Vector3(0.0, 4.0, 0.0)
+	dialogue.position = Vector3(0.0, 4.3, 0.0)
 	dialogue.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	dialogue.no_depth_test = true
 	dialogue.render_priority = 127
 	dialogue.font = FONT
 	# 잡담 말풍선 확대에 맞춰 소폭 상향 — 비율이 어긋나 보이지 않게.
-	dialogue.font_size = 38
-	dialogue.pixel_size = 0.0048
+	# 2026-09-03 유저: "상인 왔다는 글자 너무 작아" — 잡담 말풍선(0.0085)보다 조금 작게.
+	dialogue.font_size = 48
+	dialogue.pixel_size = 0.0072
 	dialogue.modulate = Color("#f5e6bd")
 	dialogue.outline_modulate = Color(0.015, 0.02, 0.018, 0.96)
 	dialogue.outline_size = 15
@@ -4689,9 +4690,64 @@ func _activate_shelter_goal_card() -> void:
 	if _ui_blocks_player() or SHELTER_REQUISITION.is_final_tier():
 		return
 	if not shelter_goal_all_met:
-		_show_status(_shelter_tier_upgrade_failure_reason())
+		_show_goal_card_hint(_shelter_tier_upgrade_failure_reason())
 		return
 	_upgrade_shelter_tier()
+
+
+var goal_card_hint_panel: PanelContainer
+var goal_card_hint_tween: Tween
+
+
+func _show_goal_card_hint(text: String) -> void:
+	# 목표 카드 바로 아래 한 줄(2026-09-03 유저: "위치도 하단 말고 카드 근처에").
+	if text.strip_edges().is_empty():
+		return
+	var stats_panel := get_node_or_null("ShelterHUD/ShelterStatsPanel") as Control
+	if stats_panel == null:
+		_show_status(text)
+		return
+	if not is_instance_valid(goal_card_hint_panel):
+		goal_card_hint_panel = PanelContainer.new()
+		goal_card_hint_panel.name = "GoalCardHint"
+		goal_card_hint_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var style := HudStyle.panel(
+			Color(HudStyle.INK.r, HudStyle.INK.g, HudStyle.INK.b, 0.94),
+			Color(HudStyle.GOLD, 0.5),
+			HudStyle.RADIUS_CARD
+		)
+		style.content_margin_left = 12.0
+		style.content_margin_right = 12.0
+		style.content_margin_top = 7.0
+		style.content_margin_bottom = 8.0
+		goal_card_hint_panel.add_theme_stylebox_override("panel", style)
+		var label := Label.new()
+		label.name = "Label"
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.add_theme_font_override("font", FONT)
+		label.add_theme_font_size_override("font_size", HudStyle.TYPE_BODY)
+		label.add_theme_color_override("font_color", HudStyle.GOLD.lerp(HudStyle.TEXT, 0.45))
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		goal_card_hint_panel.add_child(label)
+		stats_panel.get_parent().add_child(goal_card_hint_panel)
+	var hint_label := goal_card_hint_panel.get_node("Label") as Label
+	hint_label.text = text
+	var rect := stats_panel.get_global_rect()
+	goal_card_hint_panel.custom_minimum_size = Vector2(rect.size.x, 0)
+	goal_card_hint_panel.size = Vector2(rect.size.x, 0)
+	goal_card_hint_panel.global_position = Vector2(rect.position.x, rect.end.y + 8.0)
+	goal_card_hint_panel.visible = true
+	goal_card_hint_panel.modulate.a = 0.0
+	if goal_card_hint_tween != null and goal_card_hint_tween.is_valid():
+		goal_card_hint_tween.kill()
+	goal_card_hint_tween = create_tween()
+	goal_card_hint_tween.tween_property(goal_card_hint_panel, "modulate:a", 1.0, 0.16)
+	goal_card_hint_tween.tween_interval(3.0 + 0.03 * float(text.length()))
+	goal_card_hint_tween.tween_property(goal_card_hint_panel, "modulate:a", 0.0, 0.3)
+	goal_card_hint_tween.tween_callback(func() -> void:
+		if is_instance_valid(goal_card_hint_panel):
+			goal_card_hint_panel.visible = false
+	)
 
 
 func _first_sentence(text: String) -> String:

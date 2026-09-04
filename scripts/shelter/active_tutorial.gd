@@ -1118,22 +1118,36 @@ func _connect_goal_row() -> void:
 
 
 func _on_goal_tapped() -> void:
-	# 탭 = 목표 카드 열기. 줄에서 생략된 힌트(출처)까지 토스트로 펼친다.
+	# 탭 = 목표 카드 열기. 한 줄만(2026-09-03 유저: "너무 TMI. '고철과 츄르를 얻어
+	# 쉘터 티어를 확장하세요' 정도면 된다"). 카드 바로 아래에 뜬다.
 	var goal: Dictionary = SHELTER_REQUISITION.get_next_goal()
 	var text := ""
 	if goal.is_empty():
 		text = str(SHELTER_REQUISITION.get_final_tier_text())
 	else:
-		text = str(SHELTER_REQUISITION.format_goal_line(goal, true))
-		var hints: Array[String] = []
+		var missing: Array[String] = []
+		var key_hint := ""
 		for requirement in goal.get("requirements", []) as Array:
 			var item := requirement as Dictionary
-			var hint := str(item.get("hint", ""))
-			if not bool(item.get("ok", false)) and not hint.is_empty():
-				hints.append("%s · %s" % [str(item.get("label", "")), hint])
-		if not hints.is_empty():
-			text += "  —  " + "  /  ".join(hints)
-	if host.has_method("_show_status") and not text.is_empty():
+			if bool(item.get("ok", false)):
+				continue
+			missing.append(str(item.get("label", item.get("id", ""))))
+			if bool(item.get("is_key", false)) and key_hint.is_empty():
+				key_hint = str(item.get("hint_short", ""))
+		var tier := int(goal.get("tier", 0))
+		if missing.is_empty():
+			text = "조건을 다 채웠습니다. 카드를 눌러 Tier %d로 확장하세요." % tier
+		else:
+			var joined := " · ".join(missing)
+			var particle := "을" if GameState.korean_ends_with_consonant(missing[missing.size() - 1]) else "를"
+			text = "%s%s 모아 Tier %d로 확장하세요." % [joined, particle, tier]
+			if not key_hint.is_empty():
+				text += " %s." % key_hint
+	if text.is_empty():
+		return
+	if host.has_method("_show_goal_card_hint"):
+		host.call("_show_goal_card_hint", text)
+	elif host.has_method("_show_status"):
 		host.call("_show_status", text)
 	notices["goal_tapped"] = true
 	poll_timer = 0.0
