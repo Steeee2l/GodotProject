@@ -6,7 +6,9 @@ extends SceneTree
 # 문체 규칙 위반을 스스로 잡아낸다.
 #
 #   규칙 ① 한 장면에 새 고유명사는 1개까지 (이미 나온 것만 반복해서 쓴다)
-#   규칙 ② 모든 미션 단계는 "무엇을 알아냈다"로 끝난다 (분위기로 끝내지 않는다)
+#   규칙 ② 모든 미션 단계는 앞으로 끌어당기며 끝난다 — 다음에 갈 곳·할 일·
+#           풀리지 않은 질문. (v4, 2026-09-04: "알아낸 것은 이렇다" 정리 독백은
+#           사건 보고서처럼 읽혀 폐기. 요약은 미션 카드 UI가 맡는다.)
 #
 # 실행:
 #   godot --headless --path . --script res://tests/story_dump_probe.gd
@@ -21,11 +23,15 @@ const KNOWN_NOUNS: Array[String] = [
 	"종로", "남대문", "을지로", "용산", "남산",
 	"수거", "명단", "방송", "장부", "쉘터", "하수구", "봉쇄선",
 	"통조림", "츄르", "고철", "캣닢",
+	# v4 서울 질감 — 관리사무소 방송과 사자의 집 주소는 여러 장면에 되풀이된다.
+	"관리사무소", "101동", "302호", "야간", "3구역", "집",
 ]
 
-# 단계 완료 독백이 "알아낸 것"으로 끝났는지 판정하는 표지.
-const FINDING_MARKERS: Array[String] = [
-	"알아낸", "알았다", "뜻이다", "이었다", "였다", "이다.", "아니다",
+# 단계 완료 독백이 앞으로 끌어당기며 끝나는지 판정하는 표지 — 다음 행선지,
+# 행동, 혹은 아직 열린 질문. 마지막 두 줄 안에 있어야 한다.
+const FORWARD_MARKERS: Array[String] = [
+	"간다", "본다", "정한다", "찾는다", "묻는다", "올라간다", "끝내야",
+	"으로.", "로.", "일까", "을까", "까.", "…", "다음",
 ]
 
 var lines: Array[String] = []
@@ -94,11 +100,11 @@ func _dump_stage(zone_id: String, index: int, stage: Dictionary) -> void:
 	var carry := stage.get("carry_monologue", []) as Array
 	for carry_line in carry:
 		_emit("      완료 독백    : %s" % str(carry_line))
-	# 규칙 ② — 미션의 마지막 말은 "알아낸 것"이어야 한다.
+	# 규칙 ② — 미션의 마지막 말은 앞으로 끌어당겨야 한다.
 	if carry.is_empty():
 		violations.append("%s · 완료 독백이 없다(규칙 ②)" % label)
-	elif not _is_finding(carry):
-		violations.append("%s · 완료 독백이 '알아낸 것'으로 끝나지 않는다(규칙 ②): %s" % [label, str(carry[0])])
+	elif not _pulls_forward(carry):
+		violations.append("%s · 완료 독백이 앞으로 끌어당기지 않는다(규칙 ②): %s" % [label, str(carry[carry.size() - 1])])
 
 	var lore := str(stage.get("lore", ""))
 	if not lore.is_empty():
@@ -149,12 +155,14 @@ func _dump_cinematics(stage_label: String, cinematics: Dictionary) -> void:
 			])
 
 
-func _is_finding(monologue: Array) -> bool:
-	var joined := ""
-	for line_value in monologue:
-		joined += str(line_value)
-	for marker in FINDING_MARKERS:
-		if joined.contains(marker):
+func _pulls_forward(monologue: Array) -> bool:
+	# 마지막 두 줄만 본다. 앞줄에서 이미 정리했더라도 끝이 닫혀 있으면 실패.
+	var tail := ""
+	var start := maxi(0, monologue.size() - 2)
+	for index in range(start, monologue.size()):
+		tail += str(monologue[index])
+	for marker in FORWARD_MARKERS:
+		if tail.contains(marker):
 			return true
 	return false
 
