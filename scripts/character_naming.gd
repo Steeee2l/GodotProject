@@ -15,6 +15,9 @@ signal finished(chosen_name: String)
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const PORTRAIT_TEXTURE := preload("res://assets/characters/cat_8way/down_idle_0.png")
+# 256×256 전신 프레임에서 귀 끝~가슴까지 정사각(48,22 / 160×160).
+const PORTRAIT_BUST_REGION := Rect2(48.0, 22.0, 160.0, 160.0)
+const PORTRAIT_RADIUS := 34
 const LAYER := 250
 const MAX_LENGTH := 8
 const SUGGESTIONS := ["먼지", "재", "그을음", "안개"]
@@ -81,42 +84,54 @@ func _build() -> void:
 	column.add_theme_constant_override("separation", 0)
 	margin.add_child(column)
 
-	# 초상화 — 둥근 사각 안에 상반신만.
+	# 초상화 — 스프라이트에서 상반신 정사각만 잘라(AtlasTexture) 틀 크기에 딱 맞추고,
+	# 둥근 마스크 셰이더로 모서리를 깎은 뒤 테두리를 그림 위에 얹는다(2026-09-03
+	# 유저: "캐릭터 부분이 이상하잖아, 잘 크롭해서 깔끔하게").
 	var portrait_holder := CenterContainer.new()
 	column.add_child(portrait_holder)
+	var frame_size := 128.0
 	portrait_frame = PanelContainer.new()
 	portrait_frame.name = "Portrait"
-	portrait_frame.clip_contents = true
 	var frame_style := StyleBoxFlat.new()
 	frame_style.bg_color = Color(0.06, 0.08, 0.085, 1.0)
-	frame_style.set_corner_radius_all(44)
-	frame_style.border_color = Color(ACCENT, 0.35)
-	frame_style.set_border_width_all(2)
-	frame_style.shadow_color = Color(ACCENT, 0.16)
-	frame_style.shadow_size = 28
+	frame_style.set_corner_radius_all(PORTRAIT_RADIUS)
+	frame_style.shadow_color = Color(ACCENT, 0.14)
+	frame_style.shadow_size = 26
 	frame_style.content_margin_left = 0.0
 	frame_style.content_margin_right = 0.0
 	frame_style.content_margin_top = 0.0
 	frame_style.content_margin_bottom = 0.0
 	portrait_frame.add_theme_stylebox_override("panel", frame_style)
-	var frame_size := 128.0
 	portrait_frame.custom_minimum_size = Vector2(frame_size, frame_size)
 	portrait_holder.add_child(portrait_frame)
-	var clip := Control.new()
-	clip.clip_contents = true
-	clip.custom_minimum_size = Vector2(frame_size, frame_size)
-	portrait_frame.add_child(clip)
+	var bust := AtlasTexture.new()
+	bust.atlas = PORTRAIT_TEXTURE
+	bust.region = PORTRAIT_BUST_REGION
 	var portrait := TextureRect.new()
-	portrait.texture = PORTRAIT_TEXTURE
+	portrait.name = "Bust"
+	portrait.texture = bust
 	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+	portrait.stretch_mode = TextureRect.STRETCH_SCALE
 	portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	var texture_size := PORTRAIT_TEXTURE.get_size()
-	var zoom := 1.7
-	var drawn := texture_size * (frame_size * zoom / maxf(1.0, texture_size.x))
-	portrait.size = drawn
-	portrait.position = Vector2((frame_size - drawn.x) * 0.5, frame_size * 0.1 - drawn.y * 0.08)
-	clip.add_child(portrait)
+	portrait.custom_minimum_size = Vector2(frame_size, frame_size)
+	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var mask := ShaderMaterial.new()
+	mask.shader = _rounded_mask_shader()
+	mask.set_shader_parameter("radius", PORTRAIT_RADIUS / frame_size)
+	portrait.material = mask
+	portrait_frame.add_child(portrait)
+	var border := Panel.new()
+	border.name = "Border"
+	border.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var border_style := StyleBoxFlat.new()
+	border_style.bg_color = Color(0, 0, 0, 0)
+	border_style.border_color = Color(ACCENT, 0.55)
+	border_style.set_border_width_all(2)
+	border_style.set_corner_radius_all(PORTRAIT_RADIUS)
+	border_style.anti_aliasing = true
+	border.add_theme_stylebox_override("panel", border_style)
+	border.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	portrait_frame.add_child(border)
 
 	_spacer(16)
 	var eyebrow := _make_label("생존자 등록", 12, ACCENT)
@@ -360,3 +375,25 @@ func _show_confirmation(chosen: String) -> void:
 		finished.emit(chosen)
 		queue_free()
 	)
+
+
+static var _mask_shader: Shader
+
+
+static func _rounded_mask_shader() -> Shader:
+	if _mask_shader != null:
+		return _mask_shader
+	_mask_shader = Shader.new()
+	_mask_shader.code = """
+shader_type canvas_item;
+uniform float radius = 0.25;
+void fragment() {
+	vec2 p = abs(UV - vec2(0.5)) - vec2(0.5 - radius);
+	float d = length(max(p, vec2(0.0))) - radius;
+	float edge = fwidth(d) * 1.2;
+	float alpha = 1.0 - smoothstep(-edge, edge, d);
+	vec4 tex = texture(TEXTURE, UV);
+	COLOR = vec4(tex.rgb, tex.a * alpha);
+}
+"""
+	return _mask_shader

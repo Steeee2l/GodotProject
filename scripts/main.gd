@@ -313,7 +313,6 @@ var damage_direction_tween: Tween
 var camera_shake_time := 0.0
 var camera_shake_strength := 0.0
 # 세그먼트 체력바 — 마지막으로 살아 있던 칸 수(파편 연출 트리거).
-var last_health_segment_count := -1
 # 지난 프레임에 카메라에 얹은 흔들림 오프셋. 추종 보간 전에 도로 걷어내
 # 흔들림이 위치 드리프트로 눌어붙지 않게 한다(_update_camera_follow 참조).
 var camera_shake_applied_offset := Vector3.ZERO
@@ -1937,46 +1936,11 @@ func _update_laser_beam(aim_direction: Vector3) -> void:
 		hud.laser_endpoint.scale = Vector3.ONE * lerpf(0.82, 1.28, pulse)
 
 
-func _spawn_health_chip(segment_index: int) -> void:
-	# 깨진 칸 자리에서 작은 파편이 위로 튀어 오르며 사라진다.
-	if hud.player_world_health_bar == null or hud.aim_canvas == null:
-		return
-	var segment_width := hud.PLAYER_HEALTH_BAR_WIDTH / float(hud.PLAYER_HEALTH_SEGMENT_COUNT)
-	var chip := ColorRect.new()
-	chip.name = "HealthChip"
-	chip.color = Color(0.96, 0.62, 0.42, 1.0)
-	chip.size = Vector2(maxf(2.0, segment_width - 2.0), 3.0)
-	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	chip.position = (
-		hud.player_world_health_bar.position
-		+ Vector2(1.0 + float(segment_index) * segment_width, 1.0)
-	)
-	hud.aim_canvas.add_child(chip)
-	var drift := Vector2(randf_range(-14.0, 14.0), randf_range(-26.0, -14.0))
-	var tween := create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(chip, "position", chip.position + drift, 0.42).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(chip, "rotation", randf_range(-1.2, 1.2), 0.42)
-	tween.tween_property(chip, "modulate:a", 0.0, 0.42).set_delay(0.12)
-	tween.set_parallel(false)
-	tween.tween_callback(chip.queue_free)
-
-
 func _update_player_combat_feedback(delta: float) -> void:
 	var health_ratio := clampf(float(player_health) / float(GameState.get_max_health()), 0.0, 1.0)
 	if hud.player_world_health_bar:
 		var bar_inner := hud.PLAYER_HEALTH_BAR_WIDTH - hud.PLAYER_HEALTH_BAR_INSET * 2.0
 		hud.player_world_health_fill.size.x = bar_inner * health_ratio
-		# 칸이 깨지는 순간 파편이 튄다 — "맞으면 칸이 날아간다"(유저 요구).
-		var segments_now := ceili(health_ratio * float(hud.PLAYER_HEALTH_SEGMENT_COUNT) - 0.0001)
-		if last_health_segment_count < 0:
-			last_health_segment_count = segments_now
-		elif segments_now < last_health_segment_count:
-			for lost_index in range(segments_now, last_health_segment_count):
-				_spawn_health_chip(lost_index)
-			last_health_segment_count = segments_now
-		elif segments_now > last_health_segment_count:
-			last_health_segment_count = segments_now
 		# 흰 잔상 — 방금 깎인 만큼이 흰색으로 잠깐 남았다가 따라 줄어든다
 		# (보스 체력바 damage_trail과 같은 패턴, 지연 0.28s · 초당 46px 추적).
 		hud.update_player_health_trail(health_ratio, delta)

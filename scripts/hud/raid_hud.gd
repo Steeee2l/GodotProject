@@ -65,13 +65,11 @@ var squad_clear_pulse_material: ShaderMaterial
 var squad_clear_pulse_tween: Tween
 var damage_direction_indicator: TextureRect
 var player_world_health_bar: Control
-# 2026-09-03 유저: "체력바 너무 못생겼어, 해상도도 별로". 64×5는 눈금이 뭉개졌다.
-# 100×9, 안쪽 2px 여백, 칸 사이 2px 홈으로 다시 그린다.
-const PLAYER_HEALTH_BAR_WIDTH := 100.0
-const PLAYER_HEALTH_BAR_HEIGHT := 9.0
-const PLAYER_HEALTH_BAR_INSET := 2.0
-const PLAYER_HEALTH_SEGMENT_COUNT := 10
-const PLAYER_HEALTH_SEGMENTS_SCRIPT := preload("res://scripts/hud/health_segments.gd")
+# 2026-09-03 유저: "칸막이로 디자인 못할 거면 그냥 깔끔하고 작게, 일반적인 HP바".
+# 72×6 한 줄. 칸·파편 없음. 흰 잔상만 남긴다.
+const PLAYER_HEALTH_BAR_WIDTH := 72.0
+const PLAYER_HEALTH_BAR_HEIGHT := 6.0
+const PLAYER_HEALTH_BAR_INSET := 1.0
 var player_world_health_fill: Panel
 var player_health_fill_style: StyleBoxFlat
 # 피격 잔상(흰색) — 깎인 만큼이 잠깐 남았다 따라 줄어든다.
@@ -1531,9 +1529,7 @@ void fragment() {
 	damage_direction_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	damage_feedback_canvas.add_child(damage_direction_indicator)
 
-	# 세그먼트 체력바(2026-08-30 유저: "둔탁하고 커. 칸막이식으로, 맞으면 칸이
-	# 날아가는 느낌"). 10칸짜리 얇은 띠 — 채움/잔상 Panel은 칸 위에 그대로 두고
-	# 칸 구분선을 위에 얹는다. 칸이 깨질 때의 파편은 main이 spawn_health_chip으로.
+	# 머리 위 체력바 — 작은 한 줄(배경·흰 잔상·초록 채움).
 	player_world_health_bar = Control.new()
 	player_world_health_bar.name = "PlayerWorldHealthBar"
 	player_world_health_bar.custom_minimum_size = Vector2(PLAYER_HEALTH_BAR_WIDTH, PLAYER_HEALTH_BAR_HEIGHT)
@@ -1589,13 +1585,6 @@ void fragment() {
 	player_health_fill_style.anti_aliasing = true
 	player_world_health_fill.add_theme_stylebox_override("panel", player_health_fill_style)
 	player_world_health_bar.add_child(player_world_health_fill)
-	# 칸 구분선 — 채움 위에 검은 눈금을 얹어 10칸으로 읽히게 한다.
-	var segment_overlay := PLAYER_HEALTH_SEGMENTS_SCRIPT.new() as Control
-	segment_overlay.name = "Segments"
-	segment_overlay.position = Vector2.ZERO
-	segment_overlay.size = Vector2(PLAYER_HEALTH_BAR_WIDTH, PLAYER_HEALTH_BAR_HEIGHT)
-	segment_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	player_world_health_bar.add_child(segment_overlay)
 	aim_canvas.add_child(player_world_health_bar)
 	roll_cooldown_indicator = ROLL_COOLDOWN_INDICATOR_SCRIPT.new() as Control
 	roll_cooldown_indicator.name = "RollCooldownIndicator"
