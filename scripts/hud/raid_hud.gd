@@ -1678,7 +1678,7 @@ func update_cover_chip(state: String, anchor: Vector2, visible_now: bool = true)
 				cover_chip_icon.texture = UI_ICONS.get_icon("armor", 14, HudStyle.GREEN)
 				cover_chip.add_theme_stylebox_override("panel", HudStyle.chip(HudStyle.GREEN))
 			"peeking":
-				cover_chip_label.text = "내밈 ▸"
+				cover_chip_label.text = "내밈"
 				cover_chip_label.add_theme_color_override("font_color", HudStyle.WARN)
 				cover_chip_icon.texture = UI_ICONS.get_icon("armor", 14, HudStyle.WARN)
 				var outline := HudStyle.chip(HudStyle.WARN)

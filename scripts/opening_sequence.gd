@@ -961,7 +961,7 @@ func _build_dialogue_ui(hud: CanvasLayer) -> void:
 	add_child(dialogue_typewriter)
 	dialogue_typewriter.attach(dialogue_text)
 	continue_label = Label.new()
-	continue_label.text = "화면 터치 ▸" if touch_enabled else "클릭 또는 SPACE ▸"
+	continue_label.text = "화면 터치" if touch_enabled else "클릭 또는 SPACE"
 	continue_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	continue_label.add_theme_font_override("font", FONT)
 	continue_label.add_theme_font_size_override("font_size", 13)
