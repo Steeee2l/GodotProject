@@ -13,6 +13,9 @@ const CAT_ROOT := "res://assets/characters/cat_8way"
 const ROLL_ROOT := "res://assets/characters/cat_roll"
 const SHELTER_SCENE := "res://scenes/shelter_interior.tscn"
 const CHARACTER_NAMING := preload("res://scripts/character_naming.gd")
+# 조준선은 인게임과 같은 모듈(2026-09-03 유저: "오프닝 조준선이 이상해, 인게임과 동일해야").
+const AIM_RETICLE_SCRIPT := preload("res://scripts/aim_reticle.gd")
+const OPENING_AIM_SPREAD_DEG := 5.0
 const OPENING_SCENE := "res://scenes/opening_sequence.tscn"
 const SCREEN_DIRECTIONS := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const CAT_DIRECTION_STATES := {
@@ -866,7 +869,9 @@ func _build_hud() -> void:
 	_build_status_ui(hud)
 	_build_interaction_ui(hud)
 	_build_mobile_controls(hud)
-	aim_reticle = _create_aim_reticle()
+	aim_reticle = AIM_RETICLE_SCRIPT.new()
+	aim_reticle.name = "AimReticle"
+	aim_reticle.visible = false
 	hud.add_child(aim_reticle)
 	fade_rect = ColorRect.new()
 	fade_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -1341,22 +1346,6 @@ func _update_visibility_fog() -> void:
 	visibility_material.set_shader_parameter("fan_cos", 0.18)
 	visibility_material.set_shader_parameter("darkness", 0.94)
 	visibility_material.set_shader_parameter("aim_expanded", 1.0 if aim_held else 0.0)
-
-
-func _create_aim_reticle() -> Control:
-	var reticle := Control.new()
-	reticle.name = "AimReticle"
-	reticle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	reticle.size = Vector2(42, 42)
-	reticle.visible = false
-	reticle.draw.connect(func() -> void:
-		var center := Vector2(21, 21)
-		reticle.draw_arc(center, 11, 0, TAU, 28, Color("#f1ca69"), 2.0, true)
-		for direction in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
-			reticle.draw_line(center + direction * 14, center + direction * 19, Color("#f1ca69"), 2.0)
-		reticle.draw_circle(center, 2.2, Color("#ffe8a2"))
-	)
-	return reticle
 
 
 func _panel_style(color: Color, border: Color, width: int, radius: int) -> StyleBoxFlat:
@@ -2036,7 +2025,8 @@ func _update_weapon_visual(delta: float = 0.0) -> void:
 			reticle_position = camera.unproject_position(
 				player.global_position + current_aim_direction * 4.0 + Vector3(0, 0.2, 0)
 			)
-		aim_reticle.position = reticle_position - aim_reticle.size * 0.5
+		# 인게임 레티클과 같은 그리기(퍼짐·반동·레이저 상태) — 오프닝은 반동 없음.
+		aim_reticle.call("update_feedback", reticle_position, OPENING_AIM_SPREAD_DEG, Vector2.ZERO, true)
 
 
 func _update_camera(delta: float) -> void:
