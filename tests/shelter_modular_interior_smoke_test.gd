@@ -60,8 +60,9 @@ func _run() -> void:
 
 	var module_root := shelter.get_node("StageOneModules") as Node3D
 	assert(int(module_root.get_meta("stage")) == 1)
-	assert(int(module_root.get_meta("cat_capacity")) == 5)
-	assert(module_root.get_meta("module_grid_size") == Vector2(2.65, 3.45))
+	# 정원은 티어 표를 따른다(2026-08 티어 정원 개편 뒤 5→8).
+	assert(int(module_root.get_meta("cat_capacity")) == int((root.get_node("GameState").get("SHELTER_CAPACITY_BY_TIER") as Dictionary).get(1, 0)))
+	assert((module_root.get_meta("module_grid_size") as Vector2).is_equal_approx(Vector2(2.65, 3.45)))
 	assert(get_nodes_in_group("shelter_module_slot").size() == 1)
 	assert(get_nodes_in_group("shelter_bed").size() == 1)
 	assert(get_nodes_in_group("shelter_workbench").size() == 1)

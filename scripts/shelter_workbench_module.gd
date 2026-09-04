@@ -8,6 +8,8 @@ const SHELTER_UI := preload("res://scripts/shelter_ui_components.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const SHELTER_REQUISITION := preload("res://scripts/shelter/requisition.gd")
 const SFX := preload("res://scripts/sfx_bank.gd")
+# 쉘터 공용 디자인 언어(2026-09-04) — 색·반지름·버튼·칩은 전부 여기 빌더로만 만든다.
+const SHELTER_THEME := preload("res://scripts/hud/shelter_theme.gd")
 const AMMO_TEXTURE := preload("res://assets/items/ammo_762.png")
 const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
@@ -338,22 +340,15 @@ const LEGACY_CATEGORY_TAB := {
 	"mods": "craft", "supplies": "craft", "supply": "craft", "heavy": "craft",
 	"artisan": "enhance", "enhance": "enhance",
 }
-# 레시피 행 상태 색 — 초록=지금 만들 수 있음, 주황=재료만 모자람, 회색=아직 잠김.
-const STATE_COLOR_READY := Color("#8fe0a6")
-const STATE_COLOR_SHORT := Color("#e2a35e")
-const STATE_COLOR_LOCKED := Color("#7e8a86")
-# 보드 색 토큰(목업 그대로) — 무기 골드, 방어구 시안, 돌파 관문 붉은색.
-const GOLD := Color("#d8bd72")
-const GOLD_TEXT := Color("#ead69c")
-const GOLD_BRIGHT := Color("#f0d77d")
-const CYAN := Color("#7cc7d8")
-const GREEN := Color("#7fc79e")
-const DANGER := Color("#e06c5c")
-const TEXT := Color("#e9f1ec")
-const DIM := Color("#93a89d")
-const FAINT := Color("#6d7f76")
-const WELL := Color(0.063, 0.09, 0.086, 0.84)
-const WELL_LINE := Color(0.133, 0.188, 0.169, 0.9)
+# 레시피 행 상태 색 — 민트=지금 만들 수 있음, 노랑=재료만 모자람, 회색=아직 잠김.
+const STATE_COLOR_READY := SHELTER_THEME.ACCENT
+const STATE_COLOR_SHORT := SHELTER_THEME.WARN
+const STATE_COLOR_LOCKED := SHELTER_THEME.TEXT_DIM
+# 글자 색은 쉘터 공용 토큰(이름 짓기 화면과 같은 언어) — 골드·시안 강조는 폐지, 강조는 민트 하나.
+const DANGER := SHELTER_THEME.DANGER
+const TEXT := SHELTER_THEME.TEXT
+const DIM := SHELTER_THEME.TEXT_DIM
+const FAINT := SHELTER_THEME.TEXT_FAINT
 # (재료 · 창고 합산 패널은 2026-08-29 폐지 — 강화·돌파가 고철 단독이 되면서
 #  강화 보드에서 부품을 읽을 이유가 사라졌다. 부품은 제작 탭 비용 행이 보여 준다.)
 # 길게 누르면 연타 — 0.42초 뒤부터 0.11초 간격(목업 수치).
@@ -492,7 +487,7 @@ func _rebuild_ui() -> void:
 	var dim := ColorRect.new()
 	dim.name = "WorkbenchDim"
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dim.color = Color(0.006, 0.008, 0.011, 0.72)
+	dim.color = SHELTER_THEME.BG_DIM
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	modal_root.add_child(dim)
 	ModalDismiss.install(ui_layer, dim, _close_ui)
@@ -522,19 +517,24 @@ func _rebuild_ui() -> void:
 	root.offset_right = panel_width * 0.5 + safe_center_offset.x
 	root.offset_bottom = panel_height * 0.5 + safe_center_offset.y
 	root.clip_contents = true
-	# 유리 위의 반투명 패널(목업 .mod) — 뒤 화면의 블러가 비친다.
-	root.add_theme_stylebox_override("panel", _panel_style(Color(0.035, 0.059, 0.059, 0.8), HudStyle.LINE_GOLD, 2, 10))
+	# 거의 검정 큰 판 + 그림자, 테두리 없음(이름 짓기 화면의 언어). 안쪽 여백은 아래 margin이 맡는다.
+	var root_style := SHELTER_THEME.modal_style()
+	root_style.content_margin_left = 0.0
+	root_style.content_margin_right = 0.0
+	root_style.content_margin_top = 0.0
+	root_style.content_margin_bottom = 0.0
+	root.add_theme_stylebox_override("panel", root_style)
 	modal_root.add_child(root)
-	HudStyle.enter_modal(root)
+	SHELTER_THEME.enter(root)
 
-	var inner_margin := 10 if compact else 16
+	var inner_margin := 14 if compact else 22
 	var margin := _margin(inner_margin, inner_margin, inner_margin, inner_margin)
 	root.add_child(margin)
 	var main := VBoxContainer.new()
 	main.name = "WorkbenchContent"
 	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	main.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	main.add_theme_constant_override("separation", 8 if compact else 10)
+	main.add_theme_constant_override("separation", 12 if compact else 16)
 	margin.add_child(main)
 
 	main.add_child(_build_header(stacked))
@@ -568,18 +568,21 @@ func _rebuild_ui() -> void:
 	toast_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	toast_panel.modulate.a = 0.0
 	toast_panel.visible = false
-	var toast_style := _panel_style(Color(0.035, 0.059, 0.059, 0.94), HudStyle.LINE_GOLD, 1, 999)
-	toast_style.content_margin_left = 16
-	toast_style.content_margin_right = 16
-	toast_style.content_margin_top = 7
-	toast_style.content_margin_bottom = 7
+	# 알약 토스트 — 표면색 채움 + 그림자, 글자색만 사유(붉음)/알림(민트)로 바뀐다.
+	var toast_style := SHELTER_THEME.pill_style(false)
+	toast_style.bg_color = SHELTER_THEME.SURFACE_RAISED
+	toast_style.shadow_color = Color(0, 0, 0, 0.45)
+	toast_style.shadow_size = 14
+	toast_style.content_margin_left = 18
+	toast_style.content_margin_right = 18
+	toast_style.content_margin_top = 9
+	toast_style.content_margin_bottom = 10
 	toast_panel.add_theme_stylebox_override("panel", toast_style)
-	var toast_label := _label("", 14, GOLD_TEXT)
+	var toast_label := _label("", 14, SHELTER_THEME.ACCENT)
 	toast_label.name = "WorkbenchToastLabel"
 	toast_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	toast_panel.add_child(toast_label)
-	HudFx.attach_text_glow(toast_label, GOLD, 0.7)
 	modal_root.add_child(toast_panel)
 
 	# 표면 연출 — 가방과 같은 유리 배경(블러·스캔라인·그레인·먼지) + 열릴 때 스캔 스윕.
@@ -594,18 +597,19 @@ func _build_header(stacked: bool) -> Control:
 	resource_value_labels.clear()
 	var header := VBoxContainer.new()
 	header.name = "WorkbenchHeader"
-	header.add_theme_constant_override("separation", 8)
+	header.add_theme_constant_override("separation", 10)
 	var top_row := HBoxContainer.new()
 	top_row.name = "WorkbenchHeaderRow"
-	top_row.add_theme_constant_override("separation", 10)
+	top_row.add_theme_constant_override("separation", 12)
 	header.add_child(top_row)
 
+	# [민트 이름표 / 굵은 큰 제목 + 고철 알약] ······ [알약 탭] [둥근 닫기]
 	var title_box := VBoxContainer.new()
 	title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_box.clip_contents = true
-	title_box.add_theme_constant_override("separation", 2)
+	title_box.add_theme_constant_override("separation", 4)
 	top_row.add_child(title_box)
-	var eyebrow := _label("%s · WORKBENCH %02d · SHELTER Lv.%d" % [GameState.player_name, GameState.shelter_workbench_level, GameState.shelter_tier], 10, FAINT)
+	var eyebrow := SHELTER_THEME.eyebrow("%s · WORKBENCH %02d · SHELTER Lv.%d" % [GameState.player_name, GameState.shelter_workbench_level, GameState.shelter_tier])
 	eyebrow.name = "WorkbenchEyebrow"
 	eyebrow.autowrap_mode = TextServer.AUTOWRAP_OFF
 	eyebrow.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -613,20 +617,19 @@ func _build_header(stacked: bool) -> Control:
 	var title_row := HBoxContainer.new()
 	title_row.add_theme_constant_override("separation", 12)
 	title_box.add_child(title_row)
-	var title := _label("작업대", 24, GOLD_TEXT)
+	var title := SHELTER_THEME.title("작업대", SHELTER_THEME.TYPE_TITLE if not stacked else SHELTER_THEME.TYPE_TITLE - 4)
 	title.name = "WorkbenchTitle"
 	title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	# 짧은 고정 문구 — ELLIPSIS면 최소 폭이 0이 돼 HBox에서 지갑 칩에 밀려 사라진다.
 	title.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	title_row.add_child(title)
-	HudFx.attach_text_glow(title, GOLD)
-	HudFx.attach_title_aberration(title)
 	title_row.add_child(_build_wallet())
 
 	if not stacked:
 		top_row.add_child(_build_tabs())
 	var close := _close_button()
 	close.pressed.connect(_close_ui)
+	close.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	top_row.add_child(close)
 	if stacked:
 		header.add_child(_build_tabs())
@@ -635,37 +638,18 @@ func _build_header(stacked: bool) -> Control:
 
 func _build_wallet() -> Control:
 	# 지갑 칩 — 강화·돌파가 고철 단독이 되면서(2026-08-29) 인장 칩은 뺐다.
-	# 재화 표기 전역 규칙: 아이콘 + 숫자만, 이름은 툴팁.
+	# 재화 표기 전역 규칙: 아이콘 + 숫자만, 이름은 툴팁. 알약 칩(공용 빌더).
 	var wallet := HBoxContainer.new()
 	wallet.name = "WorkbenchWallet"
-	wallet.size_flags_vertical = Control.SIZE_SHRINK_END
+	wallet.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	wallet.add_theme_constant_override("separation", 6)
 	for key in ["scrap"]:
-		var chip := PanelContainer.new()
+		var chip := SHELTER_THEME.chip("", _resource_icon(key))
 		chip.name = "WorkbenchWalletChip_%s" % key
 		chip.tooltip_text = _resource_name(key)
-		var chip_style := _panel_style(WELL, HudStyle.LINE, 1, 999)
-		chip_style.content_margin_left = 9
-		chip_style.content_margin_right = 9
-		chip_style.content_margin_top = 2
-		chip_style.content_margin_bottom = 2
-		chip.add_theme_stylebox_override("panel", chip_style)
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 5)
-		chip.add_child(row)
-		var icon := TextureRect.new()
-		icon.custom_minimum_size = Vector2(15, 15)
-		icon.texture = _resource_icon(key)
-		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(icon)
-		var value_label := _label("", 12, GOLD)
+		var value_label := chip.get_meta("label") as Label
 		value_label.name = "WorkbenchWalletValue_%s" % key
 		value_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-		row.add_child(value_label)
-		HudFx.attach_text_glow(value_label, GOLD, 0.6)
 		wallet_labels[key] = value_label
 		wallet.add_child(chip)
 	_refresh_wallet()
@@ -688,17 +672,18 @@ func _build_tabs() -> Control:
 	var stacked := get_viewport().get_visible_rect().size.x < 760.0
 	for tab_value in TAB_ORDER:
 		var tab_id := str(tab_value)
-		var tab := _button(_tab_text(tab_id), "")
+		var tab := Button.new()
+		tab.text = _tab_text(tab_id)
 		tab.name = "WorkbenchTab_%s" % tab_id
 		tab.toggle_mode = true
 		tab.button_pressed = selected_category == tab_id
-		tab.custom_minimum_size = Vector2(0, 44)
+		tab.custom_minimum_size = Vector2(0, 40)
 		tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL if stacked else Control.SIZE_FILL
 		tab.autowrap_mode = TextServer.AUTOWRAP_OFF
 		tab.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		tab.clip_text = true
 		if not stacked:
-			tab.custom_minimum_size.x = 96
+			tab.custom_minimum_size.x = 92
 		_style_tab(tab, tab.button_pressed)
 		tab.pressed.connect(func() -> void:
 			selected_category = tab_id
@@ -729,20 +714,9 @@ func _tab_text(tab_id: String) -> String:
 
 
 func _style_tab(tab: Button, lit: bool) -> void:
-	if lit:
-		var on := _panel_style(Color("#e2c97f"), GOLD_BRIGHT, 1, 7)
-		on.content_margin_left = 12
-		on.content_margin_right = 12
-		on.content_margin_top = 7
-		on.content_margin_bottom = 7
-		for state in ["normal", "hover", "pressed"]:
-			tab.add_theme_stylebox_override(state, on)
-		tab.add_theme_color_override("font_color", Color("#0b100e"))
-		tab.add_theme_color_override("font_hover_color", Color("#0b100e"))
-		tab.add_theme_color_override("font_pressed_color", Color("#0b100e"))
-		tab.add_theme_color_override("font_hover_pressed_color", Color("#0b100e"))
-	else:
-		tab.add_theme_color_override("font_color", DIM)
+	# 알약 탭 — 활성은 민트 채움/어두운 글자, 비활성은 표면색.
+	SHELTER_THEME.style_pill(tab, lit)
+	tab.custom_minimum_size.y = maxf(tab.custom_minimum_size.y, 36.0)
 
 
 func _craftable_gear_count() -> int:
@@ -761,34 +735,28 @@ func _refresh_tab_badges() -> void:
 
 
 func _build_resource_strip() -> Control:
-	# 제작·개조 탭의 재료 띠(아이콘 칩) — 레시피 비용을 읽는 맥락.
+	# 제작 탭의 재료 띠 — 알약 칩(아이콘 + 수치). 레시피 비용을 읽는 맥락.
 	var strip := HFlowContainer.new()
 	strip.name = "WorkbenchResourceStrip"
 	strip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	strip.add_theme_constant_override("h_separation", 7)
+	strip.add_theme_constant_override("h_separation", 8)
 	strip.add_theme_constant_override("v_separation", 6)
 	# 항상 아이콘+수치만(2026-08-30 유저: "재화 표시를 컴팩트하게"). 이름은 툴팁.
-	var compact := true
 	# 통조림은 제작 재료가 아니므로 자원 띠에서 뺐다(플레이어 소모품).
 	# 캣닢도 뺐다(2026-08-29) — 캣닢 비용은 개조품 전용이었는데 개조 탭이 폐지됐다.
 	for key in ["scrap", "scope_lens", "rubber_gasket", "magazine_spring", "precision_gear", "military_alloy"]:
 		var resource_key := str(key)
-		# 재화(고철·캣닢)는 아이콘이 곧 이름이라 수치만 남긴다. 부품·재료는
-		# 아이콘만으로 무엇인지 알 수 없어 이름을 유지한다 — 다만 좁은 화면에서는
-		# 이름이 수치를 잡아먹으므로 그때도 아이콘에 맡긴다.
-		var chip := SHELTER_UI.make_resource_chip(
-			resource_key,
-			_resource_name(resource_key),
-			GameState.format_compact_number(_owned_resource(resource_key)),
-			_resource_icon(resource_key),
-			_resource_accent(resource_key),
-			compact,
-			not compact and not ICON_ONLY_RESOURCES.has(resource_key)
+		var chip := SHELTER_THEME.chip(
+			"x%s" % GameState.format_compact_number(_owned_resource(resource_key)),
+			_resource_icon(resource_key)
 		)
+		chip.name = "ResourceChip_%s" % resource_key
+		chip.tooltip_text = "%s x%s" % [_resource_name(resource_key), GameState.format_compact_number(_owned_resource(resource_key))]
+		var value_label := chip.get_meta("label") as Label
+		value_label.name = "ResourceValue_%s" % resource_key
+		value_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+		resource_value_labels[resource_key] = value_label
 		_fit_chip_text(chip, resource_key)
-		var value_label := chip.find_child("ResourceValue_%s" % resource_key, true, false) as Label
-		if value_label != null:
-			resource_value_labels[resource_key] = value_label
 		strip.add_child(chip)
 	return strip
 
@@ -796,7 +764,7 @@ func _build_resource_strip() -> Control:
 # ── 토스트 ─────────────────────────────────────────────────────
 
 
-func _toast(message: String, accent: Color = GOLD_TEXT) -> void:
+func _toast(message: String, accent: Color = SHELTER_THEME.ACCENT) -> void:
 	if not is_instance_valid(toast_panel) or message.is_empty():
 		return
 	var label := toast_panel.get_node_or_null("WorkbenchToastLabel") as Label
@@ -804,7 +772,6 @@ func _toast(message: String, accent: Color = GOLD_TEXT) -> void:
 		return
 	label.text = message
 	label.add_theme_color_override("font_color", accent)
-	HudFx.set_text_glow_color(label, accent)
 	if toast_tween != null and toast_tween.is_valid():
 		toast_tween.kill()
 	toast_panel.visible = true
@@ -832,7 +799,7 @@ func _build_enhance_board(stacked: bool, compact: bool) -> Control:
 	board.name = "WorkbenchEnhanceBoard"
 	board.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	board.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	board.add_theme_constant_override("separation", 8)
+	board.add_theme_constant_override("separation", 12 if stacked else 20)
 	enhance_board = board
 
 	# ── 좌: 보유 장비 · 평생 귀속 ──
@@ -847,19 +814,19 @@ func _build_enhance_board(stacked: bool, compact: bool) -> Control:
 		list_panel.custom_minimum_size = Vector2(210 if compact else 240, 0)
 		list_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	board.add_child(list_panel)
-	var list_margin := _margin(8, 8, 8, 8)
+	var list_margin := _margin(10, 10, 10, 10)
 	list_panel.add_child(list_margin)
 	var list_column := VBoxContainer.new()
 	list_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	list_column.add_theme_constant_override("separation", 4)
+	list_column.add_theme_constant_override("separation", 8)
 	list_margin.add_child(list_column)
 	if not stacked:
-		var list_title := _label("보유 장비 · 평생 귀속", 11, DIM)
+		var list_title := SHELTER_THEME.caption("보유 장비 · 평생 귀속")
 		list_title.autowrap_mode = TextServer.AUTOWRAP_OFF
 		list_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		list_column.add_child(list_title)
-	var list_scroll := HudStyle.make_scroll()
+	var list_scroll := SHELTER_THEME.scroll()
 	list_scroll.name = "WorkbenchGearListScroll"
 	list_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -884,37 +851,43 @@ func _build_enhance_board(stacked: bool, compact: bool) -> Control:
 	stage.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	stage.clip_contents = true
-	stage.add_theme_stylebox_override("panel", _board_module_style())
+	# 우측 상세는 판을 두르지 않는다 — 검정 바탕 위에 카드(스탯·튜닝·비용)가 단차로 선다.
+	stage.add_theme_stylebox_override("panel", _stage_style())
 	board.add_child(stage)
 	enhance_card = stage
-	var stage_margin := _margin(12 if compact else 14, 10, 12 if compact else 14, 10)
+	var stage_margin := _margin(2, 0, 2, 0)
 	stage.add_child(stage_margin)
 	var stage_column := VBoxContainer.new()
 	stage_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	stage_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	stage_column.add_theme_constant_override("separation", 8)
+	stage_column.add_theme_constant_override("separation", 12)
 	stage_margin.add_child(stage_column)
-	var card_scroll := HudStyle.make_scroll()
+	var card_scroll := SHELTER_THEME.scroll()
 	card_scroll.name = "WorkbenchEnhanceScroll"
 	card_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	card_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	stage_column.add_child(card_scroll)
+	# 스크롤바가 내용 위에 겹쳐 그려지므로 오른쪽에 여백을 둔다(카드 끝이 바 밑에 깔리지 않게).
+	var body_margin := _margin(0, 0, 12, 0)
+	body_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card_scroll.add_child(body_margin)
 	enhance_card_body = VBoxContainer.new()
 	enhance_card_body.name = "WorkbenchEnhanceCardBody"
 	enhance_card_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	enhance_card_body.add_theme_constant_override("separation", 8)
-	card_scroll.add_child(enhance_card_body)
-	# 액션 바 — 스크롤 밖 고정. [강화 +1 | 가능한 만큼] (1.6 : 1).
+	enhance_card_body.add_theme_constant_override("separation", 12)
+	body_margin.add_child(enhance_card_body)
+	# 액션 바 — 스크롤 밖 고정. [강화 +1 | 가능한 만큼] (1.6 : 1). 주 버튼 민트, 보조는 표면색.
 	var actions := HBoxContainer.new()
 	actions.name = "WorkbenchEnhanceActions"
 	actions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	actions.size_flags_vertical = Control.SIZE_SHRINK_END
-	actions.add_theme_constant_override("separation", 6)
+	actions.add_theme_constant_override("separation", 10)
 	stage_column.add_child(actions)
-	enhance_primary_button = _button("강화 +1", "")
+	enhance_primary_button = Button.new()
+	enhance_primary_button.text = "강화 +1"
 	enhance_primary_button.name = "WorkbenchEnhanceButton"
-	enhance_primary_button.custom_minimum_size = Vector2(0, 52)
+	enhance_primary_button.custom_minimum_size = Vector2(0, 56)
 	enhance_primary_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	enhance_primary_button.size_flags_stretch_ratio = 1.6
 	enhance_primary_button.clip_contents = true
@@ -925,9 +898,9 @@ func _build_enhance_board(stacked: bool, compact: bool) -> Control:
 	enhance_primary_button.pressed.connect(_on_primary_pressed)
 	enhance_primary_button.mouse_exited.connect(_stop_enhance_hold)
 	actions.add_child(enhance_primary_button)
-	enhance_max_button = _button("가능한 만큼", "")
+	enhance_max_button = SHELTER_THEME.secondary_button("가능한 만큼")
 	enhance_max_button.name = "WorkbenchEnhanceMaxButton"
-	enhance_max_button.custom_minimum_size = Vector2(0, 52)
+	enhance_max_button.custom_minimum_size = Vector2(0, 56)
 	enhance_max_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	enhance_max_button.autowrap_mode = TextServer.AUTOWRAP_OFF
 	enhance_max_button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -937,7 +910,8 @@ func _build_enhance_board(stacked: bool, compact: bool) -> Control:
 
 
 func _board_module_style() -> StyleBoxFlat:
-	var style := _panel_style(Color(0.035, 0.059, 0.059, 0.76), Color(0.247, 0.341, 0.298, 0.7), 1, 8)
+	# 목록 판 — 표면색 카드(SURFACE). 안쪽 여백은 호출부 margin이 맡는다.
+	var style := SHELTER_THEME.card_style()
 	style.content_margin_left = 0
 	style.content_margin_right = 0
 	style.content_margin_top = 0
@@ -945,12 +919,38 @@ func _board_module_style() -> StyleBoxFlat:
 	return style
 
 
-func _well_style(border: Color = WELL_LINE) -> StyleBoxFlat:
-	var style := _panel_style(WELL, border, 1, 6)
-	style.content_margin_left = 8
-	style.content_margin_right = 8
-	style.content_margin_top = 6
-	style.content_margin_bottom = 6
+func _stage_style() -> StyleBoxFlat:
+	# 상세 영역 — 배경 없음(모달 바탕 그대로). 연출 오버레이(글리치·플래시)가 얹힐 PanelContainer 껍데기만 남긴다.
+	var style := SHELTER_THEME.flat(Color(0, 0, 0, 0), SHELTER_THEME.RADIUS_CARD)
+	style.content_margin_left = 0
+	style.content_margin_right = 0
+	style.content_margin_top = 0
+	style.content_margin_bottom = 0
+	return style
+
+
+func _row_style(selected: bool, hover := false) -> StyleBoxFlat:
+	# 목록 행 — 카드 안 카드(SURFACE_RAISED). 선택 행만 민트 2px 테두리.
+	var style := SHELTER_THEME.card_style(true, selected)
+	if hover and not selected:
+		style.bg_color = SHELTER_THEME.SURFACE_HOVER
+	style.content_margin_left = 12
+	style.content_margin_right = 12
+	style.content_margin_top = 10
+	style.content_margin_bottom = 10
+	return style
+
+
+func _well_style(border: Color = Color(0, 0, 0, 0)) -> StyleBoxFlat:
+	# 상세 안의 작은 카드(SURFACE). 테두리는 기본 없음 — 강조가 필요할 때만 2px.
+	var style := SHELTER_THEME.card_style(false, false)
+	if border.a > 0.0:
+		style.border_color = border
+		style.set_border_width_all(2)
+	style.content_margin_left = 14
+	style.content_margin_right = 14
+	style.content_margin_top = 12
+	style.content_margin_bottom = 12
 	return style
 
 
@@ -1054,9 +1054,9 @@ func _gear_kind_text(kind: String, gear_id: String) -> String:
 func _gear_icon(kind: String, gear_id: String) -> Texture2D:
 	if kind == "weapon":
 		var weapon_texture := WEAPON_VISUAL_CATALOG.get_weapon_texture(gear_id)
-		return weapon_texture if weapon_texture != null else UI_ICONS.get_icon("weapon", 72, GOLD)
+		return weapon_texture if weapon_texture != null else UI_ICONS.get_icon("weapon", 72, SHELTER_THEME.TEXT_DIM)
 	var armor_texture := _equipment_texture(gear_id)
-	return armor_texture if armor_texture != null else UI_ICONS.get_icon("armor", 72, CYAN)
+	return armor_texture if armor_texture != null else UI_ICONS.get_icon("armor", 72, SHELTER_THEME.TEXT_DIM)
 
 
 func _refresh_gear_list() -> void:
@@ -1069,21 +1069,20 @@ func _refresh_gear_list() -> void:
 		var gear_id := str(entry["id"])
 		var owned := bool(entry["owned"])
 		var selected := kind == enhance_selected_kind and gear_id == enhance_selected_id
-		var accent := GOLD if kind == "weapon" else CYAN
 		var row := Button.new()
 		row.name = "WorkbenchGearRow_%s" % gear_id
 		row.toggle_mode = true
 		row.button_pressed = selected
 		row.focus_mode = Control.FOCUS_NONE
 		row.clip_contents = true
-		row.custom_minimum_size = Vector2(150 if stacked else 0, 50)
+		row.custom_minimum_size = Vector2(168 if stacked else 0, 58)
 		if not stacked:
 			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var row_style := _well_style(GOLD_BRIGHT if selected else WELL_LINE)
+		var row_style := _row_style(selected)
 		row.add_theme_stylebox_override("normal", row_style)
 		row.add_theme_stylebox_override("pressed", row_style)
-		var row_hover := _well_style(HudStyle.LINE_FOCUS)
-		row.add_theme_stylebox_override("hover", row_hover)
+		row.add_theme_stylebox_override("focus", row_style)
+		row.add_theme_stylebox_override("hover", _row_style(selected, true))
 		row.add_theme_stylebox_override("hover_pressed", row_style)
 		row.pressed.connect(func() -> void:
 			enhance_selected_kind = kind
@@ -1094,15 +1093,15 @@ func _refresh_gear_list() -> void:
 		# 버튼 위 내용 — 입력은 버튼이 받는다(자식은 IGNORE).
 		var content := HBoxContainer.new()
 		content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		content.offset_left = 7
-		content.offset_right = -7
-		content.offset_top = 4
-		content.offset_bottom = -4
+		content.offset_left = 12
+		content.offset_right = -12
+		content.offset_top = 6
+		content.offset_bottom = -6
 		content.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		content.add_theme_constant_override("separation", 7)
+		content.add_theme_constant_override("separation", 10)
 		row.add_child(content)
 		var icon := TextureRect.new()
-		icon.custom_minimum_size = Vector2(28, 28)
+		icon.custom_minimum_size = Vector2(30, 30)
 		icon.texture = _gear_icon(kind, gear_id)
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -1113,35 +1112,30 @@ func _refresh_gear_list() -> void:
 		var text_box := VBoxContainer.new()
 		text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		text_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		text_box.add_theme_constant_override("separation", 0)
+		text_box.add_theme_constant_override("separation", 1)
 		text_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		content.add_child(text_box)
-		var name_label := _label(str(entry["name"]), 12, TEXT if owned else FAINT)
+		var name_label := SHELTER_THEME.label(str(entry["name"]), SHELTER_THEME.TYPE_BODY, TEXT if owned else FAINT, true)
 		name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 		name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		text_box.add_child(name_label)
-		var sub_label := _label(str(entry["sub"]), 10, FAINT)
+		var sub_label := SHELTER_THEME.caption(str(entry["sub"]), FAINT)
 		sub_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 		sub_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		sub_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		text_box.add_child(sub_label)
-		var level_label := _label(
-			"+%d" % int(entry["level"]) if owned else "조각 %d/%d" % [int(entry["shards"]), GameState.BLUEPRINT_SHARDS_REQUIRED],
-			16 if owned else 10,
-			accent if owned else FAINT
-		)
+		var level_label: Label
+		if owned:
+			level_label = SHELTER_THEME.number("+%d" % int(entry["level"]), SHELTER_THEME.TYPE_NUMBER_SMALL, SHELTER_THEME.ACCENT)
+		else:
+			level_label = SHELTER_THEME.caption("조각 %d/%d" % [int(entry["shards"]), GameState.BLUEPRINT_SHARDS_REQUIRED], FAINT)
 		level_label.name = "GearLevel"
 		level_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 		level_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		level_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		content.add_child(level_label)
-		if owned:
-			HudFx.attach_text_glow(level_label, accent, 0.8)
 		gear_list_box.add_child(row)
 		if selected:
-			HudFx.attach_rim_pulse(row, GOLD_BRIGHT, 6.0)
+			# 선택 행의 은은한 민트 림 펄스 — 테두리와 같은 색, 카드 반지름에 맞춘다.
+			HudFx.attach_rim_pulse(row, SHELTER_THEME.ACCENT, float(SHELTER_THEME.RADIUS_CARD))
 
 
 # ── 강화 카드 ──────────────────────────────────────────────────
@@ -1184,7 +1178,7 @@ func _refresh_enhance_card() -> void:
 	var entry := _find_gear_entry(enhance_selected_kind, enhance_selected_id)
 	var insert_at := 0
 	if entry.is_empty():
-		var empty := _label("보유한 장비가 없습니다 — 제작 탭에서 첫 장비를 만드세요.", 14, DIM)
+		var empty := SHELTER_THEME.subtitle("보유한 장비가 없습니다 — 제작 탭에서 첫 장비를 만드세요.")
 		empty.name = "WorkbenchEnhanceEmpty"
 		enhance_card_body.add_child(empty)
 		enhance_card_body.move_child(empty, 0)
@@ -1201,17 +1195,22 @@ func _refresh_enhance_card() -> void:
 
 
 func _build_stage_head(entry: Dictionary, big_caption: String, big_text: String, kind_suffix: String) -> Control:
+	# [아이콘 카드] [굵은 큰 장비 이름 / 회색 설명] ······ [작은 캡션 / 큰 굵은 숫자 "+N"]
 	var kind := str(entry["kind"])
-	var accent := GOLD if kind == "weapon" else CYAN
 	var head := HBoxContainer.new()
 	head.name = "WorkbenchEnhanceHead"
-	head.add_theme_constant_override("separation", 10)
+	head.add_theme_constant_override("separation", 14)
 	var icon_box := PanelContainer.new()
-	icon_box.custom_minimum_size = Vector2(56, 56)
+	icon_box.custom_minimum_size = Vector2(64, 64)
 	icon_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	icon_box.add_theme_stylebox_override("panel", _well_style(HudStyle.LINE_GOLD if kind == "weapon" else Color(CYAN, 0.6)))
+	var icon_style := _well_style()
+	icon_style.content_margin_left = 8
+	icon_style.content_margin_right = 8
+	icon_style.content_margin_top = 8
+	icon_style.content_margin_bottom = 8
+	icon_box.add_theme_stylebox_override("panel", icon_style)
 	var icon := TextureRect.new()
-	icon.custom_minimum_size = Vector2(40, 40)
+	icon.custom_minimum_size = Vector2(44, 44)
 	icon.texture = _gear_icon(kind, str(entry["id"]))
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -1220,15 +1219,14 @@ func _build_stage_head(entry: Dictionary, big_caption: String, big_text: String,
 	var text_box := VBoxContainer.new()
 	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	text_box.add_theme_constant_override("separation", 1)
+	text_box.add_theme_constant_override("separation", 3)
 	head.add_child(text_box)
-	var name_label := _label(str(entry["name"]), 17, GOLD_TEXT if kind == "weapon" else Color("#cfeef5"))
+	var name_label := SHELTER_THEME.title(str(entry["name"]), 22)
 	name_label.name = "WorkbenchEnhanceName"
 	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(name_label)
-	HudFx.attach_text_glow(name_label, accent, 0.8)
-	var kind_label := _label("%s · %s" % [str(entry["sub"]), kind_suffix], 10, FAINT)
+	var kind_label := SHELTER_THEME.subtitle("%s · %s" % [str(entry["sub"]), kind_suffix])
 	kind_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	kind_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(kind_label)
@@ -1236,16 +1234,15 @@ func _build_stage_head(entry: Dictionary, big_caption: String, big_text: String,
 	big_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	big_box.add_theme_constant_override("separation", 0)
 	head.add_child(big_box)
-	var caption := _label(big_caption, 9, FAINT)
+	var caption := SHELTER_THEME.eyebrow(big_caption, FAINT)
 	caption.autowrap_mode = TextServer.AUTOWRAP_OFF
 	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	big_box.add_child(caption)
-	var big := _label(big_text, 28, accent)
+	var big := SHELTER_THEME.number(big_text, 34, SHELTER_THEME.ACCENT)
 	big.name = "WorkbenchEnhanceBigLevel"
 	big.autowrap_mode = TextServer.AUTOWRAP_OFF
 	big.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	big_box.add_child(big)
-	HudFx.attach_text_glow(big, accent)
 	return head
 
 
@@ -1277,10 +1274,14 @@ func _build_tuning_block(gear_id: String) -> Control:
 	var block := VBoxContainer.new()
 	block.name = "WorkbenchTuningBlock"
 	block.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	block.add_theme_constant_override("separation", 4)
-	var title := _label("부품 튜닝 · 먹인 만큼 이 무기가 영구히 좋아진다", 11, DIM)
+	block.add_theme_constant_override("separation", 8)
+	var title := SHELTER_THEME.label("부품 튜닝", SHELTER_THEME.TYPE_SECTION, TEXT, true)
 	title.name = "WorkbenchTuningTitle"
 	block.add_child(title)
+	var hint := SHELTER_THEME.caption("먹인 만큼 이 무기가 영구히 좋아진다")
+	hint.autowrap_mode = TextServer.AUTOWRAP_OFF
+	hint.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	block.add_child(hint)
 	for component_id in ["magazine_spring", "rubber_gasket", "scope_lens"]:
 		block.add_child(_build_tuning_row(gear_id, str(component_id)))
 	return block
@@ -1291,17 +1292,19 @@ func _build_tuning_row(gear_id: String, component_id: String) -> Control:
 	var fed := GameState.get_weapon_tuning_count(gear_id, component_id)
 	var bonus := GameState.get_weapon_tuning_bonus(gear_id, component_id)
 	var have := GameState.get_mod_component_count(component_id)
+	# 표면색 카드 한 장 — [아이콘] [이름 / 수치 캡션] ······ [+1] [+10](보조 버튼 small)
 	var row := PanelContainer.new()
 	row.name = "WorkbenchTuningRow_%s" % component_id
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_theme_stylebox_override("panel", _well_style())
-	var margin := _margin(8, 4, 8, 4)
-	row.add_child(margin)
+	var row_style := _well_style()
+	row_style.content_margin_top = 8
+	row_style.content_margin_bottom = 8
+	row.add_theme_stylebox_override("panel", row_style)
 	var line := HBoxContainer.new()
-	line.add_theme_constant_override("separation", 8)
-	margin.add_child(line)
+	line.add_theme_constant_override("separation", 10)
+	row.add_child(line)
 	var icon := TextureRect.new()
-	icon.custom_minimum_size = Vector2(22, 22)
+	icon.custom_minimum_size = Vector2(26, 26)
 	icon.texture = TUNING_COMPONENT_TEXTURES.get(component_id)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -1310,28 +1313,31 @@ func _build_tuning_row(gear_id: String, component_id: String) -> Control:
 	var text_box := VBoxContainer.new()
 	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	text_box.add_theme_constant_override("separation", 0)
+	text_box.add_theme_constant_override("separation", 1)
 	line.add_child(text_box)
-	var name_label := _label(
-		"%s — %s" % [str(track.get("name", "")), str(track.get("effect", ""))], 11, GOLD_TEXT
+	var name_label := SHELTER_THEME.label(
+		"%s · %s" % [str(track.get("name", "")), str(track.get("effect", ""))], SHELTER_THEME.TYPE_BODY, TEXT, true
 	)
 	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(name_label)
-	var value_label := _label(
-		"+%.1f%% · 먹임 %d · 보유 %d" % [bonus * 100.0, fed, have], 10, GREEN if bonus > 0.0 else DIM
+	var value_label := SHELTER_THEME.caption(
+		"+%.1f%% · 먹임 %d · 보유 %d" % [bonus * 100.0, fed, have], SHELTER_THEME.ACCENT if bonus > 0.0 else DIM
 	)
 	value_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	value_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(value_label)
-	var feed_one := _button("+1", "")
+	var feed_one := SHELTER_THEME.secondary_button("+1", true)
 	feed_one.name = "WorkbenchTuningFeed1_%s" % component_id
 	feed_one.custom_minimum_size = Vector2(52, 40)
+	feed_one.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	feed_one.disabled = have <= 0
 	feed_one.pressed.connect(_feed_tuning.bind(gear_id, component_id, 1))
 	line.add_child(feed_one)
-	var feed_ten := _button("+10", "")
+	var feed_ten := SHELTER_THEME.secondary_button("+10", true)
 	feed_ten.name = "WorkbenchTuningFeed10_%s" % component_id
-	feed_ten.custom_minimum_size = Vector2(58, 40)
+	feed_ten.custom_minimum_size = Vector2(60, 40)
+	feed_ten.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	feed_ten.disabled = have <= 0
 	feed_ten.pressed.connect(_feed_tuning.bind(gear_id, component_id, 10))
 	line.add_child(feed_ten)
@@ -1345,111 +1351,58 @@ func _feed_tuning(gear_id: String, component_id: String, amount: int) -> void:
 
 
 func _build_perk_row(kind: String, gear_id: String, level: int) -> Control:
-	# 돌파 정체성 보너스(3단계) — 이미 얻은 보너스는 초록 칩, 다음 관문 보너스는 한 줄 예고.
+	# 돌파 정체성 보너스(3단계) — 이미 얻은 보너스는 민트 글자 알약 칩, 다음 관문 보너스는 한 줄 캡션.
 	var row := HFlowContainer.new()
 	row.name = "WorkbenchPerkRow"
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_theme_constant_override("h_separation", 6)
-	row.add_theme_constant_override("v_separation", 4)
+	row.add_theme_constant_override("v_separation", 6)
 	var table: Dictionary = (GameState.BREAKTHROUGH_PERKS as Dictionary).get(kind, {})
 	var earned: Array[String] = GameState.get_breakthrough_perks(kind, gear_id)
 	for perk_level in GameState.BREAKTHROUGH_PERK_LEVELS:
 		var perk: Dictionary = table.get(int(perk_level), {})
 		if perk.is_empty() or not earned.has(str(perk.get("id", ""))):
 			continue
-		var chip := PanelContainer.new()
+		var chip := SHELTER_THEME.chip("+%d %s" % [int(perk_level), str(perk.get("label", ""))])
 		chip.name = "PerkChip_%s" % str(perk.get("id", ""))
 		chip.tooltip_text = str(perk.get("description", ""))
-		var chip_style := _panel_style(Color(0.09, 0.16, 0.13, 0.9), Color(GREEN, 0.7), 1, 999)
-		chip_style.content_margin_left = 8
-		chip_style.content_margin_right = 8
-		chip_style.content_margin_top = 1
-		chip_style.content_margin_bottom = 1
-		chip.add_theme_stylebox_override("panel", chip_style)
-		var chip_label := _label("+%d %s" % [int(perk_level), str(perk.get("label", ""))], 10, GREEN)
-		chip_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-		chip.add_child(chip_label)
+		(chip.get_meta("label") as Label).add_theme_color_override("font_color", SHELTER_THEME.ACCENT)
 		row.add_child(chip)
 	var next_perk_level := _next_perk_level(level)
 	var next_text := str(GameState.describe_breakthrough_perk(kind, next_perk_level)) if next_perk_level > 0 else ""
-	var next_label := _label(("다음 보너스 · %s" % next_text) if not next_text.is_empty() else "돌파 보너스 전부 획득", 10, DANGER if not next_text.is_empty() else FAINT)
+	var next_label := SHELTER_THEME.caption(("다음 보너스 · %s" % next_text) if not next_text.is_empty() else "돌파 보너스 전부 획득", DIM if not next_text.is_empty() else FAINT)
 	next_label.name = "WorkbenchNextPerk"
 	next_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	next_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	next_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	next_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(next_label)
 	return row
 
 
 func _build_breakthrough_track(kind: String, gear_id: String, level: int) -> Control:
-	# 10칸 = 이번 10단계(+1~+10). 완료 초록 · 현재 금색 펄스 · 10번째 칸 우측 붉은 관문.
-	# 돌파 대기(+10·+20…·미돌파)면 10칸 전부 완료 + 관문이 붉게 깜빡인다.
+	# 이번 10단계(+1~+10)의 진행 — 얇은 민트 바 한 줄 + "다음 +N / 돌파 +M" 캡션.
+	# 돌파 대기(+10·+20…·미돌파)면 바가 꽉 찬 붉은색, 오른쪽 캡션도 붉게.
 	var gate_required := bool(GameState.is_breakthrough_required(kind, gear_id))
 	var step := GameState.BREAKTHROUGH_STEP
 	var decade_base := (level - step) if gate_required else (level / step) * step
 	var done := step if gate_required else level % step
-	var current := -1 if gate_required else level % step
 	var box := VBoxContainer.new()
 	box.name = "WorkbenchBreakthroughTrack"
-	box.add_theme_constant_override("separation", 3)
-	var track := HBoxContainer.new()
-	track.name = "TrackCells"
-	track.add_theme_constant_override("separation", 3)
-	track.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_child(track)
-	for index in step:
-		var cell := Panel.new()
-		cell.name = "TrackCell_%d" % index
-		cell.custom_minimum_size = Vector2(0, 8)
-		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var style := StyleBoxFlat.new()
-		style.set_corner_radius_all(3)
-		if index < done:
-			style.bg_color = Color("#8fd08f")
-			style.border_color = Color("#aeea78")
-			style.set_border_width_all(0)
-			cell.set_meta("state", "done")
-		elif index == current:
-			style.bg_color = GOLD_BRIGHT
-			style.set_border_width_all(0)
-			cell.set_meta("state", "cur")
-			var pulse := cell.create_tween().set_loops()
-			pulse.tween_property(cell, "modulate", Color(1.4, 1.4, 1.4, 1.0), 0.7).set_trans(Tween.TRANS_SINE)
-			pulse.tween_property(cell, "modulate", Color.WHITE, 0.7).set_trans(Tween.TRANS_SINE)
-		else:
-			style.bg_color = Color("#13201c")
-			style.border_color = Color("#223a30")
-			style.set_border_width_all(1)
-			cell.set_meta("state", "todo")
-		cell.add_theme_stylebox_override("panel", style)
-		track.add_child(cell)
-		if index == step - 1:
-			# 붉은 관문 표시 — "여기서 장인·인장이 든다"를 누르기 전에 말한다.
-			var gate := ColorRect.new()
-			gate.name = "TrackGate"
-			gate.color = DANGER
-			gate.anchor_left = 1.0
-			gate.anchor_right = 1.0
-			gate.anchor_top = 0.0
-			gate.anchor_bottom = 1.0
-			gate.offset_left = -2
-			gate.offset_right = 4
-			gate.offset_top = -4
-			gate.offset_bottom = 4
-			gate.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			cell.add_child(gate)
-			# 위험 신호 문법 — 드물게 붉은 점멸(돌파 대기 중엔 또렷하게).
-			var blink := gate.create_tween().set_loops()
-			blink.tween_interval(0.9 if gate_required else 3.4)
-			blink.tween_property(gate, "modulate", Color(1.8, 1.4, 1.4, 1.0), 0.12)
-			blink.tween_property(gate, "modulate", Color.WHITE, 0.22)
+	box.add_theme_constant_override("separation", 6)
+	var bar := SHELTER_THEME.progress(float(done), float(step), DANGER if gate_required else SHELTER_THEME.ACCENT)
+	bar.name = "TrackBar"
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(bar)
 	var labels := HBoxContainer.new()
 	labels.name = "TrackLabels"
-	var left := _label("+%d" % decade_base, 10, FAINT)
+	var left := SHELTER_THEME.caption("돌파 대기 · +%d 도달" % level if gate_required else "다음 +%d" % (level + 1))
+	left.name = "TrackNextLabel"
 	left.autowrap_mode = TextServer.AUTOWRAP_OFF
+	left.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	labels.add_child(left)
-	var right := _label("돌파 +%d" % (decade_base + step), 10, DANGER)
+	var right := SHELTER_THEME.caption("돌파 +%d" % (decade_base + step), DANGER if gate_required else DIM)
 	right.name = "TrackGateLabel"
 	right.autowrap_mode = TextServer.AUTOWRAP_OFF
 	right.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -1466,9 +1419,10 @@ func _stat_cells(kind: String, gear_id: String, level: int) -> Array:
 		var now: Dictionary = WeaponSystem.build_stats(gear_id, no_mods, level)
 		var next: Dictionary = WeaponSystem.build_stats(gear_id, no_mods, mini(level + 1, GameState.MAX_WEAPON_ENHANCEMENT))
 		var pellets := maxi(1, int(now.get("pellet_count", 1)))
-		var damage_now := "%d×%d" % [roundi(float(now.get("damage", 0))), pellets] if pellets > 1 else str(roundi(float(now.get("damage", 0))))
-		var damage_next := str(roundi(float(next.get("damage", 0))))
-		cells.append(["피해", damage_now, "▲%s" % damage_next if level < GameState.MAX_WEAPON_ENHANCEMENT else ""])
+		var damage_now := "%dx%d" % [roundi(float(now.get("damage", 0))), pellets] if pellets > 1 else str(roundi(float(now.get("damage", 0))))
+		# 상승은 민트 "+N"(다음 단계에서 오르는 양). 특수기호(▲) 없이.
+		var damage_gain := roundi(float(next.get("damage", 0))) - roundi(float(now.get("damage", 0)))
+		cells.append(["피해", damage_now, _gain_text(damage_gain) if level < GameState.MAX_WEAPON_ENHANCEMENT else ""])
 		cells.append(["연사", "%d" % roundi(60.0 / maxf(0.01, float(now.get("fire_interval", 0.2)))), ""])
 		cells.append(["장탄", str(int(now.get("magazine_size", 0))), ""])
 		cells.append(["장전", "%.2fs" % float(now.get("reload_time", 0.0)), ""])
@@ -1479,12 +1433,12 @@ func _stat_cells(kind: String, gear_id: String, level: int) -> Array:
 	var can_grow := level < GameState.MAX_ARMOR_ENHANCEMENT
 	if definition.has("damage_reduction"):
 		var base := float(definition["damage_reduction"])
-		cells.append(["피해 감소", "%d%%" % roundi(base * multiplier_now * 100.0), "▲%d%%" % roundi(base * multiplier_next * 100.0) if can_grow else ""])
+		cells.append(["피해 감소", "%d%%" % roundi(base * multiplier_now * 100.0), _gain_text(roundi(base * multiplier_next * 100.0) - roundi(base * multiplier_now * 100.0), "%") if can_grow else ""])
 	elif definition.has("move_speed_bonus"):
 		var base := float(definition["move_speed_bonus"])
-		cells.append(["이동", "+%d%%" % roundi(base * multiplier_now * 100.0), "▲%d%%" % roundi(base * multiplier_next * 100.0) if can_grow else ""])
+		cells.append(["이동", "+%d%%" % roundi(base * multiplier_now * 100.0), _gain_text(roundi(base * multiplier_next * 100.0) - roundi(base * multiplier_now * 100.0), "%") if can_grow else ""])
 	else:
-		cells.append(["효과", "×%.2f" % multiplier_now, "▲×%.2f" % multiplier_next if can_grow else ""])
+		cells.append(["효과", "x%.2f" % multiplier_now, ("+%.2f" % (multiplier_next - multiplier_now)) if can_grow and multiplier_next > multiplier_now else ""])
 	cells.append(["무게", "%.1f" % float(definition.get("weight", 0.0)), ""])
 	if definition.has("visibility_multiplier"):
 		cells.append(["가시성", "+%d%%" % roundi((float(definition["visibility_multiplier"]) - 1.0) * 100.0), ""])
@@ -1496,70 +1450,56 @@ func _stat_cells(kind: String, gear_id: String, level: int) -> Array:
 	return cells
 
 
+func _gain_text(gain: int, suffix := "") -> String:
+	# 다음 단계 상승량 — 0이면 표시하지 않는다(민트 "+N"만 상승 표식).
+	return "+%d%s" % [gain, suffix] if gain > 0 else ""
+
+
 func _build_stat_grid(kind: String, gear_id: String, level: int) -> Control:
+	# 스탯 4칸 — 공용 stat_card(작은 설명 + 큰 숫자). 오르는 칸은 옆에 민트 "+N".
 	var grid := GridContainer.new()
 	grid.name = "WorkbenchEnhanceStats"
 	grid.columns = 4 if get_viewport().get_visible_rect().size.x >= 560.0 else 2
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.add_theme_constant_override("h_separation", 5)
-	grid.add_theme_constant_override("v_separation", 5)
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
 	for cell_raw in _stat_cells(kind, gear_id, level):
 		var cell: Array = cell_raw
-		var panel := PanelContainer.new()
+		var panel := SHELTER_THEME.stat_card(str(cell[0]), str(cell[1]))
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		panel.clip_contents = true
-		panel.add_theme_stylebox_override("panel", _well_style())
-		var column := VBoxContainer.new()
-		column.add_theme_constant_override("separation", 0)
-		panel.add_child(column)
-		var key := _label(str(cell[0]), 10, FAINT)
-		key.autowrap_mode = TextServer.AUTOWRAP_OFF
-		key.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		column.add_child(key)
-		var value_row := HBoxContainer.new()
-		value_row.add_theme_constant_override("separation", 3)
-		column.add_child(value_row)
-		var value := _label(str(cell[1]), 14, TEXT)
+		var value := panel.get_meta("value_label") as Label
 		value.autowrap_mode = TextServer.AUTOWRAP_OFF
 		# 짧은 수치 — ELLIPSIS면 HBox 안에서 폭 0으로 줄어 사라진다(실측).
 		value.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-		value_row.add_child(value)
 		if not str(cell[2]).is_empty():
-			var next := _label(str(cell[2]), 10, GREEN)
+			var column := value.get_parent()
+			column.remove_child(value)
+			var value_row := HBoxContainer.new()
+			value_row.add_theme_constant_override("separation", 6)
+			value_row.add_child(value)
+			var next := SHELTER_THEME.number(str(cell[2]), SHELTER_THEME.TYPE_CAPTION + 1, SHELTER_THEME.ACCENT)
 			next.autowrap_mode = TextServer.AUTOWRAP_OFF
 			next.size_flags_vertical = Control.SIZE_SHRINK_END
 			value_row.add_child(next)
-			HudFx.attach_text_glow(next, GREEN, 0.6)
+			column.add_child(value_row)
 		grid.add_child(panel)
 	return grid
 
 
 func _cost_pair(label_text: String, value_text: String, ok: bool, resource_key := "") -> Control:
-	# 비용 한 쌍 — 모자란 것만 빨강(충족은 초록 글로우).
+	# 비용 한 쌍 = 알약 칩. 모자란 것만 붉은 글자(충족은 민트).
 	# 재화(고철·캣닢·통조림·츄르)는 아이콘이 곧 이름이라 이름 라벨을 걷어내고
 	# 아이콘 + 수치만 남긴다(유저 확정: "아이콘 옆에 이름을 또 쓸 필요 없다").
 	# 부품·재료는 아이콘만으로 무엇인지 알 수 없으니 이름을 유지한다.
-	var pair := HBoxContainer.new()
-	pair.add_theme_constant_override("separation", 4)
-	pair.tooltip_text = "%s %s" % [label_text, value_text]
-	if ICON_ONLY_RESOURCES.has(resource_key):
-		var icon := TextureRect.new()
-		icon.custom_minimum_size = Vector2(15, 15)
-		icon.texture = _resource_icon(resource_key)
-		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		pair.add_child(icon)
-	else:
-		var key := _label(label_text, 11, DIM)
-		key.autowrap_mode = TextServer.AUTOWRAP_OFF
-		pair.add_child(key)
-	var value := _label(value_text, 12, GREEN if ok else DANGER)
-	value.autowrap_mode = TextServer.AUTOWRAP_OFF
-	pair.add_child(value)
-	HudFx.attach_text_glow(value, GREEN if ok else DANGER, 0.6)
-	return pair
+	var icon_only := ICON_ONLY_RESOURCES.has(resource_key)
+	var chip := SHELTER_THEME.chip(
+		value_text if icon_only else "%s %s" % [label_text, value_text],
+		_resource_icon(resource_key) if icon_only else null
+	)
+	chip.tooltip_text = "%s %s" % [label_text, value_text]
+	(chip.get_meta("label") as Label).add_theme_color_override("font_color", SHELTER_THEME.ACCENT if ok else DANGER)
+	return chip
 
 
 func _build_enhance_cost_row(kind: String, gear_id: String, level: int) -> Control:
@@ -1568,13 +1508,13 @@ func _build_enhance_cost_row(kind: String, gear_id: String, level: int) -> Contr
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.add_theme_stylebox_override("panel", _well_style())
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", 12)
 	panel.add_child(row)
 	var flow := HFlowContainer.new()
 	flow.name = "CostPairs"
 	flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	flow.add_theme_constant_override("h_separation", 12)
-	flow.add_theme_constant_override("v_separation", 3)
+	flow.add_theme_constant_override("h_separation", 8)
+	flow.add_theme_constant_override("v_separation", 6)
 	row.add_child(flow)
 	var gate_required := bool(GameState.is_breakthrough_required(kind, gear_id))
 	var max_level := GameState.MAX_WEAPON_ENHANCEMENT if kind == "weapon" else GameState.MAX_ARMOR_ENHANCEMENT
@@ -1597,9 +1537,9 @@ func _build_enhance_cost_row(kind: String, gear_id: String, level: int) -> Contr
 			var need := int(cost[key])
 			var have := _owned_resource(key)
 			flow.add_child(_cost_pair(_resource_name(key), "%d /%d" % [need, have], have >= need, key))
-	var next_label := _label(
+	var next_label := SHELTER_THEME.caption(
 		("돌파 +%d" % level) if gate_required else ("다음 +%d" % mini(level + 1, max_level)),
-		10, DANGER if gate_required else FAINT
+		DANGER if gate_required else DIM
 	)
 	next_label.name = "WorkbenchEnhanceNext"
 	next_label.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -1622,8 +1562,8 @@ func _build_locked_card_blocks(entry: Dictionary) -> Array[Control]:
 	panel.add_theme_stylebox_override("panel", _well_style())
 	var flow := HFlowContainer.new()
 	flow.name = "CostPairs"
-	flow.add_theme_constant_override("h_separation", 12)
-	flow.add_theme_constant_override("v_separation", 3)
+	flow.add_theme_constant_override("h_separation", 8)
+	flow.add_theme_constant_override("v_separation", 6)
 	panel.add_child(flow)
 	flow.add_child(_cost_pair("설계도 조각", "%d / %d" % [shards, GameState.BLUEPRINT_SHARDS_REQUIRED], shards >= GameState.BLUEPRINT_SHARDS_REQUIRED))
 	var cost := _effective_cost(recipe)
@@ -1633,7 +1573,7 @@ func _build_locked_card_blocks(entry: Dictionary) -> Array[Control]:
 		var have := _owned_resource(key)
 		flow.add_child(_cost_pair(_resource_name(key), GameState.format_compact_number(need) if key == "scrap" else "%d /%d" % [need, have], have >= need, key))
 	blocks.append(panel)
-	var source := _label("조각은 %s에서 나옵니다.%s" % [_blueprint_source_text(gear_id), _transfer_preview_sentence(kind, gear_id)], 12, DIM)
+	var source := SHELTER_THEME.subtitle("조각은 %s에서 나옵니다.%s" % [_blueprint_source_text(gear_id), _transfer_preview_sentence(kind, gear_id)])
 	source.name = "WorkbenchCraftGuide"
 	source.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	blocks.append(source)
@@ -1642,7 +1582,8 @@ func _build_locked_card_blocks(entry: Dictionary) -> Array[Control]:
 	var required_workbench := int(recipe.get("required_workbench", 1))
 	if GameState.shelter_tier < required_tier or GameState.shelter_workbench_level < required_workbench:
 		var lock_text := ("쉘터 Tier %d 필요" % required_tier) if GameState.shelter_tier < required_tier else ("작업대 Lv.%d 필요 (제작 탭 하단 '보급품'에서 확장)" % required_workbench)
-		var lock_label := _label(lock_text, 12, DANGER)
+		var lock_label := SHELTER_THEME.label(lock_text, SHELTER_THEME.TYPE_CAPTION + 1, DANGER)
+		lock_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		lock_label.name = "WorkbenchBlockedReason"
 		blocks.append(lock_label)
 	return blocks
@@ -1686,56 +1627,18 @@ func _next_perk_level(level: int) -> int:
 
 
 func _style_action_button(button: Button, mode: String) -> void:
-	var accent := HudStyle.LINE_FOCUS
-	var fill := Color(0.063, 0.09, 0.086, 0.96)
-	var font := TEXT
+	# 주 행동은 민트 채움(강화·제작), 돌파는 붉은 채움, 돌파 고철 부족은 표면색 + 붉은 글자.
 	match mode:
-		"enhance":
-			fill = Color("#e2c97f")
-			accent = GOLD_BRIGHT
-			font = Color("#0b100e")
 		"gate":
-			fill = Color("#d47a6b")
-			accent = Color("#f09a8a")
-			font = Color("#0b100e")
+			SHELTER_THEME.style_primary(button, DANGER)
 		"gate_short":
 			# 돌파 고철 부족 — 붉은 글씨의 어두운 버튼(누르면 부족 사유 토스트).
-			fill = Color(0.09, 0.05, 0.045, 0.96)
-			accent = DANGER
-			font = DANGER
-		"craft":
-			fill = Color(0.063, 0.09, 0.086, 0.96)
-			accent = GREEN
-			font = TEXT
-	var normal := _panel_style(fill, accent, 1, 8)
-	normal.content_margin_left = 10
-	normal.content_margin_right = 10
-	normal.content_margin_top = 6
-	normal.content_margin_bottom = 6
-	var hover := _panel_style(fill.lightened(0.05), accent, 1, 8)
-	hover.content_margin_left = 10
-	hover.content_margin_right = 10
-	hover.content_margin_top = 6
-	hover.content_margin_bottom = 6
-	var pressed := _panel_style(fill.darkened(0.12), accent, 2, 8)
-	pressed.content_margin_left = 10
-	pressed.content_margin_right = 10
-	pressed.content_margin_top = 7
-	pressed.content_margin_bottom = 5
-	var disabled := _panel_style(Color(fill.r, fill.g, fill.b, 0.45), Color(accent, 0.4), 1, 8)
-	disabled.content_margin_left = 10
-	disabled.content_margin_right = 10
-	disabled.content_margin_top = 6
-	disabled.content_margin_bottom = 6
-	button.add_theme_stylebox_override("normal", normal)
-	button.add_theme_stylebox_override("hover", hover)
-	button.add_theme_stylebox_override("pressed", pressed)
-	button.add_theme_stylebox_override("disabled", disabled)
-	button.add_theme_color_override("font_color", font)
-	button.add_theme_color_override("font_hover_color", font)
-	button.add_theme_color_override("font_pressed_color", font)
-	button.add_theme_color_override("font_disabled_color", Color(font, 0.6))
-	button.add_theme_font_size_override("font_size", 15)
+			SHELTER_THEME.style_secondary(button)
+			for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+				button.add_theme_color_override(state, DANGER)
+		_:
+			SHELTER_THEME.style_primary(button)
+	button.custom_minimum_size.y = maxf(button.custom_minimum_size.y, 56.0)
 
 
 func _refresh_enhance_actions() -> void:
@@ -1983,7 +1886,7 @@ func _play_button_shine(button: Button) -> void:
 func _spawn_level_pop(anchor: Control, text: String) -> void:
 	if not is_instance_valid(modal_root):
 		return
-	var pop := _label(text, 20, Color.WHITE)
+	var pop := SHELTER_THEME.number(text, 22, SHELTER_THEME.ACCENT)
 	pop.name = "LevelPop"
 	pop.autowrap_mode = TextServer.AUTOWRAP_OFF
 	pop.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1992,7 +1895,6 @@ func _spawn_level_pop(anchor: Control, text: String) -> void:
 	var anchor_rect := anchor.get_global_rect()
 	var origin := modal_root.get_global_rect().position
 	pop.position = Vector2(anchor_rect.position.x + anchor_rect.size.x * 0.5 - 16.0, anchor_rect.position.y - 22.0) - origin
-	HudFx.attach_text_glow(pop, GOLD_BRIGHT, 1.1)
 	var tween := pop.create_tween()
 	tween.set_parallel(true)
 	tween.tween_property(pop, "position:y", pop.position.y - 26.0, 0.7).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -2004,11 +1906,12 @@ func _play_breakthrough_fx() -> void:
 	SFX.play("enhance_clink")
 	if not is_instance_valid(enhance_card) or not HudFx.fx_enabled():
 		return
-	# 돌파 = 벽이 깨지는 순간 — 카드를 0.3초 찢었다 되돌리는 글리치(복원형) 위에 골드 플래시.
+	# 돌파 = 벽이 깨지는 순간 — 카드를 0.3초 찢었다 되돌리는 글리치(복원형) 위에 민트 플래시.
+	# (노드 이름 GoldFlash는 프로브가 잡는 이름이라 유지.)
 	HudFx.play_glitch_pulse(enhance_card, 0.3)
 	var flash := ColorRect.new()
 	flash.name = "GoldFlash"
-	flash.color = Color(GOLD_BRIGHT, 0.55)
+	flash.color = Color(SHELTER_THEME.ACCENT, 0.42)
 	flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	enhance_card.add_child(flash)
@@ -2043,26 +1946,27 @@ func _build_recipe_list() -> Control:
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL if stacked else Control.SIZE_FILL
 	panel.size_flags_vertical = Control.SIZE_FILL if stacked else Control.SIZE_EXPAND_FILL
 	panel.add_theme_stylebox_override("panel", _board_module_style())
-	var margin := _margin(8, 8, 8, 8)
+	var margin := _margin(10, 10, 10, 10)
 	panel.add_child(margin)
 	var column := VBoxContainer.new()
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	column.add_theme_constant_override("separation", 4)
+	column.add_theme_constant_override("separation", 8)
 	margin.add_child(column)
 	if not stacked:
 		# 강화 보드의 목록 제목("보유 장비 · 평생 귀속")과 같은 문법.
-		var list_title := _label("설계도 · 아직 만들지 않은 것만", 11, DIM)
+		var list_title := SHELTER_THEME.caption("설계도 · 아직 만들지 않은 것만")
 		list_title.autowrap_mode = TextServer.AUTOWRAP_OFF
 		list_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		column.add_child(list_title)
-	# 카테고리 서브탭 — 무기 / 방어구 / 중장비 / 보급품(유저: "카테고리별로 탭").
+	# 카테고리 서브탭(알약) — 무기 / 방어구 / 중장비 / 보급품(유저: "카테고리별로 탭").
 	var subtabs := HBoxContainer.new()
 	subtabs.name = "WorkbenchCraftSubtabs"
-	subtabs.add_theme_constant_override("separation", 4)
+	subtabs.add_theme_constant_override("separation", 6)
 	for sub_value in CRAFT_SUBCATEGORIES:
 		var sub_id := str(sub_value)
-		var sub_button := _button(str(CRAFT_SUBCATEGORY_NAMES.get(sub_id, sub_id)), "")
+		var sub_button := Button.new()
+		sub_button.text = str(CRAFT_SUBCATEGORY_NAMES.get(sub_id, sub_id))
 		sub_button.name = "WorkbenchCraftSubtab_%s" % sub_id
 		sub_button.toggle_mode = true
 		sub_button.button_pressed = craft_subcategory == sub_id
@@ -2070,6 +1974,7 @@ func _build_recipe_list() -> Control:
 		sub_button.custom_minimum_size = Vector2(0, 34)
 		sub_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		sub_button.clip_text = true
+		sub_button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		_style_tab(sub_button, sub_button.button_pressed)
 		sub_button.pressed.connect(func() -> void:
 			craft_subcategory = sub_id
@@ -2080,7 +1985,7 @@ func _build_recipe_list() -> Control:
 		)
 		subtabs.add_child(sub_button)
 	column.add_child(subtabs)
-	var scroll := HudStyle.make_scroll()
+	var scroll := SHELTER_THEME.scroll()
 	scroll.name = "WorkbenchRecipeScroll"
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -2089,7 +1994,7 @@ func _build_recipe_list() -> Control:
 	recipe_list = VBoxContainer.new()
 	recipe_list.name = "WorkbenchRecipeList"
 	recipe_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	recipe_list.add_theme_constant_override("separation", 5)
+	recipe_list.add_theme_constant_override("separation", 6)
 	scroll.add_child(recipe_list)
 	return panel
 
@@ -2100,33 +2005,37 @@ func _build_detail_panel() -> Control:
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	panel.clip_contents = true
-	# 강화 카드와 같은 모듈 패널 — 탭별로 다르던 초록톤 테마를 걷어냈다.
-	panel.add_theme_stylebox_override("panel", _board_module_style())
-	var margin := _margin(14, 10, 14, 10)
+	# 강화 카드와 같은 문법 — 판 없이 바탕 위에 카드가 선다.
+	panel.add_theme_stylebox_override("panel", _stage_style())
+	var margin := _margin(2, 0, 2, 0)
 	panel.add_child(margin)
 	# 설명·재료만 스크롤하고 제작 버튼은 바닥에 고정한다.
 	var shell := VBoxContainer.new()
 	shell.name = "WorkbenchDetailShell"
 	shell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	shell.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	shell.add_theme_constant_override("separation", 10)
+	shell.add_theme_constant_override("separation", 12)
 	margin.add_child(shell)
-	var scroll := HudStyle.make_scroll()
+	var scroll := SHELTER_THEME.scroll()
 	scroll.name = "WorkbenchDetailScroll"
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	shell.add_child(scroll)
+	# 스크롤바가 내용 위에 겹쳐 그려지므로 오른쪽에 여백을 둔다.
+	var detail_margin := _margin(0, 0, 12, 0)
+	detail_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(detail_margin)
 	detail_box = VBoxContainer.new()
 	detail_box.name = "WorkbenchDetailContent"
 	detail_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	detail_box.add_theme_constant_override("separation", 14)
-	scroll.add_child(detail_box)
+	detail_margin.add_child(detail_box)
 	detail_action_bar = VBoxContainer.new()
 	detail_action_bar.name = "WorkbenchDetailActions"
 	detail_action_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	detail_action_bar.size_flags_vertical = Control.SIZE_SHRINK_END
-	detail_action_bar.add_theme_constant_override("separation", 6)
+	detail_action_bar.add_theme_constant_override("separation", 8)
 	shell.add_child(detail_action_bar)
 	return panel
 
@@ -2163,31 +2072,30 @@ func _refresh_recipe_list() -> void:
 		var recipe: Dictionary = recipe_raw
 		if not heavy_divider_added and heavy_ids.has(str(recipe.get("id", ""))):
 			heavy_divider_added = true
-			var heavy_divider := _label("중장비 · 쓰면 부서진다", 11, DIM)
+			var heavy_divider := SHELTER_THEME.caption("중장비 · 쓰면 부서진다")
 			heavy_divider.name = "WorkbenchHeavySection"
 			heavy_divider.autowrap_mode = TextServer.AUTOWRAP_OFF
 			recipe_list.add_child(heavy_divider)
 		if not supply_divider_added and supply_ids.has(str(recipe.get("id", ""))):
 			supply_divider_added = true
-			var divider := _label("보급품", 11, DIM)
+			var divider := SHELTER_THEME.caption("보급품")
 			divider.name = "WorkbenchSupplySection"
 			divider.autowrap_mode = TextServer.AUTOWRAP_OFF
 			recipe_list.add_child(divider)
 		# 상태를 글자로만 말하면 목록을 한 줄씩 읽어야 한다. 색으로 먼저 말한다.
 		var state_color := _recipe_state_color(recipe)
 		var selected := str(recipe["id"]) == selected_recipe_id
-		var button := _button(
-			"%s\n%s" % [str(recipe["name"]), _recipe_list_subtitle(recipe)],
-			"",
-			state_color
-		)
+		var button := SHELTER_THEME.secondary_button("%s\n%s" % [str(recipe["name"]), _recipe_list_subtitle(recipe)])
 		button.name = "WorkbenchRecipeRow_%s" % str(recipe["id"])
-		# 강화 보드의 장비 행과 같은 WELL 문법 — 선택 행만 골드 테두리.
-		var row_style := _well_style(GOLD_BRIGHT if selected else WELL_LINE)
+		# 강화 보드의 장비 행과 같은 카드 문법 — 선택 행만 민트 2px 테두리.
+		var row_style := _row_style(selected)
 		button.add_theme_stylebox_override("normal", row_style)
 		button.add_theme_stylebox_override("pressed", row_style)
-		button.add_theme_stylebox_override("hover", _well_style(HudStyle.LINE_FOCUS))
+		button.add_theme_stylebox_override("focus", row_style)
+		button.add_theme_stylebox_override("hover", _row_style(selected, true))
 		button.add_theme_stylebox_override("hover_pressed", row_style)
+		button.add_theme_font_override("font", SHELTER_THEME.FONT)
+		button.add_theme_font_size_override("font_size", SHELTER_THEME.TYPE_CAPTION + 1)
 		button.add_theme_color_override("font_color", state_color)
 		button.add_theme_color_override("font_hover_color", state_color.lightened(0.2))
 		button.add_theme_color_override("font_pressed_color", state_color)
@@ -2195,8 +2103,9 @@ func _refresh_recipe_list() -> void:
 		button.icon = _recipe_icon(recipe)
 		button.expand_icon = true
 		button.add_theme_constant_override("icon_max_width", 40)
+		button.add_theme_constant_override("h_separation", 10)
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		button.custom_minimum_size = Vector2(0, 64)
+		button.custom_minimum_size = Vector2(0, 66)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -2223,26 +2132,29 @@ func _refresh_detail_panel() -> void:
 		action_host = detail_action_bar
 	var recipe := _selected_recipe()
 	if recipe.is_empty():
-		detail_box.add_child(_label("선택된 설계도가 없습니다.", 16, TEXT))
+		detail_box.add_child(SHELTER_THEME.subtitle("선택된 설계도가 없습니다."))
 		return
 
-	# 강화 카드의 헤드와 같은 문법 — 골드 제목 + 글로우, 설명은 DIM.
-	var title := _label(str(recipe["name"]), 22, GOLD_TEXT)
+	# 강화 카드의 헤드와 같은 문법 — 굵은 큰 제목 + 회색 설명.
+	var head := VBoxContainer.new()
+	head.add_theme_constant_override("separation", 4)
+	detail_box.add_child(head)
+	var title := SHELTER_THEME.title(str(recipe["name"]), 22)
 	title.name = "WorkbenchRecipeTitle"
 	title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	detail_box.add_child(title)
-	HudFx.attach_text_glow(title, GOLD, 0.8)
-	var description := _label(str(recipe.get("desc", "")), 13, DIM)
+	head.add_child(title)
+	var description := SHELTER_THEME.subtitle(str(recipe.get("desc", "")))
 	description.name = "WorkbenchRecipeDescription"
 	description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	detail_box.add_child(description)
+	head.add_child(description)
 
 	var icon_card := PanelContainer.new()
 	icon_card.name = "WorkbenchResultCard"
-	icon_card.custom_minimum_size = Vector2(170, 108)
+	icon_card.custom_minimum_size = Vector2(170, 112)
+	icon_card.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	icon_card.add_theme_stylebox_override("panel", _well_style())
-	var icon_margin := _margin(12, 10, 12, 10)
+	var icon_margin := _margin(0, 0, 0, 0)
 	icon_card.add_child(icon_margin)
 	var icon_texture := TextureRect.new()
 	icon_texture.texture = _recipe_icon(recipe)
@@ -2254,14 +2166,14 @@ func _refresh_detail_panel() -> void:
 	detail_box.add_child(_section("필요 재료"))
 	var cost_box := VBoxContainer.new()
 	cost_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cost_box.add_theme_constant_override("separation", 6)
+	cost_box.add_theme_constant_override("separation", 8)
 	detail_box.add_child(cost_box)
 	var effective_cost := _effective_cost(recipe)
 	for key in effective_cost.keys():
 		var needed := int(effective_cost[key])
 		var owned := _owned_resource(str(key))
-		# 강화 보드의 충족/부족 색(GREEN/DANGER)과 같은 문법.
-		var color := GREEN if owned >= needed else DANGER
+		# 강화 보드의 충족/부족 색(민트/붉음)과 같은 문법.
+		var color := SHELTER_THEME.ACCENT if owned >= needed else DANGER
 		cost_box.add_child(_resource_row(str(key), owned, needed, color))
 	var required_tier := int(recipe.get("required_tier", 1))
 	if GameState.shelter_tier < required_tier:
@@ -2269,34 +2181,35 @@ func _refresh_detail_panel() -> void:
 	if bool((recipe.get("result", {}) as Dictionary).get("enhance", false)):
 		var detail_weapon_id := _enhance_weapon_id(recipe)
 		var level := GameState.get_weapon_enhancement_level(detail_weapon_id)
-		cost_box.add_child(_label("%s  +%d → +%d" % [_gear_short_name("weapon", detail_weapon_id), level, mini(99, level + 1)], 14, GOLD_TEXT))
+		cost_box.add_child(_label("%s  +%d 에서 +%d" % [_gear_short_name("weapon", detail_weapon_id), level, mini(99, level + 1)], 14, TEXT))
 	if (recipe.get("result", {}) as Dictionary).has("enhance_armor"):
 		var armor_id := str((recipe.get("result", {}) as Dictionary)["enhance_armor"])
 		var armor_level := int(GameState.get_armor_enhancement_level(armor_id))
-		cost_box.add_child(_label("%s  +%d → +%d · 효과 ×%.2f" % [
+		cost_box.add_child(_label("%s  +%d 에서 +%d · 효과 x%.2f" % [
 			_equipment_display_name(armor_id), armor_level, mini(99, armor_level + 1),
 			float(GameState.get_armor_enhancement_multiplier(armor_id)),
-		], 14, GOLD_TEXT))
+		], 14, TEXT))
 	if (recipe.get("result", {}) as Dictionary).has("breakthrough"):
 		var target := (recipe.get("result", {}) as Dictionary)["breakthrough"] as Dictionary
 		cost_box.add_child(_label("돌파 단계 +%d · 완료한 돌파 +%d" % [
 			int(GameState.get_gear_enhancement_level(str(target.get("kind", "")), str(target.get("id", "")))),
 			int(GameState.get_breakthrough_level_done(str(target.get("kind", "")), str(target.get("id", "")))),
-		], 14, GOLD_TEXT))
+		], 14, TEXT))
 	if _is_gear_recipe_owned(recipe):
-		cost_box.add_child(_label("제작됨 · 영구 보유 — 잃지 않으며 다시 만들 수 없습니다", 13, GREEN))
+		cost_box.add_child(_label("제작됨 · 영구 보유 — 잃지 않으며 다시 만들 수 없습니다", 13, SHELTER_THEME.ACCENT))
 	elif not str(recipe.get("gear_id", "")).is_empty():
-		cost_box.add_child(_label(str(GameState.get_blueprint_progress_text(str(recipe.get("gear_id", "")))), 13, GOLD_TEXT))
+		cost_box.add_child(_label(str(GameState.get_blueprint_progress_text(str(recipe.get("gear_id", "")))), 13, DIM))
 
 	detail_box.add_child(_section("결과물"))
 	detail_box.add_child(_build_result_preview(recipe))
 
-	var craft := _button(_craft_action_text(recipe), _craft_action_icon(recipe))
+	var craft := Button.new()
+	craft.text = _craft_action_text(recipe)
 	craft.name = "WorkbenchCraftButton"
-	craft.custom_minimum_size = Vector2(0, 52)
+	craft.custom_minimum_size = Vector2(0, 56)
 	craft.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	craft.disabled = not _can_craft(recipe)
-	# 강화 보드 액션 바의 [제작] 모드와 같은 스타일 — 두 탭의 주 행동 버튼이 같은 얼굴.
+	# 강화 보드 액션 바의 [제작] 모드와 같은 주 버튼(민트) — 두 탭의 주 행동 버튼이 같은 얼굴.
 	_style_action_button(craft, "craft")
 	craft.pressed.connect(func() -> void:
 		_craft(recipe)
@@ -2307,15 +2220,16 @@ func _refresh_detail_panel() -> void:
 	if craft.disabled:
 		var reason := _recipe_list_subtitle(recipe)
 		if not reason.is_empty():
-			var reason_label := _label("잠긴 이유: %s" % reason, 13, DANGER)
+			var reason_label := SHELTER_THEME.label("잠긴 이유: %s" % reason, SHELTER_THEME.TYPE_CAPTION + 1, DANGER)
+			reason_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			reason_label.name = "WorkbenchBlockedReason"
 			action_host.add_child(reason_label)
 
 	# 제작 직후 성공 피드백 — 리빌드 후에도 잠깐 남아 스르륵 사라진다.
 	if not craft_feedback_text.is_empty() and Time.get_ticks_msec() < craft_feedback_until_msec:
-		var feedback := _label(craft_feedback_text, 16, GREEN)
+		var feedback := SHELTER_THEME.label(craft_feedback_text, 18, SHELTER_THEME.ACCENT, true)
+		feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		feedback.name = "WorkbenchCraftFeedback"
-		feedback.add_theme_font_size_override("font_size", 20)
 		action_host.add_child(feedback)
 		feedback.pivot_offset = Vector2(0.0, 12.0)
 		feedback.scale = Vector2(0.94, 0.94)
@@ -3067,7 +2981,10 @@ func _resource_row(key: String, owned: int, needed: int, color: Color) -> Contro
 	var well := PanelContainer.new()
 	well.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	well.clip_contents = true
-	well.add_theme_stylebox_override("panel", _well_style())
+	var well_style := _well_style()
+	well_style.content_margin_top = 8
+	well_style.content_margin_bottom = 8
+	well.add_theme_stylebox_override("panel", well_style)
 	well.tooltip_text = "%s %s / %s" % [_resource_name(key), GameState.format_compact_number(owned), GameState.format_compact_number(needed)]
 	var row := HBoxContainer.new()
 	row.name = "ResourceCost_%s" % key
@@ -3088,7 +3005,7 @@ func _resource_row(key: String, owned: int, needed: int, color: Color) -> Contro
 	name_box.add_theme_constant_override("separation", 0)
 	row.add_child(name_box)
 	if not ICON_ONLY_RESOURCES.has(key):
-		var name_label := _label(_resource_name(key), 13, TEXT)
+		var name_label := SHELTER_THEME.label(_resource_name(key), SHELTER_THEME.TYPE_BODY, TEXT, true)
 		name_label.name = "ResourceName"
 		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -3098,32 +3015,29 @@ func _resource_row(key: String, owned: int, needed: int, color: Color) -> Contro
 	# 어디에 있는 재료인지 밝힌다 — "창고에 있는데 왜 못 만드나"를 없앤다.
 	var stored := _stored_resource(key)
 	if stored > 0:
-		var source_label := _label(
+		var source_label := SHELTER_THEME.caption(
 			"가방 %s + 창고 %s" % [
 				GameState.format_compact_number(_bag_resource(key)),
 				GameState.format_compact_number(stored),
 			],
-			11,
 			FAINT
 		)
 		source_label.name = "ResourceSource"
 		source_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 		source_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		name_box.add_child(source_label)
-	# 충족 여부는 체크 표시로 한눈에. 모자란 줄만 붉게 남는다.
-	var amount_label := _label("%s / %s  %s" % [
+	# 충족 여부는 색으로 한눈에(민트/붉음). 기호 없이 숫자만 굵게.
+	var amount_label := SHELTER_THEME.number("%s / %s" % [
 		GameState.format_compact_number(owned),
 		GameState.format_compact_number(needed),
-		"✓" if owned >= needed else "✗",
-	], 14, color)
+	], SHELTER_THEME.TYPE_NUMBER_SMALL - 2, color)
 	amount_label.name = "ResourceAmount"
-	amount_label.custom_minimum_size = Vector2(132, 0)
+	amount_label.custom_minimum_size = Vector2(120, 0)
 	amount_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	amount_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	amount_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	amount_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL if ICON_ONLY_RESOURCES.has(key) else Control.SIZE_FILL
 	row.add_child(amount_label)
-	HudFx.attach_text_glow(amount_label, color, 0.5)
 	return well
 
 
@@ -3167,9 +3081,9 @@ func _build_result_preview(recipe: Dictionary) -> Control:
 	var card := PanelContainer.new()
 	card.name = "WorkbenchResultPreview"
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	# 강화 카드 헤드의 WELL + 골드 라인 문법.
-	card.add_theme_stylebox_override("panel", _well_style(HudStyle.LINE_GOLD))
-	var margin := _margin(12, 10, 12, 10)
+	# 강화 카드 헤드와 같은 표면색 카드.
+	card.add_theme_stylebox_override("panel", _well_style())
+	var margin := _margin(0, 0, 0, 0)
 	card.add_child(margin)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
@@ -3186,15 +3100,14 @@ func _build_result_preview(recipe: Dictionary) -> Control:
 	text_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	text_box.add_theme_constant_override("separation", 2)
 	row.add_child(text_box)
-	var name_label := _label(_result_text(recipe), 16, GOLD_TEXT)
+	var name_label := SHELTER_THEME.label(_result_text(recipe), SHELTER_THEME.TYPE_SECTION, TEXT, true)
 	name_label.name = "ResultPreviewName"
 	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(name_label)
-	HudFx.attach_text_glow(name_label, GOLD, 0.6)
 	var stat_line := _result_stat_line(recipe)
 	if not stat_line.is_empty():
-		var stat_label := _label(stat_line, 12, DIM)
+		var stat_label := SHELTER_THEME.caption(stat_line)
 		stat_label.name = "ResultPreviewStats"
 		# 이관 안내가 둘째 줄로 붙는다(\n) — 줄바꿈은 살리고 가로만 자른다.
 		stat_label.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -3304,27 +3217,24 @@ func _resource_name(key: String) -> String:
 
 
 func _button(text: String, icon_name := "", accent := HudStyle.LINE_FOCUS) -> Button:
-	# 스타일은 디자인 시스템이 정한다. 여기서는 내용(텍스트·아이콘)만.
+	# 스타일은 디자인 시스템이 정한다(보조 버튼 = 표면색 채움). 여기서는 내용(텍스트·아이콘)만.
 	var button := Button.new()
 	button.text = text
+	button.set_meta("accent", accent)
 	if not icon_name.is_empty():
-		button.icon = UI_ICONS.get_icon(icon_name, 30, HudStyle.TEXT)
+		button.icon = UI_ICONS.get_icon(icon_name, 30, SHELTER_THEME.TEXT)
 		# 대형 재화 PNG가 버튼 전체로 부풀지 않게 폭을 못 박는다.
 		button.add_theme_constant_override("icon_max_width", 28)
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	return HudStyle.style_button(button, accent)
+	return SHELTER_THEME.style_secondary(button)
 
 
 func _close_button() -> Button:
-	var button := _button("", "close")
+	# 둥근 40px 닫기(공용 빌더) — 이름 짓기 화면과 같은 언어.
+	var button := SHELTER_THEME.close_button()
 	button.name = "CloseButton"
-	button.custom_minimum_size = Vector2(44, 44)
-	button.icon = UI_ICONS.get_icon("close", 24, Color("#dce6df"))
-	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	button.autowrap_mode = TextServer.AUTOWRAP_OFF
 	button.tooltip_text = "닫기"
-	button.focus_mode = Control.FOCUS_NONE
 	return button
 
 
@@ -3348,18 +3258,14 @@ func _fit_chip_text(chip: PanelContainer, resource_id: String) -> PanelContainer
 
 
 func _label(text: String, size: int, color: Color) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.add_theme_font_override("font", FONT)
-	label.add_theme_font_size_override("font_size", size)
-	label.add_theme_color_override("font_color", color)
+	var label := SHELTER_THEME.label(text, size, color)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return label
 
 
 func _section(text: String) -> Label:
-	# 강화 보드의 소제목("보유 장비 · 평생 귀속")과 같은 문법 — 11px DIM.
-	var label := _label(text, 11, DIM)
+	# 상세의 소제목("필요 재료"·"결과물") — 굵은 섹션 글자.
+	var label := SHELTER_THEME.label(text, SHELTER_THEME.TYPE_SECTION, TEXT, true)
 	label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	return label
 

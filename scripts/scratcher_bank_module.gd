@@ -4,6 +4,7 @@ extends Node3D
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const SHELTER_UI := preload("res://scripts/shelter_ui_components.gd")
+const SHELTER_THEME := preload("res://scripts/hud/shelter_theme.gd")
 const RESIDENT_PORTRAITS := preload("res://scripts/resident_portrait_catalog.gd")
 
 @export var interaction_radius := 4.0
@@ -12,6 +13,8 @@ const RESIDENT_PORTRAITS := preload("res://scripts/resident_portrait_catalog.gd"
 # 앞에서부터 이만큼만 그리고 나머지는 요약 카드 한 장이 대신한다.
 const SEAT_CARD_RENDER_LIMIT := 36
 const BENCH_CARD_RENDER_LIMIT := 36
+# 좌석·대기 카드 한 장의 크기. 초상화(72px)가 주인공이고 아래 두 줄이 붙는다.
+const PORTRAIT_CARD_SIZE := Vector2(108, 140)
 
 # 씬 없이 로직 노드로만 인스턴스될 수 있다 — 스프라이트는 없을 수 있다.
 @onready var sprite: Sprite3D = get_node_or_null("BankSprite") as Sprite3D
@@ -71,10 +74,8 @@ func _open_ui() -> void:
 	modal.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	modal.mouse_filter = Control.MOUSE_FILTER_STOP
 	ui_layer.add_child(modal)
-	var dim := ColorRect.new()
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dim.color = Color(0.004, 0.006, 0.008, 0.78)
-	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	# 쉘터 공용 디자인 언어(ShelterTheme) — 딤 + 거의 검정 둥근 판, 보더 없음.
+	var dim := SHELTER_THEME.dim_backdrop()
 	modal.add_child(dim)
 	ModalDismiss.install(ui_layer, dim, func() -> void:
 		if is_instance_valid(ui_layer):
@@ -88,7 +89,8 @@ func _open_ui() -> void:
 		viewport_size.x - safe.x - safe.z,
 		viewport_size.y - safe.y - safe.w
 	)
-	var outer_margin := 10 if viewport_size.y < 640.0 else 22
+	var short_screen := viewport_size.y < 640.0
+	var outer_margin := 10 if short_screen else 22
 	safe_margin.add_theme_constant_override("margin_left", roundi(outer_margin + safe.x))
 	safe_margin.add_theme_constant_override("margin_top", roundi(outer_margin + safe.y))
 	safe_margin.add_theme_constant_override("margin_right", roundi(outer_margin + safe.z))
@@ -103,48 +105,53 @@ func _open_ui() -> void:
 	# 올리면 패널이 통째로 화면 밖으로 나간다(실측 720 화면에 910px 패널 →
 	# 닫기·오버클럭 버튼이 화면 밖). 내부는 이 폭 안에서만 논다.
 	var panel_width := minf(960.0, maxf(260.0, available_size.x - outer_margin * 2.0))
-	var panel_height := minf(620.0, maxf(320.0, available_size.y - outer_margin * 2.0))
+	var panel_height := minf(640.0, maxf(320.0, available_size.y - outer_margin * 2.0))
 	panel.custom_minimum_size = Vector2(panel_width, panel_height)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	panel.clip_contents = true
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.018, 0.023, 0.02, 0.96), Color("#c29c5b")))
+	# 판 자체가 안쪽 여백을 가진다(modal_style의 content margin). 낮은 화면에선 줄인다.
+	var panel_style := SHELTER_THEME.modal_style()
+	if short_screen or panel_width < 420.0:
+		panel_style.content_margin_left = 16.0
+		panel_style.content_margin_right = 16.0
+		panel_style.content_margin_top = 14.0
+		panel_style.content_margin_bottom = 14.0
+	panel.add_theme_stylebox_override("panel", panel_style)
 	center.add_child(panel)
 	# 모달 표준 등장 — 툭 나타나지 않는다.
-	HudStyle.enter_modal(panel)
-	var margin := MarginContainer.new()
-	var inner_margin := 12 if viewport_size.y < 640.0 else 20
-	margin.add_theme_constant_override("margin_left", inner_margin)
-	margin.add_theme_constant_override("margin_top", inner_margin)
-	margin.add_theme_constant_override("margin_right", inner_margin)
-	margin.add_theme_constant_override("margin_bottom", inner_margin)
-	panel.add_child(margin)
+	SHELTER_THEME.enter(panel)
 	# 목록만 스크롤하고 액션 줄은 바닥에 고정하기 위한 2단 껍데기.
 	var shell := VBoxContainer.new()
 	shell.name = "ScratcherBankShell"
 	shell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	shell.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	shell.add_theme_constant_override("separation", 8)
-	margin.add_child(shell)
-	var panel_scroll := HudStyle.make_scroll()
+	shell.add_theme_constant_override("separation", 12)
+	panel.add_child(shell)
+	var panel_scroll := SHELTER_THEME.scroll()
 	panel_scroll.name = "ScratcherBankScroll"
 	panel_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	panel_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	shell.add_child(panel_scroll)
+	# 스크롤 바가 카드 오른쪽 모서리에 붙지 않게 숨 쉴 틈을 준다.
+	var content_margin := MarginContainer.new()
+	content_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content_margin.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content_margin.add_theme_constant_override("margin_right", 10)
+	panel_scroll.add_child(content_margin)
 	content = VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	# 내용 쪽에서 최소 폭을 못 박으면 그 값이 스크롤·패널로 거꾸로 전파돼
 	# 패널을 화면 밖으로 밀어낸다. 폭은 패널이 정하고 내용은 따라간다.
 	content.custom_minimum_size.x = 0.0
-	content.add_theme_constant_override("separation", 10 if viewport_size.y < 640.0 else 16)
-	panel_scroll.add_child(content)
+	content.add_theme_constant_override("separation", 12 if short_screen else 18)
+	content_margin.add_child(content)
 	action_bar = VBoxContainer.new()
 	action_bar.name = "ScratcherBankActionBar"
 	action_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	action_bar.size_flags_vertical = Control.SIZE_SHRINK_END
-	action_bar.add_theme_constant_override("separation", 6)
+	action_bar.add_theme_constant_override("separation", 8)
 	shell.add_child(action_bar)
 	_rebuild_ui()
 
@@ -154,23 +161,17 @@ func _rebuild_ui() -> void:
 	for child in content.get_children():
 		child.queue_free()
 	var viewport_size := get_viewport().get_visible_rect().size
-	var narrow := viewport_size.x < 760.0
 	var compact := viewport_size.x < 1040.0 or viewport_size.y < 680.0
 	var header := VBoxContainer.new()
 	header.name = "ScratcherBankHeader"
-	header.add_theme_constant_override("separation", 8)
+	header.add_theme_constant_override("separation", 12)
 	content.add_child(header)
-	var top_row := HBoxContainer.new()
-	top_row.add_theme_constant_override("separation", 12)
-	header.add_child(top_row)
-	var title_box := VBoxContainer.new()
-	title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top_row.add_child(title_box)
-	title_box.add_child(_label("꾹꾹이 고철 생산기  Lv.%d" % GameState.scratcher_bank_level, 24, Color("#f4ddb2")))
-	title_box.add_child(_label("주민을 배치하면 고철이 자동 생산됩니다.", 13, Color("#9eaa9f")))
-	var close := _close_button()
-	close.pressed.connect(func(): ui_layer.queue_free())
-	top_row.add_child(close)
+	# [생산기 / 꾹꾹이 고철 생산기 [Lv.N] / 설명]  ······  [둥근 닫기]
+	header.add_child(_modal_header(
+		"꾹꾹이 고철 생산기",
+		"주민을 배치하면 고철이 자동 생산됩니다.",
+		"Lv.%d" % GameState.scratcher_bank_level
+	))
 	var wallet := HFlowContainer.new()
 	wallet.name = "ScratcherBankWallet"
 	wallet.add_theme_constant_override("h_separation", 8)
@@ -178,19 +179,16 @@ func _rebuild_ui() -> void:
 	header.add_child(wallet)
 	# 지갑 칩은 아이콘 + 수치만(이름은 툴팁) — 재화 표기 규칙.
 	# 캣닢 칩은 뺐다 — 이 모달에 캣닢을 쓰는 기능이 더는 없다(피버 전용).
-	wallet.add_child(_fit_chip_text(SHELTER_UI.make_currency_chip(
-		"scrap",
-		GameState.format_compact_number(GameState.scrap),
-		compact
-	), "scrap"))
+	wallet.add_child(_wallet_chip("scrap", GameState.format_compact_number(GameState.scrap)))
 	var workers: int = GameState.get_active_scratcher_workers()
 	var slots: int = GameState.get_scratcher_worker_slots()
 	var summary := GridContainer.new()
 	summary.name = "ScratcherBankSummary"
-	summary.columns = 1 if narrow else 3
+	# 세로 720px에서도 요약 카드는 한 줄에 둔다 — 세로로 쌓으면 좌석이 액션 바 밑으로 밀린다.
+	summary.columns = 1 if viewport_size.x < 520.0 else 3
 	summary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	summary.add_theme_constant_override("h_separation", 8)
-	summary.add_theme_constant_override("v_separation", 8)
+	summary.add_theme_constant_override("h_separation", 10)
+	summary.add_theme_constant_override("v_separation", 10)
 	content.add_child(summary)
 	summary.add_child(_summary_card("시간당", GameState.format_compact_number(GameState.get_scrap_per_hour()), "scrap", compact))
 	summary.add_child(_summary_card("작업자", "%d / %d명" % [workers, slots], "resident", compact))
@@ -214,23 +212,22 @@ func _rebuild_ui() -> void:
 	content.add_child(body)
 
 	body.add_child(_seat_header(
-		"작업 좌석 · 앉은 고양이가 고철을 만듭니다",
-		Color("#e3decf"),
+		"작업 좌석",
+		SHELTER_THEME.TEXT,
 		_assign_all_workers,
 		_clear_all_workers
 	))
 	# 좌석 목록도 스크롤 안에 산다 — 좌석이 400칸이면 벤치를 화면 밖으로 밀어낸다.
-	var seat_scroll := HudStyle.make_scroll()
+	var seat_scroll := SHELTER_THEME.scroll()
 	seat_scroll.name = "ScratcherSeatScroll"
 	seat_scroll.custom_minimum_size = Vector2(0, 150)
 	seat_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	seat_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	seat_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	body.add_child(seat_scroll)
 	var seat_row := HFlowContainer.new()
 	seat_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	seat_row.add_theme_constant_override("h_separation", 8)
-	seat_row.add_theme_constant_override("v_separation", 8)
+	seat_row.add_theme_constant_override("h_separation", 10)
+	seat_row.add_theme_constant_override("v_separation", 10)
 	seat_scroll.add_child(seat_row)
 	var assigned_ids: Array[String] = []
 	var assigned_set: Dictionary = {}
@@ -249,13 +246,12 @@ func _rebuild_ui() -> void:
 			)
 		))
 
-	body.add_child(_label(
-		"대기 주민 · 눌러서 좌석에 앉히기"
+	var bench_hint := SHELTER_THEME.caption(
+		"눌러서 좌석에 앉히기"
 		if DisplayServer.is_touchscreen_available()
-		else "대기 주민 · 눌러서 좌석에 앉히기 (우클릭: 특성 재굴림)",
-		13,
-		Color("#9eaa9f")
-	))
+		else "눌러서 앉히기 · 우클릭 특성 재굴림"
+	)
+	body.add_child(SHELTER_THEME.section_header("대기 주민", bench_hint))
 	if GameState.resident_cat_ids.is_empty():
 		body.add_child(_empty_resident_state(
 			"구출한 주민이 없습니다.",
@@ -263,16 +259,15 @@ func _rebuild_ui() -> void:
 			compact
 		))
 	else:
-		var bench_scroll := HudStyle.make_scroll()
+		var bench_scroll := SHELTER_THEME.scroll()
 		bench_scroll.custom_minimum_size = Vector2(0, 150)
 		bench_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		bench_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		bench_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 		body.add_child(bench_scroll)
 		var bench := HFlowContainer.new()
 		bench.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		bench.add_theme_constant_override("h_separation", 8)
-		bench.add_theme_constant_override("v_separation", 8)
+		bench.add_theme_constant_override("h_separation", 10)
+		bench.add_theme_constant_override("v_separation", 10)
 		bench_scroll.add_child(bench)
 		var bench_shown := 0
 		var bench_hidden := 0
@@ -308,19 +303,20 @@ func _rebuild_actions() -> void:
 	var actions: BoxContainer = VBoxContainer.new() if narrow else HBoxContainer.new()
 	actions.name = "ScratcherBankActions"
 	actions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	actions.add_theme_constant_override("separation", 8)
+	actions.add_theme_constant_override("separation", 10)
 	action_bar.add_child(actions)
 	# 인크리멘탈 사다리 두 개만 남긴다 — 캣닢 부스터는 바깥 캣닢 피버가 그 역할이라
 	# 뺐고(유저 지시), 비용은 전부 고철 재투자다. "무엇이 얼마나 좋아지는가"를
-	# 버튼이 직접 말한다.
+	# 버튼이 직접 말한다. 주 버튼(민트) = 확장, 보조(표면색) = 오버클럭.
 	var upgrade_cost := int(GameState.SCRATCHER_UPGRADE_COSTS.get(GameState.scratcher_bank_level + 1, 0))
-	var upgrade := _button(
+	var upgrade := Button.new()
+	upgrade.text = (
 		"최고 레벨"
-		if upgrade_cost == 0 else "x%s · 좌석 +1 · 생산 ×1.9" % (
+		if upgrade_cost == 0 else "좌석 +1 확장\n고철 %s · 생산 ×1.9" % (
 			GameState.format_compact_number(upgrade_cost)
-		),
-		"upgrade" if upgrade_cost == 0 else "scrap"
+		)
 	)
+	SHELTER_THEME.style_primary(upgrade)
 	upgrade.tooltip_text = "확장 Lv.%d → Lv.%d" % [
 		GameState.scratcher_bank_level, GameState.scratcher_bank_level + 1,
 	]
@@ -330,10 +326,12 @@ func _rebuild_actions() -> void:
 	actions.add_child(upgrade)
 	# 오버클럭: 고철을 다시 생산에 넣는 복리 사다리. "항상 다음에 살 것"을 만든다.
 	var overclock_cost := GameState.get_overclock_cost()
-	var overclock := _button(
-		"x%s · 시간당 +8%%" % GameState.format_compact_number(overclock_cost),
-		"scrap"
-	)
+	var overclock := Button.new()
+	overclock.text = "오버클럭 Lv.%d\n고철 %s · 시간당 +8%%" % [
+		GameState.scratcher_overclock_level + 1,
+		GameState.format_compact_number(overclock_cost),
+	]
+	SHELTER_THEME.style_secondary(overclock)
 	overclock.tooltip_text = "오버클럭 Lv.%d → Lv.%d" % [
 		GameState.scratcher_overclock_level, GameState.scratcher_overclock_level + 1,
 	]
@@ -343,63 +341,109 @@ func _rebuild_actions() -> void:
 	actions.add_child(overclock)
 
 	# 실패 사유를 적는 자리. 버튼이 고장 난 게 아니라 조건이 모자란 것이라고 말해 준다.
-	feedback_label = _label("", 12, Color("#e6c779"))
+	feedback_label = SHELTER_THEME.caption("", SHELTER_THEME.TEXT_DIM)
 	feedback_label.name = "ScratcherBankFeedback"
 	feedback_label.custom_minimum_size.y = 20
 	feedback_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	feedback_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	action_bar.add_child(feedback_label)
 	if not pending_feedback.is_empty():
 		_apply_feedback_style(pending_feedback, pending_feedback_ok)
 
 
 func _stretch_action(button: Button) -> void:
-	# 긴 문구를 한 줄로 고집하면 버튼 최소 폭이 패널 폭을 넘긴다 — 줄바꿈을 허용해
-	# 폭 대신 높이를 쓴다.
+	# 두 줄 문구(굵은 행동 + 비용 줄)를 담는 큰 버튼. 한 줄로 고집하면 버튼 최소 폭이
+	# 패널 폭을 넘긴다 — 줄바꿈을 허용해 폭 대신 높이를 쓴다.
 	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	button.custom_minimum_size = Vector2(0, 48)
+	button.custom_minimum_size = Vector2(0, 60)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 
-func _fit_chip_text(chip: PanelContainer, resource_id: String) -> PanelContainer:
-	# 자원 칩 이름 라벨은 ELLIPSIS라 최소 폭이 1px이다 — 옆의 수치 라벨이
-	# EXPAND_FILL로 남는 폭을 다 먹으면 이름이 통째로 사라진다(실측 폭 1px).
-	# 두 라벨 모두 실제 글자 폭을 최소 폭으로 못 박는다.
-	for label_name in ["ResourceName_%s" % resource_id, "ResourceValue_%s" % resource_id]:
-		var label := chip.find_child(label_name, true, false) as Label
-		if label == null:
-			continue
-		var font := label.get_theme_font("font")
-		if font == null:
-			continue
-		label.custom_minimum_size.x = ceilf(font.get_string_size(
-			label.text,
-			HORIZONTAL_ALIGNMENT_LEFT,
-			-1,
-			label.get_theme_font_size("font_size")
-		).x) + 2.0
+func _modal_header(title_text: String, subtitle_text: String, level_text: String) -> HBoxContainer:
+	# ShelterTheme.modal_header 규격에 레벨 알약 칩을 제목 옆에 얹은 것.
+	var header := SHELTER_THEME.modal_header(title_text, subtitle_text, Callable(), "생산기")
+	var close := header.get_meta("close_button") as Button
+	close.name = "CloseButton"
+	# 글자 × 대신 아이콘 — 특수기호 금지 규칙, 그리고 닫기는 아이콘 하나로 충분하다.
+	close.text = ""
+	close.icon = UI_ICONS.get_icon("close", 22, SHELTER_THEME.TEXT)
+	close.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	close.expand_icon = false
+	close.add_theme_constant_override("icon_max_width", 18)
+	close.tooltip_text = "닫기"
+	close.pressed.connect(func() -> void:
+		if is_instance_valid(ui_layer):
+			ui_layer.queue_free()
+	)
+	var column := header.get_child(0) as VBoxContainer
+	var title_label := column.get_child(1) as Label
+	column.remove_child(title_label)
+	var title_row := HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", 10)
+	# 제목이 줄바꿈으로 폭을 밀어 올리지 않게 — 자기 글자 폭만큼만 차지하고, 아주
+	# 좁은 화면에서만 말줄임. (ELLIPSIS 라벨의 최소 폭은 1px이라 폭을 못 박아야 한다.)
+	title_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	title_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	title_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	var title_font := title_label.get_theme_font("font")
+	var title_width := ceilf(title_font.get_string_size(
+		title_text, HORIZONTAL_ALIGNMENT_LEFT, -1, title_label.get_theme_font_size("font_size")
+	).x) + 4.0
+	var title_room := maxf(140.0, get_viewport().get_visible_rect().size.x - 320.0)
+	title_label.custom_minimum_size.x = minf(title_width, title_room)
+	title_row.add_child(title_label)
+	var level_chip := SHELTER_THEME.chip(level_text, null, SHELTER_THEME.ACCENT, true)
+	level_chip.name = "LevelChip"
+	level_chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	title_row.add_child(level_chip)
+	column.add_child(title_row)
+	column.move_child(title_row, 1)
+	return header
+
+
+func _wallet_chip(currency_id: String, value_text: String) -> PanelContainer:
+	# 알약 칩: 재화 아이콘 + 수치. 이름은 툴팁. 테스트·튜토리얼이 찾는
+	# ResourceIcon_/ResourceValue_ 이름 규약은 그대로 지킨다.
+	var chip := SHELTER_THEME.chip(
+		value_text,
+		UI_ICONS.get_icon(currency_id, 42, SHELTER_UI.get_currency_color(currency_id)),
+		SHELTER_THEME.TEXT
+	)
+	chip.name = "ResourceChip_%s" % currency_id
+	chip.tooltip_text = str(SHELTER_UI.CURRENCY_NAMES.get(currency_id, currency_id))
+	chip.mouse_filter = Control.MOUSE_FILTER_PASS
+	for node in chip.find_children("*", "TextureRect", true, false):
+		node.name = "ResourceIcon_%s" % currency_id
+	var value_label := chip.get_meta("label") as Label
+	if value_label != null:
+		value_label.name = "ResourceValue_%s" % currency_id
 	return chip
 
 
 func _portrait_card(resident_id: String, is_seat: bool, slots: int) -> Button:
 	# 초상화가 주인공인 세로 카드. 좌석(위)과 벤치(아래)가 같은 카드를 쓰므로
-	# "고양이를 옮겨 앉힌다"는 감각이 유지된다.
+	# "고양이를 옮겨 앉힌다"는 감각이 유지된다. 좌석 카드는 민트 테두리, 벤치 카드는
+	# 한 단계 밝은 표면 — 보더 색으로 상태를 말하던 옛 문법은 버린다.
 	var button := Button.new()
-	button.custom_minimum_size = Vector2(104, 128)
+	button.custom_minimum_size = PORTRAIT_CARD_SIZE
 	button.add_theme_font_override("font", FONT)
-	button.add_theme_font_size_override("font_size", 12)
+	button.add_theme_font_size_override("font_size", SHELTER_THEME.TYPE_CAPTION)
+	button.add_theme_color_override("font_color", SHELTER_THEME.TEXT)
+	button.add_theme_color_override("font_hover_color", SHELTER_THEME.TEXT)
+	button.add_theme_color_override("font_pressed_color", SHELTER_THEME.TEXT)
+	button.add_theme_color_override("font_focus_color", SHELTER_THEME.TEXT)
+	button.add_theme_color_override("font_disabled_color", SHELTER_THEME.TEXT_FAINT)
 	button.expand_icon = true
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-	var bg := Color(0.035, 0.04, 0.033, 0.92)
+	button.focus_mode = Control.FOCUS_NONE
 	if resident_id.is_empty():
-		# 빈 좌석: 여기 앉힐 수 있다는 자리 표시.
+		# 빈 좌석: 실루엣 + 흐린 글자. 여기 앉힐 수 있다는 자리 표시.
 		button.name = "SeatEmpty"
-		button.icon = UI_ICONS.get_icon("resident", 56, Color("#4c554f"))
+		button.icon = UI_ICONS.get_icon("resident", 56, SHELTER_THEME.TEXT_FAINT)
 		button.text = "빈 좌석"
 		button.disabled = true
-		button.add_theme_stylebox_override("normal", _panel_style(bg, Color("#3c463f")))
-		button.add_theme_stylebox_override("disabled", _panel_style(bg, Color("#3c463f")))
-		button.add_theme_color_override("font_disabled_color", Color("#6d7a72"))
+		_apply_card_styles(button, false, false)
 		return button
 	var trait_data: Dictionary = GameState.get_resident_trait(resident_id)
 	var display_name := str(trait_data.get("display_name", "이름 없는 주민"))
@@ -407,13 +451,7 @@ func _portrait_card(resident_id: String, is_seat: bool, slots: int) -> Button:
 	var seats_free := GameState.assigned_worker_ids.size() < slots
 	button.name = "ResidentCard_%s" % resident_id
 	button.icon = RESIDENT_PORTRAITS.get_portrait(int(trait_data.get("portrait_index", 0)))
-	var border := Color("#80b887") if is_seat else (
-		Color("#5b789c") if busy_elsewhere else (Color("#c9ac5e") if seats_free else Color("#635847"))
-	)
-	button.add_theme_stylebox_override("normal", _panel_style(bg, border))
-	button.add_theme_stylebox_override("hover", _panel_style(bg.lightened(0.08), border.lightened(0.15)))
-	button.add_theme_stylebox_override("pressed", _panel_style(bg.darkened(0.05), Color("#f0d16f")))
-	button.add_theme_stylebox_override("disabled", _panel_style(bg.darkened(0.08), border.darkened(0.2)))
+	_apply_card_styles(button, not is_seat, is_seat)
 	if is_seat:
 		button.text = "%s\n꾹꾹이 x%.2f" % [display_name, float(trait_data.get("kneading", 1.0))]
 	elif busy_elsewhere:
@@ -446,47 +484,66 @@ func _portrait_card(resident_id: String, is_seat: bool, slots: int) -> Button:
 	return button
 
 
-func _seat_header(title: String, color: Color, assign_all: Callable, clear_all: Callable) -> Control:
+func _apply_card_styles(button: Button, raised: bool, accent_border: bool) -> void:
+	# 카드 버튼의 네 상태를 ShelterTheme 카드 스타일로. 초상화가 카드 폭을 꽉 채우게
+	# 안쪽 여백은 카드 기본보다 조금 좁힌다.
+	var normal := SHELTER_THEME.card_style(raised, accent_border)
+	var hover := SHELTER_THEME.card_style(raised, accent_border)
+	hover.bg_color = SHELTER_THEME.SURFACE_HOVER
+	var pressed := SHELTER_THEME.card_style(raised, accent_border)
+	pressed.bg_color = SHELTER_THEME.SURFACE
+	if accent_border:
+		pressed.border_color = SHELTER_THEME.ACCENT
+	var disabled := SHELTER_THEME.card_style(raised, false)
+	disabled.bg_color = Color(disabled.bg_color, 0.6)
+	for style in [normal, hover, pressed, disabled]:
+		(style as StyleBoxFlat).content_margin_left = 10.0
+		(style as StyleBoxFlat).content_margin_right = 10.0
+		(style as StyleBoxFlat).content_margin_top = 12.0
+		(style as StyleBoxFlat).content_margin_bottom = 10.0
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", pressed)
+	button.add_theme_stylebox_override("focus", normal)
+	button.add_theme_stylebox_override("disabled", disabled)
+
+
+func _seat_header(title: String, _color: Color, assign_all: Callable, clear_all: Callable) -> Control:
 	# 제목 줄 오른쪽에 일괄 배치·해제. 좌석이 400칸이면 한 장씩 누르게 두는 건
 	# UI가 아니라 벌이다.
-	var row := HBoxContainer.new()
-	row.name = "SeatHeaderRow"
-	row.add_theme_constant_override("separation", 8)
-	var title_label := _label(title, 14, color)
-	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(title_label)
-	var assign_button := _button("전원 배치")
+	var trailing := HBoxContainer.new()
+	trailing.add_theme_constant_override("separation", 6)
+	var assign_button := SHELTER_THEME.secondary_button("전원 배치", true)
 	assign_button.name = "AssignAllButton"
-	assign_button.custom_minimum_size = Vector2(88, 36)
+	assign_button.custom_minimum_size.x = 84.0
 	assign_button.pressed.connect(assign_all)
-	row.add_child(assign_button)
-	var clear_button := _button("전원 해제")
+	trailing.add_child(assign_button)
+	var clear_button := SHELTER_THEME.secondary_button("전원 해제", true)
 	clear_button.name = "ClearAllButton"
-	clear_button.custom_minimum_size = Vector2(88, 36)
+	clear_button.custom_minimum_size.x = 84.0
 	clear_button.pressed.connect(clear_all)
-	row.add_child(clear_button)
+	trailing.add_child(clear_button)
+	var row := SHELTER_THEME.section_header(title, trailing)
+	row.name = "SeatHeaderRow"
 	return row
 
 
 func _overflow_card(title: String, subtitle: String) -> Control:
 	# 카드를 다 그리지 않았다는 사실을 숨기지 않는다 — "그 외 N석"이 그 자리를 지킨다.
-	var panel := PanelContainer.new()
+	var panel := SHELTER_THEME.card()
 	panel.name = "SeatOverflowCard"
-	panel.custom_minimum_size = Vector2(104, 128)
-	panel.add_theme_stylebox_override(
-		"panel", _panel_style(Color(0.03, 0.035, 0.03, 0.9), Color("#4a5a4f"))
-	)
+	panel.custom_minimum_size = PORTRAIT_CARD_SIZE
 	var center := CenterContainer.new()
 	panel.add_child(center)
 	var box := VBoxContainer.new()
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_theme_constant_override("separation", 4)
 	center.add_child(box)
-	var title_label := _label(title, 14, Color("#c8d3cb"))
+	var title_label := SHELTER_THEME.label(title, SHELTER_THEME.TYPE_BODY, SHELTER_THEME.TEXT, true)
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	box.add_child(title_label)
-	var subtitle_label := _label(subtitle, 11, Color("#7f8d85"))
+	var subtitle_label := SHELTER_THEME.caption(subtitle)
 	subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	box.add_child(subtitle_label)
@@ -593,43 +650,41 @@ func _apply_feedback_style(message: String, success: bool) -> void:
 	feedback_label.text = message
 	feedback_label.add_theme_color_override(
 		"font_color",
-		Color("#9de0b1") if success else Color("#f09a8a")
+		SHELTER_THEME.ACCENT if success else SHELTER_THEME.DANGER
 	)
 
 
 func _button(text: String, icon_name := "") -> Button:
-	var button := Button.new()
-	button.text = text
+	# 보조 버튼(표면색 채움). 아이콘은 왼쪽에 작게.
+	var button := SHELTER_THEME.secondary_button(text)
 	if not icon_name.is_empty():
-		button.icon = UI_ICONS.get_icon(icon_name, 28, HudStyle.TEXT)
-		button.expand_icon = true
+		button.icon = UI_ICONS.get_icon(icon_name, 28, SHELTER_THEME.TEXT)
 		# 재화 아이콘(고철·캣닢)은 대형 생성 PNG다. 폭 상한을 안 걸면
 		# 세로 여백이 남는 순간 아이콘이 버튼 전체로 부풀어 레이아웃이
 		# 무너진다(모바일 세로에서 실제 발생). 상한을 못 박는다.
 		button.add_theme_constant_override("icon_max_width", 26)
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.expand_icon = false
-	return HudStyle.style_button(button, HudStyle.LINE_FOCUS)
+	return button
 
 
 func _close_button() -> Button:
-	var button := _button("", "close")
+	var button := SHELTER_THEME.close_button()
 	button.name = "CloseButton"
-	button.custom_minimum_size = Vector2(40, 40)
-	button.icon = UI_ICONS.get_icon("close", 24, Color("#dce6df"))
+	button.text = ""
+	button.icon = UI_ICONS.get_icon("close", 22, SHELTER_THEME.TEXT)
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.add_theme_constant_override("icon_max_width", 18)
 	button.tooltip_text = "닫기"
-	button.focus_mode = Control.FOCUS_NONE
 	return button
 
 
 func _empty_resident_state(title: String, description: String, compact: bool) -> Control:
-	var panel := PanelContainer.new()
+	var panel := SHELTER_THEME.card()
 	panel.name = "ScratcherEmptyState"
 	panel.custom_minimum_size = Vector2(0, 138 if compact else 190)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.018, 0.024, 0.021, 0.76), Color("#35483e")))
 	var center := CenterContainer.new()
 	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -640,16 +695,17 @@ func _empty_resident_state(title: String, description: String, compact: bool) ->
 	center.add_child(box)
 	var icon := TextureRect.new()
 	icon.custom_minimum_size = Vector2(44, 44)
-	icon.texture = UI_ICONS.get_icon("resident", 48, Color("#667a70"))
+	icon.texture = UI_ICONS.get_icon("resident", 48, SHELTER_THEME.TEXT_FAINT)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	box.add_child(icon)
-	var title_label := _label(title, 14, Color("#b5c0ba"))
+	var title_label := SHELTER_THEME.label(title, SHELTER_THEME.TYPE_BODY, SHELTER_THEME.TEXT, true)
 	title_label.name = "EmptyStateTitle"
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	box.add_child(title_label)
-	var description_label := _label(description, 11, Color("#718078"))
+	var description_label := SHELTER_THEME.caption(description)
 	description_label.name = "EmptyStateDescription"
 	description_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	description_label.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -658,59 +714,25 @@ func _empty_resident_state(title: String, description: String, compact: bool) ->
 
 
 func _summary_card(title: String, value: String, icon_name: String, compact: bool) -> Control:
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(0, 52 if compact else 58)
+	# 작은 설명 + 큰 굵은 숫자, 보더 없음. 재화 색은 아이콘에만.
+	var icon_color := SHELTER_THEME.TEXT_DIM
+	if SHELTER_UI.CURRENCY_COLORS.has(icon_name):
+		icon_color = SHELTER_UI.get_currency_color(icon_name)
+	var panel := SHELTER_THEME.stat_card(title, value, UI_ICONS.get_icon(icon_name, 36, icon_color))
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.035, 0.041, 0.036, 0.92), Color("#46564d")))
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 10)
-	margin.add_theme_constant_override("margin_top", 7)
-	margin.add_theme_constant_override("margin_right", 10)
-	margin.add_theme_constant_override("margin_bottom", 7)
-	panel.add_child(margin)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	margin.add_child(row)
-	var icon := TextureRect.new()
-	var icon_size := 28 if compact else 32
-	icon.custom_minimum_size = Vector2(icon_size, icon_size)
-	icon.texture = UI_ICONS.get_icon(icon_name, 36, Color("#d1b96f"))
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	row.add_child(icon)
-	var box := VBoxContainer.new()
-	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_theme_constant_override("separation", 1)
-	row.add_child(box)
-	var title_label := _label(title, 10 if compact else 11, Color("#8e9b92"))
-	var value_label := _label(value, 13 if compact else 15, Color("#e4dfd1"))
-	title_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	value_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	title_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	value_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	# ELLIPSIS 라벨의 최소 폭은 1px이다 — 최소 폭을 안 주면 칸이 좁아질 때
-	# 글자가 통째로 사라진다.
-	title_label.custom_minimum_size.x = 48.0
-	value_label.custom_minimum_size.x = 62.0
-	box.add_child(title_label)
-	box.add_child(value_label)
+	var value_label := panel.get_meta("value_label") as Label
+	if value_label != null:
+		value_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+		value_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		# ELLIPSIS 라벨의 최소 폭은 1px이다 — 최소 폭을 안 주면 칸이 좁아질 때
+		# 글자가 통째로 사라진다.
+		value_label.custom_minimum_size.x = 62.0
+		if compact:
+			value_label.add_theme_font_size_override("font_size", SHELTER_THEME.TYPE_NUMBER_SMALL - 2)
 	return panel
 
 
 func _label(text: String, size: int, color: Color) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.add_theme_font_override("font", FONT)
-	label.add_theme_font_size_override("font_size", size)
-	label.add_theme_color_override("font_color", color)
+	var label := SHELTER_THEME.label(text, size, color)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return label
-
-
-func _panel_style(background: Color, border: Color) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
-	style.border_color = border
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(6)
-	return style

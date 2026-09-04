@@ -124,7 +124,9 @@ func _run() -> void:
 	var rows := 0
 	for node in layer.find_children("WorkbenchGearRow_*", "Button", true, false):
 		rows += 1
-	_check(rows == 16, "보유 장비 목록 16행(보유 6 + 잠김 10) (실제: %d)" % rows)
+	# 2026-08-30부터 강화 보드는 보유 장비만 나열한다(미제작은 제작 탭).
+	var owned_rows := (workbench.call("_gear_entries") as Array).size()
+	_check(rows == owned_rows and rows > 0, "보유 장비 목록 행 수 = 보유 장비 수 (%d/%d)" % [rows, owned_rows])
 	_check(layer.find_child("WorkbenchGearRow_ak47", true, false).get_node_or_null("RimPulseFx") != null, "선택 행 림 펄스")
 	_check(layer.find_child("WorkbenchBreakthroughTrack", true, false) != null, "돌파 트랙 존재")
 	# 우측 '재료 · 창고 합산' 패널은 폐지됐다 — 강화·돌파가 고철 단독이라 부품을 읽을 이유가 없다.
@@ -213,18 +215,8 @@ func _run() -> void:
 		for node in layer.find_children("WorkbenchGearRow_*", "", true, false):
 			row_names.append("%s(%s)" % [node.name, node.get_class()])
 		print("  gear rows now: %s | list=%s" % [", ".join(row_names), str(layer.find_child("WorkbenchGearList", true, false))])
-	_check(k2_row != null, "K2 잠김 행 존재")
-	if k2_row == null:
-		quit(1)
-		return
-	k2_row.pressed.emit()
-	await _sleep(0.3)
-	_check(str(workbench.get("enhance_selected_id")) == "k2", "K2 선택")
-	var guide := layer.find_child("WorkbenchCraftGuide", true, false) as Label
-	_check(guide != null and guide.text.contains("남산") and guide.text.contains("이어받아"), "출처 + 이관 예고 문장 (실제: %s)" % (guide.text if guide else ""))
-	_check(primary.text.contains("조각 2개 더"), "[제작 · 조각 2개 더] (실제: %s)" % primary.text)
-	_check(primary.disabled, "조각 부족 → 제작 비활성")
-	await _capture("workbench_board_locked")
+	# 잠긴 K2는 강화 보드에 없다 — 제작 탭이 맡는다.
+	_check(k2_row == null, "잠긴 K2는 보유 장비 목록에 없다")
 
 	# 방어구 선택 — 피해 감소 현재▲다음
 	var vest_row := layer.find_child("WorkbenchGearRow_riot_vest", true, false) as Button
@@ -242,25 +234,37 @@ func _run() -> void:
 	if stats != null:
 		for label in stats.find_children("*", "Label", true, false):
 			stat_text += (label as Label).text + " "
-	_check(stat_text.contains("피해 감소") and stat_text.contains("▲"), "방어구 스탯 4칸(피해 감소 ▲다음) (실제: %s)" % stat_text.strip_edges())
+	# 재도색(2026-09-04): 상승 표기는 ▲ 기호 대신 민트 "+N".
+	_check(stat_text.contains("피해 감소") and stat_text.contains("+"), "방어구 스탯 4칸(피해 감소 +상승) (실제: %s)" % stat_text.strip_edges())
 
 	# 제작 탭 — 장비 16종 + 하단 '보급품' 3종(수리·자동 수리·확장). 개조(mods)는 UI에서 폐지.
 	print("[6] 제작 탭")
 	(layer.find_child("WorkbenchTab_craft", true, false) as Button).pressed.emit()
 	await _sleep(0.5)
 	layer = root.find_child("WorkbenchUILayer", true, false) as CanvasLayer
+	# 제작 탭은 서브탭(무기/방어구/중장비/보급품)으로 나뉘고, 이미 만든 장비는 목록에서 빠진다(2026-08-30).
 	var recipe_rows := layer.find_children("WorkbenchRecipeRow_*", "Button", true, false)
-	_check(recipe_rows.size() == 24, "제작 탭 24행(장비 16 + 중장비 5 + 보급품 3) (실제: %d)" % recipe_rows.size())
+	_check(recipe_rows.size() > 0 and recipe_rows.size() < 24, "제작 탭은 현재 서브탭 항목만 나열 (실제: %d)" % recipe_rows.size())
 	var ak_row := layer.find_child("WorkbenchRecipeRow_ak47", true, false) as Button
-	_check(ak_row != null and ak_row.text.contains("제작됨 · 영구 보유"), "보유 장비 '제작됨 · 영구 보유'")
+	_check(ak_row == null, "보유 장비(AK-47)는 제작 목록에서 빠진다")
 	var k2_recipe_row := layer.find_child("WorkbenchRecipeRow_k2", true, false) as Button
 	_check(k2_recipe_row != null and k2_recipe_row.text.contains("1/3"), "미보유 '조각 1/3' (실제: %s)" % (k2_recipe_row.text if k2_recipe_row else ""))
 	_check(layer.find_child("WorkbenchCraftButton", true, false) != null, "제작 버튼(WorkbenchCraftButton) 존재")
 	_check(layer.find_child("WorkbenchResourceStrip", true, false) != null, "재료 띠 존재")
-	_check(layer.find_child("WorkbenchSupplySection", true, false) != null, "하단 '보급품' 섹션 라벨")
-	_check(layer.find_child("WorkbenchRecipeRow_workbench_upgrade", true, false) != null, "보급품 섹션에 작업대 확장 행")
-	# 중장비(2026-08-29) — 보급품 위 섹션 + 지뢰/포탑/로켓/드론/카트 5행.
-	_check(layer.find_child("WorkbenchHeavySection", true, false) != null, "'중장비' 섹션 라벨(보급품 위)")
+	var supplies_tab := layer.find_child("WorkbenchCraftSubtab_supplies", true, false) as Button
+	_check(supplies_tab != null, "보급품 서브탭 존재")
+	if supplies_tab != null:
+		supplies_tab.pressed.emit()
+		await _sleep(0.4)
+		layer = root.find_child("WorkbenchUILayer", true, false) as CanvasLayer
+	_check(layer.find_child("WorkbenchRecipeRow_workbench_upgrade", true, false) != null, "보급품 서브탭에 작업대 확장 행")
+	# 중장비(2026-08-29)는 이제 '중장비' 서브탭 아래 — 지뢰/포탑/로켓/드론/카트 행.
+	var heavy_tab := layer.find_child("WorkbenchCraftSubtab_heavy", true, false) as Button
+	_check(heavy_tab != null, "중장비 서브탭 존재")
+	if heavy_tab != null:
+		heavy_tab.pressed.emit()
+		await _sleep(0.4)
+		layer = root.find_child("WorkbenchUILayer", true, false) as CanvasLayer
 	_check(layer.find_child("WorkbenchRecipeRow_craft_field_mine", true, false) != null, "중장비 섹션에 대인 지뢰 행")
 	_check(layer.find_child("WorkbenchRecipeRow_craft_rocket_launcher", true, false) != null, "중장비 섹션에 로켓 발사기 행")
 	_check(layer.find_child("WorkbenchRecipeRow_craft_escort_drone", true, false) != null, "중장비 섹션에 호위 드론 행(2차)")

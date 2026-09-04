@@ -46,7 +46,8 @@ func _run() -> void:
 	var title := shelter.get("shelter_goal_title_label") as Label
 	var reward := shelter.get("shelter_goal_reward_label") as Label
 	print("  ① TITLE=%s / REWARD=%s" % [title.text, reward.text])
-	_check(title.text == "다음 목표 — Tier 2 확장", "① 헤더 제목")
+	# 2026-09-04 재도색: 제목은 목표 이름만, "다음 목표"는 eyebrow.
+	_check(title.text == "Tier 2 확장", "① 헤더 제목 (got %s)" % title.text)
 	_check(reward.text == "남대문 폐시장 해금", "① 보상 캡션")
 	# 예전 확장 버튼 줄("Tier 2 확장 → …해금")은 카드 헤더에 흡수돼 사라졌다.
 	_check(shelter.get("shelter_upgrade_button") == null, "① 중복 확장 버튼 줄 제거")
@@ -79,13 +80,11 @@ func _run() -> void:
 	game_state.set("churu", 1)
 	shelter.call("_update_stats")
 	await _idle(4)
-	_check(title.text == "지금 확장 가능!", "② 헤더 문구 (got %s)" % title.text)
+	var eyebrow := shelter.get("shelter_goal_eyebrow_label") as Label
+	_check(eyebrow != null and eyebrow.text == "지금 확장 가능", "② 헤더 문구 (got %s)" % (eyebrow.text if eyebrow else "none"))
 	_check(bool(shelter.get("shelter_goal_all_met")), "② all_met 플래그")
-	var card_style := shelter.get("shelter_goal_card_style") as StyleBoxFlat
-	print("  ② BORDER=%s width=%d" % [card_style.border_color.to_html(), card_style.border_width_top])
-	_check(card_style.border_color.r > 0.6 and card_style.border_color.b < card_style.border_color.r,
-		"② 보더 금색")
-	_check(card_style.border_width_top == 2, "② 충족 시 보더 두께 2")
+	var upgrade_button := shelter.get("shelter_goal_upgrade_button") as Button
+	_check(upgrade_button != null and upgrade_button.visible, "② 전부 충족하면 확장 버튼이 보인다")
 	shelter.queue_free()
 	shelter = null
 	await _idle(4)

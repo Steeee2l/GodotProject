@@ -1,9 +1,18 @@
 class_name ShelterTrainingModule
 extends Node3D
 
-const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const SHELTER_UI := preload("res://scripts/shelter_ui_components.gd")
+# 쉘터 UI 공용 디자인 언어(이름 짓기 화면 기준) — 색·반지름·글자는 여기서만 가져온다.
+const SHELTER_THEME := preload("res://scripts/hud/shelter_theme.gd")
+
+# 요약 카드 아이콘 색 — 재화·능력치 색은 아이콘에만 쓴다(글자는 흰색 한 가지).
+const SUMMARY_ICON_COLORS := {
+	"health": Color("#e87668"),
+	"stamina": Color("#e4ca6c"),
+	"speed": Color("#77c5a1"),
+	"fitness": Color("#8db5d1"),
+}
 
 @export var interaction_radius := 4.1
 
@@ -61,10 +70,7 @@ func _open_ui() -> void:
 	modal.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	modal.mouse_filter = Control.MOUSE_FILTER_STOP
 	ui_layer.add_child(modal)
-	var dim := ColorRect.new()
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dim.color = Color(0.004, 0.006, 0.006, 0.84)
-	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	var dim := SHELTER_THEME.dim_backdrop()
 	modal.add_child(dim)
 	ModalDismiss.install(ui_layer, dim, func() -> void:
 		if is_instance_valid(ui_layer):
@@ -98,22 +104,23 @@ func _open_ui() -> void:
 	)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.015, 0.02, 0.019, 0.98), Color("#8fa164"), 8))
+	# 모달 판의 안쪽 여백은 스타일박스가 쥔다 — 작은 화면에선 조금 줄인다.
+	var panel_style := SHELTER_THEME.modal_style()
+	if compact_layout:
+		var inner_margin := 16.0
+		panel_style.content_margin_left = inner_margin
+		panel_style.content_margin_right = inner_margin
+		panel_style.content_margin_top = inner_margin
+		panel_style.content_margin_bottom = inner_margin
+	panel.add_theme_stylebox_override("panel", panel_style)
 	center.add_child(panel)
 	# 모달 표준 등장 — 툭 나타나지 않는다.
-	HudStyle.enter_modal(panel)
-	var margin := MarginContainer.new()
-	var inner_margin := 12 if compact_layout else 24
-	margin.add_theme_constant_override("margin_left", inner_margin)
-	margin.add_theme_constant_override("margin_top", inner_margin)
-	margin.add_theme_constant_override("margin_right", inner_margin)
-	margin.add_theme_constant_override("margin_bottom", inner_margin)
-	panel.add_child(margin)
+	SHELTER_THEME.enter(panel)
 	content = VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_theme_constant_override("separation", 10 if compact_layout else 14)
-	margin.add_child(content)
+	content.add_theme_constant_override("separation", 12 if compact_layout else 16)
+	panel.add_child(content)
 	_rebuild_ui()
 
 
@@ -129,70 +136,50 @@ func _rebuild_ui() -> void:
 	for child in content.get_children():
 		content.remove_child(child)
 		child.queue_free()
-	var header := VBoxContainer.new()
+	# 헤더: 민트 이름표 / 굵은 제목 / 회색 설명 ······ [통조림 칩] [둥근 닫기]
+	var on_close := func() -> void:
+		if is_instance_valid(ui_layer):
+			ui_layer.queue_free()
+	var header := SHELTER_THEME.modal_header(
+		"영구 강화",
+		"출정에서 모아 온 통조림을 소비해 능력을 영구히 올립니다.",
+		on_close,
+		"훈련장"
+	)
 	header.name = "TrainingHeader"
 	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	header.add_theme_constant_override("separation", 5)
 	content.add_child(header)
-	var top_row := HBoxContainer.new()
-	top_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top_row.add_theme_constant_override("separation", 12)
-	header.add_child(top_row)
-	var title := _label("생존 체력 훈련장", 24 if compact_layout else 30, Color("#e7d58f"))
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.autowrap_mode = TextServer.AUTOWRAP_OFF
-	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	# ELLIPSIS 라벨은 최소 폭이 1px이라, 못 박지 않으면 옆칸에 밀려 글자가 사라진다.
-	title.custom_minimum_size.x = 120.0
-	top_row.add_child(title)
 	# 훈련 화폐는 통조림이다(유저 확정). 지갑 칩도 쉘터 통조림 재고를 보여 준다 —
 	# 가방 통조림(투척용)이 아니라 훈련에 실제로 쓸 수 있는 수량이어야 한다.
 	# 지갑 칩은 아이콘 + 수치만 — 통조림 아이콘 옆에 "통조림"이라고 또 쓰지 않는다.
-	var resource_panel := _fit_chip_text(SHELTER_UI.make_currency_chip(
-		"food",
-		GameState.format_compact_number(GameState.shelter_canned_food),
-		compact_layout
-	), "food")
-	resource_panel.custom_minimum_size.x = 78 if compact_layout else 98
-	resource_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var resource_value := resource_panel.find_child("ResourceValue_food", true, false) as Label
+	var resource_panel := _currency_chip("food", GameState.format_compact_number(GameState.shelter_canned_food))
+	resource_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	var resource_value := resource_panel.get_meta("label") as Label
 	if resource_value != null:
 		resource_value.name = "TrainingResourceLabel"
-	top_row.add_child(resource_panel)
-	var close := _close_button()
-	close.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	close.pressed.connect(func() -> void: ui_layer.queue_free())
-	top_row.add_child(close)
-	var subtitle := _label(
-		"출정에서 모아 온 통조림을 훈련에 소비해 영구 능력을 개방합니다.",
-		14 if compact_layout else 15,
-		Color("#9eafa6")
-	)
-	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	header.add_child(subtitle)
+	header.add_child(resource_panel)
+	header.move_child(resource_panel, 1)
+	var close := header.get_meta("close_button") as Button
+	close.name = "CloseButton"
+	# 닫기는 아이콘 하나(글자 없음) — 특수기호 대신 그린 아이콘을 쓴다.
+	close.text = ""
+	close.icon = UI_ICONS.get_icon("close", 20, SHELTER_THEME.TEXT)
+	close.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	close.tooltip_text = "닫기"
 
 	var summary := GridContainer.new()
 	summary.columns = 2 if narrow_layout or compact_layout else 4
 	summary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	summary.add_theme_constant_override("h_separation", 10)
-	summary.add_theme_constant_override("v_separation", 8)
+	summary.add_theme_constant_override("v_separation", 10)
 	content.add_child(summary)
-	_add_summary_chip(summary, "health", "최대 체력", "%d" % GameState.get_max_health(), Color("#e87668"))
-	_add_summary_chip(summary, "stamina", "스태미나", "%d" % roundi(GameState.get_max_stamina()), Color("#e4ca6c"))
-	_add_summary_chip(summary, "speed", "이동 배율", "x%.2f" % GameState.get_move_speed_multiplier(), Color("#77c5a1"))
-	_add_summary_chip(summary, "fitness", "반동 제어", "x%.2f" % GameState.get_recoil_control_multiplier(), Color("#8db5d1"))
+	_add_summary_chip(summary, "health", "최대 체력", "%d" % GameState.get_max_health(), SUMMARY_ICON_COLORS["health"])
+	_add_summary_chip(summary, "stamina", "스태미나", "%d" % roundi(GameState.get_max_stamina()), SUMMARY_ICON_COLORS["stamina"])
+	_add_summary_chip(summary, "speed", "이동 배율", "x%.2f" % GameState.get_move_speed_multiplier(), SUMMARY_ICON_COLORS["speed"])
+	_add_summary_chip(summary, "fitness", "반동 제어", "x%.2f" % GameState.get_recoil_control_multiplier(), SUMMARY_ICON_COLORS["fitness"])
 
-	var divider := HSeparator.new()
-	content.add_child(divider)
-	var section_row := HBoxContainer.new()
-	section_row.add_theme_constant_override("separation", 8)
-	content.add_child(section_row)
-	var section_title := _label("영구 강화", 19 if compact_layout else 21, Color("#dce4dc"))
-	section_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	section_title.custom_minimum_size.x = 90.0
-	section_row.add_child(section_title)
-	var section_hint := _label("카드를 눌러 즉시 훈련", 12, Color("#82958c"))
+	var section_hint := SHELTER_THEME.caption("카드를 눌러 즉시 훈련")
 	section_hint.name = "TrainingSectionHint"
 	section_hint.custom_minimum_size = Vector2(150, 0)
 	section_hint.size_flags_horizontal = Control.SIZE_SHRINK_END
@@ -200,12 +187,12 @@ func _rebuild_ui() -> void:
 	section_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	section_hint.autowrap_mode = TextServer.AUTOWRAP_OFF
 	section_hint.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	section_row.add_child(section_hint)
-	var scroll := HudStyle.make_scroll()
+	var section_row := SHELTER_THEME.section_header("훈련 과목", section_hint)
+	content.add_child(section_row)
+	var scroll := SHELTER_THEME.scroll()
 	scroll.name = "TrainingTreeScroll"
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.follow_focus = false
 	content.add_child(scroll)
 	var tree := GridContainer.new()
@@ -213,7 +200,7 @@ func _rebuild_ui() -> void:
 	tree.columns = 1 if narrow_layout else 2
 	tree.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tree.add_theme_constant_override("h_separation", 12)
-	tree.add_theme_constant_override("v_separation", 10)
+	tree.add_theme_constant_override("v_separation", 12)
 	scroll.add_child(tree)
 	_add_training_card(tree, "vitality")
 	_add_training_card(tree, "recovery")
@@ -226,34 +213,26 @@ func _rebuild_ui() -> void:
 	_add_training_card(tree, "quick_hands")
 	_add_training_card(tree, "ammo_carry")
 	_add_training_card(tree, "sortie_supply")
-	status_label = _label("", 13, Color("#9db0a6"))
+	status_label = SHELTER_THEME.caption("")
 	status_label.name = "TrainingStatus"
 	status_label.custom_minimum_size.y = 18
+	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(status_label)
 	if not pending_status.is_empty():
 		_apply_status_style(pending_status, pending_status_ok)
 
 
 func _add_summary_chip(parent: Container, icon_name: String, title: String, value: String, color: Color) -> void:
-	var chip := PanelContainer.new()
-	chip.custom_minimum_size = Vector2(0, 68 if compact_layout else 76)
-	chip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	chip.add_theme_stylebox_override("panel", _panel_style(Color("#101716"), Color(0.43, 0.52, 0.48, 0.45), 6))
-	parent.add_child(chip)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	chip.add_child(row)
-	var icon := TextureRect.new()
-	icon.custom_minimum_size = Vector2(36, 36)
-	icon.texture = UI_ICONS.get_icon(icon_name, 42, color)
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	row.add_child(icon)
-	var text_box := VBoxContainer.new()
-	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	text_box.add_child(_label(title, 13, Color("#92a39b")))
-	text_box.add_child(_label(value, 20, Color("#e6ece7")))
-	row.add_child(text_box)
+	# 작은 설명 + 큰 굵은 숫자. 보더 없는 표면 카드.
+	var card := SHELTER_THEME.stat_card(title, value, UI_ICONS.get_icon(icon_name, 42, color))
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var value_label := card.get_meta("value_label") as Label
+	if value_label != null:
+		value_label.add_theme_font_size_override(
+			"font_size",
+			SHELTER_THEME.TYPE_NUMBER_SMALL if compact_layout else SHELTER_THEME.TYPE_NUMBER
+		)
+	parent.add_child(card)
 
 
 func _add_training_card(parent: GridContainer, node_id: String) -> void:
@@ -262,6 +241,9 @@ func _add_training_card(parent: GridContainer, node_id: String) -> void:
 	var max_rank := int(definition.get("max_rank", 1))
 	var cost := GameState.get_training_cost(node_id)
 	var requirements_met := GameState.get_training_requirements_met(node_id)
+	var maxed := rank >= max_rank
+	# 선행 미충족 카드는 글자 전체가 흐려진다 — 색이 먼저 말한다.
+	var faded := not requirements_met and not maxed
 	var card := Button.new()
 	card.name = "TrainingCard_%s" % node_id
 	card.custom_minimum_size = Vector2(0, 118 if compact_layout else 132)
@@ -269,42 +251,41 @@ func _add_training_card(parent: GridContainer, node_id: String) -> void:
 	card.clip_contents = true
 	card.text = ""
 	card.focus_mode = Control.FOCUS_NONE
-	card.add_theme_font_override("font", FONT)
-	card.add_theme_stylebox_override("normal", _panel_style(Color("#101514"), Color("#596760"), 7))
-	card.add_theme_stylebox_override("hover", _panel_style(Color("#1b231d"), Color("#d6c36f"), 7))
-	card.add_theme_stylebox_override("pressed", _panel_style(Color("#292a1c"), Color("#f0d77d"), 7))
-	card.add_theme_stylebox_override("disabled", _panel_style(Color("#0b0f0e"), Color("#343d39"), 7))
-	card.disabled = rank >= max_rank or not requirements_met
+	card.add_theme_stylebox_override("normal", SHELTER_THEME.flat(SHELTER_THEME.SURFACE, SHELTER_THEME.RADIUS_CARD))
+	card.add_theme_stylebox_override("hover", SHELTER_THEME.flat(SHELTER_THEME.SURFACE_HOVER, SHELTER_THEME.RADIUS_CARD))
+	card.add_theme_stylebox_override("pressed", SHELTER_THEME.flat(SHELTER_THEME.SURFACE_HOVER, SHELTER_THEME.RADIUS_CARD))
+	card.add_theme_stylebox_override("focus", SHELTER_THEME.flat(SHELTER_THEME.SURFACE, SHELTER_THEME.RADIUS_CARD))
+	card.add_theme_stylebox_override("disabled", SHELTER_THEME.flat(SHELTER_THEME.SURFACE, SHELTER_THEME.RADIUS_CARD))
+	card.disabled = maxed or not requirements_met
 	card.pressed.connect(_upgrade_training.bind(node_id))
 	parent.add_child(card)
 
 	var card_body := HBoxContainer.new()
 	card_body.name = "CardBody"
 	card_body.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	card_body.offset_left = 14
-	card_body.offset_top = 12
-	card_body.offset_right = -14
-	card_body.offset_bottom = -12
+	card_body.offset_left = 16
+	card_body.offset_top = 14
+	card_body.offset_right = -16
+	card_body.offset_bottom = -14
 	card_body.add_theme_constant_override("separation", 14)
 	card.add_child(card_body)
 
 	var icon_panel := PanelContainer.new()
 	icon_panel.custom_minimum_size = Vector2(64, 64)
 	icon_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	icon_panel.add_theme_stylebox_override(
-		"panel",
-		_panel_style(Color("#161d1a"), Color(0.62, 0.55, 0.29, 0.62), 6)
-	)
+	icon_panel.add_theme_stylebox_override("panel", SHELTER_THEME.flat(SHELTER_THEME.SURFACE_RAISED, 12))
 	card_body.add_child(icon_panel)
 	var icon := TextureRect.new()
-	icon.custom_minimum_size = Vector2(48, 48)
+	icon.custom_minimum_size = Vector2(40, 40)
 	icon.texture = UI_ICONS.get_icon(
 		str(definition.get("icon", "fitness")),
 		58,
-		Color("#d9c874") if requirements_met else Color("#69746f")
+		SHELTER_THEME.TEXT_FAINT if faded else SHELTER_THEME.ACCENT
 	)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	icon_panel.add_child(icon)
 
 	var details := VBoxContainer.new()
@@ -317,10 +298,11 @@ func _add_training_card(parent: GridContainer, node_id: String) -> void:
 	title_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_row.add_theme_constant_override("separation", 8)
 	details.add_child(title_row)
-	var title := _label(
+	var title := SHELTER_THEME.label(
 		str(definition.get("title", node_id)),
-		16 if compact_layout else 18,
-		Color("#e5eadf") if requirements_met else Color("#7f8b85")
+		SHELTER_THEME.TYPE_SECTION if compact_layout else SHELTER_THEME.TYPE_NUMBER_SMALL,
+		SHELTER_THEME.TEXT_FAINT if faded else SHELTER_THEME.TEXT,
+		true
 	)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -328,21 +310,22 @@ func _add_training_card(parent: GridContainer, node_id: String) -> void:
 	# ELLIPSIS 라벨의 최소 폭은 1px이다 — 등급 라벨에 밀려 제목이 사라지지 않게.
 	title.custom_minimum_size.x = 96.0
 	title_row.add_child(title)
-	var rank_label := _label(
+	var rank_label := SHELTER_THEME.number(
 		"%d / %d" % [rank, max_rank],
-		13 if compact_layout else 14,
-		Color("#d8c674") if rank < max_rank else Color("#78b791")
+		SHELTER_THEME.TYPE_BODY,
+		SHELTER_THEME.TEXT_FAINT if faded else (SHELTER_THEME.ACCENT if maxed else SHELTER_THEME.TEXT_DIM)
 	)
 	rank_label.name = "Rank"
 	rank_label.custom_minimum_size = Vector2(52, 0)
 	rank_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	rank_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	rank_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	title_row.add_child(rank_label)
 
-	var description := _label(
+	var description := SHELTER_THEME.label(
 		_training_description_text(node_id, definition),
-		12 if compact_layout else 13,
-		Color("#9eaaa4") if requirements_met else Color("#65706b")
+		SHELTER_THEME.TYPE_CAPTION if compact_layout else SHELTER_THEME.TYPE_BODY - 1,
+		SHELTER_THEME.TEXT_FAINT if faded else SHELTER_THEME.TEXT_DIM
 	)
 	description.name = "TrainingCardDescription_%s" % node_id
 	description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -353,35 +336,31 @@ func _add_training_card(parent: GridContainer, node_id: String) -> void:
 	action_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	action_row.add_theme_constant_override("separation", 6)
 	details.add_child(action_row)
-	var action_icon := TextureRect.new()
-	action_icon.custom_minimum_size = Vector2(20, 20)
-	action_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	action_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	action_row.add_child(action_icon)
-	var action_label := _label("", 12 if compact_layout else 13, Color("#efbd66"))
-	action_label.name = "Action"
-	action_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	action_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	action_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	action_label.custom_minimum_size.x = 88.0
-	action_row.add_child(action_label)
-	if rank >= max_rank:
-		action_icon.texture = UI_ICONS.get_icon("upgrade", 24, Color("#78b791"))
-		action_label.text = "최대 강화 완료"
-		action_label.add_theme_color_override("font_color", Color("#78b791"))
+	if maxed:
+		var done := SHELTER_THEME.caption("최고 단계", SHELTER_THEME.ACCENT)
+		done.name = "Action"
+		action_row.add_child(done)
 	elif not requirements_met:
-		action_icon.texture = UI_ICONS.get_icon("alert", 24, Color("#7f8b85"))
-		action_label.text = "선행 필요 · %s" % _training_requirement_text(definition)
-		action_label.add_theme_color_override("font_color", Color("#7f8b85"))
-	else:
-		# 아이콘이 이미 통조림이다 — 그 옆에 "통조림"과 "필요"를 또 쓰지 않는다.
-		# 재고가 모자라면 수치가 빨강으로 바뀐다(글보다 색이 먼저 읽힌다).
-		action_icon.texture = UI_ICONS.get_icon("food", 24, Color("#efbd66"))
-		action_label.text = "x%s" % GameState.format_compact_number(cost)
-		action_label.add_theme_color_override(
-			"font_color",
-			Color("#efbd66") if GameState.shelter_canned_food >= cost else Color("#e06c5c")
+		var locked := SHELTER_THEME.caption(
+			"선행 필요 · %s" % _training_requirement_text(definition),
+			SHELTER_THEME.TEXT_FAINT
 		)
+		locked.name = "Action"
+		locked.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		locked.autowrap_mode = TextServer.AUTOWRAP_OFF
+		locked.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		locked.custom_minimum_size.x = 88.0
+		action_row.add_child(locked)
+	else:
+		# 비용은 알약 칩 — 아이콘이 이미 통조림이다. 그 옆에 "통조림"과 "필요"를
+		# 또 쓰지 않는다. 재고가 모자라면 수치가 빨강으로 바뀐다(글보다 색이 먼저 읽힌다).
+		var cost_chip := _currency_chip("food", GameState.format_compact_number(cost))
+		cost_chip.name = "CostChip_food"
+		var action_label := cost_chip.get_meta("label") as Label
+		action_label.name = "Action"
+		if GameState.shelter_canned_food < cost:
+			action_label.add_theme_color_override("font_color", SHELTER_THEME.DANGER)
+		action_row.add_child(cost_chip)
 	# 재화 이름은 화면에서 뺐으니 카드 툴팁이 대신 말한다.
 	card.tooltip_text = "%s · 훈련 비용 통조림 %s개 (보유 %s)" % [
 		str(definition.get("title", node_id)),
@@ -490,68 +469,25 @@ func _apply_status_style(message: String, success: bool) -> void:
 	status_label.text = message
 	status_label.add_theme_color_override(
 		"font_color",
-		Color("#9de0b1") if success else Color("#f09a8a")
+		SHELTER_THEME.ACCENT if success else SHELTER_THEME.DANGER
 	)
 
 
-func _button(text: String, icon_name: String = "") -> Button:
-	var button := Button.new()
-	button.text = text
-	if not icon_name.is_empty():
-		button.icon = UI_ICONS.get_icon(icon_name, 28, HudStyle.TEXT)
-		# 대형 재화 PNG가 버튼 전체로 부풀지 않게 폭을 못 박는다.
-		button.add_theme_constant_override("icon_max_width", 26)
-	return HudStyle.style_button(button, HudStyle.LINE_FOCUS)
-
-
-func _close_button() -> Button:
-	var button := _button("", "close")
-	button.name = "CloseButton"
-	button.custom_minimum_size = Vector2(40, 40)
-	button.icon = UI_ICONS.get_icon("close", 24, Color("#dce5df"))
-	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	button.tooltip_text = "닫기"
-	button.focus_mode = Control.FOCUS_NONE
-	return button
-
-
-func _fit_chip_text(chip: PanelContainer, resource_id: String) -> PanelContainer:
-	# 자원 칩 이름 라벨은 ELLIPSIS라 최소 폭이 1px이다 — 옆의 수치 라벨이
-	# EXPAND_FILL로 남는 폭을 다 먹으면 이름("통조림")이 통째로 사라진다.
-	for label_name in ["ResourceName_%s" % resource_id, "ResourceValue_%s" % resource_id]:
-		var label := chip.find_child(label_name, true, false) as Label
-		if label == null:
-			continue
-		var font := label.get_theme_font("font")
-		if font == null:
-			continue
-		label.custom_minimum_size.x = ceilf(font.get_string_size(
-			label.text,
-			HORIZONTAL_ALIGNMENT_LEFT,
-			-1,
-			label.get_theme_font_size("font_size")
-		).x) + 2.0
+func _currency_chip(currency_id: String, value_text: String) -> PanelContainer:
+	# 재화 표기 규칙(유저 확정): 아이콘이 이름이다. 칩엔 아이콘 + "xN"만 적고
+	# 이름은 툴팁이 말한다. 노드 이름(ResourceChip_/ResourceIcon_/ResourceValue_)은
+	# 프로브·튜토리얼이 찾는 규약이라 그대로 둔다.
+	var chip := SHELTER_THEME.chip(
+		"x%s" % value_text,
+		UI_ICONS.get_icon(currency_id, 42, SHELTER_UI.get_currency_color(currency_id))
+	)
+	chip.name = "ResourceChip_%s" % currency_id
+	chip.mouse_filter = Control.MOUSE_FILTER_PASS
+	chip.tooltip_text = "%s x%s" % [str(SHELTER_UI.CURRENCY_NAMES.get(currency_id, currency_id)), value_text]
+	var row := chip.get_child(0)
+	if row != null and row.get_child_count() > 0 and row.get_child(0) is TextureRect:
+		(row.get_child(0) as TextureRect).name = "ResourceIcon_%s" % currency_id
+	var value_label := chip.get_meta("label") as Label
+	if value_label != null:
+		value_label.name = "ResourceValue_%s" % currency_id
 	return chip
-
-
-func _label(text: String, font_size: int, color: Color) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.add_theme_font_override("font", FONT)
-	label.add_theme_font_size_override("font_size", font_size)
-	label.add_theme_color_override("font_color", color)
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	return label
-
-
-func _panel_style(background: Color, border: Color, radius: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
-	style.border_color = border
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(radius)
-	style.content_margin_left = 14
-	style.content_margin_top = 12
-	style.content_margin_right = 14
-	style.content_margin_bottom = 12
-	return style

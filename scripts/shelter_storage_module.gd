@@ -4,6 +4,8 @@ extends Node3D
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const SHELTER_UI := preload("res://scripts/shelter_ui_components.gd")
+# 쉘터 UI 공용 디자인 언어(이름 짓기 화면 기준) — 색·반지름·글자는 여기서만 가져온다.
+const SHELTER_THEME := preload("res://scripts/hud/shelter_theme.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 
 const ITEM_NAMES := {
@@ -57,6 +59,9 @@ const COMPONENT_TEXTURES := {
 	"scope_lens": "res://assets/items/mod_components/scope_lens.png",
 	"magazine_spring": "res://assets/items/mod_components/magazine_spring.png",
 }
+
+# 슬롯 버튼 반지름 — 카드(14)보다 한 단계 작다.
+const SLOT_RADIUS := 10
 
 @export var interaction_radius := 4.0
 
@@ -115,10 +120,7 @@ func _open_ui() -> void:
 	modal.mouse_filter = Control.MOUSE_FILTER_STOP
 	ui_layer.add_child(modal)
 
-	var dim := ColorRect.new()
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dim.color = Color(0.004, 0.007, 0.008, 0.82)
-	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	var dim := SHELTER_THEME.dim_backdrop()
 	modal.add_child(dim)
 	ModalDismiss.install(ui_layer, dim, _close_ui)
 
@@ -154,27 +156,24 @@ func _open_ui() -> void:
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	panel.clip_contents = true
-	panel.add_theme_stylebox_override(
-		"panel",
-		_panel_style(Color(0.012, 0.019, 0.021, 0.98), Color("#6c8f89"), 2, 6)
-	)
+	# 모달 판의 안쪽 여백은 스타일박스가 쥔다 — 작은 화면에선 조금 줄인다.
+	var panel_style := SHELTER_THEME.modal_style()
+	if viewport_size.y < 640.0:
+		var inner_margin := 14.0
+		panel_style.content_margin_left = inner_margin
+		panel_style.content_margin_right = inner_margin
+		panel_style.content_margin_top = inner_margin
+		panel_style.content_margin_bottom = inner_margin
+	panel.add_theme_stylebox_override("panel", panel_style)
 	center.add_child(panel)
 	# 모달 표준 등장 — 툭 나타나지 않는다.
-	HudStyle.enter_modal(panel)
-
-	var margin := MarginContainer.new()
-	var inner_margin := 10 if viewport_size.y < 640.0 else 18
-	margin.add_theme_constant_override("margin_left", inner_margin)
-	margin.add_theme_constant_override("margin_top", inner_margin)
-	margin.add_theme_constant_override("margin_right", inner_margin)
-	margin.add_theme_constant_override("margin_bottom", inner_margin)
-	panel.add_child(margin)
+	SHELTER_THEME.enter(panel)
 
 	content = VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content.add_theme_constant_override("separation", 12)
-	margin.add_child(content)
+	panel.add_child(content)
 	_rebuild_ui()
 
 
@@ -188,58 +187,50 @@ func _rebuild_ui() -> void:
 	var viewport_size := get_viewport().get_visible_rect().size
 	var narrow := viewport_size.x < 1040.0
 	var compact := viewport_size.y < 680.0
-	var header := VBoxContainer.new()
+	# 헤더: 민트 이름표 / 굵은 제목 / 회색 설명 ······ [고철·츄르 칩] [둥근 닫기]
+	var header := SHELTER_THEME.modal_header(
+		"쉘터 창고",
+		"Lv.%d · 가방과 창고 사이에서 장비를 옮깁니다." % GameState.storage_level,
+		_close_ui,
+		"창고"
+	)
 	header.name = "StorageHeader"
-	header.add_theme_constant_override("separation", 8)
+	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_child(header)
-	var top_row := HBoxContainer.new()
-	top_row.add_theme_constant_override("separation", 12)
-	header.add_child(top_row)
-	var title_box := VBoxContainer.new()
-	title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_box.add_theme_constant_override("separation", 2)
-	top_row.add_child(title_box)
-	title_box.add_child(_label("쉘터 창고  Lv.%d" % GameState.storage_level, 26 if not compact else 22, Color("#e7ddbd")))
-	title_box.add_child(_label("가방과 창고 사이에서 장비를 이동합니다.", 12, Color("#91a7a2")))
-	var close := _icon_button("close", "닫기", Color("#dce7e4"))
-	close.name = "CloseButton"
-	close.pressed.connect(_close_ui)
-	top_row.add_child(close)
-	var wallet := HFlowContainer.new()
-	wallet.name = "StorageWallet"
-	wallet.add_theme_constant_override("h_separation", 8)
-	wallet.add_theme_constant_override("v_separation", 6)
-	header.add_child(wallet)
 	# 지갑 칩은 아이콘 + 수치만(이름은 툴팁) — 재화 표기 규칙.
-	wallet.add_child(_fit_chip_text(SHELTER_UI.make_currency_chip(
-		"scrap",
-		GameState.format_compact_number(GameState.scrap),
-		compact
-	), "scrap"))
-	wallet.add_child(_fit_chip_text(SHELTER_UI.make_currency_chip(
-		"churu",
-		GameState.format_compact_number(GameState.churu),
-		compact
-	), "churu"))
+	# HFlow는 헤더 안에서 최소 폭(칩 하나)만 받아 세로로 줄바꿈된다 — 한 줄로 나란히.
+	var wallet := HBoxContainer.new()
+	wallet.name = "StorageWallet"
+	wallet.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	wallet.add_theme_constant_override("separation", 8)
+	wallet.add_child(_currency_chip("scrap", GameState.format_compact_number(GameState.scrap)))
+	wallet.add_child(_currency_chip("churu", GameState.format_compact_number(GameState.churu)))
+	header.add_child(wallet)
+	header.move_child(wallet, 1)
+	var close := header.get_meta("close_button") as Button
+	close.name = "CloseButton"
+	# 닫기는 아이콘 하나(글자 없음) — 특수기호 대신 그린 아이콘을 쓴다.
+	close.text = ""
+	close.icon = UI_ICONS.get_icon("close", 20, SHELTER_THEME.TEXT)
+	close.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	close.tooltip_text = "닫기"
 
 	# 귀중품은 쓸 데가 없다. 여기가 유일한 출구다.
 	var valuable_total: int = GameState.get_valuable_total_value()
 	if valuable_total > 0:
-		var sell := Button.new()
+		var sell := SHELTER_THEME.secondary_button(
+			"귀중품 전부 팔기 · 고철 +%s" % GameState.format_compact_number(valuable_total),
+			true
+		)
 		sell.name = "SellValuablesButton"
-		sell.text = "귀중품 전부 팔기  ·  고철 +%s" % GameState.format_compact_number(valuable_total)
-		sell.custom_minimum_size = Vector2(0, 42)
-		sell.add_theme_font_override("font", FONT)
-		sell.add_theme_font_size_override("font_size", 14)
-		sell.add_theme_color_override("font_color", Color("#f0dda6"))
 		sell.pressed.connect(_sell_valuables, CONNECT_DEFERRED)
 		content.add_child(sell)
 
 	var summary := GridContainer.new()
 	summary.name = "StorageSummary"
 	summary.columns = 1 if viewport_size.x < 700.0 else 2
-	summary.add_theme_constant_override("h_separation", 8)
-	summary.add_theme_constant_override("v_separation", 8)
+	summary.add_theme_constant_override("h_separation", 10)
+	summary.add_theme_constant_override("v_separation", 10)
 	content.add_child(summary)
 	summary.add_child(_summary_card(
 		"사용 슬롯",
@@ -263,7 +254,7 @@ func _rebuild_ui() -> void:
 	body.add_child(_build_backpack_panel(narrow, list_height))
 	body.add_child(_build_storage_panel(narrow, compact, list_height))
 
-	feedback_label = _label("", 12, Color("#e6c779"))
+	feedback_label = _label("", SHELTER_THEME.TYPE_CAPTION, SHELTER_THEME.TEXT_DIM)
 	feedback_label.name = "StorageFeedback"
 	feedback_label.custom_minimum_size.y = 20
 	feedback_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -271,20 +262,14 @@ func _rebuild_ui() -> void:
 
 
 func _build_backpack_panel(narrow: bool, list_height: float) -> Control:
-	var panel := PanelContainer.new()
+	var panel := SHELTER_THEME.card()
 	panel.name = "BackpackItemsPanel"
 	panel.custom_minimum_size = Vector2(0 if narrow else 330, 180 if narrow else 0)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL if narrow else Control.SIZE_SHRINK_BEGIN
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	panel.add_theme_stylebox_override(
-		"panel",
-		_panel_style(Color(0.022, 0.031, 0.032, 0.94), Color("#405854"))
-	)
-	var margin := _margin(12, 10)
-	panel.add_child(margin)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 8)
-	margin.add_child(box)
+	box.add_theme_constant_override("separation", 10)
+	panel.add_child(box)
 	var title_row := HBoxContainer.new()
 	title_row.add_theme_constant_override("separation", 8)
 	box.add_child(title_row)
@@ -296,7 +281,7 @@ func _build_backpack_panel(narrow: bool, list_height: float) -> Control:
 	title_row.add_child(_section_title("가방"))
 	title_row.add_child(_section_value("%d개" % backpack_count, 56.0))
 
-	var scroll := HudStyle.make_scroll()
+	var scroll := SHELTER_THEME.scroll()
 	scroll.name = "BackpackItemScroll"
 	scroll.custom_minimum_size.y = list_height
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -309,7 +294,7 @@ func _build_backpack_panel(narrow: bool, list_height: float) -> Control:
 	scroll.add_child(list)
 	var entries := _get_backpack_entries()
 	if entries.is_empty():
-		var empty := _label("보관 가능한 소지품이 없습니다.", 13, Color("#687a76"))
+		var empty := _label("보관 가능한 소지품이 없습니다.", SHELTER_THEME.TYPE_BODY - 1, SHELTER_THEME.TEXT_FAINT)
 		empty.custom_minimum_size.y = 72
 		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		empty.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -321,31 +306,27 @@ func _build_backpack_panel(narrow: bool, list_height: float) -> Control:
 
 
 func _build_storage_panel(narrow: bool, compact: bool, list_height: float) -> Control:
-	var panel := PanelContainer.new()
+	# 창고가 가득 차면 판 테두리가 민트로 켜진다 — 더 못 넣는다는 걸 색이 먼저 말한다.
+	var storage_full := GameState.get_storage_used_slots() >= GameState.get_storage_capacity()
+	var panel := SHELTER_THEME.card(false, storage_full)
 	panel.name = "StorageGridPanel"
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	panel.add_theme_stylebox_override(
-		"panel",
-		_panel_style(Color(0.019, 0.027, 0.029, 0.96), Color("#4f6f69"))
-	)
-	var margin := _margin(12, 10)
-	panel.add_child(margin)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 8)
-	margin.add_child(box)
+	box.add_theme_constant_override("separation", 10)
+	panel.add_child(box)
 
 	var title_row := HBoxContainer.new()
 	title_row.add_theme_constant_override("separation", 8)
 	box.add_child(title_row)
 	# 스페이서가 폭을 다 먹어 "창고"/"0 / 30 슬롯"이 1px로 사라지던 자리.
-	title_row.add_child(_section_title("창고", Color("#e4d8b8")))
+	title_row.add_child(_section_title("창고"))
 	title_row.add_child(_section_value(
 		"%d / %d 슬롯" % [GameState.get_storage_used_slots(), GameState.get_storage_capacity()],
 		94.0
 	))
 
-	var scroll := HudStyle.make_scroll()
+	var scroll := SHELTER_THEME.scroll()
 	scroll.name = "StorageGridScroll"
 	scroll.custom_minimum_size.y = list_height
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -382,22 +363,20 @@ func _backpack_item_button(entry: Dictionary) -> Button:
 	var button := Button.new()
 	button.name = "Store_%s_%s" % [item_type, item_id]
 	button.custom_minimum_size = Vector2(0, 58)
-	button.text = "%s\n보유 %d  ·  보관" % [_item_name(item_id), count]
+	button.text = "%s\n보유 %d · 보관" % [_item_name(item_id), count]
 	button.icon = _item_texture(item_type, item_id, 42)
 	button.expand_icon = true
 	button.add_theme_constant_override("icon_max_width", 42)
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.focus_mode = Control.FOCUS_NONE
 	button.add_theme_font_override("font", FONT)
-	button.add_theme_font_size_override("font_size", 12)
-	button.add_theme_stylebox_override(
-		"normal",
-		_panel_style(Color(0.032, 0.044, 0.045, 0.98), Color("#405651"))
-	)
-	button.add_theme_stylebox_override(
-		"hover",
-		_panel_style(Color(0.054, 0.072, 0.069, 0.98), Color("#d0ad63"))
-	)
+	button.add_theme_font_size_override("font_size", SHELTER_THEME.TYPE_CAPTION)
+	button.add_theme_color_override("font_color", SHELTER_THEME.TEXT)
+	button.add_theme_color_override("font_hover_color", SHELTER_THEME.TEXT)
+	button.add_theme_color_override("font_pressed_color", SHELTER_THEME.TEXT)
+	button.add_theme_color_override("font_focus_color", SHELTER_THEME.TEXT)
+	_apply_slot_styles(button)
 	button.pressed.connect(_deposit_item.bind(item_type, item_id))
 	return button
 
@@ -406,19 +385,17 @@ func _storage_slot_button(slot_index: int, entry: Dictionary, cell_size: int) ->
 	var button := Button.new()
 	button.name = "StorageSlot_%02d" % slot_index
 	button.custom_minimum_size = Vector2(cell_size, cell_size)
-	button.add_theme_font_override("font", FONT)
-	button.add_theme_font_size_override("font_size", 11)
-	button.add_theme_stylebox_override(
-		"normal",
-		_panel_style(Color(0.026, 0.036, 0.038, 0.98), Color("#354a46"), 1, 4)
-	)
-	button.add_theme_stylebox_override(
-		"hover",
-		_panel_style(Color(0.06, 0.071, 0.063, 0.98), Color("#d1af63"), 2, 4)
-	)
+	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_font_override("font", SHELTER_THEME.tabular())
+	button.add_theme_font_size_override("font_size", SHELTER_THEME.TYPE_CAPTION - 1)
+	button.add_theme_color_override("font_color", SHELTER_THEME.TEXT)
+	button.add_theme_color_override("font_hover_color", SHELTER_THEME.TEXT)
+	button.add_theme_color_override("font_pressed_color", SHELTER_THEME.TEXT)
+	button.add_theme_color_override("font_focus_color", SHELTER_THEME.TEXT)
+	_apply_slot_styles(button)
 	if entry.is_empty():
 		button.disabled = true
-		button.icon = UI_ICONS.get_icon("all", 24, Color(0.28, 0.34, 0.33, 0.42))
+		button.icon = UI_ICONS.get_icon("all", 24, Color(SHELTER_THEME.TEXT_FAINT, 0.35))
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		return button
 	var item_type := str(entry.get("type", ""))
@@ -428,10 +405,34 @@ func _storage_slot_button(slot_index: int, entry: Dictionary, cell_size: int) ->
 	button.expand_icon = true
 	button.add_theme_constant_override("icon_max_width", 40)
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	button.text = "×%d" % count
-	button.tooltip_text = "%s  ×%d\n꺼내기" % [_item_name(item_id), count]
+	button.text = "x%d" % count
+	button.tooltip_text = "%s x%d\n꺼내기" % [_item_name(item_id), count]
 	button.pressed.connect(_withdraw_slot.bind(slot_index))
 	return button
+
+
+func _apply_slot_styles(button: Button) -> void:
+	# 슬롯·소지품 버튼: SURFACE_RAISED 둥근 사각, 호버는 한 단계 밝게, 누르면 민트 테두리.
+	# 빈 슬롯(disabled)은 바탕만 옅게 남긴다.
+	button.add_theme_stylebox_override("normal", _slot_style(SHELTER_THEME.SURFACE_RAISED))
+	button.add_theme_stylebox_override("hover", _slot_style(SHELTER_THEME.SURFACE_HOVER))
+	button.add_theme_stylebox_override("pressed", _slot_style(SHELTER_THEME.SURFACE_HOVER, true))
+	button.add_theme_stylebox_override("focus", _slot_style(SHELTER_THEME.SURFACE_RAISED))
+	button.add_theme_stylebox_override("disabled", _slot_style(Color(SHELTER_THEME.SURFACE_RAISED, 0.45)))
+
+
+func _slot_style(background: Color, accent_border := false) -> StyleBoxFlat:
+	var style := SHELTER_THEME.flat(
+		background,
+		SLOT_RADIUS,
+		Color(SHELTER_THEME.ACCENT, 0.8) if accent_border else Color(0, 0, 0, 0),
+		2 if accent_border else 0
+	)
+	style.content_margin_left = 10
+	style.content_margin_right = 10
+	style.content_margin_top = 6
+	style.content_margin_bottom = 6
+	return style
 
 
 func _upgrade_card() -> Control:
@@ -440,93 +441,69 @@ func _upgrade_card() -> Control:
 		return _summary_card("확장", "최대 등급", "upgrade")
 	var scrap_cost := int(cost.get("scrap", 0))
 	var churu_cost := int(cost.get("churu", 0))
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(0, 58)
+	# 확장 카드: 왼쪽에 설명 + 비용 칩, 오른쪽에 주 버튼 하나.
+	var panel := SHELTER_THEME.card()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.add_theme_stylebox_override(
-		"panel",
-		_panel_style(Color(0.043, 0.039, 0.025, 0.96), Color("#806b38"))
-	)
-	var margin := _margin(8, 6)
-	panel.add_child(margin)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 7)
-	margin.add_child(row)
-	var button := Button.new()
+	row.add_theme_constant_override("separation", 12)
+	panel.add_child(row)
+	var column := VBoxContainer.new()
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	column.add_theme_constant_override("separation", 6)
+	row.add_child(column)
+	column.add_child(SHELTER_THEME.caption("확장 비용"))
+	var costs := HFlowContainer.new()
+	costs.add_theme_constant_override("h_separation", 6)
+	costs.add_theme_constant_override("v_separation", 6)
+	column.add_child(costs)
+	var scrap_chip := _currency_chip("scrap", GameState.format_compact_number(scrap_cost))
+	scrap_chip.name = "CostChip_scrap"
+	if GameState.scrap < scrap_cost:
+		(scrap_chip.get_meta("label") as Label).add_theme_color_override("font_color", SHELTER_THEME.DANGER)
+	costs.add_child(scrap_chip)
+	if churu_cost > 0:
+		var churu_chip := _currency_chip("churu", str(churu_cost))
+		churu_chip.name = "CostChip_churu"
+		if GameState.churu < churu_cost:
+			(churu_chip.get_meta("label") as Label).add_theme_color_override("font_color", SHELTER_THEME.DANGER)
+		costs.add_child(churu_chip)
+	var button := SHELTER_THEME.primary_button("Lv.%d 확장" % (GameState.storage_level + 1))
 	button.name = "StorageUpgradeButton"
-	button.custom_minimum_size = Vector2(116, 42)
-	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	button.text = "Lv.%d 확장" % (GameState.storage_level + 1)
-	button.icon = UI_ICONS.get_icon("upgrade", 30, Color("#e0c16d"))
-	button.expand_icon = true
-	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	button.add_theme_font_override("font", FONT)
-	button.add_theme_font_size_override("font_size", 13)
+	button.custom_minimum_size = Vector2(116, SHELTER_THEME.BUTTON_HEIGHT_SMALL + 4.0)
+	button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	button.disabled = GameState.scrap < scrap_cost or GameState.churu < churu_cost
-	button.add_theme_stylebox_override(
-		"normal",
-		_panel_style(Color(0.043, 0.039, 0.025, 0.96), Color("#806b38"))
-	)
-	button.add_theme_stylebox_override(
-		"hover",
-		_panel_style(Color(0.075, 0.063, 0.035, 0.98), Color("#d2b45d"), 2)
-	)
 	button.pressed.connect(_upgrade_storage)
 	row.add_child(button)
-	row.add_child(_fit_chip_text(SHELTER_UI.make_currency_chip(
-		"scrap",
-		GameState.format_compact_number(scrap_cost),
-		true
-	), "scrap"))
-	if churu_cost > 0:
-		row.add_child(_fit_chip_text(
-			SHELTER_UI.make_currency_chip("churu", str(churu_cost), true), "churu"
-		))
 	return panel
 
 
 func _summary_card(title: String, value: String, icon_name: String) -> Control:
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(0, 58)
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.add_theme_stylebox_override(
-		"panel",
-		_panel_style(Color(0.026, 0.037, 0.038, 0.94), Color("#405954"))
+	var card := SHELTER_THEME.stat_card(
+		title,
+		value,
+		UI_ICONS.get_icon(icon_name, 34, SHELTER_THEME.TEXT_DIM)
 	)
-	var margin := _margin(10, 7)
-	panel.add_child(margin)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	margin.add_child(row)
-	var icon := TextureRect.new()
-	icon.custom_minimum_size = Vector2(30, 30)
-	icon.texture = UI_ICONS.get_icon(icon_name, 34, Color("#b6cfc7"))
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	row.add_child(icon)
-	var labels := VBoxContainer.new()
-	labels.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	labels.add_theme_constant_override("separation", 1)
-	row.add_child(labels)
-	labels.add_child(_label(title, 10, Color("#849994")))
-	var value_label := _label(value, 14, Color("#e1e8e5"))
-	value_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	# ELLIPSIS 라벨은 최소 폭이 1px이라 못 박지 않으면 글자째 사라진다.
-	value_label.custom_minimum_size.x = 76.0
-	labels.add_child(value_label)
-	return panel
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var value_label := card.get_meta("value_label") as Label
+	if value_label != null:
+		value_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		# ELLIPSIS 라벨은 최소 폭이 1px이라 못 박지 않으면 글자째 사라진다.
+		value_label.custom_minimum_size.x = 76.0
+	return card
 
 
-func _section_title(text: String, color := Color("#d8e3df")) -> Label:
+func _section_title(text: String, color := SHELTER_THEME.TEXT) -> Label:
 	# 남는 폭은 제목이 가져간다 — 값 라벨은 제 글자 폭만 쓴다.
-	var label := _label(text, 16, color)
+	var label := SHELTER_THEME.label(text, SHELTER_THEME.TYPE_SECTION, color, true)
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	label.custom_minimum_size.x = 48.0
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return label
 
 
 func _section_value(text: String, min_width: float) -> Label:
-	var label := _label(text, 12, Color("#91a7a2"))
+	var label := SHELTER_THEME.number(text, SHELTER_THEME.TYPE_CAPTION + 1, SHELTER_THEME.TEXT_DIM)
 	label.custom_minimum_size.x = min_width
 	label.size_flags_horizontal = Control.SIZE_SHRINK_END
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -534,22 +511,23 @@ func _section_value(text: String, min_width: float) -> Label:
 	return label
 
 
-func _fit_chip_text(chip: PanelContainer, resource_id: String) -> PanelContainer:
-	# 자원 칩 이름 라벨은 ELLIPSIS라 최소 폭이 1px이다 — 옆의 수치 라벨이
-	# EXPAND_FILL로 남는 폭을 다 먹으면 이름이 통째로 사라진다(실측 폭 1px).
-	for label_name in ["ResourceName_%s" % resource_id, "ResourceValue_%s" % resource_id]:
-		var label := chip.find_child(label_name, true, false) as Label
-		if label == null:
-			continue
-		var font := label.get_theme_font("font")
-		if font == null:
-			continue
-		label.custom_minimum_size.x = ceilf(font.get_string_size(
-			label.text,
-			HORIZONTAL_ALIGNMENT_LEFT,
-			-1,
-			label.get_theme_font_size("font_size")
-		).x) + 2.0
+func _currency_chip(currency_id: String, value_text: String) -> PanelContainer:
+	# 재화 표기 규칙(유저 확정): 아이콘이 이름이다. 칩엔 아이콘 + "xN"만 적고
+	# 이름은 툴팁이 말한다. 노드 이름(ResourceChip_/ResourceIcon_/ResourceValue_)은
+	# 프로브가 찾는 규약이라 그대로 둔다.
+	var chip := SHELTER_THEME.chip(
+		"x%s" % value_text,
+		UI_ICONS.get_icon(currency_id, 42, SHELTER_UI.get_currency_color(currency_id))
+	)
+	chip.name = "ResourceChip_%s" % currency_id
+	chip.mouse_filter = Control.MOUSE_FILTER_PASS
+	chip.tooltip_text = "%s x%s" % [str(SHELTER_UI.CURRENCY_NAMES.get(currency_id, currency_id)), value_text]
+	var row := chip.get_child(0)
+	if row != null and row.get_child_count() > 0 and row.get_child(0) is TextureRect:
+		(row.get_child(0) as TextureRect).name = "ResourceIcon_%s" % currency_id
+	var value_label := chip.get_meta("label") as Label
+	if value_label != null:
+		value_label.name = "ResourceValue_%s" % currency_id
 	return chip
 
 
@@ -645,7 +623,7 @@ func _set_feedback(message: String, success: bool) -> void:
 	feedback_label.text = message
 	feedback_label.add_theme_color_override(
 		"font_color",
-		Color("#9de0b1") if success else Color("#f09a8a")
+		SHELTER_THEME.ACCENT if success else SHELTER_THEME.DANGER
 	)
 
 
@@ -693,7 +671,7 @@ func _item_texture(item_type: String, item_id: String, size: int) -> Texture2D:
 			icon_name = "weapon"
 		"progression":
 			icon_name = "secure" if item_id == "sealed_zone_keycard" else "craft"
-	return UI_ICONS.get_icon(icon_name, size, Color("#d7c27d"))
+	return UI_ICONS.get_icon(icon_name, size, SHELTER_THEME.GOLD)
 
 
 var sell_valuables_armed_msec := 0
@@ -717,61 +695,14 @@ func _sell_valuables() -> void:
 		_rebuild_ui()
 
 
-func _icon_button(icon_name: String, tooltip: String, color: Color) -> Button:
-	var button := Button.new()
-	button.custom_minimum_size = Vector2(42, 42)
-	button.icon = UI_ICONS.get_icon(icon_name, 24, color)
-	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	button.expand_icon = true
-	button.tooltip_text = tooltip
-	button.focus_mode = Control.FOCUS_NONE
-	button.add_theme_stylebox_override(
-		"normal",
-		_panel_style(Color(0.025, 0.034, 0.035, 0.96), Color("#50645f"))
-	)
-	button.add_theme_stylebox_override(
-		"hover",
-		_panel_style(Color(0.06, 0.075, 0.073, 0.98), Color("#b8d1c9"))
-	)
-	return button
-
-
 func _close_ui() -> void:
 	if is_instance_valid(ui_layer):
 		ui_layer.queue_free()
 
 
 func _label(text: String, size: int, color: Color) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.add_theme_font_override("font", FONT)
-	label.add_theme_font_size_override("font_size", size)
-	label.add_theme_color_override("font_color", color)
+	# 한 줄 라벨(줄바꿈 없음, 넘치면 말줄임) — 목록·피드백처럼 높이가 고정된 자리용.
+	var label := SHELTER_THEME.label(text, size, color)
 	label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	return label
-
-
-func _margin(horizontal: int, vertical: int) -> MarginContainer:
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", horizontal)
-	margin.add_theme_constant_override("margin_top", vertical)
-	margin.add_theme_constant_override("margin_right", horizontal)
-	margin.add_theme_constant_override("margin_bottom", vertical)
-	return margin
-
-
-func _panel_style(
-	background: Color,
-	border: Color,
-	border_width: int = 1,
-	corner_radius: int = 6
-) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
-	style.border_color = border
-	style.set_border_width_all(border_width)
-	style.set_corner_radius_all(corner_radius)
-	style.content_margin_left = 8
-	style.content_margin_right = 8
-	return style
