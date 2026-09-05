@@ -81,9 +81,19 @@ func _run() -> void:
 	var accessibility := root.get_node("AccessibilitySettings")
 	var sliders := accessibility.find_children("", "HSlider", true, false)
 	_assert(sliders.size() >= 10, "설정 UI에 볼륨 슬라이더 3개가 추가돼 HSlider가 10개 이상이어야 합니다: %d" % sliders.size())
-	var master_slider := sliders[7] as HSlider
-	var sfx_slider := sliders[8] as HSlider
-	var ui_slider := sliders[9] as HSlider
+	# 인덱스로 집으면 설정에 슬라이더가 하나 늘 때마다 조용히 어긋난다(실제로
+	# "피격 화면 효과"가 늘면서 7/8/9가 밀렸다). 0~100 범위인 마지막 셋이 음량이다.
+	var volume_sliders: Array[HSlider] = []
+	for slider_node in sliders:
+		var slider := slider_node as HSlider
+		if slider != null and is_equal_approx(slider.max_value, 100.0):
+			volume_sliders.append(slider)
+	_assert(volume_sliders.size() >= 3, "0~100 음량 슬라이더 3개를 찾아야 합니다: %d" % volume_sliders.size())
+	if volume_sliders.size() < 3:
+		return
+	var master_slider := volume_sliders[volume_sliders.size() - 3]
+	var sfx_slider := volume_sliders[volume_sliders.size() - 2]
+	var ui_slider := volume_sliders[volume_sliders.size() - 1]
 	_assert(master_slider.max_value == 100.0 and sfx_slider.max_value == 100.0 and ui_slider.max_value == 100.0, "볼륨 슬라이더 범위는 0~100이어야 합니다.")
 	master_slider.value = 50.0
 	sfx_slider.value = 25.0
@@ -166,7 +176,7 @@ func _run() -> void:
 		weapon_combat.call("_fire_ak47")
 		_assert(SFX.get_play_count("rifle_shot") == shot_before + 1, "연사 %d발째 총성이 재생돼야 합니다." % shot_index)
 		for child in bank.get_children():
-			if child is AudioStreamPlayer and child.playing and child.stream == SFX.get_stream("rifle_shot"):
+			if child is AudioStreamPlayer and child.playing and _is_stream_of(child.stream, "rifle_shot"):
 				if not pitches.has(child.pitch_scale):
 					pitches.append(child.pitch_scale)
 	var pool_2d := 0
@@ -215,7 +225,7 @@ func _run() -> void:
 	_assert(SFX.get_play_count("hit_enemy") == hit_before + 1, "적 피격 시 명중음이 1회 재생돼야 합니다.")
 	var positional_found := false
 	for child in bank.get_children():
-		if child is AudioStreamPlayer3D and child.playing and child.stream == SFX.get_stream("hit_enemy"):
+		if child is AudioStreamPlayer3D and child.playing and _is_stream_of(child.stream, "hit_enemy"):
 			positional_found = child.global_position.distance_to(hit_enemy.global_position) < 0.01 and child.max_distance > 10.0
 	_assert(positional_found, "명중음은 적 위치의 3D 플레이어로 울려야 합니다.")
 	var alert_enemy := enemies[1] as CharacterBody3D
@@ -239,7 +249,7 @@ func _run() -> void:
 	_assert(SFX.get_play_count(enemy_shot_id) == enemy_shot_before + 1, "적 총성(%s)이 1회 재생돼야 합니다." % enemy_shot_id)
 	var enemy_shot_positional := false
 	for child in bank.get_children():
-		if child is AudioStreamPlayer3D and child.playing and child.stream == SFX.get_stream(enemy_shot_id):
+		if child is AudioStreamPlayer3D and child.playing and _is_stream_of(child.stream, enemy_shot_id):
 			enemy_shot_positional = child.volume_db < float(SFX.SOUNDS[enemy_shot_id]["volume_db"]) - 3.0
 	_assert(enemy_shot_positional, "적 총성은 3D 플레이어에 플레이어 총성보다 낮은 볼륨으로 울려야 합니다.")
 	# 플레이어 피격 — 출정 인트로 시네마틱이 떠 있으면 take_damage가 무시되므로 먼저 스킵한다.
@@ -380,6 +390,15 @@ func _run() -> void:
 
 	print("SFX_BANK_SMOKE_OK")
 	quit(0)
+
+
+func _is_stream_of(stream: AudioStream, id: String) -> bool:
+	# 총성·장전은 녹음 샘플(여러 변주), 나머지는 합성 스트림이 재생된다.
+	var variants: Array = SFX.SAMPLES.get(id, [])
+	for variant in variants:
+		if stream == variant:
+			return true
+	return stream == SFX.get_stream(id)
 
 
 func _analyze(stream: AudioStreamWAV) -> Dictionary:

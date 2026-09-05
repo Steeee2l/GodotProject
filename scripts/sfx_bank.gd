@@ -17,6 +17,21 @@
 # 재사용), 같은 프레임 중복 억제, 종류별 최소 간격(실시간 ms — 500fps 환경이라
 # 프레임 수 기반 계산은 쓰지 않는다).
 
+# 실제 녹음 샘플(2026-09-05). 있으면 코드 합성보다 우선해서 쓴다 — 합성은
+# 샘플이 없는 소리(명중·근접·UI…)와 폴백으로 그대로 남는다.
+# 연사 총성은 3종을 무작위로 돌린다: 같은 파형이 초당 열세 번 겹치면 기계음이
+# 되지만, 세 종류를 섞으면 총구가 살아 있는 것처럼 들린다.
+const SAMPLES := {
+	"pistol_shot": [preload("res://assets/audio/weapons/pistol_shot.wav")],
+	"rifle_shot": [
+		preload("res://assets/audio/weapons/mg_shot_a.wav"),
+		preload("res://assets/audio/weapons/mg_shot_b.wav"),
+		preload("res://assets/audio/weapons/mg_shot_c.wav"),
+	],
+	"reload_start": [preload("res://assets/audio/weapons/reload_start.wav")],
+	"reload_end": [preload("res://assets/audio/weapons/reload_end.wav")],
+}
+
 const MIX_RATE := 22050
 const PLAYER_POOL_SIZE := 12
 const PLAYER_3D_POOL_SIZE := 12
@@ -28,8 +43,8 @@ const TARGET_PEAK := 0.9
 # 종류별 정의: 버스 / 기본 볼륨 / 피치 지터 / 최소 재생 간격(ms) / 3D 감쇠.
 const SOUNDS := {
 	# ── 총성 3구경 ──
-	"pistol_shot": {"bus": "SFX", "volume_db": -5.0, "pitch_jitter": 0.08, "min_interval_ms": 0, "unit_size": 8.0, "max_distance": 60.0},
-	"rifle_shot": {"bus": "SFX", "volume_db": -3.0, "pitch_jitter": 0.08, "min_interval_ms": 0, "unit_size": 9.0, "max_distance": 70.0},
+	"pistol_shot": {"bus": "SFX", "volume_db": -9.0, "pitch_jitter": 0.08, "min_interval_ms": 0, "unit_size": 8.0, "max_distance": 60.0},
+	"rifle_shot": {"bus": "SFX", "volume_db": -10.5, "pitch_jitter": 0.08, "min_interval_ms": 0, "unit_size": 9.0, "max_distance": 70.0},
 	"shotgun_shot": {"bus": "SFX", "volume_db": -1.5, "pitch_jitter": 0.06, "min_interval_ms": 0, "unit_size": 10.0, "max_distance": 80.0},
 	# ── 명중 ──
 	"hit_enemy": {"bus": "SFX", "volume_db": -8.0, "pitch_jitter": 0.08, "min_interval_ms": 0, "unit_size": 7.0, "max_distance": 40.0},
@@ -41,8 +56,8 @@ const SOUNDS := {
 	"alert_sting": {"bus": "SFX", "volume_db": -8.0, "pitch_jitter": 0.03, "min_interval_ms": 250, "unit_size": 8.0, "max_distance": 60.0},
 	"reinforce_alarm": {"bus": "SFX", "volume_db": -6.0, "pitch_jitter": 0.0, "min_interval_ms": 400, "unit_size": 8.0, "max_distance": 60.0},
 	# ── 탄약·장전 ──
-	"reload_start": {"bus": "SFX", "volume_db": -9.0, "pitch_jitter": 0.06, "min_interval_ms": 80, "unit_size": 6.0, "max_distance": 30.0},
-	"reload_end": {"bus": "SFX", "volume_db": -8.0, "pitch_jitter": 0.06, "min_interval_ms": 80, "unit_size": 6.0, "max_distance": 30.0},
+	"reload_start": {"bus": "SFX", "volume_db": -12.0, "pitch_jitter": 0.06, "min_interval_ms": 80, "unit_size": 6.0, "max_distance": 30.0},
+	"reload_end": {"bus": "SFX", "volume_db": -11.0, "pitch_jitter": 0.06, "min_interval_ms": 80, "unit_size": 6.0, "max_distance": 30.0},
 	"dry_fire": {"bus": "SFX", "volume_db": -9.0, "pitch_jitter": 0.06, "min_interval_ms": 140, "unit_size": 6.0, "max_distance": 30.0},
 	# ── 루팅·UI ──
 	"pickup": {"bus": "SFX", "volume_db": -10.0, "pitch_jitter": 0.08, "min_interval_ms": 60, "unit_size": 6.0, "max_distance": 30.0},
@@ -95,7 +110,7 @@ static func play(id: String, world_position: Vector3 = Vector3.INF, volume_offse
 	if min_interval > 0 and now_msec - int(last_play_msec.get(id, -100000)) < min_interval:
 		return false
 	_ensure_bank(tree)
-	var stream := get_stream(id)
+	var stream := pick_stream(id)
 	if stream == null:
 		return false
 	var jitter := float(definition.get("pitch_jitter", 0.0))
@@ -143,9 +158,13 @@ static func play_weapon_shot(weapon_id: String, world_position: Vector3 = Vector
 
 static func shot_sound_for_weapon(weapon_id: String) -> String:
 	match weapon_id:
-		"m1911", "mp5":
-			# 권총탄(.45 / 9mm) — 짧고 높고 탁한 소리. MP5는 피치만 살짝 올린다.
+		"m1911":
+			# .45 권총 — 한 발씩 끊어 치는 짧은 소리.
 			return "pistol_shot"
+		"mp5":
+			# 9mm 기관단총 — 권총 소리로는 연사가 안 들린다. 연사 총성을 피치만
+			# 올려 쓴다(구경이 작으니 더 날카롭게).
+			return "rifle_shot"
 		"double_barrel", "pump_shotgun", "rocket_launcher":
 			# 산탄 — 넓게 퍼지는 저음 + 긴 꼬리. 로켓 발사는 같은 소리를 낮춰 쓴다.
 			return "shotgun_shot"
@@ -156,7 +175,7 @@ static func shot_sound_for_weapon(weapon_id: String) -> String:
 
 static func shot_pitch_for_weapon(weapon_id: String) -> float:
 	match weapon_id:
-		"mp5": return 1.1
+		"mp5": return 1.22
 		"rocket_launcher": return 0.72
 		_: return 1.0
 
@@ -180,6 +199,8 @@ static func sound_ids() -> Array:
 static func warm_up() -> void:
 	# 씬 시작 시 전부 미리 생성 — 첫 총성에서 합성 루프가 프레임을 잡지 않게.
 	for id in SOUNDS:
+		if SAMPLES.has(id):
+			continue
 		get_stream(str(id))
 
 
@@ -285,6 +306,16 @@ static func _invalidate_bank() -> void:
 
 
 # ── 합성 ───────────────────────────────────────────────────────
+
+
+static func pick_stream(id: String) -> AudioStream:
+	# 녹음 샘플이 있으면 그중 하나(여럿이면 무작위), 없으면 합성 스트림.
+	var variants: Array = SAMPLES.get(id, [])
+	if not variants.is_empty():
+		if variants.size() == 1:
+			return variants[0]
+		return variants[random.randi_range(0, variants.size() - 1)]
+	return get_stream(id)
 
 
 static func get_stream(id: String) -> AudioStreamWAV:
