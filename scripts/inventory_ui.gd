@@ -12,6 +12,10 @@ signal item_discard_requested(item_type: String, item_id: String, amount: int)
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
+# 가방 UI 디자인 언어 = 쉘터·이름 짓기 화면과 같은 ShelterTheme/HudStyle(2026-09-05 유저:
+# "이름 짓기 화면 디자인 언어를 가방·인게임 UI 전부에 전면 적용"). 금색 보더·글로우 없음,
+# 거의 검정 모달 + 무광 카드 + 민트 강조 하나.
+const SHELTER_THEME := preload("res://scripts/hud/shelter_theme.gd")
 
 const SLOT_ORDER := ["sight", "muzzle", "stock", "magazine", "tactical", "special"]
 const MOD_COMPONENTS := {
@@ -83,6 +87,7 @@ var item_action_button: Button
 var item_discard_button: Button
 var item_detail_reason: Label
 var bag_empty_hint: Label
+var bag_count_chip: PanelContainer
 
 var has_weapon_state := false
 var magazine_state := 0
@@ -204,7 +209,7 @@ func _build_open_button() -> void:
 	open_button = Button.new()
 	open_button.name = "InventoryButton"
 	open_button.text = "가방"
-	open_button.icon = UI_ICONS.get_icon("backpack", 40, Color("#dce9e1"))
+	open_button.icon = UI_ICONS.get_icon("backpack", 40, HudStyle.TEXT)
 	open_button.expand_icon = true
 	open_button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	open_button.tooltip_text = "가방 열기  [E]"
@@ -217,13 +222,14 @@ func _build_open_button() -> void:
 	open_button.offset_top = 0
 	open_button.offset_right = 1
 	open_button.offset_bottom = 0
-	_apply_button_font(open_button, 14)
 	if DisplayServer.is_touchscreen_available():
 		# 모바일은 필드 액션 버튼과 같은 원형 문법 — 사각 상자는 '깨진 옵션 버튼'처럼 읽혔다.
-		HudStyle.style_mobile_action(open_button, Color("#8ab7a0"), 26)
+		HudStyle.style_mobile_action(open_button, HudStyle.ACCENT, 26)
 	else:
-		open_button.add_theme_stylebox_override("normal", _panel_style(Color(0.02, 0.027, 0.025, 0.94), Color("#8ab7a0"), 6))
-		open_button.add_theme_stylebox_override("hover", _panel_style(Color(0.06, 0.075, 0.068, 0.98), Color("#d9c579"), 6))
+		# 데스크톱은 표면색 카드 버튼(아이콘 + 굵은 라벨) — 쉘터 독 버튼과 같은 언어.
+		HudStyle.style_button(open_button)
+		open_button.add_theme_constant_override("icon_max_width", 24)
+		open_button.add_theme_constant_override("h_separation", 8)
 	open_button.pressed.connect(func() -> void:
 		if not _suppress_open_button_signal:
 			toggle()
@@ -243,7 +249,7 @@ func _build_modal() -> void:
 	var dim := ColorRect.new()
 	dim.name = "ModalDim"
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dim.color = Color(0.006, 0.009, 0.012, 0.82)
+	dim.color = SHELTER_THEME.BG_DIM
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	modal.add_child(dim)
 	ModalDismiss.install(modal, dim, func() -> void:
@@ -282,7 +288,7 @@ func _build_inventory_panel() -> Control:
 	panel.name = "CompactInventoryPanel"
 	panel.custom_minimum_size = Vector2(320, 260)
 	panel.clip_contents = true
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.035, 0.043, 0.049, 0.98), Color(0.66, 0.78, 0.73, 0.7), 8))
+	panel.add_theme_stylebox_override("panel", _modal_style())
 	var margin := _margin(16, 14, 16, 14)
 	panel.add_child(margin)
 	var panel_scroll := HudStyle.make_scroll()
@@ -293,21 +299,36 @@ func _build_inventory_panel() -> Control:
 	margin.add_child(panel_scroll)
 	var box := VBoxContainer.new()
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_theme_constant_override("separation", 6)
+	box.add_theme_constant_override("separation", 8)
 	panel_scroll.add_child(box)
 
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 10)
-	box.add_child(header)
+	# 헤더 — [민트 이름표 / 굵은 제목 / 회색 설명 + 알약 칩] ······ [둥근 닫기]
 	# 화면 문구는 "가방"으로 통일한다 — HUD·툴팁이 이미 가방으로 부르고 있었다.
-	var title := _label("가방", 23, Color("#f0e8d0"))
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(title)
-	# 타이틀 뒤 은은한 골드 글로우 + 7~9초에 한 번 60ms 색수차(단말기 질감). 레이아웃 무변경.
-	HudFx.attach_text_glow(title, HudFx.GOLD)
+	var header := HBoxContainer.new()
+	header.name = "InventoryHeader"
+	header.add_theme_constant_override("separation", 12)
+	box.add_child(header)
+	var header_column := VBoxContainer.new()
+	header_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_column.add_theme_constant_override("separation", 3)
+	header.add_child(header_column)
+	header_column.add_child(_label("가방", HudStyle.TYPE_CAPTION, HudStyle.ACCENT))
+	var title := _label("들고 있는 것", HudStyle.TYPE_TITLE, HudStyle.TEXT, true)
+	header_column.add_child(title)
+	# 7~9초에 한 번 60ms 색수차(단말기 질감). 글로우는 새 언어에 없다 — 레이아웃 무변경.
 	HudFx.attach_title_aberration(title)
-	var close_button := _icon_text_button("닫기", "가방 닫기 [Esc]", "close")
-	close_button.custom_minimum_size = Vector2(62, 34)
+	var header_meta := HBoxContainer.new()
+	header_meta.add_theme_constant_override("separation", 8)
+	header_column.add_child(header_meta)
+	var subtitle := _label("아이템을 누르면 아래에서 살펴보고 장착한다.", HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
+	subtitle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_meta.add_child(subtitle)
+	bag_count_chip = _chip("0종")
+	bag_count_chip.name = "BagCountChip"
+	header_meta.add_child(bag_count_chip)
+	var close_button := HudStyle.close_button(UI_ICONS.get_icon("close", 20, HudStyle.TEXT))
+	close_button.tooltip_text = "가방 닫기 [Esc]"
+	close_button.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	close_button.pressed.connect(func() -> void: set_open(false))
 	header.add_child(close_button)
 
@@ -327,7 +348,8 @@ func _build_inventory_panel() -> Control:
 	bag_header.name = "BagHeader"
 	bag_header.add_theme_constant_override("separation", 8)
 	box.add_child(bag_header)
-	var bag_title := _section("가방")
+	# 헤더 이름표가 이미 "가방"이라 섹션은 "보관 중"으로 — 같은 말이 두 번 서지 않게.
+	var bag_title := _section("보관 중")
 	bag_title.custom_minimum_size.x = 44
 	bag_header.add_child(bag_title)
 	# 용량 표시는 통째로 없앴다(2026-08-30 유저: "무제한 같은 표시는 없어도 될 듯").
@@ -339,9 +361,8 @@ func _build_inventory_panel() -> Control:
 	# 필터 바는 폐지됐다(유저: "하나도 이해를 못 하겠다"). 가방은 12칸짜리라
 	# 전부 한눈에 들어오고, 필터가 오히려 "왜 안 보이지"를 만들었다.
 
-	inventory_feedback = _label("", 11, Color("#f2d27a"))
+	inventory_feedback = _label("", HudStyle.TYPE_CAPTION, HudStyle.ACCENT)
 	inventory_feedback.visible = false
-	inventory_feedback.add_theme_font_size_override("font_size", 11)
 	inventory_feedback.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	box.add_child(inventory_feedback)
 
@@ -362,9 +383,7 @@ func _build_inventory_panel() -> Control:
 	bag_grid.add_theme_constant_override("v_separation", 6)
 	bag_scroll.add_child(bag_grid)
 
-	bag_empty_hint = _label("가방에 보관 중인 아이템이 없습니다.", 11, Color("#8ca5a0"))
-	bag_empty_hint.add_theme_font_size_override("font_size", 12)
-	bag_empty_hint.add_theme_color_override("font_color", Color("#8eb0a5"))
+	bag_empty_hint = _label("가방에 보관 중인 아이템이 없습니다.", HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
 	bag_empty_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	bag_empty_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bag_empty_hint.visible = false
@@ -378,11 +397,11 @@ func _build_item_detail_panel() -> Control:
 	panel.name = "SelectedItemDetail"
 	panel.custom_minimum_size = Vector2(0, 132)
 	panel.clip_contents = false
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.018, 0.025, 0.029, 0.96), Color(0.43, 0.58, 0.52, 0.58), 7))
-	var margin := _margin(10, 8, 10, 8)
+	panel.add_theme_stylebox_override("panel", _card_style())
+	var margin := _margin(12, 10, 12, 10)
 	panel.add_child(margin)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
+	row.add_theme_constant_override("separation", 12)
 	margin.add_child(row)
 
 	item_detail_icon = TextureRect.new()
@@ -397,11 +416,11 @@ func _build_item_detail_panel() -> Control:
 	text_box.clip_contents = false
 	text_box.add_theme_constant_override("separation", 4)
 	row.add_child(text_box)
-	item_detail_title = _label("가방", 14, Color("#e8e0c7"))
+	item_detail_title = _label("가방", HudStyle.TYPE_HEADING, HudStyle.TEXT, true)
 	item_detail_title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	item_detail_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(item_detail_title)
-	item_detail_description = _label("가방 슬롯에는 아이콘과 수량만 표시됩니다.", 11, Color("#9aaba4"))
+	item_detail_description = _label("가방 슬롯에는 아이콘과 수량만 표시됩니다.", HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
 	item_detail_description.custom_minimum_size = Vector2(0, 64)
 	item_detail_description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	item_detail_description.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -409,7 +428,7 @@ func _build_item_detail_panel() -> Control:
 	item_detail_description.max_lines_visible = 6
 	item_detail_description.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(item_detail_description)
-	item_detail_reason = _label("", 10, Color("#ffc77f"))
+	item_detail_reason = _label("", HudStyle.TYPE_FOOTNOTE, HudStyle.WARN)
 	item_detail_reason.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	item_detail_reason.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	item_detail_reason.max_lines_visible = 2
@@ -418,17 +437,21 @@ func _build_item_detail_panel() -> Control:
 	text_box.add_child(item_detail_reason)
 	var action_box := VBoxContainer.new()
 	action_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	action_box.add_theme_constant_override("separation", 5)
+	action_box.add_theme_constant_override("separation", 6)
 	row.add_child(action_box)
-	item_action_button = _icon_text_button("", "", "all")
-	item_action_button.custom_minimum_size = Vector2(86, 36)
+	# 주 행동(장착/해제/교체) = 민트 주 버튼, 버리기 = 표면색 보조 버튼. 아이콘 없이 글자만.
+	item_action_button = Button.new()
+	item_action_button.name = "ItemActionButton"
+	HudStyle.style_button(item_action_button, HudStyle.ACCENT, true)
+	item_action_button.custom_minimum_size = Vector2(92, 40)
 	item_action_button.visible = false
 	item_action_button.pressed.connect(_on_selected_item_action)
 	action_box.add_child(item_action_button)
-	item_discard_button = _icon_text_button("버리기", "close", "all")
-	item_discard_button.custom_minimum_size = Vector2(86, 36)
-	item_discard_button.add_theme_color_override("font_color", Color("#f0b09a"))
-	item_discard_button.add_theme_color_override("icon_normal_color", Color("#f0b09a"))
+	item_discard_button = Button.new()
+	item_discard_button.name = "ItemDiscardButton"
+	item_discard_button.text = "버리기"
+	HudStyle.style_button(item_discard_button)
+	item_discard_button.custom_minimum_size = Vector2(92, 40)
 	item_discard_button.visible = false
 	item_discard_button.pressed.connect(_on_selected_item_discard)
 	action_box.add_child(item_discard_button)
@@ -440,7 +463,7 @@ func _build_weapon_panel() -> Control:
 	panel.name = "WeaponDetailPanel"
 	panel.custom_minimum_size = Vector2(320, 260)
 	panel.clip_contents = true
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.028, 0.035, 0.04, 0.98), Color(0.69, 0.62, 0.4, 0.68), 8))
+	panel.add_theme_stylebox_override("panel", _modal_style())
 	var margin := _margin(18, 14, 18, 16)
 	panel.add_child(margin)
 	var panel_scroll := HudStyle.make_scroll()
@@ -455,23 +478,29 @@ func _build_weapon_panel() -> Control:
 	panel_scroll.add_child(box)
 
 	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 10)
 	box.add_child(header)
-	weapon_title = _label("총기 상세", 22, Color("#f0e8cf"))
-	weapon_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(weapon_title)
-	HudFx.attach_text_glow(weapon_title, HudFx.GOLD)
-	weapon_state_action_button = _icon_text_button("장착 해제", "현재 무기를 가방으로 내립니다.", "close")
-	weapon_state_action_button.custom_minimum_size = Vector2(94, 34)
+	var header_column := VBoxContainer.new()
+	header_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_column.add_theme_constant_override("separation", 3)
+	header.add_child(header_column)
+	header_column.add_child(_label("주무기", HudStyle.TYPE_CAPTION, HudStyle.ACCENT))
+	weapon_title = _label("총기 상세", 20, HudStyle.TEXT, true)
+	header_column.add_child(weapon_title)
+	weapon_state_action_button = _icon_text_button("장착 해제", "현재 무기를 가방으로 내립니다.")
+	weapon_state_action_button.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	weapon_state_action_button.custom_minimum_size = Vector2(0, 40)
 	weapon_state_action_button.pressed.connect(_request_weapon_unequip)
 	header.add_child(weapon_state_action_button)
-	var detail_close := _icon_text_button("접기", "총기 상세 접기", "close")
-	detail_close.custom_minimum_size = Vector2(62, 34)
+	var detail_close := HudStyle.close_button(UI_ICONS.get_icon("close", 20, HudStyle.TEXT))
+	detail_close.tooltip_text = "총기 상세 접기"
+	detail_close.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	detail_close.pressed.connect(_hide_weapon_detail)
 	header.add_child(detail_close)
 
 	var preview_panel := PanelContainer.new()
 	preview_panel.custom_minimum_size = Vector2(0, 112)
-	preview_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.014, 0.019, 0.022, 0.9), Color(0.5, 0.55, 0.52, 0.35), 7))
+	preview_panel.add_theme_stylebox_override("panel", _card_style())
 	box.add_child(preview_panel)
 	var preview_margin := _margin(12, 10, 12, 10)
 	preview_panel.add_child(preview_margin)
@@ -484,7 +513,8 @@ func _build_weapon_panel() -> Control:
 	weapon_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	weapon_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	preview.add_child(weapon_preview)
-	weapon_stats = _label("", 12, Color("#d4ddd6"))
+	weapon_stats = _label("", HudStyle.TYPE_CAPTION, HudStyle.TEXT)
+	weapon_stats.add_theme_font_override("font", HudStyle.tabular())
 	weapon_stats.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	weapon_stats.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	preview.add_child(weapon_stats)
@@ -492,9 +522,10 @@ func _build_weapon_panel() -> Control:
 	box.add_child(_section("부착 슬롯"))
 	var help := _label(
 		"완성 부착물만 가방에서 장착할 수 있습니다. 제작 재료는 쉘터 작업대에서 완성품 제작에 사용합니다.",
-		11,
-		Color("#8fa59b")
+		HudStyle.TYPE_FOOTNOTE,
+		HudStyle.TEXT_DIM
 	)
+	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(help)
 	mod_slot_grid = GridContainer.new()
 	mod_slot_grid.name = "AttachmentSlots"
@@ -503,7 +534,7 @@ func _build_weapon_panel() -> Control:
 	mod_slot_grid.add_theme_constant_override("v_separation", 10)
 	box.add_child(mod_slot_grid)
 
-	var footer := _label("변경된 부품과 방어 수치는 즉시 전투 능력에 반영됩니다.", 11, Color("#c9b96e"))
+	var footer := _label("변경된 부품과 방어 수치는 즉시 전투 능력에 반영됩니다.", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_FAINT)
 	footer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	footer.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	box.add_child(footer)
@@ -555,7 +586,7 @@ func _build_bag_filter_bar() -> Control:
 		var count_label := Label.new()
 		count_label.name = "BagFilterCount_%s" % filter_id
 		count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		count_label.add_theme_font_override("font", font_ref)
+		count_label.add_theme_font_override("font", HudStyle.bold_tabular())
 		count_label.add_theme_font_size_override("font_size", 9)
 		count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -744,22 +775,10 @@ func _animate_bag_filter_count_update(button: Button, filter_id: String, _old_co
 
 
 func _refresh_bag_filter_button_style(button: Button, filter_id: Variant) -> void:
+	# 탭은 알약 — 활성은 민트 채움/어두운 글자, 비활성은 표면색. 필터별 색은 없다.
 	var current_filter := str(filter_id)
 	var is_active := str(current_filter) == bag_filter
-	var base_color := _bag_filter_base_color(current_filter)
-	var active_color := _bag_filter_active_color(current_filter)
-	if is_active:
-		button.add_theme_stylebox_override("normal", _panel_style(_lighten_color(active_color, 0.04), Color("#f5e3ae"), 6, 2))
-		button.add_theme_stylebox_override("hover", _panel_style(_lighten_color(active_color, 0.1), Color("#ffefbf"), 6, 2))
-		button.add_theme_stylebox_override("pressed", _panel_style(_darken_color(active_color, 0.1), Color("#e4c96f"), 6, 2))
-		button.add_theme_stylebox_override("focus", _panel_style(_lighten_color(active_color, 0.08), Color("#ffe6a8"), 6, 2))
-		button.add_theme_color_override("font_color", Color("#21170d"))
-	else:
-		button.add_theme_stylebox_override("normal", _panel_style(base_color, Color("#7e8e88"), 6, 2))
-		button.add_theme_stylebox_override("hover", _panel_style(_lighten_color(base_color, 0.08), Color("#c4bea4"), 6, 2))
-		button.add_theme_stylebox_override("pressed", _panel_style(_darken_color(base_color, 0.08), Color("#8a9586"), 6, 2))
-		button.add_theme_stylebox_override("focus", _panel_style(_lighten_color(base_color, 0.05), Color("#b1bcae"), 6, 2))
-		button.add_theme_color_override("font_color", Color("#dde7e1"))
+	HudStyle.style_pill(button, is_active)
 	_refresh_bag_filter_count_badge_style(current_filter, is_active)
 
 
@@ -768,28 +787,17 @@ func _refresh_bag_filter_count_badge_style(filter_id: String, is_active: bool) -
 	var count_label: Variant = bag_filter_count_labels.get(filter_id, null)
 	if not (badge is PanelContainer):
 		return
-	var filter_color := _bag_filter_active_color(filter_id) if is_active else _bag_filter_base_color(filter_id)
-	var bg_color := _lighten_color(filter_color, 0.35) if is_active else _darken_color(filter_color, 0.02)
-	var border_color := Color(1, 1, 1, 0.95) if is_active else Color(1, 1, 1, 0.35)
-	var border_width := 2 if is_active else 1
-	var badge_style := StyleBoxFlat.new()
-	badge_style.bg_color = bg_color
-	badge_style.border_color = border_color
-	badge_style.set_border_width_all(border_width)
-	badge_style.set_corner_radius_all(999)
+	# 수량 배지 — 작은 알약. 테두리 선 없이 표면 단차로만 구분한다.
+	var badge_style := HudStyle.flat(HudStyle.ACCENT_INK if is_active else HudStyle.SURFACE_HOVER, 999)
 	badge_style.content_margin_left = 3
 	badge_style.content_margin_right = 3
 	badge_style.content_margin_top = 1
 	badge_style.content_margin_bottom = 1
 	badge.add_theme_stylebox_override("panel", badge_style)
 	if count_label is Label:
-		count_label.add_theme_color_override("font_color", Color("#ffffff" if is_active else "#f0f4ff"))
-		count_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.52) if is_active else Color(0, 0, 0, 0.24))
-		count_label.add_theme_constant_override("outline_size", 2 if is_active else 1)
-		if is_active:
-			count_label.modulate = Color(1.0, 1.0, 1.0, 1.0)
-		else:
-			count_label.modulate = Color(0.88, 0.94, 1.0, 0.95)
+		count_label.add_theme_font_override("font", HudStyle.bold_tabular())
+		count_label.add_theme_color_override("font_color", HudStyle.ACCENT if is_active else HudStyle.TEXT)
+		count_label.modulate = Color(1.0, 1.0, 1.0, 1.0)
 
 
 func _bag_filter_base_color(filter_id: String) -> Color:
@@ -902,7 +910,7 @@ func _count_bag_items_for_filter(filter_id: String) -> int:
 	return count
 
 
-func _show_inventory_feedback(message: String, color: Color = Color("#f2d27a")) -> void:
+func _show_inventory_feedback(message: String, color: Color = HudStyle.ACCENT) -> void:
 	if inventory_feedback == null:
 		return
 	inventory_feedback.visible = true
@@ -1161,6 +1169,10 @@ func _refresh_contents() -> void:
 	# 가방 무제한 — 빈 칸 타일도, 만재 경고도, 용량 표시도 없다.
 	if scrap_label:
 		scrap_label.text = "쉘터 고철 %d" % int(game_state.scrap if game_state else 0)
+	if bag_count_chip:
+		var count_label := bag_count_chip.get_meta("label", null) as Label
+		if count_label:
+			count_label.text = "%d종" % visible_bag_items
 	if weapon_detail_open and has_weapon_state:
 		_refresh_weapon_detail()
 	_refresh_item_detail()
@@ -1241,7 +1253,7 @@ func _select_equipped_equipment(slot: String) -> void:
 		"texture": _equipment_texture(equipment_id, 64),
 	}
 	_refresh_item_detail()
-	_show_inventory_feedback("%s 선택" % str(selected_item.get("title", "장비")), Color("#d9c579"))
+	_show_inventory_feedback("%s 선택" % str(selected_item.get("title", "장비")), HudStyle.ACCENT)
 
 
 func _select_empty_equipment_slot(slot_name: String) -> void:
@@ -1251,10 +1263,10 @@ func _select_empty_equipment_slot(slot_name: String) -> void:
 		"title": slot_name,
 		"description": "현재 장착된 장비가 없습니다. 가방의 아이템을 선택해 장착할 수 있습니다.",
 		"quantity": 0,
-		"texture": UI_ICONS.get_icon(_equipment_icon_name(slot_name), 64, Color("#71877c")),
+		"texture": UI_ICONS.get_icon(_equipment_icon_name(slot_name), 64, HudStyle.TEXT_FAINT),
 	}
 	_refresh_item_detail()
-	_show_inventory_feedback("%s 슬롯은 비어 있습니다." % slot_name, Color("#9eb8ad"))
+	_show_inventory_feedback("%s 슬롯은 비어 있습니다." % slot_name, HudStyle.TEXT_DIM)
 
 
 func _hide_weapon_detail() -> void:
@@ -1313,7 +1325,7 @@ func _select_item(item: Dictionary) -> void:
 func _on_bag_item_pressed(item: Dictionary) -> void:
 	_select_item(item)
 	_update_bag_selection_visual(str(item.get("id", "")))
-	_show_inventory_feedback("%s 선택" % str(item.get("title", "아이템")), Color("#d9c579"))
+	_show_inventory_feedback("%s 선택" % str(item.get("title", "아이템")), HudStyle.ACCENT)
 	if not weapon_detail_open or str(item.get("type", "")) != "mod":
 		return
 	var mod_id := str(item.get("id", ""))
@@ -1337,13 +1349,13 @@ func _update_bag_selection_visual(selected_id: String) -> void:
 
 
 func _sync_bag_rim_fx() -> void:
-	# 눌린(선택된) 칸에만 골드 림라이트 펄스 오버레이를 얹고, 나머지는 뗀다. 표면 연출만.
+	# 눌린(선택된) 칸에만 민트 림라이트 펄스 오버레이를 얹고, 나머지는 뗀다. 표면 연출만.
 	if bag_grid == null:
 		return
 	for child in bag_grid.get_children():
 		if child is Button and str(child.name).begins_with("BagItem_"):
 			if (child as Button).button_pressed:
-				HudFx.attach_rim_pulse(child as Button)
+				HudFx.attach_rim_pulse(child as Button, HudStyle.ACCENT, float(HudStyle.RADIUS_CARD))
 			else:
 				HudFx.detach_rim_pulse(child as Button)
 
@@ -1359,7 +1371,7 @@ func _refresh_item_detail() -> void:
 		item_detail_reason.text = ""
 		item_detail_reason.visible = false
 	if selected_item.is_empty():
-		item_detail_icon.texture = UI_ICONS.get_icon("backpack", 72, Color("#71877c"))
+		item_detail_icon.texture = UI_ICONS.get_icon("backpack", 72, HudStyle.TEXT_FAINT)
 		item_detail_title.text = "가방"
 		item_detail_description.text = "아이템을 누르면 여기서 살펴본다."
 		return
@@ -1374,7 +1386,6 @@ func _refresh_item_detail() -> void:
 		if is_equipped:
 			item_detail_description.text = "현재 장착 중인 주무기입니다. 해제하면 가방으로 돌아갑니다."
 			item_action_button.text = "해제"
-			item_action_button.icon = UI_ICONS.get_icon("close", 28, Color("#e4d09a"))
 			item_action_button.visible = true
 		else:
 			item_detail_description.text += "  ·  장착하면 현재 주무기와 교체됩니다."
@@ -1382,7 +1393,6 @@ func _refresh_item_detail() -> void:
 			if not weapon_comparison.is_empty():
 				item_detail_description.text += "\n" + weapon_comparison
 			item_action_button.text = "장착"
-			item_action_button.icon = UI_ICONS.get_icon("upgrade", 28, Color("#bce6ca"))
 			item_action_button.visible = true
 	elif item_type == "mod":
 		var mod_id := str(selected_item.get("id", ""))
@@ -1397,7 +1407,6 @@ func _refresh_item_detail() -> void:
 			available,
 		]
 		item_action_button.text = "해제" if installed == mod_id else ("교체" if not installed.is_empty() else "장착")
-		item_action_button.icon = UI_ICONS.get_icon("close" if installed == mod_id else "mod", 28, Color("#e1d39a"))
 		item_action_button.visible = true
 		var check := _get_mod_install_check(mod_id)
 		var can_install := bool(check.get("can_install", false))
@@ -1465,8 +1474,6 @@ func _refresh_item_detail() -> void:
 			equipment_detail_lines.append(comparison)
 		item_detail_description.text = "\n".join(equipment_detail_lines)
 		item_action_button.text = "해제" if equipped_id == equipment_id else "장착"
-		var equipment_icon := str(equipment_definition.get("icon", "armor"))
-		item_action_button.icon = UI_ICONS.get_icon("close" if equipped_id == equipment_id else equipment_icon, 28, Color("#bce6ca"))
 		item_action_button.visible = true
 
 	_configure_discard_button(item_type)
@@ -1478,7 +1485,6 @@ func _configure_discard_button(item_type: String) -> void:
 	var item_id := str(selected_item.get("id", ""))
 	item_discard_button.visible = true
 	item_discard_button.text = "버리기"
-	item_discard_button.icon = UI_ICONS.get_icon("close", 24, Color("#f0b09a"))
 	var protected_item: bool = RAID_ITEM_ECONOMY.is_protected(item_type, item_id)
 	var equipped_item: bool = bool(selected_item.get("equipped", false))
 	if item_type == "weapon":
@@ -1507,7 +1513,7 @@ func _disarm_discard() -> void:
 		discard_disarm_tween.kill()
 	if item_discard_button != null:
 		item_discard_button.text = "버리기"
-		item_discard_button.remove_theme_color_override("font_color")
+		item_discard_button.add_theme_color_override("font_color", HudStyle.TEXT)
 
 
 func _on_selected_item_discard() -> void:
@@ -1532,7 +1538,7 @@ func _on_selected_item_discard() -> void:
 	if discard_armed_item_id != item_id:
 		discard_armed_item_id = item_id
 		item_discard_button.text = "한 번 더: x%d 버리기" % amount
-		item_discard_button.add_theme_color_override("font_color", Color("#ff9d8f"))
+		item_discard_button.add_theme_color_override("font_color", HudStyle.DANGER)
 		if discard_disarm_tween != null and discard_disarm_tween.is_valid():
 			discard_disarm_tween.kill()
 		discard_disarm_tween = create_tween()
@@ -1553,7 +1559,7 @@ func apply_discard_result(success: bool, message: String) -> void:
 		_refresh_contents()
 	_show_inventory_feedback(
 		message,
-		Color("#e7c26e") if success else Color("#ff9d8f")
+		HudStyle.ACCENT if success else HudStyle.DANGER
 	)
 
 
@@ -1582,7 +1588,7 @@ func _on_selected_item_action() -> void:
 		else:
 			weapon_equipped.emit(item_id)
 			if game_state.equipped_weapon_id == item_id and bool(game_state.has_ak):
-				_show_inventory_feedback("%s 장착" % str(selected_item.get("title", item_id)), Color("#a3ff92"))
+				_show_inventory_feedback("%s 장착" % str(selected_item.get("title", item_id)), HudStyle.ACCENT)
 				selected_item = {}
 				weapon_detail_open = false
 				_refresh_contents()
@@ -1598,12 +1604,12 @@ func _on_selected_item_action() -> void:
 		var slot := str(definition.get("slot", "body"))
 		if str(game_state.get_equipped_equipment(slot)) == item_id:
 			if game_state.unequip_equipment(slot):
-				_show_inventory_feedback("%s 해제" % str(definition.get("display_name", item_id)), Color("#d9c579"))
+				_show_inventory_feedback("%s 해제" % str(definition.get("display_name", item_id)), HudStyle.ACCENT)
 			else:
-				_show_inventory_feedback("해제할 장비가 없습니다.", Color("#ee806c"))
+				_show_inventory_feedback("해제할 장비가 없습니다.", HudStyle.DANGER)
 		else:
 			game_state.equip_equipment(item_id)
-			_show_inventory_feedback("%s 장착" % str(definition.get("display_name", item_id)), Color("#a3ff92"))
+			_show_inventory_feedback("%s 장착" % str(definition.get("display_name", item_id)), HudStyle.ACCENT)
 		game_state.save_persistent_state()
 		equipment_changed.emit()
 		selected_item = {}
@@ -1722,10 +1728,10 @@ func _request_weapon_unequip() -> void:
 		has_weapon_state = false
 		weapon_detail_open = false
 		selected_item = {}
-		_show_inventory_feedback("주무기를 가방에 보관했습니다.", Color("#d9c579"))
+		_show_inventory_feedback("주무기를 가방에 보관했습니다.", HudStyle.ACCENT)
 		_refresh_contents()
 	else:
-		_show_inventory_feedback("해제할 무기가 없습니다.", Color("#ee806c"))
+		_show_inventory_feedback("해제할 무기가 없습니다.", HudStyle.DANGER)
 
 
 func _build_mod_slot_button(slot: String) -> Button:
@@ -1793,7 +1799,7 @@ func _get_mod_compatibility_check(mod_id: String) -> Dictionary:
 func _install_mod(mod_id: String) -> void:
 	var check := _get_mod_install_check(mod_id)
 	if not bool(check.get("can_install", false)):
-		_show_inventory_feedback("장착 실패: %s" % str(check.get("reason", "")), Color("#ff9f9f"))
+		_show_inventory_feedback("장착 실패: %s" % str(check.get("reason", "")), HudStyle.DANGER)
 		return
 	var definition := WEAPON_SYSTEM.get_mod(mod_id)
 	var slot := str(definition.get("slot", ""))
@@ -1804,7 +1810,7 @@ func _install_mod(mod_id: String) -> void:
 	game_state.add_weapon_mod(mod_id, -1)
 	game_state.equipped_weapon_mods.append(mod_id)
 	game_state.save_equipped_weapon_loadout()
-	_show_inventory_feedback("%s 장착" % _mod_name(mod_id), Color("#a3ff92"))
+	_show_inventory_feedback("%s 장착" % _mod_name(mod_id), HudStyle.ACCENT)
 	weapon_mods_changed.emit()
 	_refresh_contents()
 
@@ -1814,7 +1820,7 @@ func _unequip_mod(mod_id: String) -> void:
 	game_state.add_weapon_mod(mod_id, 1)
 	game_state.equipped_weapon_mods.erase(mod_id)
 	game_state.save_equipped_weapon_loadout()
-	_show_inventory_feedback("%s 해제" % _mod_name(mod_id), Color("#f5c96a"))
+	_show_inventory_feedback("%s 해제" % _mod_name(mod_id), HudStyle.WARN)
 	weapon_mods_changed.emit()
 	_refresh_contents()
 
@@ -1833,7 +1839,7 @@ func _equipment_button(slot_name: String, texture: Texture2D, active: bool, call
 	button.custom_minimum_size = Vector2(132, 74)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.tooltip_text = slot_name
-	button.icon = (texture if texture != null else UI_ICONS.get_icon(_equipment_icon_name(slot_name), 38, Color("#8fa49a"))) if active else null
+	button.icon = (texture if texture != null else UI_ICONS.get_icon(_equipment_icon_name(slot_name), 38, HudStyle.TEXT_DIM)) if active else null
 	button.expand_icon = active
 	button.add_theme_constant_override("icon_max_width", 42)
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1849,11 +1855,14 @@ func _equipment_button(slot_name: String, texture: Texture2D, active: bool, call
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	label.add_theme_font_override("font", font_ref)
-	label.add_theme_font_size_override("font_size", 10 if active else 13)
-	label.add_theme_color_override("font_color", Color("#dbe4de") if active else Color("#819087"))
-	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
-	label.add_theme_constant_override("outline_size", 3)
+	# 장착 중이면 아이콘 아래 작은 굵은 이름, 비어 있으면 회색 슬롯 이름만.
+	label.add_theme_font_override("font", HudStyle.bold())
+	label.add_theme_font_size_override("font_size", HudStyle.TYPE_FOOTNOTE if active else HudStyle.TYPE_BODY)
+	label.add_theme_color_override("font_color", HudStyle.TEXT if active else HudStyle.TEXT_DIM)
+	if active:
+		# 아이콘 위에 걸릴 수 있어 살짝만 받친다.
+		label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
+		label.add_theme_constant_override("outline_size", 2)
 	button.add_child(label)
 	if callback.is_valid():
 		button.pressed.connect(callback)
@@ -2051,53 +2060,27 @@ func _bag_item_button(item: Dictionary) -> Button:
 	badge.text = "x%d" % int(item.get("badge_quantity", quantity))
 	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	badge.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-	badge.add_theme_font_override("font", font_ref)
-	badge.add_theme_font_size_override("font_size", 11)
-	badge.add_theme_color_override("font_color", Color("#f2e7c5") if quantity > 0 else Color("#68736e"))
-	badge.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
-	badge.add_theme_constant_override("outline_size", 4)
+	# 수량은 굵은 tabular 숫자. 아이콘 위에 얹히므로 검정 받침만 살짝.
+	badge.add_theme_font_override("font", HudStyle.bold_tabular())
+	badge.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION)
+	badge.add_theme_color_override("font_color", HudStyle.TEXT if quantity > 0 else HudStyle.TEXT_FAINT)
+	badge.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	badge.add_theme_constant_override("outline_size", 3)
 	button.add_child(badge)
 	if item_type == "component":
-		var material_badge := Label.new()
+		# "재료" 표식 — 작은 알약 칩(표면색). 테두리 선·아웃라인 트릭 없이.
+		var material_badge := _corner_tag("재료", false)
 		material_badge.name = "CraftingMaterialBadge"
-		material_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		material_badge.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		material_badge.offset_left = 5
-		material_badge.offset_top = 4
-		material_badge.offset_right = 43
-		material_badge.offset_bottom = 24
-		material_badge.text = "재료"
-		material_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		material_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		material_badge.add_theme_font_override("font", font_ref)
-		material_badge.add_theme_font_size_override("font_size", 9)
-		material_badge.add_theme_color_override("font_color", Color("#171a17"))
-		material_badge.add_theme_color_override("font_outline_color", Color("#79d4bd"))
-		material_badge.add_theme_constant_override("outline_size", 6)
 		button.add_child(material_badge)
 	if item_type == "equipment" and has_quantity and not bool(item.get("equipped", false)):
 		var equipment_definition: Dictionary = game_state.get_equipment_definition(item_id)
 		var equipment_level := int(equipment_definition.get("level", 1))
 		if equipment_level > 1:
-			var level_badge := Label.new()
+			var level_badge := _corner_tag("Lv%d" % equipment_level, false)
 			level_badge.name = "EquipmentLevelBadge"
-			level_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			level_badge.set_anchors_preset(Control.PRESET_TOP_LEFT)
-			level_badge.offset_left = 5
-			level_badge.offset_top = 4
-			level_badge.offset_right = 43
-			level_badge.offset_bottom = 24
-			level_badge.text = "Lv%d" % equipment_level
-			level_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			level_badge.add_theme_font_override("font", font_ref)
-			level_badge.add_theme_font_size_override("font_size", 10)
-			level_badge.add_theme_color_override(
-				"font_color", Color("#ffd98a") if equipment_level >= 4 else Color("#cfe3d6")
-			)
-			level_badge.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
-			level_badge.add_theme_constant_override("outline_size", 5)
 			button.add_child(level_badge)
-		# 지금 낀 것보다 좋으면 ▲ — 리스트만 훑어도 갈아 낄 게 보인다.
+		# 지금 낀 것보다 좋으면 민트 UP 표식 — 리스트만 훑어도 갈아 낄 게 보인다.
+		# (▲ 같은 기호는 Pretendard에 없어 깨진다.)
 		var equipment_slot := str(equipment_definition.get("slot", "body"))
 		var equipped_in_slot := str(game_state.get_equipped_equipment(equipment_slot))
 		var equipped_score := (
@@ -2106,41 +2089,46 @@ func _bag_item_button(item: Dictionary) -> Button:
 			else -1.0
 		)
 		if float(game_state.get_equipment_score(item_id)) > equipped_score:
-			var upgrade_badge := Label.new()
+			var upgrade_badge := _corner_tag("UP", true)
 			upgrade_badge.name = "EquipmentUpgradeBadge"
-			upgrade_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			upgrade_badge.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-			upgrade_badge.offset_left = -26
-			upgrade_badge.offset_top = 3
+			upgrade_badge.offset_left = -34
+			upgrade_badge.offset_top = 4
 			upgrade_badge.offset_right = -5
-			upgrade_badge.offset_bottom = 23
-			upgrade_badge.text = "▲"
-			upgrade_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			upgrade_badge.add_theme_font_override("font", font_ref)
-			upgrade_badge.add_theme_font_size_override("font_size", 12)
-			upgrade_badge.add_theme_color_override("font_color", Color("#8ef2a0"))
-			upgrade_badge.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
-			upgrade_badge.add_theme_constant_override("outline_size", 5)
+			upgrade_badge.offset_bottom = 22
 			button.add_child(upgrade_badge)
 	if bool(item.get("equipped", false)):
-		var equipped_badge := Label.new()
+		# 장착 중 표식 — 민트 알약 "E".
+		var equipped_badge := _corner_tag("E", true)
 		equipped_badge.name = "EquippedBadge"
-		equipped_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		equipped_badge.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		equipped_badge.offset_left = 6
-		equipped_badge.offset_top = 5
-		equipped_badge.offset_right = 29
-		equipped_badge.offset_bottom = 28
-		equipped_badge.text = "E"
-		equipped_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		equipped_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		equipped_badge.add_theme_font_override("font", font_ref)
-		equipped_badge.add_theme_font_size_override("font_size", 13)
-		equipped_badge.add_theme_color_override("font_color", Color("#171a17"))
-		equipped_badge.add_theme_color_override("font_outline_color", Color("#e9cf76"))
-		equipped_badge.add_theme_constant_override("outline_size", 7)
+		equipped_badge.offset_right = 28
 		button.add_child(equipped_badge)
 	return button
+
+
+func _corner_tag(text: String, active: bool) -> Label:
+	# 타일 모서리의 작은 알약 표식("재료"·"Lv3"·"E"·"UP"). active면 민트 채움/어두운 글자,
+	# 아니면 표면색/흰 글자. Label 하나에 알약 스타일박스만 입힌다(자식 수 무변경).
+	var tag := Label.new()
+	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tag.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	tag.offset_left = 5
+	tag.offset_top = 4
+	tag.offset_right = 43
+	tag.offset_bottom = 22
+	tag.text = text
+	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tag.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	tag.add_theme_font_override("font", HudStyle.bold_tabular())
+	tag.add_theme_font_size_override("font_size", 9)
+	tag.add_theme_color_override("font_color", HudStyle.ACCENT_INK if active else HudStyle.TEXT)
+	var style := HudStyle.flat(HudStyle.ACCENT if active else HudStyle.SURFACE_HOVER, 999)
+	style.content_margin_left = 5
+	style.content_margin_right = 5
+	style.content_margin_top = 1
+	style.content_margin_bottom = 1
+	tag.add_theme_stylebox_override("normal", style)
+	return tag
 
 
 func _empty_slot() -> PanelContainer:
@@ -2148,11 +2136,12 @@ func _empty_slot() -> PanelContainer:
 	panel.name = "EmptyBagSlot"
 	panel.custom_minimum_size = Vector2(82, 74)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.025, 0.031, 0.036, 0.6), Color(0.46, 0.52, 0.5, 0.25), 7))
+	panel.add_theme_stylebox_override("panel", HudStyle.flat(Color(HudStyle.INK_WELL, 0.5), HudStyle.RADIUS_CARD))
 	return panel
 
 
 func _tile_button(text: String, active: bool) -> Button:
+	# 슬롯/타일 = 무광 표면 카드. 선택(pressed)만 민트 2px 테두리, 나머지는 표면 단차뿐.
 	var button := Button.new()
 	button.text = text
 	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -2160,27 +2149,36 @@ func _tile_button(text: String, active: bool) -> Button:
 	button.focus_mode = Control.FOCUS_NONE
 	button.mouse_filter = Control.MOUSE_FILTER_STOP
 	button.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
-	_apply_button_font(button, 11)
-	button.add_theme_stylebox_override("normal", _panel_style(Color(0.052, 0.061, 0.069, 0.82), Color(0.72, 0.8, 0.77, 0.48 if active else 0.2), 7))
-	button.add_theme_stylebox_override("hover", _panel_style(Color(0.085, 0.1, 0.105, 0.96), Color("#d9c579"), 7, 2))
-	button.add_theme_stylebox_override("pressed", _panel_style(Color(0.12, 0.1, 0.06, 0.98), Color("#e0b75f"), 7, 2))
-	button.add_theme_stylebox_override("disabled", _panel_style(Color(0.025, 0.03, 0.034, 0.58), Color(0.38, 0.42, 0.4, 0.2), 7))
+	_apply_button_font(button, HudStyle.TYPE_FOOTNOTE)
+	button.add_theme_color_override("font_color", HudStyle.TEXT if active else HudStyle.TEXT_DIM)
+	var surface := HudStyle.INK_WELL if active else Color(HudStyle.INK_WELL, 0.6)
+	button.add_theme_stylebox_override("normal", _tile_style(HudStyle.flat(surface, HudStyle.RADIUS_CARD)))
+	button.add_theme_stylebox_override("hover", _tile_style(HudStyle.flat(HudStyle.SURFACE_RAISED, HudStyle.RADIUS_CARD)))
+	button.add_theme_stylebox_override("pressed", _tile_style(HudStyle.accent_panel(HudStyle.SURFACE_RAISED)))
+	button.add_theme_stylebox_override("focus", _tile_style(HudStyle.flat(surface, HudStyle.RADIUS_CARD)))
+	button.add_theme_stylebox_override("disabled", _tile_style(HudStyle.flat(Color(HudStyle.INK_WELL, 0.4), HudStyle.RADIUS_CARD)))
 	return button
 
 
+func _tile_style(style: StyleBoxFlat) -> StyleBoxFlat:
+	style.content_margin_left = 8
+	style.content_margin_top = 7
+	style.content_margin_right = 8
+	style.content_margin_bottom = 7
+	return style
+
+
 func _icon_text_button(text: String, tooltip: String, icon_name := "") -> Button:
+	# 보조 버튼(표면색 채움/흰 굵은 글자). 아이콘은 있으면 왼쪽에 작게.
 	var button := Button.new()
 	button.text = text
 	button.tooltip_text = tooltip
-	button.focus_mode = Control.FOCUS_NONE
+	HudStyle.style_button(button)
 	if not icon_name.is_empty():
-		button.icon = UI_ICONS.get_icon(icon_name, 28, Color("#dce6df"))
+		button.icon = UI_ICONS.get_icon(icon_name, 28, HudStyle.TEXT)
 		button.expand_icon = true
+		button.add_theme_constant_override("icon_max_width", 18)
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_apply_button_font(button, 12)
-	button.add_theme_stylebox_override("normal", _panel_style(Color(0.07, 0.08, 0.084, 0.94), Color(0.55, 0.64, 0.61, 0.55), 6))
-	button.add_theme_stylebox_override("hover", _panel_style(Color(0.13, 0.105, 0.06, 0.98), Color("#d9c579"), 6))
-	button.add_theme_stylebox_override("disabled", _panel_style(Color(0.035, 0.04, 0.044, 0.65), Color(0.38, 0.42, 0.4, 0.22), 6))
 	return button
 
 
@@ -2248,16 +2246,14 @@ func _weapon_preview_texture() -> Texture2D:
 
 
 func _section(text: String) -> Label:
-	var label := _label(text, 14, Color("#d9ded8"))
-	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.55))
-	label.add_theme_constant_override("outline_size", 3)
-	return label
+	# 섹션 제목 — 굵은 흰 글자. 아웃라인·글로우 없음.
+	return _label(text, HudStyle.TYPE_HEADING, HudStyle.TEXT, true)
 
 
-func _label(text: String, size: int, color: Color) -> Label:
+func _label(text: String, size: int, color: Color, is_bold := false) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_font_override("font", font_ref)
+	label.add_theme_font_override("font", HudStyle.bold() if is_bold else HudStyle.FONT)
 	label.add_theme_font_size_override("font_size", size)
 	label.add_theme_color_override("font_color", color)
 	label.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -2265,11 +2261,36 @@ func _label(text: String, size: int, color: Color) -> Label:
 	return label
 
 
+func _chip(text: String) -> PanelContainer:
+	# 정보 알약 칩(표면색). 값 라벨은 meta "label".
+	var chip := SHELTER_THEME.chip(text)
+	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return chip
+
+
+func _modal_style() -> StyleBoxFlat:
+	# 큰 판 = 거의 검정, 보더 없음, 큰 그림자. 안쪽 여백은 MarginContainer가 쥔다(반응형 조정).
+	var style := HudStyle.modal()
+	style.content_margin_left = 0.0
+	style.content_margin_right = 0.0
+	style.content_margin_top = 0.0
+	style.content_margin_bottom = 0.0
+	return style
+
+
+func _card_style() -> StyleBoxFlat:
+	# 판 속 카드 = 무광 표면(INK_WELL), 반지름 14, 테두리 없음.
+	return HudStyle.flat(HudStyle.INK_WELL, HudStyle.RADIUS_CARD)
+
+
 func _apply_button_font(button: Button, size: int) -> void:
-	button.add_theme_font_override("font", font_ref)
+	button.add_theme_font_override("font", HudStyle.bold())
 	button.add_theme_font_size_override("font_size", size)
-	button.add_theme_color_override("font_color", Color("#e4e9e3"))
-	button.add_theme_color_override("font_disabled_color", Color(0.7, 0.74, 0.72, 0.46))
+	button.add_theme_color_override("font_color", HudStyle.TEXT)
+	button.add_theme_color_override("font_hover_color", HudStyle.TEXT)
+	button.add_theme_color_override("font_pressed_color", HudStyle.TEXT)
+	button.add_theme_color_override("font_focus_color", HudStyle.TEXT)
+	button.add_theme_color_override("font_disabled_color", HudStyle.TEXT_FAINT)
 
 
 func _margin(left: int, top: int, right: int, bottom: int) -> MarginContainer:
@@ -2449,14 +2470,6 @@ func _mod_icon(mod_id: String) -> Texture2D:
 	return _slot_icon(str(definition.get("slot", "")))
 
 
-func _panel_style(background: Color, border: Color, radius: int, width: int = 1) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
-	style.border_color = border
-	style.set_border_width_all(width)
-	style.set_corner_radius_all(radius)
-	style.content_margin_left = 8
-	style.content_margin_top = 7
-	style.content_margin_right = 8
-	style.content_margin_bottom = 7
-	return style
+func _panel_style(background: Color, _border: Color, radius: int, _width: int = 1) -> StyleBoxFlat:
+	# (하위 호환) 새 언어엔 테두리 선이 없다 — 보더 인자는 무시하고 무광 면만 만든다.
+	return _tile_style(HudStyle.flat(background, maxi(radius, HudStyle.RADIUS_CARD)))

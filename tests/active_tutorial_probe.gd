@@ -113,7 +113,7 @@ func _run() -> void:
 		(target as BaseButton).pressed.emit()
 	await _sleep(0.35)
 	_check(bool(game_state.call("is_tutorial_step_done", "seat_worker")), "seat_worker 완료 저장")
-	var check_label := layer.find_child("TutorialCheck", true, false) as Label
+	var check_label := layer.find_child("TutorialCheck", true, false) as Control
 	_check(check_label != null and check_label.visible, "✓ 체크 연출이 떴다")
 	var modal := root.find_child("ScratcherBankUILayer", true, false)
 	if modal != null:

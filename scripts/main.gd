@@ -908,6 +908,8 @@ func _physics_process(delta: float) -> void:
 	extraction._update_extraction_discovery()
 	_update_combat_overlay_visibility()
 	_update_cinematic_hud_hiding()
+	# 커서 모드는 매 프레임 맞춘다 — 어느 창이 언제 열려도 커서가 따라온다.
+	_refresh_pointer_mode()
 	stealth._update_stealth_takedown_prompt()
 	if (
 		_is_inventory_open()
@@ -2032,8 +2034,7 @@ func _setup_boss_alert_ui() -> void:
 	boss_alert_panel.modulate.a = 0.0
 	boss_alert_panel.visible = false
 	boss_alert_panel.add_theme_stylebox_override(
-		"panel",
-		_make_panel_style(Color(0.035, 0.024, 0.02, 0.96), Color("#d66a4a"), 8)
+		"panel", HudStyle.flat(HudStyle.INK, HudStyle.RADIUS_CARD)
 	)
 	$HUD.add_child(boss_alert_panel)
 
@@ -2049,15 +2050,15 @@ func _setup_boss_alert_ui() -> void:
 	margin.add_child(content)
 	boss_alert_title = Label.new()
 	boss_alert_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	boss_alert_title.add_theme_font_override("font", FONT)
-	boss_alert_title.add_theme_font_size_override("font_size", 26)
-	boss_alert_title.add_theme_color_override("font_color", Color("#ffb075"))
+	boss_alert_title.add_theme_font_override("font", HudStyle.bold())
+	boss_alert_title.add_theme_font_size_override("font_size", HudStyle.TYPE_TITLE)
+	boss_alert_title.add_theme_color_override("font_color", HudStyle.DANGER)
 	content.add_child(boss_alert_title)
 	boss_alert_subtitle = Label.new()
 	boss_alert_subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	boss_alert_subtitle.add_theme_font_override("font", FONT)
 	boss_alert_subtitle.add_theme_font_size_override("font_size", 15)
-	boss_alert_subtitle.add_theme_color_override("font_color", Color("#d6c3b5"))
+	boss_alert_subtitle.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
 	content.add_child(boss_alert_subtitle)
 
 
@@ -2093,8 +2094,7 @@ func _setup_boss_defeat_ui() -> void:
 	boss_defeat_panel.offset_right = 360
 	boss_defeat_panel.offset_bottom = -104
 	boss_defeat_panel.add_theme_stylebox_override(
-		"panel",
-		_make_panel_style(HudStyle.INK, Color("#d9a441"), 8)
+		"panel", HudStyle.flat(HudStyle.INK, HudStyle.RADIUS_CARD)
 	)
 	boss_defeat_overlay.add_child(boss_defeat_panel)
 	var margin := MarginContainer.new()
@@ -3084,7 +3084,10 @@ func _apply_hud_layout() -> void:
 
 	if hud.extraction_result_panel:
 		var panel_w := clampf(minf(viewport_size.x * 0.94, 920.0), 520.0, 1000.0)
-		var panel_h := clampf(minf(viewport_size.y * 0.86, 600.0), 360.0, 620.0)
+		# 600 상한은 720p에서 안쪽 스크롤 창을 354px로 만들었다 — 성과 타일·보상
+		# 칩·요약·XP·성장 카드가 다 들어가지 못해, 튜토리얼이 카드로 스크롤하는
+		# 순간 위쪽 타일이 통째로 잘려 나갔다. 화면이 주는 만큼 쓴다.
+		var panel_h := clampf(minf(viewport_size.y * 0.94, 720.0), 360.0, 760.0)
 		hud.extraction_result_panel.set_anchors_preset(Control.PRESET_CENTER)
 		hud.extraction_result_panel.offset_left = -panel_w * 0.5
 		hud.extraction_result_panel.offset_right = panel_w * 0.5
@@ -3315,15 +3318,6 @@ func _on_inventory_item_discard_requested(item_type: String, item_id: String, am
 	_update_medkit_button()
 
 
-func _make_panel_style(background: Color, border: Color, radius: int = 4) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
-	style.border_color = border
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(radius)
-	return style
-
-
 func _get_field_interaction_accent(interaction_type: String, is_locked: bool) -> Color:
 	if is_locked:
 		# 잠긴 대상 = 골드 톤 + 자물쇠. "위험"이 아니라 "조건이 필요하다"는 신호.
@@ -3373,11 +3367,8 @@ func _refresh_field_interaction_visual(interaction_type: String, is_locked: bool
 	hud.field_interaction_panel.add_theme_stylebox_override(
 		"panel", RaidHud.make_prompt_capsule_style(accent)
 	)
-	# 키캡: 잠김이면 자물쇠 아이콘, 아니면 [F](터치는 탭 아이콘).
-	var key_background: Color = accent.darkened(0.72)
-	key_background.a = 0.98
-	var key_style: StyleBoxFlat = _make_panel_style(key_background, accent, 9)
-	hud.field_interaction_key_panel.add_theme_stylebox_override("panel", key_style)
+	# 키캡: 잠김이면 자물쇠 아이콘, 아니면 [F](터치는 탭 아이콘). 표면색 알약, 테두리 없음.
+	hud.field_interaction_key_panel.add_theme_stylebox_override("panel", HudStyle.keycap())
 	hud.field_interaction_key_label.visible = not touch_enabled and not is_locked
 	hud.field_interaction_key_label.add_theme_color_override("font_color", accent.lightened(0.24))
 	hud.field_interaction_key_icon.visible = touch_enabled or is_locked
@@ -3695,7 +3686,10 @@ func _update_equipment_ui() -> void:
 		hud.equipment_ammo_type_label.visible = has_ak
 	if hud.equipment_ammo_label:
 		hud.equipment_ammo_label.text = str(hud_state.get("ammo_combined_text", "-- / --"))
-		var hud_ammo_color: Color = hud_state.get("ammo_color", Color("#f1ce70"))
+		var hud_ammo_color: Color = hud_state.get("ammo_color", HudStyle.TEXT)
+		# 평시 잔탄은 금색이 아니라 흰 굵은 숫자 — 금색은 재화에만(새 언어).
+		if hud_ammo_color.is_equal_approx(WEAPON_HUD_PRESENTER.READY_COLOR):
+			hud_ammo_color = HudStyle.TEXT
 		hud.equipment_ammo_label.add_theme_color_override(
 			"font_color",
 			hud_ammo_color
@@ -3874,7 +3868,18 @@ func _is_pointer_ui_active() -> bool:
 		# 사라져 "커서 없이 버튼을 누르는" 상태였다(유저 신고).
 		or loot_system.is_loot_swap_open()
 		or main_mission.is_cinematic_active()
+		# 디버그 메뉴·확인 대화상자 등 "pointer_ui" 그룹에 든 창이 하나라도 보이면
+		# 커서가 있어야 한다(2026-09-04 유저: "메뉴에서 커서가 안 보여 못 누른다").
+		or (debug_menu != null and bool(debug_menu.get("is_open")))
+		or _has_visible_pointer_ui()
 	)
+
+
+func _has_visible_pointer_ui() -> bool:
+	for node in get_tree().get_nodes_in_group("pointer_ui"):
+		if node is CanvasItem and (node as CanvasItem).is_visible_in_tree():
+			return true
+	return false
 
 
 func _update_cinematic_hud_hiding() -> void:
@@ -4396,7 +4401,8 @@ func _update_time_hud() -> void:
 	var minute := floori((world_time_hours - float(hour)) * 60.0)
 	var danger_tier := 1 + floori(night_intensity * 3.99)
 	time_label.text = "%s  %02d:%02d  ·  위험 %d" % [current_day_phase, hour, minute, danger_tier]
-	var phase_color := Color("#d6c891").lerp(Color("#ff6f5c"), night_intensity)
+	# 낮엔 회색 설명 톤, 밤이 깊을수록 위험색으로 — 금색 제목은 새 언어에 없다.
+	var phase_color := HudStyle.TEXT_DIM.lerp(HudStyle.DANGER, night_intensity)
 	time_label.add_theme_color_override("font_color", phase_color)
 
 
@@ -5444,10 +5450,7 @@ func _refresh_raid_pressure_hud() -> void:
 		raid_pressure_points,
 		float(RAID_EVENT_DIRECTOR.LEVEL_THRESHOLDS.back())
 	)
-	hud.raid_pressure_bar.add_theme_stylebox_override(
-		"fill",
-		_make_panel_style(color.darkened(0.12), color.lightened(0.12), 7)
-	)
+	hud.raid_pressure_bar.add_theme_stylebox_override("fill", HudStyle.flat(color, 7))
 
 
 func _complete_raid_opportunity(point: Node3D) -> void:
@@ -5734,15 +5737,19 @@ func _show_level_reward_choices() -> void:
 				current_rank, current_rank + 1
 			],
 		]
-		card.icon = UI_ICONS.get_icon(str(definition.get("icon", "upgrade")), 54, Color("#e4cc7c"))
+		card.icon = UI_ICONS.get_icon(str(definition.get("icon", "upgrade")), 54, HudStyle.ACCENT)
 		card.expand_icon = true
 		card.add_theme_constant_override("icon_max_width", 54)
-		card.add_theme_font_override("font", FONT)
-		card.add_theme_font_size_override("font_size", 17)
-		card.add_theme_color_override("font_color", Color("#e6ece7"))
-		card.add_theme_stylebox_override("normal", _make_panel_style(Color("#101716"), Color("#536b61"), 7))
-		card.add_theme_stylebox_override("hover", _make_panel_style(Color("#19231f"), Color("#e0c46f"), 7))
-		card.add_theme_stylebox_override("pressed", _make_panel_style(Color("#283126"), Color("#f0d77d"), 7))
+		card.add_theme_font_override("font", HudStyle.bold())
+		card.add_theme_font_size_override("font_size", HudStyle.TYPE_BODY)
+		card.focus_mode = Control.FOCUS_NONE
+		for color_state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+			card.add_theme_color_override(color_state, HudStyle.TEXT)
+		# 표면 카드 3장, 테두리 없음 — 고르는 손이 닿으면 민트 2px 강조.
+		card.add_theme_stylebox_override("normal", HudStyle.flat(HudStyle.INK_WELL, HudStyle.RADIUS_CARD))
+		card.add_theme_stylebox_override("hover", HudStyle.accent_panel(HudStyle.INK_WELL))
+		card.add_theme_stylebox_override("pressed", HudStyle.accent_panel(HudStyle.SURFACE_RAISED))
+		card.add_theme_stylebox_override("focus", HudStyle.flat(HudStyle.INK_WELL, HudStyle.RADIUS_CARD))
 		card.pressed.connect(_on_level_reward_selected.bind(stat_id))
 		hud.extraction_level_choice_row.add_child(card)
 
@@ -7336,19 +7343,19 @@ func _refresh_danger_hud() -> void:
 	if hud.danger_bar:
 		hud.danger_bar.value = danger_percent
 	var status := "조용함"
-	var color := Color("#5fc9b4")
+	var color := HudStyle.ACCENT
 	var next_warning_band := 0
 	if raid_danger >= 0.9:
 		status = "최악"
-		color = Color("#e06c62")
+		color = HudStyle.DANGER
 		next_warning_band = 3
 	elif raid_danger >= 0.65:
 		status = "위험"
-		color = Color("#e3ad61")
+		color = HudStyle.WARN
 		next_warning_band = 2
 	elif raid_danger >= 0.35:
 		status = "수색 중"
-		color = Color("#d5c16b")
+		color = HudStyle.WARN.lerp(HudStyle.TEXT, 0.35)
 		next_warning_band = 1
 	if hud.danger_status_label:
 		hud.danger_status_label.text = (

@@ -5,11 +5,11 @@ extends RefCounted
 # 카드 한 장으로 바꾼다.
 #
 #   ┌─────────────────────────────┐
-#   │ ◆ [방어 작전] 급수탑 방어      [TAB]│  ← 아이콘 + 제목(굵게) + 지도 키캡
-#   │   구역 방어 12.4초 · 접근 3   │  ← 현재 목표 1줄
-#   │   ▬▬▬▬▬▬▬▬░░░░              │  ← 수치형이면 얇은 바 / 다단계면 핍 ●●○
-#   │   ✓ 기초 부품 확보 3/3        │  ← 보조 목표 체크 행
-#   │   ○ 지하철역 입구 조사 0/1     │
+#   │ (아이콘) 급수탑 방어        [TAB]│  ← 아이콘 + 제목(굵게) + 지도 키캡
+#   │   구역 방어 12.4초 · 접근 3   │  ← 현재 목표 1줄(회색)
+#   │   ━━━━━━━━━━━━──────          │  ← 수치형이면 얇은 민트 바 / 다단계면 작은 원
+#   │   · 기초 부품 확보       3/3  │  ← 보조 목표 행(완료=민트 점·글자)
+#   │   · 지하철역 입구 조사    0/1  │     (남음=회색 점, tabular 수치)
 #   └─────────────────────────────┘
 #
 # host 패턴: main.gd가 attach → build(objective_panel)만 부른다. 데이터는
@@ -24,6 +24,7 @@ const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const MAX_WIDTH := 300.0
 const PULSE_COOLDOWN := 3.0
 const MAX_SUB_ROWS := 4
+const DOT_SIZE := 6.0
 
 var host: Node
 var panel: PanelContainer
@@ -53,21 +54,20 @@ func build(mount: PanelContainer) -> void:
 	for child in panel.get_children():
 		if child is Control:
 			(child as Control).visible = false
-	var style := HudStyle.panel(HudStyle.INK, HudStyle.LINE_GOLD, HudStyle.RADIUS_CARD)
-	style.border_width_left = 3
-	style.content_margin_left = 11.0
-	style.content_margin_right = 10.0
-	style.content_margin_top = 7.0
-	style.content_margin_bottom = 8.0
-	style.shadow_color = Color(0, 0, 0, 0.45)
-	style.shadow_size = 6
+	# 디자인 언어(2026-09-04, 이름 짓기 화면 기준): 무광 표면 카드, 보더 없음, 굵은
+	# 제목, 단계는 작은 민트/회색 원, 수치는 tabular 회색. 금색 선·기호 없음.
+	var style := HudStyle.card()
+	style.content_margin_left = 14.0
+	style.content_margin_right = 12.0
+	style.content_margin_top = 9.0
+	style.content_margin_bottom = 10.0
 	panel.add_theme_stylebox_override("panel", style)
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.clip_contents = true
 
 	content = VBoxContainer.new()
 	content.name = "MissionTrackerBox"
-	content.add_theme_constant_override("separation", 3)
+	content.add_theme_constant_override("separation", 4)
 	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(content)
 
@@ -83,7 +83,7 @@ func build(mount: PanelContainer) -> void:
 	icon_rect.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	header.add_child(icon_rect)
-	title_label = HudStyle.label("", HudStyle.TYPE_CAPTION + 1, HudStyle.GOLD_TEXT)
+	title_label = HudStyle.label("", HudStyle.TYPE_BODY, HudStyle.TEXT, true)
 	title_label.name = "TrackerTitle"
 	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -93,7 +93,7 @@ func build(mount: PanelContainer) -> void:
 	map_key_chip.visible = not DisplayServer.is_touchscreen_available()
 	header.add_child(map_key_chip)
 
-	objective_label = HudStyle.label("", HudStyle.TYPE_CAPTION, HudStyle.TEXT)
+	objective_label = HudStyle.label("", HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
 	objective_label.name = "TrackerObjective"
 	objective_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	objective_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -101,12 +101,12 @@ func build(mount: PanelContainer) -> void:
 
 	progress_bar = ProgressBar.new()
 	progress_bar.name = "TrackerProgress"
-	progress_bar.custom_minimum_size = Vector2(0.0, 4.0)
+	progress_bar.custom_minimum_size = Vector2(0.0, 5.0)
 	progress_bar.show_percentage = false
 	progress_bar.add_theme_stylebox_override(
-		"background", HudStyle.panel(Color("#101917"), Color("#263b33"), 2)
+		"background", HudStyle.flat(HudStyle.SURFACE_RAISED, 3)
 	)
-	progress_fill = HudStyle.panel(HudStyle.GOLD, HudStyle.GOLD.lightened(0.2), 2)
+	progress_fill = HudStyle.flat(HudStyle.ACCENT, 3)
 	progress_bar.add_theme_stylebox_override("fill", progress_fill)
 	progress_bar.visible = false
 	progress_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -114,22 +114,22 @@ func build(mount: PanelContainer) -> void:
 
 	pip_row = HBoxContainer.new()
 	pip_row.name = "TrackerPips"
-	pip_row.add_theme_constant_override("separation", 4)
+	pip_row.add_theme_constant_override("separation", 5)
 	pip_row.visible = false
 	pip_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content.add_child(pip_row)
 
 	sub_box = VBoxContainer.new()
 	sub_box.name = "TrackerSubs"
-	sub_box.add_theme_constant_override("separation", 1)
+	sub_box.add_theme_constant_override("separation", 2)
 	sub_box.visible = false
 	sub_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content.add_child(sub_box)
 
-	# 목표 전환 펄스 — 카드 위를 골드가 한 번 스치고 사라진다.
+	# 목표 전환 펄스 — 카드 위를 민트가 한 번 스치고 사라진다.
 	pulse_overlay = ColorRect.new()
 	pulse_overlay.name = "TrackerPulse"
-	pulse_overlay.color = Color(HudStyle.GOLD.r, HudStyle.GOLD.g, HudStyle.GOLD.b, 0.0)
+	pulse_overlay.color = Color(HudStyle.ACCENT, 0.0)
 	pulse_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(pulse_overlay)
 
@@ -140,11 +140,25 @@ func _build_keycap(key_text: String, tip: String) -> PanelContainer:
 	chip.add_theme_stylebox_override("panel", HudStyle.keycap())
 	chip.tooltip_text = tip
 	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var key_label := HudStyle.label(key_text, HudStyle.TYPE_FOOTNOTE - 1, HudStyle.TEXT_DIM)
+	var key_label := HudStyle.label(key_text, HudStyle.TYPE_FOOTNOTE - 1, HudStyle.TEXT_DIM, true)
 	key_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	key_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chip.add_child(key_label)
 	return chip
+
+
+func _build_dot(size: float = DOT_SIZE) -> Panel:
+	# 단계 점·체크 대신 쓰는 작은 원. 색은 _tint_dot으로 바꾼다.
+	var dot := Panel.new()
+	dot.custom_minimum_size = Vector2(size, size)
+	dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tint_dot(dot, HudStyle.TEXT_FAINT)
+	return dot
+
+
+func _tint_dot(dot: Panel, color: Color) -> void:
+	dot.add_theme_stylebox_override("panel", HudStyle.flat(color, HudStyle.RADIUS_CHIP))
 
 
 # state:
@@ -159,12 +173,15 @@ func set_state(state: Dictionary) -> void:
 		panel.visible = false
 		return
 	panel.visible = true
-	var accent: Color = state.get("color", HudStyle.GOLD_TEXT)
+	# 강조는 민트 하나 — host가 넘기는 color는 위험·주의(붉은 기운)처럼 뜻이 있는
+	# 경우만 살리고, 골드·베이지 계열 기본색은 민트로 받는다. 제목은 언제나 흰 굵은 글자.
+	var accent: Color = state.get("color", HudStyle.ACCENT)
+	if accent.r - accent.g < 0.12:
+		accent = HudStyle.ACCENT
 	if title != last_title:
 		icon_rect.texture = UI_ICONS.get_icon(str(state.get("icon", "raid")), 20, accent)
 		_play_pulse()
 	title_label.text = title
-	title_label.add_theme_color_override("font_color", accent)
 	var objective := str(state.get("objective", ""))
 	objective_label.text = objective
 	objective_label.visible = not objective.is_empty()
@@ -174,7 +191,6 @@ func set_state(state: Dictionary) -> void:
 		progress_bar.max_value = maxf(1.0, float(progress.get("max", 1.0)))
 		progress_bar.value = clampf(float(progress.get("value", 0.0)), 0.0, progress_bar.max_value)
 		progress_fill.bg_color = accent
-		progress_fill.border_color = accent.lightened(0.2)
 		progress_bar.visible = true
 	else:
 		progress_bar.visible = false
@@ -198,14 +214,11 @@ func _refresh_pips(count: int, filled: int, accent: Color) -> void:
 		pip_row.remove_child(extra)
 		extra.queue_free()
 	while pip_row.get_child_count() < count:
-		var pip := HudStyle.label("●", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_FAINT)
-		pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		pip_row.add_child(pip)
+		pip_row.add_child(_build_dot(DOT_SIZE + 1.0))
 	for index in pip_row.get_child_count():
-		var pip := pip_row.get_child(index) as Label
+		var pip := pip_row.get_child(index) as Panel
 		var done := index < filled
-		pip.text = "●" if done else "○"
-		pip.add_theme_color_override("font_color", accent if done else HudStyle.TEXT_FAINT)
+		_tint_dot(pip, accent if done else HudStyle.TEXT_FAINT)
 
 
 func _refresh_subs(subs: Array) -> void:
@@ -225,34 +238,37 @@ func _refresh_subs(subs: Array) -> void:
 		var row := sub_box.get_child(index) as HBoxContainer
 		var sub := trimmed[index] as Dictionary
 		var done := bool(sub.get("done", false))
-		var check := row.get_child(0) as Label
-		check.text = "✓" if done else "○"
-		check.add_theme_color_override("font_color", HudStyle.GREEN if done else HudStyle.TEXT_FAINT)
+		# 완료 항목은 민트(점·글자·수치), 남은 항목은 회색 점 + 본문색 글자.
+		var check := row.get_child(0) as Panel
+		_tint_dot(check, HudStyle.ACCENT if done else HudStyle.TEXT_FAINT)
 		var label := row.get_child(1) as Label
 		label.text = str(sub.get("label", ""))
 		label.add_theme_color_override(
-			"font_color", HudStyle.TEXT_FAINT if done else HudStyle.TEXT_DIM
+			"font_color", HudStyle.ACCENT if done else HudStyle.TEXT
 		)
 		var count := row.get_child(2) as Label
 		count.text = str(sub.get("count", ""))
+		count.add_theme_color_override(
+			"font_color", HudStyle.ACCENT if done else HudStyle.TEXT_DIM
+		)
 		count.visible = not count.text.is_empty()
 	sub_box.visible = sub_box.get_child_count() > 0
 
 
 func _build_sub_row() -> HBoxContainer:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 5)
+	row.add_theme_constant_override("separation", 7)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var check := HudStyle.label("○", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_FAINT)
-	check.custom_minimum_size = Vector2(12, 0)
-	check.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(check)
-	var label := HudStyle.label("", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_DIM)
+	row.add_child(_build_dot())
+	var label := HudStyle.label("", HudStyle.TYPE_CAPTION, HudStyle.TEXT)
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(label)
-	var count := HudStyle.label("", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_FAINT)
+	var count := Label.new()
+	count.add_theme_font_override("font", HudStyle.tabular())
+	count.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION)
+	count.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
 	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	count.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(count)

@@ -134,16 +134,14 @@ func _ensure_banner() -> void:
 
 	panel = PanelContainer.new()
 	panel.name = "CelebrationPanel"
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.06, 0.065, 0.05, 0.92)
-	style.border_color = Color("#e8c766")
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(12)
+	# 2026-09-05 재도색 — 금색 테두리 배너를 걷어내고 다른 화면과 같은 언어로:
+	# 거의 검정 판, 테두리 없음, 민트 기운의 그림자 하나.
+	var style := HudStyle.flat(HudStyle.INK_SOLID, HudStyle.RADIUS_CARD)
 	style.content_margin_left = 34.0
 	style.content_margin_right = 34.0
 	style.content_margin_top = 16.0
 	style.content_margin_bottom = 18.0
-	style.shadow_color = Color(0.91, 0.78, 0.4, 0.34)
+	style.shadow_color = Color(HudStyle.ACCENT, 0.22)
 	style.shadow_size = 22
 	panel.add_theme_stylebox_override("panel", style)
 	panel.visible = false
@@ -155,11 +153,11 @@ func _ensure_banner() -> void:
 	column.alignment = BoxContainer.ALIGNMENT_CENTER
 	panel.add_child(column)
 
-	eyebrow_label = _make_label(15, Color("#c9b06a"))
+	eyebrow_label = _make_label(15, HudStyle.ACCENT)
 	column.add_child(eyebrow_label)
-	title_label = _make_label(31, Color("#ffe08a"))
+	title_label = _make_label(31, HudStyle.TEXT)
 	column.add_child(title_label)
-	subtitle_label = _make_label(16, Color("#d8e0d4"))
+	subtitle_label = _make_label(16, HudStyle.TEXT_DIM)
 	column.add_child(subtitle_label)
 
 	# 팡파르 플레이어 2개 — 연속 완료(연쇄 목표)에도 소리가 끊기지 않게.

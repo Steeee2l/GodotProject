@@ -448,13 +448,13 @@ func _armor_pickup_notice(equipment_id: String) -> String:
 	if not bool(result.get("equipped", false)):
 		return "%s 획득 · 지금 장비가 더 낫다 (가방 보관)" % display_name
 	if slot == "feet":
-		return "▲ %s 장착! 발이 더 가벼워졌다" % display_name
+		return "%s 장착! 발이 더 가벼워졌다" % display_name
 	var new_pct := roundi(float(result.get("new_score", 0.0)))
 	var previous_id := str(result.get("previous_id", ""))
 	if previous_id.is_empty():
-		return "▲ %s 장착! 방어 +%d%%" % [display_name, new_pct]
+		return "%s 장착! 방어 +%d%%" % [display_name, new_pct]
 	var previous_pct := roundi(float(result.get("previous_score", 0.0)))
-	return "▲ %s 장착! 방어 %d%% → %d%%" % [display_name, previous_pct, new_pct]
+	return "%s 장착! 방어 %d%% → %d%%" % [display_name, previous_pct, new_pct]
 
 
 # 전리품 교체 모달(LootSwapUI)은 가방 무제한화(2026-08-30)로 폐지됐다.

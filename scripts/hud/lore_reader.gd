@@ -41,46 +41,50 @@ func build(host: Node) -> void:
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	ui_layer.add_child(center)
+	# 디자인 언어(2026-09-04, 이름 짓기 화면 기준): 거의 검정 모달·보더 없음, 민트
+	# 이름표 + 굵은 제목 + 회색 출처, 본문은 흰 글자에 넉넉한 줄간격. 금색 없음.
 	ui_panel = PanelContainer.new()
 	ui_panel.name = "LoreReaderPanel"
-	ui_panel.add_theme_stylebox_override(
-		"panel",
-		HudStyle.panel(HudStyle.INK_SOLID, Color("#8f7a4b"), 6)
-	)
+	var panel_style := HudStyle.modal()
+	# 안쪽 여백은 아래 MarginContainer가 맡는다(세로 화면에서 apply_layout이 줄인다).
+	panel_style.content_margin_left = 0.0
+	panel_style.content_margin_right = 0.0
+	panel_style.content_margin_top = 0.0
+	panel_style.content_margin_bottom = 0.0
+	ui_panel.add_theme_stylebox_override("panel", panel_style)
 	center.add_child(ui_panel)
 
 	var margin := MarginContainer.new()
 	margin.name = "LoreReaderMargin"
 	for margin_name in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
-		margin.add_theme_constant_override(margin_name, 24)
+		margin.add_theme_constant_override(margin_name, 28)
 	ui_panel.add_child(margin)
 	var root_box := VBoxContainer.new()
-	root_box.add_theme_constant_override("separation", 16)
+	root_box.add_theme_constant_override("separation", 20)
 	margin.add_child(root_box)
 
 	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 12)
+	header.add_theme_constant_override("separation", 16)
 	root_box.add_child(header)
 	var heading := VBoxContainer.new()
 	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_theme_constant_override("separation", 4)
 	header.add_child(heading)
-	var eyebrow := Label.new()
-	eyebrow.text = "종로 생존 기록"
-	eyebrow.add_theme_font_override("font", FONT)
-	eyebrow.add_theme_font_size_override("font_size", 13)
-	eyebrow.add_theme_color_override("font_color", Color("#8faaa0"))
+	var eyebrow := HudStyle.label("기록", HudStyle.TYPE_CAPTION, HudStyle.ACCENT)
+	eyebrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	heading.add_child(eyebrow)
-	title_label = Label.new()
-	title_label.add_theme_font_override("font", FONT)
-	title_label.add_theme_font_size_override("font_size", 29)
-	title_label.add_theme_color_override("font_color", Color("#ead39a"))
+	title_label = HudStyle.label("", HudStyle.TYPE_TITLE, HudStyle.TEXT, true)
+	title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	heading.add_child(title_label)
-	var close_button := Button.new()
+	source_label = HudStyle.label("", HudStyle.TYPE_BODY, HudStyle.TEXT_DIM)
+	source_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	source_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	heading.add_child(source_label)
+	var close_button := HudStyle.close_button(UI_ICONS.get_icon("close", 22, HudStyle.TEXT))
 	close_button.name = "LoreCloseButton"
-	close_button.custom_minimum_size = Vector2(52, 52)
-	close_button.icon = UI_ICONS.get_icon("close", 28, Color("#dce6df"))
-	close_button.expand_icon = true
 	close_button.tooltip_text = "기록 닫기"
+	close_button.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	close_button.pressed.connect(close)
 	header.add_child(close_button)
 
@@ -89,13 +93,26 @@ func build(host: Node) -> void:
 	content.add_theme_constant_override("separation", 22)
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root_box.add_child(content)
+	# 포스터는 무광 표면 카드 위에 얹는다.
+	var preview_card := PanelContainer.new()
+	preview_card.name = "LorePosterCard"
+	var preview_style := HudStyle.flat(HudStyle.INK_WELL, HudStyle.RADIUS_CARD)
+	preview_style.content_margin_left = 10.0
+	preview_style.content_margin_right = 10.0
+	preview_style.content_margin_top = 10.0
+	preview_style.content_margin_bottom = 10.0
+	preview_card.add_theme_stylebox_override("panel", preview_style)
+	preview_card.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	preview_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(preview_card)
 	var preview := TextureRect.new()
 	preview.name = "LorePosterPreview"
 	preview.texture = LORE_POSTER_TEXTURE
 	preview.custom_minimum_size = Vector2(330, 250)
 	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	content.add_child(preview)
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	preview_card.add_child(preview)
 
 	var text_box := VBoxContainer.new()
 	text_box.name = "LoreReaderText"
@@ -103,31 +120,23 @@ func build(host: Node) -> void:
 	text_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	text_box.add_theme_constant_override("separation", 12)
 	content.add_child(text_box)
-	source_label = Label.new()
-	source_label.add_theme_font_override("font", FONT)
-	source_label.add_theme_font_size_override("font_size", 15)
-	source_label.add_theme_color_override("font_color", Color("#8eb7a6"))
-	text_box.add_child(source_label)
-	var separator := HSeparator.new()
-	text_box.add_child(separator)
 	var scroll := HudStyle.make_scroll()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	text_box.add_child(scroll)
-	body_label = Label.new()
+	body_label = HudStyle.label("", HudStyle.TYPE_HEADING, HudStyle.TEXT)
 	body_label.custom_minimum_size = Vector2(360, 190)
 	body_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body_label.add_theme_font_override("font", FONT)
-	body_label.add_theme_font_size_override("font_size", 18)
-	body_label.add_theme_color_override("font_color", Color("#d6ddd7"))
-	body_label.add_theme_constant_override("line_spacing", 7)
+	body_label.add_theme_constant_override("line_spacing", 9)
+	body_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	scroll.add_child(body_label)
 	progress_label = Label.new()
 	progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	progress_label.add_theme_font_override("font", FONT)
-	progress_label.add_theme_font_size_override("font_size", 14)
-	progress_label.add_theme_color_override("font_color", Color("#a89970"))
+	progress_label.add_theme_font_override("font", HudStyle.tabular())
+	progress_label.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION + 1)
+	progress_label.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
+	progress_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text_box.add_child(progress_label)
 
 
@@ -147,7 +156,7 @@ func show_entry(point: Node3D) -> void:
 		var marker_label := point.get_node_or_null("LoreMarkerLabel") as Label3D
 		if marker_label:
 			marker_label.text = "확인한 기록"
-			marker_label.modulate = Color("#8eb7a6")
+			marker_label.modulate = HudStyle.TEXT_DIM
 	title_label.text = str(entry.get("title", "이름 없는 기록"))
 	source_label.text = str(entry.get("source", "출처 불명"))
 	body_label.text = str(entry.get("body", "기록이 심하게 망가져서 읽을 수 없다."))
@@ -170,7 +179,7 @@ func apply_layout(viewport_size: Vector2) -> void:
 	if ui_panel == null:
 		return
 	var lore_compact := viewport_size.x < 760.0 or viewport_size.y < 540.0
-	var lore_margin := 12 if lore_compact else 24
+	var lore_margin := 16 if lore_compact else 28
 	ui_panel.custom_minimum_size = Vector2(
 		maxf(280.0, minf(900.0, viewport_size.x - 20.0)),
 		maxf(260.0, minf(540.0, viewport_size.y - 20.0))
@@ -208,6 +217,6 @@ func apply_layout(viewport_size: Vector2) -> void:
 	if title_label:
 		title_label.add_theme_font_size_override(
 			"font_size",
-			22 if lore_compact else 29
+			HudStyle.TYPE_NUMBER if lore_compact else HudStyle.TYPE_TITLE
 		)
 

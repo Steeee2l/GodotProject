@@ -19,6 +19,7 @@ extends RefCounted
 const HudStyle := preload("res://scripts/hud/hud_style.gd")
 const ACTIVE_TUTORIAL := preload("res://scripts/shelter/active_tutorial.gd")
 const UI_SAFE_AREA := preload("res://scripts/ui_safe_area.gd")
+const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 
 const LAYER_INDEX := 91
 const POLL_INTERVAL := 0.25
@@ -81,7 +82,7 @@ var card_title: Label
 var card_text: Label
 var key_row: HBoxContainer
 var skip_button: Button
-var check_label: Label
+var check_label: TextureRect
 
 var active_step_id := ""
 var poll_timer := 0.0
@@ -151,10 +152,10 @@ func _build_arrow() -> void:
 	root.add_child(arrow)
 	distance_chip = PanelContainer.new()
 	distance_chip.name = "DistanceChip"
-	distance_chip.add_theme_stylebox_override("panel", HudStyle.chip(HudStyle.LINE_GOLD))
+	distance_chip.add_theme_stylebox_override("panel", HudStyle.chip())
 	distance_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(distance_chip)
-	distance_label = HudStyle.label("", HudStyle.TYPE_FOOTNOTE, HudStyle.GOLD_TEXT)
+	distance_label = HudStyle.label("", HudStyle.TYPE_FOOTNOTE, HudStyle.ACCENT, true)
 	distance_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	distance_chip.add_child(distance_label)
 
@@ -162,7 +163,7 @@ func _build_arrow() -> void:
 func _build_card() -> void:
 	card = PanelContainer.new()
 	card.name = "RaidTutorialCard"
-	var style := HudStyle.panel(HudStyle.INK, HudStyle.LINE_GOLD, HudStyle.RADIUS_CARD)
+	var style := HudStyle.flat(HudStyle.INK_SOLID, HudStyle.RADIUS_CARD)
 	style.content_margin_left = 16.0
 	style.content_margin_right = 16.0
 	style.content_margin_top = 12.0
@@ -180,7 +181,7 @@ func _build_card() -> void:
 	header.name = "RaidTutorialCardHeader"
 	header.add_theme_constant_override("separation", 8)
 	box.add_child(header)
-	card_title = HudStyle.label("", HudStyle.TYPE_CAPTION, HudStyle.GOLD_TEXT)
+	card_title = HudStyle.label("", HudStyle.TYPE_CAPTION, HudStyle.ACCENT, true)
 	card_title.name = "RaidTutorialTitle"
 	card_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -198,8 +199,8 @@ func _build_card() -> void:
 	skip_button.add_theme_font_override("font", HudStyle.FONT)
 	skip_button.add_theme_font_size_override("font_size", HudStyle.TYPE_FOOTNOTE)
 	skip_button.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
-	skip_button.add_theme_color_override("font_hover_color", HudStyle.GOLD_TEXT)
-	skip_button.add_theme_color_override("font_pressed_color", HudStyle.GOLD_TEXT)
+	skip_button.add_theme_color_override("font_hover_color", HudStyle.TEXT)
+	skip_button.add_theme_color_override("font_pressed_color", HudStyle.TEXT)
 	skip_button.pressed.connect(func() -> void: _complete_active(true))
 	header.add_child(skip_button)
 	card_text = HudStyle.label("", HudStyle.TYPE_BODY, HudStyle.TEXT)
@@ -216,12 +217,12 @@ func _build_card() -> void:
 
 
 func _build_check() -> void:
-	check_label = HudStyle.label("✓", 40, HudStyle.GOLD_TEXT)
+	# Pretendard에 ✓ 글리프가 없어 두부(□)로 떴다 — 아이콘 팩토리의 체크로 그린다.
+	check_label = TextureRect.new()
 	check_label.name = "RaidTutorialCheck"
-	check_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	check_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	check_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
-	check_label.add_theme_constant_override("outline_size", 6)
+	check_label.texture = UI_ICONS.get_icon("check", 56, HudStyle.ACCENT)
+	check_label.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	check_label.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	check_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	check_label.size = Vector2(56, 56)
 	check_label.visible = false

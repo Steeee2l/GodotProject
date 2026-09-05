@@ -218,7 +218,7 @@ func _run() -> void:
 		await _sleep(0.05)
 		_press_at(center, false)
 	# ✓는 완료(폴링 0.25s 이내) 뒤 0.4초만 떠 있다 — 프레임마다 지켜보다 한 번이라도 보이면 된다.
-	var check_label := layer.find_child("TutorialCheck", true, false) as Label
+	var check_label := layer.find_child("TutorialCheck", true, false) as Control
 	var check_seen := false
 	for _frame in 90:
 		await process_frame

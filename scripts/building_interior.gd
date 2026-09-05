@@ -74,6 +74,7 @@ var player: CharacterBody3D
 var survivor: AnimatedSprite3D
 var camera: Camera3D
 var prompt_label: Label
+var prompt_capsule: PanelContainer
 var floor_label: Label
 var health_bar: ProgressBar
 var ammo_label: Label
@@ -89,6 +90,7 @@ var equipment_condition_label: Label
 var equipment_reload_bar: ProgressBar
 var building_objective_panel: PanelContainer
 var building_objective_label: Label
+var building_objective_detail_label: Label
 var floor_clear_banner: PanelContainer
 var floor_clear_title: Label
 var floor_clear_detail: Label
@@ -753,67 +755,57 @@ func _build_interface() -> void:
 	inventory_ui.connect("weapon_equipped", _on_inventory_weapon_equipped)
 	inventory_ui.connect("weapon_unequipped", _on_inventory_weapon_unequipped)
 	inventory_ui.connect("open_state_changed", _on_inventory_open_state_changed)
+	# 좌상단 상태 카드(HudStyle.card — 무광 검정, 테두리 없음). 기본은 숨김.
 	var panel := PanelContainer.new()
 	panel.name = "VitalsPanel"
 	panel.position = Vector2(18, 18)
 	panel.size = Vector2(332, 104)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.015, 0.02, 0.022, 0.9)
-	style.border_color = Color(0.42, 0.55, 0.52, 0.65)
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(5)
-	panel.add_theme_stylebox_override("panel", style)
+	panel.add_theme_stylebox_override("panel", HudStyle.card())
 	canvas.add_child(panel)
 	panel.visible = false
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 14)
-	margin.add_theme_constant_override("margin_top", 10)
-	margin.add_theme_constant_override("margin_right", 14)
-	margin.add_theme_constant_override("margin_bottom", 10)
-	panel.add_child(margin)
 	var box := VBoxContainer.new()
-	margin.add_child(box)
-	floor_label = Label.new()
-	floor_label.add_theme_font_override("font", FONT)
-	floor_label.add_theme_font_size_override("font_size", 18)
+	box.add_theme_constant_override("separation", 6)
+	panel.add_child(box)
+	floor_label = HudStyle.label("", HudStyle.TYPE_HEADING, HudStyle.TEXT, true)
 	box.add_child(floor_label)
-	floor_label.text = ""
 	health_bar = ProgressBar.new()
-	health_bar.custom_minimum_size = Vector2(290, 10)
+	health_bar.custom_minimum_size = Vector2(290, 6)
 	health_bar.max_value = 100
 	health_bar.show_percentage = false
+	health_bar.add_theme_stylebox_override("background", HudStyle.flat(HudStyle.SURFACE_RAISED, 3))
+	health_bar.add_theme_stylebox_override("fill", HudStyle.flat(HudStyle.ACCENT, 3))
 	box.add_child(health_bar)
-	ammo_label = Label.new()
-	ammo_label.add_theme_font_override("font", FONT)
-	ammo_label.add_theme_font_size_override("font_size", 14)
-	ammo_label.modulate = Color("#d6d2bd")
+	ammo_label = HudStyle.label("", HudStyle.TYPE_BODY, HudStyle.TEXT)
+	ammo_label.add_theme_font_override("font", HudStyle.tabular())
 	box.add_child(ammo_label)
-	var help := Label.new()
-	help.text = "WASD 이동 · SPACE 대시 · 좌클릭 근접 · 우클릭 조준+좌클릭 사격 · R 재장전 · F 상호작용"
-	help.add_theme_font_override("font", FONT)
-	help.add_theme_font_size_override("font_size", 13)
-	help.modulate = Color("#aeb7b3")
+	var help := HudStyle.label(
+		"WASD 이동 · SPACE 대시 · 좌클릭 근접 · 우클릭 조준+좌클릭 사격 · R 재장전 · F 상호작용",
+		HudStyle.TYPE_CAPTION,
+		HudStyle.TEXT_DIM
+	)
 	help.visible = false
 	box.add_child(help)
+	# 목표 카드 — 굵은 흰 제목 줄 + 회색 설명 줄(한 라벨, 줄바꿈으로 나뉜다).
 	building_objective_panel = PanelContainer.new()
 	building_objective_panel.position = Vector2(18, 18)
 	building_objective_panel.size = Vector2(334, 72)
-	building_objective_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.015, 0.02, 0.022, 0.9), Color(0.42, 0.55, 0.52, 0.65)))
+	building_objective_panel.add_theme_stylebox_override("panel", HudStyle.card())
 	canvas.add_child(building_objective_panel)
-	building_objective_label = Label.new()
-	building_objective_label.text = "  건물 수색\n  · 적을 제압하고 물자를 회수한다"
-	building_objective_label.add_theme_font_override("font", FONT)
-	building_objective_label.add_theme_font_size_override("font_size", 15)
-	building_objective_label.modulate = Color(0.92, 0.76, 0.32)
-	building_objective_panel.add_child(building_objective_label)
-	building_info_label = Label.new()
+	var objective_column := VBoxContainer.new()
+	objective_column.add_theme_constant_override("separation", 3)
+	building_objective_panel.add_child(objective_column)
+	building_objective_label = HudStyle.label("", HudStyle.TYPE_BODY, HudStyle.TEXT, true)
+	objective_column.add_child(building_objective_label)
+	building_objective_detail_label = HudStyle.label("", HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
+	objective_column.add_child(building_objective_detail_label)
+	_set_objective_text("  건물 수색\n  · 적을 제압하고 물자를 회수한다")
+	building_info_label = HudStyle.label("", HudStyle.TYPE_BODY, HudStyle.TEXT_DIM)
 	building_info_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	building_info_label.position = Vector2(-330, 18)
 	building_info_label.size = Vector2(308, 82)
 	building_info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	building_info_label.add_theme_font_override("font", FONT)
-	building_info_label.add_theme_font_size_override("font_size", 15)
-	building_info_label.modulate = Color("#d6d2bd")
+	building_info_label.add_theme_font_override("font", HudStyle.tabular())
+	building_info_label.add_theme_constant_override("line_spacing", 2)
 	canvas.add_child(building_info_label)
 	# 필드 유틸리티 버튼과 같은 원형 프리셋(HudStyle.style_mobile_action).
 	medkit_button = Button.new()
@@ -827,15 +819,7 @@ func _build_interface() -> void:
 	if not touch_enabled:
 		medkit_button.pressed.connect(_use_quick_medkit)
 	canvas.add_child(medkit_button)
-	prompt_label = Label.new()
-	prompt_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	prompt_label.position = Vector2(-250, -82)
-	prompt_label.size = Vector2(500, 42)
-	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	prompt_label.add_theme_font_override("font", FONT)
-	prompt_label.add_theme_font_size_override("font_size", 18)
-	prompt_label.modulate = Color("#efe1a4")
-	canvas.add_child(prompt_label)
+	_build_interaction_prompt(canvas, touch_enabled)
 	_build_shared_combat_hud(canvas)
 	_build_floor_clear_banner(canvas)
 	# 우하단 터치 버튼: 필드(raid_hud/main)와 같은 원형 프리셋·크기(80x80)·배치.
@@ -923,17 +907,15 @@ func _build_interface() -> void:
 	touch_stick.position = Vector2(34, -160)
 	touch_stick.size = Vector2(120, 120)
 	touch_stick.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var stick_style := StyleBoxFlat.new()
-	stick_style.bg_color = Color(0.1, 0.13, 0.14, 0.38)
-	stick_style.border_color = Color(0.5, 0.62, 0.6, 0.42)
-	stick_style.set_border_width_all(2)
-	stick_style.set_corner_radius_all(60)
-	touch_stick.add_theme_stylebox_override("panel", stick_style)
+	# 표면색 원 하나 — 테두리 선 없이 단차로만 구분한다.
+	touch_stick.add_theme_stylebox_override(
+		"panel", HudStyle.flat(Color(HudStyle.SURFACE_RAISED, 0.42), 60)
+	)
 	canvas.add_child(touch_stick)
 	touch_knob = ColorRect.new()
 	touch_knob.position = Vector2(40, 40)
 	touch_knob.size = Vector2(40, 40)
-	touch_knob.color = Color(0.72, 0.78, 0.75, 0.58)
+	touch_knob.color = Color(HudStyle.TEXT, 0.55)
 	touch_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	touch_stick.add_child(touch_knob)
 	touch_stick.visible = touch_enabled
@@ -970,22 +952,16 @@ func _build_shared_combat_hud(canvas: CanvasLayer) -> void:
 	var health_background_panel := Panel.new()
 	health_background_panel.size = Vector2(48, 7)
 	health_background_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var health_background := StyleBoxFlat.new()
-	health_background.bg_color = Color(0.018, 0.022, 0.024, 0.84)
-	health_background.border_color = Color(0.82, 0.86, 0.8, 0.38)
-	health_background.set_border_width_all(1)
-	health_background.set_corner_radius_all(4)
-	health_background.anti_aliasing = true
-	health_background_panel.add_theme_stylebox_override("panel", health_background)
+	# 머리 위 체력바 — 얇고 둥근 트랙(테두리 없음) 위에 민트 채움.
+	health_background_panel.add_theme_stylebox_override(
+		"panel", HudStyle.flat(Color(HudStyle.INK_WELL, 0.9), 4)
+	)
 	player_world_health_bar.add_child(health_background_panel)
 	player_world_health_fill = Panel.new()
 	player_world_health_fill.position = Vector2(1, 1)
 	player_world_health_fill.size = Vector2(46, 5)
 	player_world_health_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	player_health_fill_style = StyleBoxFlat.new()
-	player_health_fill_style.bg_color = Color(0.28, 0.86, 0.48, 0.96)
-	player_health_fill_style.set_corner_radius_all(3)
-	player_health_fill_style.anti_aliasing = true
+	player_health_fill_style = HudStyle.flat(HudStyle.GREEN, 3)
 	player_world_health_fill.add_theme_stylebox_override("panel", player_health_fill_style)
 	player_world_health_bar.add_child(player_world_health_fill)
 	canvas.add_child(player_world_health_bar)
@@ -1002,7 +978,7 @@ func _build_shared_combat_hud(canvas: CanvasLayer) -> void:
 	equipment_panel.z_index = 30
 	equipment_panel.add_theme_stylebox_override(
 		"panel",
-		HudStyle.panel(HudStyle.INK, Color("#8da997"), 7)
+		HudStyle.flat(HudStyle.INK, HudStyle.RADIUS_CARD)
 	)
 	canvas.add_child(equipment_panel)
 	var equipment_margin := MarginContainer.new()
@@ -1030,44 +1006,28 @@ func _build_shared_combat_hud(canvas: CanvasLayer) -> void:
 	var weapon_header := HBoxContainer.new()
 	weapon_header.add_theme_constant_override("separation", 6)
 	weapon_text_box.add_child(weapon_header)
-	equipment_label = Label.new()
+	equipment_label = HudStyle.label("", HudStyle.TYPE_CAPTION, HudStyle.TEXT, true)
 	equipment_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	equipment_label.clip_text = true
-	equipment_label.add_theme_font_override("font", FONT)
-	equipment_label.add_theme_font_size_override("font_size", 12)
-	equipment_label.add_theme_color_override("font_color", Color("#c6d4cb"))
 	weapon_header.add_child(equipment_label)
-	equipment_reserve_ammo_label = Label.new()
+	equipment_reserve_ammo_label = HudStyle.label("", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_DIM)
 	equipment_reserve_ammo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	equipment_reserve_ammo_label.add_theme_font_override("font", FONT)
-	equipment_reserve_ammo_label.add_theme_font_size_override("font_size", 11)
-	equipment_reserve_ammo_label.add_theme_color_override("font_color", Color("#8fa39a"))
 	weapon_header.add_child(equipment_reserve_ammo_label)
-	# 2줄: 잔탄/탄창 · 예비탄 통합 표기.
-	equipment_ammo_label = Label.new()
+	# 2줄: 잔탄/탄창 · 예비탄 통합 표기 — 크고 굵은 tabular 숫자.
+	equipment_ammo_label = HudStyle.number("", HudStyle.TYPE_NUMBER - 1, HudStyle.TEXT)
 	equipment_ammo_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	equipment_ammo_label.add_theme_font_override("font", FONT)
-	equipment_ammo_label.add_theme_font_size_override("font_size", 19)
-	equipment_ammo_label.add_theme_color_override("font_color", HudStyle.GOLD_TEXT)
 	weapon_text_box.add_child(equipment_ammo_label)
-	equipment_condition_label = Label.new()
+	equipment_condition_label = HudStyle.label("", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_DIM)
 	equipment_condition_label.clip_text = true
-	equipment_condition_label.add_theme_font_override("font", FONT)
-	equipment_condition_label.add_theme_font_size_override("font_size", 11)
-	equipment_condition_label.add_theme_color_override("font_color", Color("#9fb0a7"))
 	weapon_text_box.add_child(equipment_condition_label)
 	equipment_reload_bar = ProgressBar.new()
 	equipment_reload_bar.custom_minimum_size = Vector2(0, 5)
 	equipment_reload_bar.max_value = 1.0
 	equipment_reload_bar.show_percentage = false
 	equipment_reload_bar.add_theme_stylebox_override(
-		"background",
-		HudStyle.panel(Color("#171d1b"), Color("#3e4944"), 4)
+		"background", HudStyle.flat(HudStyle.SURFACE_RAISED, 3)
 	)
-	equipment_reload_bar.add_theme_stylebox_override(
-		"fill",
-		HudStyle.panel(Color("#d6b653"), Color("#f0d77d"), 4)
-	)
+	equipment_reload_bar.add_theme_stylebox_override("fill", HudStyle.flat(HudStyle.ACCENT, 3))
 	weapon_text_box.add_child(equipment_reload_bar)
 
 
@@ -1081,51 +1041,89 @@ func _build_floor_clear_banner(canvas: CanvasLayer) -> void:
 	floor_clear_banner.offset_bottom = 160
 	floor_clear_banner.z_index = 140
 	floor_clear_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	floor_clear_banner.add_theme_stylebox_override(
-		"panel",
-		_make_panel_style(Color(0.012, 0.024, 0.021, 0.97), Color("#74d8b5"), 8)
-	)
+	# 상단 띠 — 무광 검정 토스트 카드, 민트 아이콘, 굵은 제목 + 회색 설명.
+	var banner_style := HudStyle.toast()
+	banner_style.content_margin_left = 18.0
+	banner_style.content_margin_right = 20.0
+	banner_style.content_margin_top = 12.0
+	banner_style.content_margin_bottom = 12.0
+	floor_clear_banner.add_theme_stylebox_override("panel", banner_style)
 	floor_clear_banner.visible = false
 	canvas.add_child(floor_clear_banner)
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 18)
-	margin.add_theme_constant_override("margin_top", 12)
-	margin.add_theme_constant_override("margin_right", 18)
-	margin.add_theme_constant_override("margin_bottom", 12)
-	floor_clear_banner.add_child(margin)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
-	margin.add_child(row)
+	floor_clear_banner.add_child(row)
 	var icon := TextureRect.new()
 	icon.custom_minimum_size = Vector2(46, 46)
-	icon.texture = UI_ICONS.get_icon("secure", 48, Color("#89e8c4"))
+	icon.texture = UI_ICONS.get_icon("secure", 48, HudStyle.ACCENT)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(icon)
 	var text_box := VBoxContainer.new()
 	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	text_box.add_theme_constant_override("separation", 2)
 	row.add_child(text_box)
-	floor_clear_title = Label.new()
-	floor_clear_title.add_theme_font_override("font", FONT)
-	floor_clear_title.add_theme_font_size_override("font_size", 22)
-	floor_clear_title.add_theme_color_override("font_color", Color("#f3d879"))
+	floor_clear_title = HudStyle.label("", HudStyle.TYPE_NUMBER, HudStyle.TEXT, true)
 	text_box.add_child(floor_clear_title)
-	floor_clear_detail = Label.new()
-	floor_clear_detail.add_theme_font_override("font", FONT)
-	floor_clear_detail.add_theme_font_size_override("font_size", 14)
-	floor_clear_detail.add_theme_color_override("font_color", Color("#b9cec4"))
+	floor_clear_detail = HudStyle.label("", HudStyle.TYPE_BODY, HudStyle.TEXT_DIM)
 	text_box.add_child(floor_clear_detail)
 
 
+func _set_objective_text(text: String) -> void:
+	# "제목\n설명" 한 문자열을 굵은 흰 제목 + 회색 설명 두 줄로 나눠 얹는다.
+	if building_objective_label == null:
+		return
+	var lines := text.split("\n", false)
+	building_objective_label.text = lines[0].strip_edges() if lines.size() > 0 else ""
+	if building_objective_detail_label != null:
+		var detail := lines[1].strip_edges() if lines.size() > 1 else ""
+		building_objective_detail_label.text = detail
+		building_objective_detail_label.visible = not detail.is_empty()
 
 
-func _make_panel_style(background: Color, border: Color, radius: int = 4) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
-	style.border_color = border
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(radius)
-	return style
+func _build_interaction_prompt(canvas: CanvasLayer, touch_enabled: bool) -> void:
+	# 하단 중앙 상호작용 캡슐 — 표면색 알약 안에 [F] 키캡 + 안내 문구.
+	# 모바일은 상호작용 버튼이 따로 있으니 키캡은 뺀다.
+	var holder := CenterContainer.new()
+	holder.name = "InteractionPromptHolder"
+	holder.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	holder.offset_top = -124.0
+	holder.offset_bottom = -64.0
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	canvas.add_child(holder)
+	prompt_capsule = PanelContainer.new()
+	prompt_capsule.name = "InteractionPrompt"
+	var capsule_style := HudStyle.chip()
+	capsule_style.bg_color = Color(HudStyle.INK_WELL, 0.94)
+	capsule_style.content_margin_left = 10.0
+	capsule_style.content_margin_right = 16.0
+	capsule_style.content_margin_top = 8.0
+	capsule_style.content_margin_bottom = 9.0
+	prompt_capsule.add_theme_stylebox_override("panel", capsule_style)
+	prompt_capsule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	prompt_capsule.visible = false
+	holder.add_child(prompt_capsule)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	prompt_capsule.add_child(row)
+	var keycap := PanelContainer.new()
+	keycap.name = "Keycap"
+	keycap.add_theme_stylebox_override("panel", HudStyle.keycap())
+	keycap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	keycap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	keycap.visible = not touch_enabled
+	var key_label := HudStyle.label("F", HudStyle.TYPE_CAPTION, HudStyle.TEXT, true)
+	key_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	key_label.custom_minimum_size.x = 14.0
+	keycap.add_child(key_label)
+	row.add_child(keycap)
+	prompt_label = HudStyle.label("", HudStyle.TYPE_HEADING, HudStyle.TEXT, true)
+	prompt_label.name = "PromptLabel"
+	prompt_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(prompt_label)
 
 
 func _on_inventory_weapon_mods_changed() -> void:
@@ -1168,9 +1166,13 @@ func _build_elevator_menu(canvas: CanvasLayer) -> void:
 	elevator_menu = PanelContainer.new()
 	elevator_menu.name = "ElevatorFloorMenu"
 	elevator_menu.set_anchors_preset(Control.PRESET_CENTER)
-	elevator_menu.position = Vector2(-155, -120)
-	elevator_menu.size = Vector2(310, 240)
-	elevator_menu.add_theme_stylebox_override("panel", _make_panel_style(Color(0.012, 0.018, 0.02, 0.97), Color("#9b8a5d"), 6))
+	elevator_menu.position = Vector2(-170, -150)
+	elevator_menu.size = Vector2(340, 300)
+	elevator_menu.custom_minimum_size = Vector2(340, 0)
+	# 머리 위 체력바(z 40)·층 확보 띠(z 140)보다 위 — 판 위로 아무것도 비치지 않게.
+	elevator_menu.z_index = 150
+	# 화면을 멈추는 작은 판 — 거의 검정, 테두리 없음, 큰 그림자(HudStyle.modal).
+	elevator_menu.add_theme_stylebox_override("panel", HudStyle.modal())
 	elevator_menu.visible = false
 	canvas.add_child(elevator_menu)
 
@@ -1183,37 +1185,52 @@ func _show_elevator_menu() -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
 	elevator_menu.add_child(box)
-	var title := Label.new()
-	title.text = "엘리베이터 · 이동할 층 선택"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_override("font", FONT)
-	title.add_theme_font_size_override("font_size", 18)
-	box.add_child(title)
 	var current_floor := int(BuildingRunState.current_floor)
+	var title := HudStyle.label("이동할 층 선택", HudStyle.TYPE_TITLE - 2, HudStyle.TEXT, true)
+	box.add_child(title)
+	var subtitle := HudStyle.label(
+		"엘리베이터 · 현재 %d층" % current_floor, HudStyle.TYPE_BODY, HudStyle.TEXT_DIM
+	)
+	box.add_child(subtitle)
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 8)
+	box.add_child(gap)
 	if current_floor < int(BuildingRunState.max_floors):
 		_add_elevator_floor_button(box, "윗층 · %d층" % (current_floor + 1), current_floor + 1)
 	if current_floor > 1:
 		_add_elevator_floor_button(box, "아랫층 · %d층" % (current_floor - 1), current_floor - 1)
 	if current_floor > 2:
 		_add_elevator_floor_button(box, "1층 로비", 1)
+	var cancel_gap := Control.new()
+	cancel_gap.custom_minimum_size = Vector2(0, 4)
+	box.add_child(cancel_gap)
 	var cancel := Button.new()
 	cancel.text = "취소"
-	cancel.icon = UI_ICONS.get_icon("close", 28, Color("#dce6df"))
-	cancel.expand_icon = true
-	cancel.add_theme_font_override("font", FONT)
+	cancel.custom_minimum_size = Vector2(0, 44)
+	HudStyle.style_button(cancel, HudStyle.TEXT_DIM, false)
 	cancel.pressed.connect(func() -> void: elevator_menu.visible = false)
 	box.add_child(cancel)
 	elevator_menu.visible = true
+	# 내용만큼만 높이를 잡고 다시 가운데로 — 빈 여백이 남는 고정 높이 판을 두지 않는다.
+	var wanted := elevator_menu.get_combined_minimum_size()
+	wanted.x = maxf(wanted.x, 340.0)
+	elevator_menu.offset_left = -wanted.x * 0.5
+	elevator_menu.offset_right = wanted.x * 0.5
+	elevator_menu.offset_top = -wanted.y * 0.5
+	elevator_menu.offset_bottom = wanted.y * 0.5
+	HudStyle.enter_modal(elevator_menu)
 
 
 func _add_elevator_floor_button(parent: VBoxContainer, label_text: String, target_floor: int) -> void:
 	var button := Button.new()
 	button.text = label_text
-	button.icon = UI_ICONS.get_icon("up" if target_floor > int(BuildingRunState.current_floor) else "down", 30, Color("#d8e5de"))
+	button.icon = UI_ICONS.get_icon("up" if target_floor > int(BuildingRunState.current_floor) else "down", 22, HudStyle.ACCENT)
 	button.expand_icon = true
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	button.custom_minimum_size = Vector2(280, 42)
-	button.add_theme_font_override("font", FONT)
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.custom_minimum_size = Vector2(280, 48)
+	button.add_theme_constant_override("h_separation", 12)
+	HudStyle.style_button(button, HudStyle.ACCENT, false)
 	button.pressed.connect(func() -> void:
 		elevator_menu.visible = false
 		var arrival := "from_below" if target_floor > int(BuildingRunState.current_floor) else "from_above"
@@ -1334,7 +1351,7 @@ func _load_floor(floor_number: int, arrival: String) -> void:
 	var building_name := _get_building_display_name()
 	building_info_label.text = "%s · %d / %d층\n경계 중\n실내 수색 구역" % [building_name, floor_number, BuildingRunState.max_floors]
 	if building_objective_label != null:
-		building_objective_label.text = "  %s 수색\n  · 적을 제압하고 물자를 회수한다" % building_name
+		_set_objective_text("  %s 수색\n  · 적을 제압하고 물자를 회수한다" % building_name)
 	_show_status("%d층 진입 · 배치 시드 %d" % [floor_number, BuildingRunState.get_floor_seed(floor_number)])
 	loading_floor = false
 
@@ -1594,7 +1611,7 @@ func _handle_floor_cleared() -> void:
 	)
 	_show_floor_clear_banner(title, detail)
 	if building_objective_label != null:
-		building_objective_label.text = (
+		_set_objective_text(
 			"  %s 탐색 완료\n  · 전리품을 챙기고 도시로 돌아간다" % building_name
 			if full_clear
 			else "  %s %d층 확보\n  · 남은 층을 마저 수색한다" % [building_name, cleared_floor]
@@ -1663,7 +1680,13 @@ func _update_nearby_interactable() -> void:
 			nearest = node
 			nearest_distance = distance
 	current_interactable = nearest
-	prompt_label.text = "" if nearest == null else "[F]  %s" % str(nearest.call("get_interaction_prompt"))
+	prompt_label.text = "" if nearest == null else str(nearest.call("get_interaction_prompt"))
+	if prompt_capsule != null:
+		var should_show := nearest != null
+		if should_show and not prompt_capsule.visible:
+			HudStyle.pop_in(prompt_capsule)
+		elif not should_show and prompt_capsule.visible:
+			prompt_capsule.visible = false
 
 
 func _interact() -> void:
@@ -2224,7 +2247,7 @@ func _update_ammo_label() -> void:
 		int(GameState.get_max_health()),
 		hud_state
 	)
-	var ammo_color: Color = hud_state.get("ammo_color", Color("#d6d2bd"))
+	var ammo_color: Color = hud_state.get("ammo_color", HudStyle.TEXT)
 	ammo_label.add_theme_color_override("font_color", ammo_color)
 	_update_shared_equipment_hud(hud_state)
 	if inventory_ui != null:
@@ -2272,7 +2295,7 @@ func _update_shared_equipment_hud(hud_state: Dictionary) -> void:
 	equipment_reserve_ammo_label.text = ammo_name if has_weapon else ""
 	equipment_reserve_ammo_label.visible = has_weapon
 	equipment_ammo_label.text = str(hud_state.get("ammo_combined_text", "-- / --"))
-	var ammo_color: Color = hud_state.get("ammo_color", Color("#f1ce70"))
+	var ammo_color: Color = hud_state.get("ammo_color", HudStyle.TEXT)
 	equipment_ammo_label.add_theme_color_override("font_color", ammo_color)
 	equipment_condition_label.text = str(hud_state.get("condition_text", ""))
 	equipment_condition_label.visible = bool(hud_state.get("condition_notable", true))
@@ -2476,11 +2499,11 @@ func _update_player_world_health_bar() -> void:
 	var health_ratio := clampf(float(GameState.player_health) / float(max_health), 0.0, 1.0)
 	player_world_health_fill.size.x = 46.0 * health_ratio
 	player_health_fill_style.bg_color = (
-		Color(0.88, 0.18, 0.12, 0.98)
+		HudStyle.DANGER
 		if health_ratio <= 0.3
-		else Color(0.94, 0.66, 0.16, 0.98)
+		else HudStyle.WARN
 		if health_ratio <= 0.6
-		else Color(0.28, 0.86, 0.48, 0.96)
+		else HudStyle.GREEN
 	)
 	var head_position := camera.unproject_position(player.global_position + Vector3(0, 2.15, 0))
 	player_world_health_bar.position = head_position - Vector2(24.0, 3.0)

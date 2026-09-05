@@ -30,8 +30,10 @@ func _run() -> void:
 	target.set("perception_state", "combat")
 	await physics_frame
 
+	# 스텔스 UI 상태는 main이 아니라 stealth 모듈(scripts/raid/stealth_system.gd)이 쥔다.
+	var stealth: Object = main_scene.get("stealth")
 	main_scene.call("_update_stealth_takedown_prompt")
-	assert(not bool((main_scene.get("stealth_takedown_prompt") as Control).visible))
+	assert(not bool((stealth.get("stealth_takedown_prompt") as Control).visible))
 	assert(not bool(target.call(
 		"can_receive_stealth_takedown",
 		player.global_position,
@@ -42,10 +44,10 @@ func _run() -> void:
 	target.set("detection_awareness", 0.2)
 	target.set("perception_state", "suspicious")
 	main_scene.call("_update_stealth_takedown_prompt")
-	assert(main_scene.get("nearby_stealth_takedown_target") == target)
-	assert(bool((main_scene.get("stealth_takedown_prompt") as Control).visible))
-	assert(not bool((main_scene.get("stealth_takedown_key_label") as Label).visible))
-	assert((main_scene.get("stealth_takedown_input_icon") as TextureRect).texture != null)
+	assert(stealth.get("nearby_stealth_takedown_target") == target)
+	assert(bool((stealth.get("stealth_takedown_prompt") as Control).visible))
+	assert(not bool((stealth.get("stealth_takedown_key_label") as Label).visible))
+	assert((stealth.get("stealth_takedown_input_icon") as TextureRect).texture != null)
 	main_scene.set("laser_aim_held", true)
 	main_scene.set("has_ak", true)
 	main_scene.set("magazine_ammo", 30)
@@ -55,7 +57,7 @@ func _run() -> void:
 	main_scene.call("_handle_combat_mouse_button", left_click)
 	assert(int(target.get("health")) == 0)
 	assert(bool(target.get("backstab_stunned")))
-	assert(not bool((main_scene.get("stealth_takedown_prompt") as Control).visible))
+	assert(not bool((stealth.get("stealth_takedown_prompt") as Control).visible))
 	assert(not bool(main_scene.get("mouse_fire_held")))
 	assert(float(main_scene.get("camera_shake_time")) > 0.0)
 	assert(Engine.time_scale < 1.0)

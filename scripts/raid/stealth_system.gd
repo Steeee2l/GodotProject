@@ -316,10 +316,7 @@ func _setup_stealth_takedown_prompt(font: Font) -> void:
 	stealth_takedown_prompt.custom_minimum_size = STEALTH_TAKEDOWN_PROMPT_SIZE
 	stealth_takedown_prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	stealth_takedown_prompt.z_index = 220
-	stealth_takedown_prompt.add_theme_stylebox_override(
-		"panel",
-		host._make_panel_style(Color(0.025, 0.032, 0.029, 0.96), Color("#e0ba66"), 6)
-	)
+	stealth_takedown_prompt.add_theme_stylebox_override("panel", HudStyle.card())
 	stealth_takedown_prompt.visible = false
 	host.get_node("HUD").add_child(stealth_takedown_prompt)
 
@@ -335,17 +332,14 @@ func _setup_stealth_takedown_prompt(font: Font) -> void:
 
 	var key_chip := PanelContainer.new()
 	key_chip.custom_minimum_size = Vector2(58, 34)
-	key_chip.add_theme_stylebox_override(
-		"panel",
-		host._make_panel_style(Color("#d5aa55"), Color("#ffe09a"), 5)
-	)
+	key_chip.add_theme_stylebox_override("panel", HudStyle.flat(HudStyle.ACCENT, 8))
 	row.add_child(key_chip)
 	var input_center := CenterContainer.new()
 	key_chip.add_child(input_center)
 	stealth_takedown_input_icon = TextureRect.new()
 	stealth_takedown_input_icon.name = "MouseLeftIcon"
 	stealth_takedown_input_icon.custom_minimum_size = Vector2(28, 28)
-	stealth_takedown_input_icon.texture = UI_ICONS.get_icon("mouse_left", 32, Color("#191711"))
+	stealth_takedown_input_icon.texture = UI_ICONS.get_icon("mouse_left", 32, HudStyle.ACCENT_INK)
 	stealth_takedown_input_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	stealth_takedown_input_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	stealth_takedown_input_icon.visible = not DisplayServer.is_touchscreen_available()
@@ -357,7 +351,7 @@ func _setup_stealth_takedown_prompt(font: Font) -> void:
 	stealth_takedown_key_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	stealth_takedown_key_label.add_theme_font_override("font", font)
 	stealth_takedown_key_label.add_theme_font_size_override("font_size", 14)
-	stealth_takedown_key_label.add_theme_color_override("font_color", Color("#191711"))
+	stealth_takedown_key_label.add_theme_color_override("font_color", HudStyle.ACCENT_INK)
 	input_center.add_child(stealth_takedown_key_label)
 
 	stealth_takedown_action_label = Label.new()
@@ -366,7 +360,7 @@ func _setup_stealth_takedown_prompt(font: Font) -> void:
 	stealth_takedown_action_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	stealth_takedown_action_label.add_theme_font_override("font", font)
 	stealth_takedown_action_label.add_theme_font_size_override("font_size", 18)
-	stealth_takedown_action_label.add_theme_color_override("font_color", Color("#f5e6c7"))
+	stealth_takedown_action_label.add_theme_color_override("font_color", HudStyle.TEXT)
 	row.add_child(stealth_takedown_action_label)
 
 

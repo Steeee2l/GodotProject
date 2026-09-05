@@ -3,7 +3,7 @@ extends RefCounted
 ## 액티브 튜토리얼 — 읽는 안내가 아니라 "가리키고 · 해보게 하고 · 행동하면 넘어가는" 안내.
 ##
 ## 토스트/레슨 카드(1회성 플래그 10개)는 전부 읽기만 하는 안내였다. 여기서는 스텝 표(STEPS)의
-## 조건이 맞는 순간 대상 컨트롤에 골드 림 펄스 + 화살표 + 한 줄 지시 카드를 붙이고, 플레이어가
+## 조건이 맞는 순간 대상 컨트롤에 민트 림 펄스 + 화살표 + 한 줄 지시 카드를 붙이고, 플레이어가
 ## 실제 행동(주민 앉히기·훈련 구매·제작·판매·피버 충전·통조림 투척·성장 선택…)을 하면 ✓ 뒤
 ## 다음 스텝으로 넘어간다. 건너뛰기는 그 스텝만 완료 처리한다.
 ##
@@ -19,6 +19,7 @@ extends RefCounted
 ## active_tutorial_enabled 토글과 "안내 다시 보기"(전부 리셋)가 이 시스템을 끄고 되돌린다.
 
 const SHELTER_REQUISITION := preload("res://scripts/shelter/requisition.gd")
+const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 
 # 시설 모달(60~90)보다 위, 일시정지(96)·피버 연출(96)·주홍 시네마틱(92)보다 아래.
 const LAYER_INDEX := 91
@@ -117,7 +118,7 @@ var card: PanelContainer
 var card_title: Label
 var card_text: Label
 var skip_button: Button
-var check_label: Label
+var check_label: TextureRect
 # 컨테이너(HFlow 등) 대상은 자식을 더하면 레이아웃이 깨져 림 펄스를 못 붙인다 — 대신 테두리 헤일로.
 var halo: Panel
 # 월드 좌표(배수관 출구) 위에 띄우는 투영 프록시 — 컨트롤이 없는 3D 지점도
@@ -186,8 +187,7 @@ func _build_pointer() -> void:
 func _build_card() -> void:
 	card = PanelContainer.new()
 	card.name = "TutorialCard"
-	var style := HudStyle.panel(HudStyle.INK, HudStyle.LINE_GOLD, HudStyle.RADIUS_CARD)
-	style.set_border_width_all(1)
+	var style := HudStyle.flat(HudStyle.INK_SOLID, HudStyle.RADIUS_CARD)
 	style.content_margin_left = 12.0
 	style.content_margin_right = 12.0
 	style.content_margin_top = 8.0
@@ -215,7 +215,7 @@ func _build_card() -> void:
 	header.name = "TutorialCardHeader"
 	header.add_theme_constant_override("separation", 8)
 	box.add_child(header)
-	card_title = HudStyle.label("", HudStyle.TYPE_CAPTION, HudStyle.GOLD_TEXT)
+	card_title = HudStyle.label("", HudStyle.TYPE_CAPTION, HudStyle.ACCENT, true)
 	card_title.name = "TutorialTitle"
 	card_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -233,8 +233,8 @@ func _build_card() -> void:
 	skip_button.add_theme_font_override("font", HudStyle.FONT)
 	skip_button.add_theme_font_size_override("font_size", HudStyle.TYPE_FOOTNOTE)
 	skip_button.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
-	skip_button.add_theme_color_override("font_hover_color", HudStyle.GOLD_TEXT)
-	skip_button.add_theme_color_override("font_pressed_color", HudStyle.GOLD_TEXT)
+	skip_button.add_theme_color_override("font_hover_color", HudStyle.TEXT)
+	skip_button.add_theme_color_override("font_pressed_color", HudStyle.TEXT)
 	skip_button.pressed.connect(func() -> void: _complete_active(true))
 	header.add_child(skip_button)
 	card_text = HudStyle.label("", HudStyle.TYPE_BODY, HudStyle.TEXT)
@@ -250,7 +250,7 @@ func _build_halo() -> void:
 	halo.name = "TutorialHalo"
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0, 0, 0, 0)
-	style.border_color = HudFx.GOLD
+	style.border_color = HudStyle.ACCENT
 	style.set_border_width_all(2)
 	style.set_corner_radius_all(HudStyle.RADIUS_CARD)
 	halo.add_theme_stylebox_override("panel", style)
@@ -298,12 +298,11 @@ func _update_world_marker() -> void:
 
 
 func _build_check() -> void:
-	check_label = HudStyle.label("✓", 40, HudStyle.GOLD_TEXT)
+	check_label = TextureRect.new()
 	check_label.name = "TutorialCheck"
-	check_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	check_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	check_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
-	check_label.add_theme_constant_override("outline_size", 6)
+	check_label.texture = UI_ICONS.get_icon("check", 56, HudStyle.ACCENT)
+	check_label.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	check_label.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	check_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	check_label.size = Vector2(56, 56)
 	check_label.visible = false
@@ -950,7 +949,7 @@ func _switch_target(target: Control) -> void:
 		halo.visible = false
 	if is_instance_valid(active_target):
 		if _rim_allowed(active_target):
-			HudFx.attach_rim_pulse(active_target, HudFx.GOLD, 7.0)
+			HudFx.attach_rim_pulse(active_target, HudStyle.ACCENT, 7.0)
 		_scroll_into_view(active_target)
 		idle_time = 0.0
 		if card_collapsed:
@@ -1171,9 +1170,9 @@ class TutorialTicker:
 
 class TutorialArrow:
 	extends Control
-	# 골드 화살촉. direction이 가리키는 쪽이 대상이다.
+	# 민트 화살촉. direction이 가리키는 쪽이 대상이다.
 	var direction := Vector2.DOWN
-	var color := Color("#f0d77d")
+	var color := HudStyle.ACCENT
 
 	func _draw() -> void:
 		var half := size * 0.5

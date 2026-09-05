@@ -4,8 +4,6 @@ extends Node
 ## 지금까지 게임을 끝내는 유일한 수단이 Alt+F4였다 — 저장하고 나가는
 ## 정상 출구를 만든다. 트리 일시정지 위에서도 동작해야 하므로 ALWAYS.
 
-const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
-
 var can_pause: Callable
 var quit_label := "저장 후 종료"
 var quit_caption := ""
@@ -79,30 +77,26 @@ func _open() -> void:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	layer.add_child(center)
 	var panel := PanelContainer.new()
+	panel.name = "PauseMenuPanel"
 	panel.custom_minimum_size = Vector2(
 		minf(340.0, get_viewport().get_visible_rect().size.x - 40.0), 0
 	)
-	var panel_style := HudStyle.panel(HudStyle.INK, HudStyle.LINE_GOLD, HudStyle.RADIUS_CARD)
-	panel_style.content_margin_left = 22.0
-	panel_style.content_margin_right = 22.0
-	panel_style.content_margin_top = 18.0
-	panel_style.content_margin_bottom = 18.0
-	panel_style.shadow_color = Color(0, 0, 0, 0.6)
-	panel_style.shadow_size = 12
+	# 작은 검정 판(반지름 20, 테두리 없음, 그림자) — 이름 짓기 화면의 언어.
+	var panel_style := HudStyle.modal()
+	panel_style.content_margin_top = 22.0
+	panel_style.content_margin_bottom = 22.0
 	panel.add_theme_stylebox_override("panel", panel_style)
 	center.add_child(panel)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 10)
 	panel.add_child(box)
 
-	var title := HudStyle.label("일시 정지", HudStyle.TYPE_CAPTION, HudStyle.GOLD_TEXT)
+	var title := HudStyle.label("일시 정지", HudStyle.TYPE_TITLE, HudStyle.TEXT, true)
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(title)
-	var divider := ColorRect.new()
-	divider.color = Color(HudStyle.LINE_GOLD, 0.5)
-	divider.custom_minimum_size = Vector2(0, 1)
-	box.add_child(divider)
 	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, 4)
+	spacer.custom_minimum_size = Vector2(0, 6)
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(spacer)
 
 	var resume := _button("계속하기", true)
@@ -119,6 +113,7 @@ func _open() -> void:
 		var caption := HudStyle.label(quit_caption, HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
 		caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		box.add_child(caption)
 
 	# 등장 모션 — 띡 나오지 않는다.
@@ -138,11 +133,9 @@ func _close() -> void:
 
 
 func _button(text: String, primary: bool) -> Button:
+	# 주 버튼 = 민트 채움/어두운 글자, 보조 = 표면색 채움/흰 글자.
 	var button := Button.new()
 	button.text = text
-	button.custom_minimum_size = Vector2(0, 48)
-	button.add_theme_font_override("font", FONT)
-	button.add_theme_font_size_override("font_size", 16)
-	button.focus_mode = Control.FOCUS_NONE
-	HudStyle.style_button(button, HudStyle.GOLD if primary else HudStyle.TEXT_DIM, primary)
+	button.custom_minimum_size = Vector2(0, 52 if primary else 48)
+	HudStyle.style_button(button, HudStyle.ACCENT, primary)
 	return button

@@ -9,8 +9,12 @@ extends RefCounted
 #
 # 시네마틱 바크 모드(field_cinematic.gd)도 이 패널을 빌려 쓴다 — 같은 하단
 # 슬롯을 쓰는 둘이 따로 패널을 띄우면 겹치므로, 한 큐에 줄을 세운다.
-# 바크 줄은 골드 테두리 + 화자 이름, 표시 시간 = 1.6s + 글자당 0.045s(최소 2.2s),
+# 바크 줄은 더 작은 카드 + 화자 이름, 표시 시간 = 1.6s + 글자당 0.045s(최소 2.2s),
 # 패널을 탭하면 빨리 넘어가고, 건너뛰기는 남은 바크를 통째로 접는다.
+#
+# 2026-09-05 재도색 — HudStyle 언어: 하단 표면 카드(반지름 14, 살짝 비침, 테두리
+# 없음), 화자는 민트 eyebrow, 본문 흰 16px. 바크는 여백이 좁은 작은 카드에 탭 안내
+# (회색 caption + 키캡)가 붙는다.
 #
 # 사용:
 #   monologue.attach(main)                  # host 패턴
@@ -27,15 +31,16 @@ const BARK_MIN_SECONDS := 2.2
 # 긴 줄을 타자기가 다 친 뒤에도 최소 이만큼은 머문다 — 마지막 글자를 읽을 틈.
 const BARK_MIN_HOLD_AFTER_TYPING := 0.7
 const BARK_FAST_HOLD_SECONDS := 0.9
-const BORDER_DEFAULT := Color("#7f9c8f")
-const BORDER_BARK := Color("#b89545")
-const SPEAKER_DEFAULT := Color("#9cc7ae")
-const SPEAKER_BARK := Color("#f0ce70")
+# 카드 바탕 — 표면색, 살짝 비침(자막이라 뒤 장면이 비쳐야 한다).
+const CARD_BACKGROUND := Color(0.078, 0.102, 0.118, 0.9)
+const SPEAKER_DEFAULT := HudStyle.ACCENT
+const SPEAKER_BARK := HudStyle.ACCENT
 
 var host: Node
 var panel: PanelContainer
 var speaker_label: Label
 var line_label: Label
+var hint_row: HBoxContainer
 var typewriter: Typewriter
 # 큐 항목: {"text", "speaker", "bark": bool, "on_done": Callable(마지막 바크 줄에만)}
 var queue: Array[Dictionary] = []
@@ -154,29 +159,38 @@ func _ensure_panel() -> void:
 	panel.offset_top = -160.0
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.gui_input.connect(_on_panel_gui_input)
-	var style := HudStyle.panel(HudStyle.INK, BORDER_DEFAULT, 7)
-	style.content_margin_left = 14.0
-	style.content_margin_right = 14.0
-	style.content_margin_top = 8.0
-	style.content_margin_bottom = 8.0
-	panel.add_theme_stylebox_override("panel", style)
+	panel.add_theme_stylebox_override("panel", _card_style(false))
 	panel.visible = false
 	host.get_node("HUD").add_child(panel)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 2)
+	box.add_theme_constant_override("separation", 3)
 	panel.add_child(box)
-	speaker_label = Label.new()
-	speaker_label.text = GameState.player_name
-	speaker_label.add_theme_font_override("font", FONT)
-	speaker_label.add_theme_font_size_override("font_size", 12)
-	speaker_label.add_theme_color_override("font_color", SPEAKER_DEFAULT)
+	speaker_label = HudStyle.label(GameState.player_name, HudStyle.TYPE_CAPTION, SPEAKER_DEFAULT)
+	speaker_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(speaker_label)
-	line_label = Label.new()
+	line_label = HudStyle.label("", 16, HudStyle.TEXT)
 	line_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	line_label.add_theme_font_override("font", FONT)
-	line_label.add_theme_font_size_override("font_size", 16)
-	line_label.add_theme_color_override("font_color", Color("#eef3ef"))
+	line_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(line_label)
+	# 바크 전용 안내 — 회색 caption + 키캡. 독백에서는 숨긴다(입력을 안 받으니까).
+	hint_row = HBoxContainer.new()
+	hint_row.name = "FieldMonologueHint"
+	hint_row.alignment = BoxContainer.ALIGNMENT_END
+	hint_row.add_theme_constant_override("separation", 6)
+	hint_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hint_row.visible = false
+	box.add_child(hint_row)
+	var keycap := PanelContainer.new()
+	keycap.add_theme_stylebox_override("panel", HudStyle.keycap())
+	keycap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var keycap_label := HudStyle.label("클릭", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT, true)
+	keycap_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	keycap.add_child(keycap_label)
+	hint_row.add_child(keycap)
+	var hint_label := HudStyle.label("빨리 넘기기", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_FAINT)
+	hint_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hint_row.add_child(hint_label)
 	typewriter = Typewriter.new()
 	host.get_node("HUD").add_child(typewriter)
 	typewriter.attach(line_label)
@@ -187,15 +201,23 @@ func _apply_style(bark: bool) -> void:
 	if bark == _bark_style_active or not is_instance_valid(panel):
 		return
 	_bark_style_active = bark
-	var style := HudStyle.panel(HudStyle.INK, BORDER_BARK if bark else BORDER_DEFAULT, 7)
-	style.content_margin_left = 14.0
-	style.content_margin_right = 14.0
-	style.content_margin_top = 8.0
-	style.content_margin_bottom = 8.0
-	panel.add_theme_stylebox_override("panel", style)
+	panel.add_theme_stylebox_override("panel", _card_style(bark))
 	speaker_label.add_theme_color_override("font_color", SPEAKER_BARK if bark else SPEAKER_DEFAULT)
+	line_label.add_theme_font_size_override("font_size", 15 if bark else 16)
+	if is_instance_valid(hint_row):
+		hint_row.visible = bark
 	# 바크만 탭을 받는다 — 독백은 예전처럼 입력을 전혀 잡지 않는다.
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP if bark else Control.MOUSE_FILTER_IGNORE
+
+
+func _card_style(bark: bool) -> StyleBoxFlat:
+	# 표면 카드(반지름 14, 테두리 없음). 바크는 여백을 줄인 더 작은 카드.
+	var style := HudStyle.flat(CARD_BACKGROUND, HudStyle.RADIUS_CARD)
+	style.content_margin_left = 12.0 if bark else 16.0
+	style.content_margin_right = 12.0 if bark else 16.0
+	style.content_margin_top = 8.0 if bark else 12.0
+	style.content_margin_bottom = 8.0 if bark else 12.0
+	return style
 
 
 func _on_panel_gui_input(event: InputEvent) -> void:

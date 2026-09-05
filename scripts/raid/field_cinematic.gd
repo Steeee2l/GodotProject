@@ -56,6 +56,7 @@ const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const DIALOGUE_PORTRAIT := preload("res://scripts/hud/dialogue_portrait.gd")
 const STORY_CHARACTER_SCRIPT := preload("res://scripts/shelter_story_character.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+const HudStyle := preload("res://scripts/hud/hud_style.gd")
 
 const BAR_HEIGHT := 62.0
 const BAR_TIME := 0.4
@@ -431,9 +432,8 @@ func _build_layer() -> void:
 		# 바크 모드: 레터박스도 입력 가로채기도 없다. 작은 건너뛰기 버튼 하나만.
 		skip_button = _make_button("건너뛰기", "close")
 		skip_button.name = "CineSkipButton"
-		skip_button.add_theme_font_size_override("font_size", 13)
-		skip_button.icon = UI_ICONS.get_icon("close", 16, Color("#cbd9cf"))
-		skip_button.modulate.a = 0.8
+		skip_button.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION + 1)
+		skip_button.modulate.a = 0.85
 		# 바크 패널(FieldMonologue: 중앙 하단, 반폭 ≤330, 위 -160) 오른쪽 위 모서리에
 		# 붙인다 — 우상단에 두면 살아 있는 HUD의 구역·탈출 거리 표시를 가린다.
 		var viewport_width: float = host.get_viewport().get_visible_rect().size.x
@@ -471,26 +471,14 @@ func _build_layer() -> void:
 	layer.add_child(skip_button)
 
 
-func _make_button(text: String, icon_name: String) -> Button:
+func _make_button(text: String, _icon_name: String, primary := false) -> Button:
+	# 이름 짓기 화면의 버튼 언어: 주 버튼 = 민트 채움/어두운 글자, 보조 = 표면색 채움.
+	# 아이콘은 쓰지 않는다(글자만). 인자는 옛 호출부 호환용으로 남긴다.
 	var button := Button.new()
 	button.text = text
-	button.focus_mode = Control.FOCUS_NONE
-	button.add_theme_font_override("font", FONT)
-	button.add_theme_font_size_override("font_size", 15)
-	button.add_theme_color_override("font_color", Color("#e5ece7"))
-	button.icon = UI_ICONS.get_icon(icon_name, 22, Color("#cbd9cf"))
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.03, 0.05, 0.05, 0.92)
-	style.border_color = Color("#7f9488")
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(6)
-	style.content_margin_left = 12.0
-	style.content_margin_right = 12.0
-	style.content_margin_top = 7.0
-	style.content_margin_bottom = 7.0
-	button.add_theme_stylebox_override("normal", style)
-	button.add_theme_stylebox_override("hover", style)
-	button.add_theme_stylebox_override("pressed", style)
+	HudStyle.style_button(button, HudStyle.ACCENT, primary)
+	if not primary:
+		button.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION + 1)
 	return button
 
 
@@ -666,15 +654,16 @@ func _open_dialogue(step: Dictionary) -> void:
 	dialogue_panel.offset_right = half
 	dialogue_panel.offset_bottom = -26.0
 	dialogue_panel.offset_top = -26.0 - (196.0 if compact else 178.0)
+	# 표면 카드(반지름 14, 테두리 없음) — 이름 짓기 화면의 언어.
 	dialogue_panel.add_theme_stylebox_override(
-		"panel", _panel_style(Color(0.012, 0.019, 0.018, 0.985), Color("#b89545"))
+		"panel", _panel_style(Color(0.078, 0.102, 0.118, 0.97), HudStyle.ACCENT)
 	)
 	layer.add_child(dialogue_panel)
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 18)
-	margin.add_theme_constant_override("margin_top", 12)
+	margin.add_theme_constant_override("margin_top", 14)
 	margin.add_theme_constant_override("margin_right", 18)
-	margin.add_theme_constant_override("margin_bottom", 12)
+	margin.add_theme_constant_override("margin_bottom", 14)
 	dialogue_panel.add_child(margin)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
@@ -687,47 +676,64 @@ func _open_dialogue(step: Dictionary) -> void:
 		portrait_slot.custom_minimum_size = Vector2(portrait_width, 0)
 		portrait_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(portrait_slot)
-		DIALOGUE_PORTRAIT.attach(layer, dialogue_panel, portrait_texture, portrait_width, compact, Color("#9fc7b8"))
+		DIALOGUE_PORTRAIT.attach(layer, dialogue_panel, portrait_texture, portrait_width, compact, HudStyle.ACCENT)
 	var text_box := VBoxContainer.new()
 	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text_box.add_theme_constant_override("separation", 7)
 	row.add_child(text_box)
 	var speaker_row := HBoxContainer.new()
 	text_box.add_child(speaker_row)
-	dialogue_speaker_label = Label.new()
-	dialogue_speaker_label.text = GameState.resolve_speaker(str(step.get("speaker", "먼지")))
+	# 화자 = 민트 eyebrow, 진행 수 = 흐린 tabular, 제목 = 회색 설명, 본문 = 흰 글자.
+	dialogue_speaker_label = HudStyle.label(
+		GameState.resolve_speaker(str(step.get("speaker", "먼지"))), HudStyle.TYPE_CAPTION + 1, HudStyle.ACCENT, true
+	)
 	dialogue_speaker_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	dialogue_speaker_label.add_theme_font_override("font", FONT)
-	dialogue_speaker_label.add_theme_font_size_override("font_size", 16)
-	dialogue_speaker_label.add_theme_color_override("font_color", Color("#f0ce70"))
+	dialogue_speaker_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	speaker_row.add_child(dialogue_speaker_label)
 	dialogue_progress_label = Label.new()
-	dialogue_progress_label.add_theme_font_override("font", FONT)
-	dialogue_progress_label.add_theme_font_size_override("font_size", 14)
-	dialogue_progress_label.add_theme_color_override("font_color", Color("#82998d"))
+	dialogue_progress_label.add_theme_font_override("font", HudStyle.tabular())
+	dialogue_progress_label.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION)
+	dialogue_progress_label.add_theme_color_override("font_color", HudStyle.TEXT_FAINT)
+	dialogue_progress_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	speaker_row.add_child(dialogue_progress_label)
-	dialogue_title_label = Label.new()
-	dialogue_title_label.text = str(step.get("title", ""))
+	dialogue_title_label = HudStyle.label(str(step.get("title", "")), HudStyle.TYPE_CAPTION + 1, HudStyle.TEXT_DIM)
 	dialogue_title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	dialogue_title_label.add_theme_font_override("font", FONT)
-	dialogue_title_label.add_theme_font_size_override("font_size", 14)
-	dialogue_title_label.add_theme_color_override("font_color", Color("#e7d49a"))
+	dialogue_title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dialogue_title_label.visible = not dialogue_title_label.text.is_empty()
 	text_box.add_child(dialogue_title_label)
-	dialogue_body_label = Label.new()
+	dialogue_body_label = HudStyle.label("", 17, HudStyle.TEXT)
 	dialogue_body_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	dialogue_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	dialogue_body_label.add_theme_font_override("font", FONT)
-	dialogue_body_label.add_theme_font_size_override("font_size", 17)
-	dialogue_body_label.add_theme_color_override("font_color", Color("#e5ece7"))
+	dialogue_body_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text_box.add_child(dialogue_body_label)
 	typewriter = Typewriter.new()
 	layer.add_child(typewriter)
 	typewriter.attach(dialogue_body_label)
 	var actions := HBoxContainer.new()
 	actions.alignment = BoxContainer.ALIGNMENT_END
+	actions.add_theme_constant_override("separation", 10)
 	text_box.add_child(actions)
-	dialogue_next_button = _make_button("다음", "collect")
-	dialogue_next_button.custom_minimum_size = Vector2(132 if compact else 170, 44)
+	# 진행 안내 — 회색 caption + 키캡(SPACE). 화면 어디를 눌러도 넘어간다.
+	var hint := HBoxContainer.new()
+	hint.add_theme_constant_override("separation", 6)
+	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hint.alignment = BoxContainer.ALIGNMENT_END
+	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	actions.add_child(hint)
+	var hint_label := HudStyle.label("클릭 또는", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_FAINT)
+	hint_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hint.add_child(hint_label)
+	var keycap := PanelContainer.new()
+	keycap.add_theme_stylebox_override("panel", HudStyle.keycap())
+	keycap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	keycap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var keycap_label := HudStyle.label("SPACE", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT, true)
+	keycap_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	keycap.add_child(keycap_label)
+	hint.add_child(keycap)
+	dialogue_next_button = _make_button("다음", "collect", true)
+	dialogue_next_button.custom_minimum_size = Vector2(124 if compact else 160, 44)
 	dialogue_next_button.pressed.connect(_advance_dialogue)
 	actions.add_child(dialogue_next_button)
 	_refresh_dialogue()
@@ -821,30 +827,31 @@ func _open_image_cut(step: Dictionary) -> void:
 	caption_panel.offset_right = half
 	caption_panel.offset_bottom = -28.0
 	caption_panel.offset_top = -28.0 - caption_height
-	caption_panel.add_theme_stylebox_override(
-		"panel", _panel_style(Color(0.02, 0.03, 0.028, 0.92), Color("#8a7b4c"))
-	)
+	# 검정 카드(테두리 없음, 그림자) + 굵은 제목 + 본문.
+	var caption_style := HudStyle.flat(HudStyle.INK_SOLID, HudStyle.RADIUS_CARD)
+	caption_style.shadow_color = Color(0, 0, 0, 0.5)
+	caption_style.shadow_size = 24
+	caption_style.content_margin_left = 20.0
+	caption_style.content_margin_right = 20.0
+	caption_style.content_margin_top = 16.0
+	caption_style.content_margin_bottom = 16.0
+	caption_panel.add_theme_stylebox_override("panel", caption_style)
 	image_cut_root.add_child(caption_panel)
 	var caption_box := VBoxContainer.new()
 	caption_box.add_theme_constant_override("separation", 8)
 	caption_panel.add_child(caption_box)
-	var cut_title := Label.new()
-	cut_title.text = str(step.get("title", "회수한 기록"))
+	var cut_title := HudStyle.label(str(step.get("title", "회수한 기록")), HudStyle.TYPE_HEADING + 2, HudStyle.TEXT, true)
 	cut_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	cut_title.add_theme_font_override("font", FONT)
-	cut_title.add_theme_font_size_override("font_size", 15)
-	cut_title.add_theme_color_override("font_color", Color("#e7d49a"))
+	cut_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	caption_box.add_child(cut_title)
-	var cut_body := Label.new()
+	var cut_body := HudStyle.label("", 15, HudStyle.TEXT)
 	cut_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	cut_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cut_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	cut_body.add_theme_font_override("font", FONT)
-	cut_body.add_theme_font_size_override("font_size", 16)
-	cut_body.add_theme_color_override("font_color", Color("#d9e2dc"))
+	cut_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	caption_box.add_child(cut_body)
-	var close_button := _make_button("계속", "collect")
-	close_button.custom_minimum_size = Vector2(150, 44)
+	var close_button := _make_button("계속", "collect", true)
+	close_button.custom_minimum_size = Vector2(160, 46)
 	close_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	close_button.pressed.connect(func() -> void:
 		_close_image_cut()
@@ -896,41 +903,64 @@ func _open_choice(step: Dictionary) -> void:
 	panel.offset_left = -half
 	panel.offset_right = half
 	panel.offset_bottom = -40.0
-	panel.offset_top = -40.0 - 44.0 - float(options.size()) * 62.0
-	panel.add_theme_stylebox_override(
-		"panel", _panel_style(Color(0.012, 0.019, 0.018, 0.985), Color("#c9a24d"))
-	)
+	panel.offset_top = -40.0 - 78.0 - float(options.size()) * 70.0
+	# 검정 판(반지름 20, 테두리 없음) 안에 굵은 물음 + 표면 카드 선택지.
+	panel.add_theme_stylebox_override("panel", HudStyle.modal())
 	choice_root.add_child(panel)
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 16)
-	margin.add_theme_constant_override("margin_top", 12)
-	margin.add_theme_constant_override("margin_right", 16)
-	margin.add_theme_constant_override("margin_bottom", 12)
-	panel.add_child(margin)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 9)
-	margin.add_child(box)
-	var prompt := Label.new()
-	prompt.text = str(step.get("prompt", "결정해라"))
+	box.add_theme_constant_override("separation", 10)
+	panel.add_child(box)
+	var prompt := HudStyle.label(str(step.get("prompt", "결정해라")), HudStyle.TYPE_HEADING, HudStyle.TEXT, true)
 	prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	prompt.add_theme_font_override("font", FONT)
-	prompt.add_theme_font_size_override("font_size", 16)
-	prompt.add_theme_color_override("font_color", Color("#e7d49a"))
+	prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(prompt)
 	var choice_id := str(step.get("id", "choice"))
 	var handler: Variant = step.get("on_choice", null)
 	for option_value in options:
 		var option := option_value as Dictionary
-		var button := _make_button(str(option.get("label", "…")), "collect")
-		button.custom_minimum_size = Vector2(0, 52)
-		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		var detail := str(option.get("detail", ""))
-		if not detail.is_empty():
-			button.text = "%s   —   %s" % [str(option.get("label", "…")), detail]
+		var button := _make_choice_card(str(option.get("label", "…")), str(option.get("detail", "")))
 		button.pressed.connect(func() -> void:
 			_resolve_choice(choice_id, option, handler)
 		)
 		box.add_child(button)
+
+
+func _make_choice_card(label_text: String, detail: String) -> Button:
+	# 선택지 카드 — 표면 카드, 호버는 한 단계 밝게, 누르면 민트 2px 테두리.
+	var button := Button.new()
+	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size = Vector2(0, 60)
+	var normal := HudStyle.flat(HudStyle.INK_WELL, HudStyle.RADIUS_CARD)
+	var hover := HudStyle.flat(HudStyle.SURFACE_HOVER, HudStyle.RADIUS_CARD)
+	var pressed := HudStyle.accent_panel(HudStyle.SURFACE_HOVER, HudStyle.ACCENT, HudStyle.RADIUS_CARD)
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", pressed)
+	button.add_theme_stylebox_override("focus", normal)
+	button.add_theme_stylebox_override("disabled", normal)
+	if not button.pressed.is_connected(HudStyle._play_button_tap):
+		button.pressed.connect(HudStyle._play_button_tap)
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 16)
+	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_bottom", 10)
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	button.add_child(margin)
+	var column := VBoxContainer.new()
+	column.alignment = BoxContainer.ALIGNMENT_CENTER
+	column.add_theme_constant_override("separation", 2)
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_child(column)
+	var title := HudStyle.label(label_text, HudStyle.TYPE_BODY + 1, HudStyle.TEXT, true)
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(title)
+	if not detail.is_empty():
+		var detail_label := HudStyle.label(detail, HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
+		detail_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		column.add_child(detail_label)
+	return button
 
 
 func _resolve_choice(choice_id: String, option: Dictionary, handler: Variant) -> void:
@@ -947,13 +977,9 @@ func _resolve_choice(choice_id: String, option: Dictionary, handler: Variant) ->
 # ── 공용 ───────────────────────────────────────────────────────
 
 
-func _panel_style(background: Color, border: Color) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
-	style.border_color = border
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(8)
-	return style
+func _panel_style(background: Color, _border: Color) -> StyleBoxFlat:
+	# 새 언어엔 테두리 선이 없다 — 보더 인자는 호환용으로만 남긴다.
+	return HudStyle.flat(background, HudStyle.RADIUS_CARD)
 
 
 func _resolve_texture(value: Variant) -> Texture2D:

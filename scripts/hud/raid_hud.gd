@@ -40,6 +40,7 @@ var extraction_result_panel: PanelContainer
 var extraction_result_title: Label
 var extraction_route_icon: TextureRect
 var extraction_route_label: Label
+var extraction_route_detail: Label
 var extraction_result_summary: Label
 var extraction_stat_row: HBoxContainer
 var extraction_reward_flow: HFlowContainer
@@ -162,7 +163,7 @@ func build(owner_node: Node) -> void:
 	ammo_prompt_panel.offset_bottom = -144
 	# 탄약 프롬프트도 상호작용 카드와 같은 캡슐 문법 — 하단 프롬프트는 한 가족처럼.
 	ammo_prompt_panel.add_theme_stylebox_override(
-		"panel", make_prompt_capsule_style(Color("#b8a66d"))
+		"panel", make_prompt_capsule_style(HudStyle.ACCENT)
 	)
 	ammo_prompt_panel.visible = false
 	host.get_node("HUD").add_child(ammo_prompt_panel)
@@ -176,8 +177,17 @@ func build(owner_node: Node) -> void:
 	ammo_pickup_button.expand_icon = true
 	ammo_pickup_button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	ammo_pickup_button.focus_mode = Control.FOCUS_NONE
-	ammo_pickup_button.add_theme_font_override("font", font)
+	# 캡슐이 곧 버튼이다 — 버튼 자체는 투명, 글자만 굵게.
+	ammo_pickup_button.add_theme_font_override("font", HudStyle.bold())
 	ammo_pickup_button.add_theme_font_size_override("font_size", 15)
+	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		ammo_pickup_button.add_theme_color_override(state, HudStyle.TEXT)
+	var ammo_button_clear := HudStyle.flat(Color.TRANSPARENT, HudStyle.RADIUS_CHIP)
+	for state in ["normal", "hover", "focus", "disabled"]:
+		ammo_pickup_button.add_theme_stylebox_override(state, ammo_button_clear)
+	ammo_pickup_button.add_theme_stylebox_override(
+		"pressed", HudStyle.flat(Color(HudStyle.ACCENT, 0.12), HudStyle.RADIUS_CHIP)
+	)
 	ammo_pickup_button.pressed.connect(Callable(host, "_collect_nearby_ammo"))
 	ammo_prompt_panel.add_child(ammo_pickup_button)
 
@@ -194,7 +204,7 @@ func build(owner_node: Node) -> void:
 	field_interaction_panel.offset_right = 190
 	field_interaction_panel.offset_bottom = -246
 	field_interaction_panel.add_theme_stylebox_override(
-		"panel", make_prompt_capsule_style(Color("#7fc5a4"))
+		"panel", make_prompt_capsule_style(HudStyle.ACCENT)
 	)
 	field_interaction_panel.visible = false
 	host.get_node("HUD").add_child(field_interaction_panel)
@@ -222,10 +232,8 @@ func build(owner_node: Node) -> void:
 	field_interaction_key_panel.offset_top = -18.0
 	field_interaction_key_panel.offset_right = 18.0
 	field_interaction_key_panel.offset_bottom = 18.0
-	field_interaction_key_panel.add_theme_stylebox_override(
-		"panel",
-		HudStyle.panel(Color("#17231f"), Color("#8bc5a8"), 9)
-	)
+	# 키캡은 표면색 작은 알약(HudStyle.keycap) — 테두리 선 없음.
+	field_interaction_key_panel.add_theme_stylebox_override("panel", HudStyle.keycap())
 	field_interaction_key_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	field_interaction_ring_wrap.add_child(field_interaction_key_panel)
 	field_interaction_key_label = Label.new()
@@ -233,16 +241,16 @@ func build(owner_node: Node) -> void:
 	field_interaction_key_label.text = "F"
 	field_interaction_key_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	field_interaction_key_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	field_interaction_key_label.add_theme_font_override("font", font)
-	field_interaction_key_label.add_theme_font_size_override("font_size", 17)
-	field_interaction_key_label.add_theme_color_override("font_color", Color("#e9f5ee"))
+	field_interaction_key_label.add_theme_font_override("font", HudStyle.bold())
+	field_interaction_key_label.add_theme_font_size_override("font_size", 16)
+	field_interaction_key_label.add_theme_color_override("font_color", HudStyle.TEXT)
 	field_interaction_key_label.visible = not touch_enabled
 	field_interaction_key_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	field_interaction_key_panel.add_child(field_interaction_key_label)
 	field_interaction_key_icon = TextureRect.new()
 	field_interaction_key_icon.name = "KeycapIcon"
 	field_interaction_key_icon.custom_minimum_size = Vector2(20.0, 20.0)
-	field_interaction_key_icon.texture = UI_ICONS.get_icon("interact", 20, Color("#e9f5ee"))
+	field_interaction_key_icon.texture = UI_ICONS.get_icon("interact", 20, HudStyle.TEXT)
 	field_interaction_key_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	field_interaction_key_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	field_interaction_key_icon.visible = touch_enabled
@@ -264,25 +272,25 @@ func build(owner_node: Node) -> void:
 	field_interaction_action_label.text = "상호작용"
 	field_interaction_action_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	field_interaction_action_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	field_interaction_action_label.add_theme_font_override("font", font)
-	field_interaction_action_label.add_theme_font_size_override("font_size", 16)
-	field_interaction_action_label.add_theme_color_override("font_color", Color("#edf5f0"))
+	field_interaction_action_label.add_theme_font_override("font", HudStyle.bold())
+	field_interaction_action_label.add_theme_font_size_override("font_size", HudStyle.TYPE_HEADING)
+	field_interaction_action_label.add_theme_color_override("font_color", HudStyle.TEXT)
 	verb_row.add_child(field_interaction_action_label)
 	field_interaction_duration_label = Label.new()
 	field_interaction_duration_label.name = "DurationLabel"
 	field_interaction_duration_label.text = "1.0초"
 	field_interaction_duration_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	field_interaction_duration_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	field_interaction_duration_label.add_theme_font_override("font", font)
-	field_interaction_duration_label.add_theme_font_size_override("font_size", 11)
-	field_interaction_duration_label.add_theme_color_override("font_color", Color("#91b7a6"))
+	field_interaction_duration_label.add_theme_font_override("font", HudStyle.tabular())
+	field_interaction_duration_label.add_theme_font_size_override("font_size", HudStyle.TYPE_FOOTNOTE)
+	field_interaction_duration_label.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
 	verb_row.add_child(field_interaction_duration_label)
 	field_interaction_action_detail_label = Label.new()
 	field_interaction_action_detail_label.name = "ActionTargetLabel"
 	field_interaction_action_detail_label.text = ""
 	field_interaction_action_detail_label.add_theme_font_override("font", font)
-	field_interaction_action_detail_label.add_theme_font_size_override("font_size", 11)
-	field_interaction_action_detail_label.add_theme_color_override("font_color", Color("#8fa79b"))
+	field_interaction_action_detail_label.add_theme_font_size_override("font_size", HudStyle.TYPE_FOOTNOTE)
+	field_interaction_action_detail_label.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
 	field_interaction_action_detail_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	action_copy.add_child(field_interaction_action_detail_label)
 	field_interaction_info_label = Label.new()
@@ -291,14 +299,14 @@ func build(owner_node: Node) -> void:
 	field_interaction_info_label.visible = false
 	field_interaction_info_label.add_theme_font_override("font", font)
 	field_interaction_info_label.add_theme_font_size_override("font_size", 10)
-	field_interaction_info_label.add_theme_color_override("font_color", Color("#7d938a"))
+	field_interaction_info_label.add_theme_color_override("font_color", HudStyle.TEXT_FAINT)
 	field_interaction_info_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	action_copy.add_child(field_interaction_info_label)
 
 	field_interaction_icon = TextureRect.new()
 	field_interaction_icon.name = "ActionIcon"
 	field_interaction_icon.custom_minimum_size = Vector2(24.0, 24.0)
-	field_interaction_icon.texture = UI_ICONS.get_icon("interact", 24, Color("#b9dec9"))
+	field_interaction_icon.texture = UI_ICONS.get_icon("interact", 24, HudStyle.TEXT_DIM)
 	field_interaction_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	field_interaction_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	field_interaction_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -319,7 +327,7 @@ func build(owner_node: Node) -> void:
 	field_interaction_button.add_theme_stylebox_override("hover", action_button_normal)
 	field_interaction_button.add_theme_stylebox_override(
 		"pressed",
-		make_prompt_capsule_style(Color("#9cd0b4"), 0.1)
+		make_prompt_capsule_style(HudStyle.ACCENT, 0.1)
 	)
 	field_interaction_button.button_down.connect(func() -> void:
 		field_interaction_touch_held = true
@@ -339,8 +347,7 @@ func build(owner_node: Node) -> void:
 	danger_panel.offset_right = 280
 	danger_panel.offset_bottom = 276
 	danger_panel.add_theme_stylebox_override(
-		"panel",
-		HudStyle.panel(HudStyle.INK, Color("#60766a"), 7)
+		"panel", HudStyle.flat(HudStyle.INK, HudStyle.RADIUS_CARD)
 	)
 	host.get_node("HUD").add_child(danger_panel)
 	var danger_margin := MarginContainer.new()
@@ -356,7 +363,7 @@ func build(owner_node: Node) -> void:
 	var danger_icon := TextureRect.new()
 	danger_icon.name = "DangerIcon"
 	danger_icon.custom_minimum_size = Vector2(28, 28)
-	danger_icon.texture = UI_ICONS.get_icon("alert", 32, Color("#5fc9b4"))
+	danger_icon.texture = UI_ICONS.get_icon("alert", 32, HudStyle.ACCENT)
 	danger_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	danger_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	danger_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -374,23 +381,23 @@ func build(owner_node: Node) -> void:
 	var danger_name := Label.new()
 	danger_name.text = "위험도"
 	danger_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	danger_name.add_theme_font_override("font", font)
-	danger_name.add_theme_font_size_override("font_size", 12)
-	danger_name.add_theme_color_override("font_color", Color("#9fb4a9"))
+	danger_name.add_theme_font_override("font", HudStyle.bold())
+	danger_name.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION)
+	danger_name.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
 	danger_header.add_child(danger_name)
 	danger_status_label = Label.new()
 	danger_status_label.text = "0%"
-	danger_status_label.add_theme_font_override("font", font)
-	danger_status_label.add_theme_font_size_override("font_size", 12)
-	danger_status_label.add_theme_color_override("font_color", Color("#8fc7a8"))
+	danger_status_label.add_theme_font_override("font", HudStyle.bold_tabular())
+	danger_status_label.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION)
+	danger_status_label.add_theme_color_override("font_color", HudStyle.ACCENT)
 	danger_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	danger_header.add_child(danger_status_label)
 	danger_bar = ProgressBar.new()
 	danger_bar.custom_minimum_size = Vector2(190, 7)
 	danger_bar.max_value = DANGER_MAX
 	danger_bar.show_percentage = false
-	danger_bar.add_theme_stylebox_override("background", HudStyle.panel(Color("#17201d"), Color("#32443c"), 4))
-	danger_fill_style = HudStyle.panel(Color("#78b993"), Color("#a7d6b9"), 4)
+	danger_bar.add_theme_stylebox_override("background", HudStyle.flat(HudStyle.SURFACE_RAISED, 4))
+	danger_fill_style = HudStyle.flat(HudStyle.ACCENT, 4)
 	danger_bar.add_theme_stylebox_override("fill", danger_fill_style)
 	danger_box.add_child(danger_bar)
 
@@ -402,7 +409,7 @@ func build(owner_node: Node) -> void:
 	equipment_panel.offset_top = -180
 	equipment_panel.offset_right = -20
 	equipment_panel.offset_bottom = -124
-	equipment_panel.add_theme_stylebox_override("panel", HudStyle.panel(HudStyle.INK, Color("#8da997"), 7))
+	equipment_panel.add_theme_stylebox_override("panel", HudStyle.flat(HudStyle.INK, HudStyle.RADIUS_CARD))
 	equipment_panel.visible = false
 	host.get_node("HUD").add_child(equipment_panel)
 	var equipment_margin := MarginContainer.new()
@@ -434,29 +441,29 @@ func build(owner_node: Node) -> void:
 	equipment_name_label = Label.new()
 	equipment_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	equipment_name_label.clip_text = true
-	equipment_name_label.add_theme_font_override("font", font)
-	equipment_name_label.add_theme_font_size_override("font_size", 12)
-	equipment_name_label.add_theme_color_override("font_color", Color("#c6d4cb"))
+	equipment_name_label.add_theme_font_override("font", HudStyle.bold())
+	equipment_name_label.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION)
+	equipment_name_label.add_theme_color_override("font_color", HudStyle.TEXT)
 	weapon_header.add_child(equipment_name_label)
 	equipment_ammo_type_label = Label.new()
 	equipment_ammo_type_label.add_theme_font_override("font", font)
-	equipment_ammo_type_label.add_theme_font_size_override("font_size", 11)
-	equipment_ammo_type_label.add_theme_color_override("font_color", Color("#8fa39a"))
+	equipment_ammo_type_label.add_theme_font_size_override("font_size", HudStyle.TYPE_FOOTNOTE)
+	equipment_ammo_type_label.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
 	equipment_ammo_type_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	weapon_header.add_child(equipment_ammo_type_label)
-	# 2줄: 잔탄 / 탄창 · 예비탄.
+	# 2줄: 잔탄 / 탄창 · 예비탄 — 큰 굵은 tabular 숫자.
 	equipment_ammo_label = Label.new()
 	equipment_ammo_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	equipment_ammo_label.add_theme_font_override("font", font)
-	equipment_ammo_label.add_theme_font_size_override("font_size", 19)
-	equipment_ammo_label.add_theme_color_override("font_color", HudStyle.GOLD_TEXT)
+	equipment_ammo_label.add_theme_font_override("font", HudStyle.bold_tabular())
+	equipment_ammo_label.add_theme_font_size_override("font_size", HudStyle.TYPE_NUMBER)
+	equipment_ammo_label.add_theme_color_override("font_color", HudStyle.TEXT)
 	weapon_text_box.add_child(equipment_ammo_label)
 	equipment_reload_bar = ProgressBar.new()
 	equipment_reload_bar.custom_minimum_size = Vector2(0, 5)
 	equipment_reload_bar.max_value = 1.0
 	equipment_reload_bar.show_percentage = false
-	equipment_reload_bar.add_theme_stylebox_override("background", HudStyle.panel(Color("#171d1b"), Color("#3e4944"), 4))
-	equipment_reload_bar.add_theme_stylebox_override("fill", HudStyle.panel(Color("#d6b653"), Color("#f0d77d"), 4))
+	equipment_reload_bar.add_theme_stylebox_override("background", HudStyle.flat(HudStyle.SURFACE_RAISED, 4))
+	equipment_reload_bar.add_theme_stylebox_override("fill", HudStyle.flat(HudStyle.ACCENT, 4))
 	weapon_text_box.add_child(equipment_reload_bar)
 
 	fire_button = Button.new()
@@ -467,11 +474,11 @@ func build(owner_node: Node) -> void:
 	fire_button.offset_right = -28
 	fire_button.offset_bottom = -24
 	fire_button.text = "발사"
-	fire_button.icon = UI_ICONS.get_icon("weapon", 36, Color("#ffd29a"))
+	fire_button.icon = UI_ICONS.get_icon("weapon", 36, HudStyle.ACCENT_INK)
 	fire_button.tooltip_text = "AK-47 발사"
 	fire_button.z_index = 90
-	# 주 행동은 유일하게 '채워진' 원 — 화면에서 제일 먼저 읽혀야 한다.
-	HudStyle.style_mobile_action(fire_button, Color("#e08a58"), 38, true, HudStyle.TYPE_HEADING)
+	# 주 행동은 유일하게 '채워진' 원(민트) — 화면에서 제일 먼저 읽혀야 한다.
+	HudStyle.style_mobile_action(fire_button, HudStyle.ACCENT, 38, true, HudStyle.TYPE_HEADING)
 	if not touch_enabled:
 		fire_button.button_down.connect(Callable(host, "_on_fire_button_down"))
 		fire_button.button_up.connect(Callable(host, "_on_fire_button_up"))
@@ -486,7 +493,7 @@ func build(owner_node: Node) -> void:
 	melee_button.offset_right = -118
 	melee_button.offset_bottom = -24
 	melee_button.text = "근접"
-	melee_button.icon = UI_ICONS.get_icon("melee", 34, Color("#dbe9df"))
+	melee_button.icon = UI_ICONS.get_icon("melee", 34, HudStyle.TEXT)
 	melee_button.tooltip_text = "야구 방망이 휘두르기"
 	melee_button.z_index = 90
 	HudStyle.style_mobile_action(melee_button, HudStyle.LINE_FOCUS, 36, false, HudStyle.TYPE_BODY)
@@ -506,7 +513,7 @@ func build(owner_node: Node) -> void:
 	dash_button.icon = UI_ICONS.get_icon("dash", 34, HudStyle.TEXT)
 	dash_button.tooltip_text = "구르기 회피"
 	dash_button.z_index = 90
-	HudStyle.style_mobile_action(dash_button, Color("#82a8b8"), 36, false, HudStyle.TYPE_BODY)
+	HudStyle.style_mobile_action(dash_button, HudStyle.LINE_FOCUS, 36, false, HudStyle.TYPE_BODY)
 	if not touch_enabled:
 		dash_button.pressed.connect(Callable(host, "_on_dash_button_pressed"))
 	dash_button.visible = touch_enabled
@@ -523,9 +530,9 @@ func build(owner_node: Node) -> void:
 	ammo_notice.offset_bottom = -234
 	ammo_notice.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ammo_notice.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	ammo_notice.add_theme_font_override("font", font)
-	ammo_notice.add_theme_font_size_override("font_size", 16)
-	ammo_notice.add_theme_color_override("font_color", HudStyle.GOLD_TEXT)
+	ammo_notice.add_theme_font_override("font", HudStyle.bold())
+	ammo_notice.add_theme_font_size_override("font_size", HudStyle.TYPE_HEADING)
+	ammo_notice.add_theme_color_override("font_color", HudStyle.TEXT)
 	ammo_notice.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	ammo_notice.add_theme_constant_override("outline_size", 5)
 	ammo_notice.visible = false
@@ -722,7 +729,7 @@ func _build_toast_stack() -> void:
 	host.get_node("HUD").add_child(toast_stack)
 
 
-func push_toast(message: String, accent: Color = HudStyle.GOLD, duration: float = 2.2) -> void:
+func push_toast(message: String, accent: Color = HudStyle.ACCENT, duration: float = 2.2) -> void:
 	if toast_stack == null or message.is_empty():
 		return
 	# 같은 메시지 연타는 마지막 장에 ×N으로 합치고 수명을 새로 준다.
@@ -741,11 +748,8 @@ func push_toast(message: String, accent: Color = HudStyle.GOLD, duration: float 
 	var toast := PanelContainer.new()
 	toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	toast.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	var style := HudStyle.panel(
-		Color(HudStyle.INK.r, HudStyle.INK.g, HudStyle.INK.b, 0.94),
-		Color(accent, 0.62),
-		HudStyle.RADIUS_CARD
-	)
+	# 표면 카드, 테두리 없음 — 강조는 테두리가 아니라 글자색(TEXT/DANGER/WARN)으로.
+	var style := HudStyle.flat(HudStyle.INK, HudStyle.RADIUS_CARD)
 	style.content_margin_left = 14.0
 	style.content_margin_right = 14.0
 	style.content_margin_top = 7.0
@@ -754,9 +758,9 @@ func push_toast(message: String, accent: Color = HudStyle.GOLD, duration: float 
 	var label := Label.new()
 	label.text = message
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.add_theme_font_override("font", HudStyle.FONT)
+	label.add_theme_font_override("font", HudStyle.bold())
 	label.add_theme_font_size_override("font_size", HudStyle.TYPE_BODY)
-	label.add_theme_color_override("font_color", accent.lerp(HudStyle.TEXT, 0.45))
+	label.add_theme_color_override("font_color", _toast_text_color(accent, HudStyle.TEXT))
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if message.length() > 34:
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -788,6 +792,19 @@ func push_toast(message: String, accent: Color = HudStyle.GOLD, duration: float 
 	enter_tween.tween_property(toast, "scale", Vector2.ONE, 0.18)\
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	_start_toast_life(toast, duration)
+
+
+static func _toast_text_color(accent: Color, neutral: Color) -> Color:
+	# 새 언어에서 토스트 글자색은 셋뿐: 보통(TEXT/TEXT_DIM) · 주의(WARN) · 위험(DANGER).
+	# 호출부가 넘기던 금색·초록 등 임의의 강조색은 보통으로 접고, 붉은/주황 계열만
+	# 위험·주의로 읽는다(토큰 값이 아니어도 색상으로 판단).
+	if accent.is_equal_approx(HudStyle.DANGER):
+		return HudStyle.DANGER
+	if accent.is_equal_approx(HudStyle.WARN):
+		return HudStyle.WARN
+	if accent.r > accent.g * 1.25 and accent.r > accent.b * 1.25:
+		return HudStyle.DANGER if accent.g < 0.55 else HudStyle.WARN
+	return neutral
 
 
 func _start_toast_life(toast: PanelContainer, duration: float) -> void:
@@ -854,10 +871,8 @@ func push_toast_minor(
 		quiet_toast.add_child(label)
 		quiet_toast.set_meta("label", label)
 		toast_stack.add_child(quiet_toast)
-	var style := HudStyle.panel(
-		Color(HudStyle.INK.r, HudStyle.INK.g, HudStyle.INK.b, 0.72),
-		Color(accent, 0.28),
-		HudStyle.RADIUS_CHIP
+	var style := HudStyle.flat(
+		Color(HudStyle.INK.r, HudStyle.INK.g, HudStyle.INK.b, 0.72), HudStyle.RADIUS_CHIP
 	)
 	style.content_margin_left = 10.0
 	style.content_margin_right = 10.0
@@ -872,7 +887,7 @@ func push_toast_minor(
 	quiet_toast.set_meta("repeat_count", repeat)
 	if is_instance_valid(quiet_label):
 		quiet_label.text = message if repeat <= 1 else "%s   ×%d" % [message, repeat]
-		quiet_label.add_theme_color_override("font_color", accent.lerp(HudStyle.TEXT, 0.35))
+		quiet_label.add_theme_color_override("font_color", _toast_text_color(accent, HudStyle.TEXT_DIM))
 	toast_stack.move_child(quiet_toast, toast_stack.get_child_count() - 1)
 	var old_life = quiet_toast.get_meta("life_tween") if quiet_toast.has_meta("life_tween") else null
 	if old_life is Tween and (old_life as Tween).is_valid():
@@ -898,8 +913,7 @@ func build_raid_opportunity_hud() -> void:
 	raid_pressure_panel.offset_right = 220.0
 	raid_pressure_panel.offset_bottom = 92.0
 	raid_pressure_panel.add_theme_stylebox_override(
-		"panel",
-		HudStyle.panel(HudStyle.INK, Color("#6f8179"), 7)
+		"panel", HudStyle.flat(HudStyle.INK, HudStyle.RADIUS_CARD)
 	)
 	raid_pressure_panel.z_index = 82
 	raid_pressure_panel.visible = false
@@ -916,7 +930,7 @@ func build_raid_opportunity_hud() -> void:
 	raid_pressure_icon = TextureRect.new()
 	raid_pressure_icon.name = "PressureIcon"
 	raid_pressure_icon.custom_minimum_size = Vector2(42, 42)
-	raid_pressure_icon.texture = UI_ICONS.get_icon("alert", 44, Color("#92b7a4"))
+	raid_pressure_icon.texture = UI_ICONS.get_icon("alert", 44, HudStyle.ACCENT)
 	raid_pressure_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	raid_pressure_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	pressure_row.add_child(raid_pressure_icon)
@@ -926,15 +940,15 @@ func build_raid_opportunity_hud() -> void:
 	pressure_row.add_child(pressure_copy)
 	raid_pressure_title = Label.new()
 	raid_pressure_title.name = "PressureTitle"
-	raid_pressure_title.add_theme_font_override("font", FONT)
-	raid_pressure_title.add_theme_font_size_override("font_size", 16)
-	raid_pressure_title.add_theme_color_override("font_color", Color("#e4ebe6"))
+	raid_pressure_title.add_theme_font_override("font", HudStyle.bold())
+	raid_pressure_title.add_theme_font_size_override("font_size", HudStyle.TYPE_HEADING)
+	raid_pressure_title.add_theme_color_override("font_color", HudStyle.TEXT)
 	pressure_copy.add_child(raid_pressure_title)
 	raid_pressure_detail = Label.new()
 	raid_pressure_detail.name = "PressureDetail"
 	raid_pressure_detail.add_theme_font_override("font", FONT)
 	raid_pressure_detail.add_theme_font_size_override("font_size", 13)
-	raid_pressure_detail.add_theme_color_override("font_color", Color("#a7b8af"))
+	raid_pressure_detail.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
 	pressure_copy.add_child(raid_pressure_detail)
 	raid_pressure_bar = ProgressBar.new()
 	raid_pressure_bar.name = "PressureProgress"
@@ -945,13 +959,9 @@ func build_raid_opportunity_hud() -> void:
 	raid_pressure_bar.max_value = RaidEventDirector.LEVEL_THRESHOLDS.back()
 	raid_pressure_bar.show_percentage = false
 	raid_pressure_bar.add_theme_stylebox_override(
-		"background",
-		HudStyle.panel(Color("#111817"), Color("#40504a"), 7)
+		"background", HudStyle.flat(HudStyle.SURFACE_RAISED, 7)
 	)
-	raid_pressure_bar.add_theme_stylebox_override(
-		"fill",
-		HudStyle.panel(Color("#6fa88b"), Color("#9bc8af"), 7)
-	)
+	raid_pressure_bar.add_theme_stylebox_override("fill", HudStyle.flat(HudStyle.ACCENT, 7))
 	pressure_row.add_child(raid_pressure_bar)
 
 	dynamic_incident_hud = PanelContainer.new()
@@ -962,8 +972,7 @@ func build_raid_opportunity_hud() -> void:
 	dynamic_incident_hud.offset_right = 245.0
 	dynamic_incident_hud.offset_bottom = 178.0
 	dynamic_incident_hud.add_theme_stylebox_override(
-		"panel",
-		HudStyle.panel(Color(0.035, 0.025, 0.022, 0.97), Color("#d56e4f"), 7)
+		"panel", HudStyle.flat(HudStyle.INK, HudStyle.RADIUS_CARD)
 	)
 	dynamic_incident_hud.z_index = 83
 	dynamic_incident_hud.visible = false
@@ -980,7 +989,7 @@ func build_raid_opportunity_hud() -> void:
 	var incident_icon := TextureRect.new()
 	incident_icon.name = "IncidentIcon"
 	incident_icon.custom_minimum_size = Vector2(46, 46)
-	incident_icon.texture = UI_ICONS.get_icon("alert", 48, Color("#f08a62"))
+	incident_icon.texture = UI_ICONS.get_icon("alert", 48, HudStyle.DANGER)
 	incident_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	incident_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	incident_row.add_child(incident_icon)
@@ -991,15 +1000,15 @@ func build_raid_opportunity_hud() -> void:
 	dynamic_incident_title = Label.new()
 	dynamic_incident_title.name = "IncidentTitle"
 	dynamic_incident_title.text = "돌발 사건 · 약탈대 충돌"
-	dynamic_incident_title.add_theme_font_override("font", FONT)
-	dynamic_incident_title.add_theme_font_size_override("font_size", 17)
-	dynamic_incident_title.add_theme_color_override("font_color", Color("#ffd2ba"))
+	dynamic_incident_title.add_theme_font_override("font", HudStyle.bold())
+	dynamic_incident_title.add_theme_font_size_override("font_size", HudStyle.TYPE_HEADING)
+	dynamic_incident_title.add_theme_color_override("font_color", HudStyle.TEXT)
 	incident_copy.add_child(dynamic_incident_title)
 	dynamic_incident_detail = Label.new()
 	dynamic_incident_detail.name = "IncidentDetail"
 	dynamic_incident_detail.add_theme_font_override("font", FONT)
 	dynamic_incident_detail.add_theme_font_size_override("font_size", 13)
-	dynamic_incident_detail.add_theme_color_override("font_color", Color("#d9b4a4"))
+	dynamic_incident_detail.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
 	incident_copy.add_child(dynamic_incident_detail)
 	dynamic_incident_progress = ProgressBar.new()
 	dynamic_incident_progress.name = "IncidentProgress"
@@ -1008,13 +1017,9 @@ func build_raid_opportunity_hud() -> void:
 	dynamic_incident_progress.max_value = DYNAMIC_INCIDENT_DURATION
 	dynamic_incident_progress.show_percentage = false
 	dynamic_incident_progress.add_theme_stylebox_override(
-		"background",
-		HudStyle.panel(Color("#1b1210"), Color("#5c3a31"), 7)
+		"background", HudStyle.flat(HudStyle.SURFACE_RAISED, 7)
 	)
-	dynamic_incident_progress.add_theme_stylebox_override(
-		"fill",
-		HudStyle.panel(Color("#d85f3f"), Color("#ff9b74"), 7)
-	)
+	dynamic_incident_progress.add_theme_stylebox_override("fill", HudStyle.flat(HudStyle.DANGER, 7))
 	incident_row.add_child(dynamic_incident_progress)
 
 	# 증원 호출 예고 배너 — 적이 무전을 잡는 순간 뜨고 남은 시간이 게이지로
@@ -1029,8 +1034,7 @@ func build_raid_opportunity_hud() -> void:
 	reinforcement_call_panel.offset_right = 235.0
 	reinforcement_call_panel.offset_bottom = 92.0
 	reinforcement_call_panel.add_theme_stylebox_override(
-		"panel",
-		HudStyle.panel(Color(0.09, 0.016, 0.014, 0.97), Color("#ff5a45"), 7)
+		"panel", HudStyle.flat(HudStyle.INK, HudStyle.RADIUS_CARD)
 	)
 	reinforcement_call_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	reinforcement_call_panel.z_index = 85
@@ -1048,7 +1052,7 @@ func build_raid_opportunity_hud() -> void:
 	var call_icon := TextureRect.new()
 	call_icon.name = "ReinforcementCallIcon"
 	call_icon.custom_minimum_size = Vector2(46, 46)
-	call_icon.texture = UI_ICONS.get_icon("alert", 48, Color("#ff7a5f"))
+	call_icon.texture = UI_ICONS.get_icon("alert", 48, HudStyle.DANGER)
 	call_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	call_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	call_row.add_child(call_icon)
@@ -1059,16 +1063,16 @@ func build_raid_opportunity_hud() -> void:
 	reinforcement_call_title = Label.new()
 	reinforcement_call_title.name = "ReinforcementCallTitle"
 	reinforcement_call_title.text = "적이 증원을 요청 중입니다!"
-	reinforcement_call_title.add_theme_font_override("font", FONT)
-	reinforcement_call_title.add_theme_font_size_override("font_size", 18)
-	reinforcement_call_title.add_theme_color_override("font_color", Color("#ffd0c2"))
+	reinforcement_call_title.add_theme_font_override("font", HudStyle.bold())
+	reinforcement_call_title.add_theme_font_size_override("font_size", HudStyle.TYPE_HEADING)
+	reinforcement_call_title.add_theme_color_override("font_color", HudStyle.DANGER)
 	call_copy.add_child(reinforcement_call_title)
 	reinforcement_call_detail = Label.new()
 	reinforcement_call_detail.name = "ReinforcementCallDetail"
 	reinforcement_call_detail.text = "!! 표식의 적을 처치해 저지하라"
 	reinforcement_call_detail.add_theme_font_override("font", FONT)
 	reinforcement_call_detail.add_theme_font_size_override("font_size", 13)
-	reinforcement_call_detail.add_theme_color_override("font_color", Color("#e5a898"))
+	reinforcement_call_detail.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
 	call_copy.add_child(reinforcement_call_detail)
 	reinforcement_call_bar = ProgressBar.new()
 	reinforcement_call_bar.name = "ReinforcementCallProgress"
@@ -1078,13 +1082,9 @@ func build_raid_opportunity_hud() -> void:
 	reinforcement_call_bar.value = 1.0
 	reinforcement_call_bar.show_percentage = false
 	reinforcement_call_bar.add_theme_stylebox_override(
-		"background",
-		HudStyle.panel(Color("#1d0d0b"), Color("#5f2a22"), 7)
+		"background", HudStyle.flat(HudStyle.SURFACE_RAISED, 7)
 	)
-	reinforcement_call_bar.add_theme_stylebox_override(
-		"fill",
-		HudStyle.panel(Color("#ff5f43"), Color("#ffa287"), 7)
-	)
+	reinforcement_call_bar.add_theme_stylebox_override("fill", HudStyle.flat(HudStyle.DANGER, 7))
 	call_row.add_child(reinforcement_call_bar)
 
 
@@ -1098,13 +1098,18 @@ func set_reinforcement_call_progress(remaining: float, duration: float) -> void:
 		reinforcement_call_detail.text = "%0.1f초 · !! 표식의 적을 처치해 저지하라" % maxf(0.0, remaining)
 
 
-func add_result_stat(icon_name: String, value: String, caption: String, accent: Color = HudStyle.GOLD) -> void:
+func add_result_stat(icon_name: String, value: String, caption: String, accent: Color = HudStyle.ACCENT) -> void:
 	# 정산 스탯 타일: 아이콘 + 큰 숫자 + 작은 라벨. 텍스트 줄보다 성과가 한눈에 온다.
 	if extraction_stat_row == null:
 		return
 	var tile := PanelContainer.new()
 	tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tile.add_theme_stylebox_override("panel", HudStyle.panel(HudStyle.INK_WELL, HudStyle.LINE, 7))
+	var tile_style := HudStyle.flat(HudStyle.INK_WELL, HudStyle.RADIUS_CARD)
+	tile_style.content_margin_left = 10.0
+	tile_style.content_margin_right = 10.0
+	tile_style.content_margin_top = 10.0
+	tile_style.content_margin_bottom = 10.0
+	tile.add_theme_stylebox_override("panel", tile_style)
 	extraction_stat_row.add_child(tile)
 	var box := VBoxContainer.new()
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -1117,7 +1122,7 @@ func add_result_stat(icon_name: String, value: String, caption: String, accent: 
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	box.add_child(icon)
-	var value_label := HudStyle.label(value, HudStyle.TYPE_NUMBER, HudStyle.TEXT)
+	var value_label := HudStyle.number(value, HudStyle.TYPE_NUMBER + 2, HudStyle.TEXT)
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(value_label)
 	var caption_label := HudStyle.label(caption, HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_DIM)
@@ -1125,12 +1130,13 @@ func add_result_stat(icon_name: String, value: String, caption: String, accent: 
 	box.add_child(caption_label)
 
 
-func add_result_reward_chip(icon_name: String, text: String, accent: Color = HudStyle.GOLD) -> void:
+func add_result_reward_chip(icon_name: String, text: String, accent: Color = HudStyle.ACCENT) -> void:
 	# 보상 칩: "+95 XP", "고철 +1.3K" 같은 획득 항목 하나가 칩 하나.
 	if extraction_reward_flow == null:
 		return
 	var chip := PanelContainer.new()
-	chip.add_theme_stylebox_override("panel", HudStyle.chip(accent.darkened(0.3)))
+	# 표면색 알약 — 강조색은 아이콘에만(재화는 금색 아이콘이 허용되는 유일한 자리).
+	chip.add_theme_stylebox_override("panel", HudStyle.chip())
 	extraction_reward_flow.add_child(chip)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 5)
@@ -1174,15 +1180,16 @@ func build_extraction_progress_ui() -> void:
 	var result_half_w := minf(390.0, (result_viewport.x - 24.0) * 0.5)
 	# 높이는 뷰포트에 맞춰 클램프 — 내용(레벨업 카드까지)이 창을 밀어 화면 밖으로
 	# 자라던 모바일 넘침(유저 신고)은 안쪽 스크롤이 받는다.
-	var result_half_h := minf(320.0, (result_viewport.y - 20.0) * 0.5)
+	var result_half_h := minf(368.0, (result_viewport.y - 20.0) * 0.5)
 	extraction_result_panel.offset_left = -result_half_w
 	extraction_result_panel.offset_top = -result_half_h
 	extraction_result_panel.offset_right = result_half_w
 	extraction_result_panel.offset_bottom = result_half_h
-	extraction_result_panel.add_theme_stylebox_override(
-		"panel",
-		HudStyle.panel(HudStyle.INK_SOLID, Color("#d0b35d"), 7)
-	)
+	# 모달 껍데기 — 거의 검정, 보더 없음, 큰 그림자(안쪽 여백은 아래 margin이 맡는다).
+	var result_style := HudStyle.flat(HudStyle.INK_SOLID, HudStyle.RADIUS_MODAL)
+	result_style.shadow_color = Color(0, 0, 0, 0.55)
+	result_style.shadow_size = 32
+	extraction_result_panel.add_theme_stylebox_override("panel", result_style)
 	extraction_result_panel.z_index = 502
 	extraction_result_panel.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
 	extraction_result_panel.visible = false
@@ -1193,31 +1200,29 @@ func build_extraction_progress_ui() -> void:
 	margin.add_theme_constant_override("margin_right", 34)
 	margin.add_theme_constant_override("margin_bottom", 28)
 	extraction_result_panel.add_child(margin)
-	# 내용이 창보다 길면(짧은 모바일 화면 + 레벨업 카드) 안에서 스크롤한다 —
-	# 패널 최소 크기로 전파돼 화면을 넘던 경로를 끊는 지점.
-	var result_scroll := HudStyle.make_scroll()
-	result_scroll.name = "ExtractionResultScroll"
-	result_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	result_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	result_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	margin.add_child(result_scroll)
-	var content := VBoxContainer.new()
-	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content.add_theme_constant_override("separation", 14)
-	result_scroll.add_child(content)
+	# 제목은 스크롤 밖에 못 박는다. 레벨업 카드까지 내려가면 "탈출 성공 · Lv.2"가
+	# 위로 밀려 사라져, 지금 무슨 화면인지 말해 주는 줄이 화면에서 없어졌다.
+	var shell := VBoxContainer.new()
+	shell.name = "ExtractionResultShell"
+	shell.add_theme_constant_override("separation", 14)
+	margin.add_child(shell)
+	var header := VBoxContainer.new()
+	header.name = "ExtractionResultHeader"
+	header.add_theme_constant_override("separation", 2)
+	shell.add_child(header)
+	header.add_child(HudStyle.label("정산", HudStyle.TYPE_CAPTION, HudStyle.ACCENT, true))
 	extraction_result_title = Label.new()
 	extraction_result_title.text = "탈출 성공"
-	extraction_result_title.add_theme_font_override("font", FONT)
-	extraction_result_title.add_theme_font_size_override("font_size", 34)
-	extraction_result_title.add_theme_color_override("font_color", HudStyle.GOLD_TEXT)
-	content.add_child(extraction_result_title)
+	extraction_result_title.add_theme_font_override("font", HudStyle.bold())
+	extraction_result_title.add_theme_font_size_override("font_size", 30)
+	extraction_result_title.add_theme_color_override("font_color", HudStyle.TEXT)
+	header.add_child(extraction_result_title)
 	var route_card := PanelContainer.new()
 	route_card.name = "ExtractionRouteCard"
 	route_card.add_theme_stylebox_override(
-		"panel",
-		HudStyle.panel(Color("#0e1615"), Color("#52655e"), 7)
+		"panel", HudStyle.flat(HudStyle.INK_WELL, HudStyle.RADIUS_CARD)
 	)
-	content.add_child(route_card)
+	shell.add_child(route_card)
 	var route_margin := MarginContainer.new()
 	route_margin.add_theme_constant_override("margin_left", 12)
 	route_margin.add_theme_constant_override("margin_top", 8)
@@ -1230,18 +1235,46 @@ func build_extraction_progress_ui() -> void:
 	extraction_route_icon = TextureRect.new()
 	extraction_route_icon.name = "RouteIcon"
 	extraction_route_icon.custom_minimum_size = Vector2(42, 42)
-	extraction_route_icon.texture = UI_ICONS.get_icon("raid", 44, Color("#d9b44a"))
+	extraction_route_icon.texture = UI_ICONS.get_icon("raid", 44, HudStyle.ACCENT)
 	extraction_route_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	extraction_route_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	route_row.add_child(extraction_route_icon)
+	# 한 라벨에 두 줄을 넣으면 굵기·색이 같아져 무엇이 제목인지 안 보인다.
+	# 어떤 길로 나왔는가(굵은 흰 글자) / 그 길이 준 것(회색 보조)로 나눈다.
+	var route_copy := VBoxContainer.new()
+	route_copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	route_copy.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	route_copy.add_theme_constant_override("separation", 2)
+	route_row.add_child(route_copy)
 	extraction_route_label = Label.new()
 	extraction_route_label.name = "RouteLabel"
 	extraction_route_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	extraction_route_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	extraction_route_label.add_theme_font_override("font", FONT)
-	extraction_route_label.add_theme_font_size_override("font_size", 17)
-	extraction_route_label.add_theme_color_override("font_color", Color("#e4e1d3"))
-	route_row.add_child(extraction_route_label)
+	extraction_route_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	extraction_route_label.add_theme_font_override("font", HudStyle.bold())
+	extraction_route_label.add_theme_font_size_override("font_size", HudStyle.TYPE_HEADING)
+	extraction_route_label.add_theme_color_override("font_color", HudStyle.TEXT)
+	route_copy.add_child(extraction_route_label)
+	extraction_route_detail = Label.new()
+	extraction_route_detail.name = "RouteDetail"
+	extraction_route_detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	extraction_route_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	extraction_route_detail.visible = false
+	extraction_route_detail.add_theme_font_override("font", FONT)
+	extraction_route_detail.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION)
+	extraction_route_detail.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
+	route_copy.add_child(extraction_route_detail)
+	# 내용이 창보다 길면(짧은 모바일 화면 + 레벨업 카드) 안에서 스크롤한다 —
+	# 패널 최소 크기로 전파돼 화면을 넘던 경로를 끊는 지점.
+	var result_scroll := HudStyle.make_scroll()
+	result_scroll.name = "ExtractionResultScroll"
+	result_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	result_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	result_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	shell.add_child(result_scroll)
+	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 14)
+	result_scroll.add_child(content)
 	# 성과는 숫자 타일로, 보상은 칩으로 — 텍스트 여덟 줄 대신 한눈에 읽히는 정산.
 	extraction_stat_row = HBoxContainer.new()
 	extraction_stat_row.name = "ExtractionStatRow"
@@ -1255,7 +1288,7 @@ func build_extraction_progress_ui() -> void:
 	extraction_result_summary = Label.new()
 	extraction_result_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	extraction_result_summary.add_theme_font_override("font", FONT)
-	extraction_result_summary.add_theme_font_size_override("font_size", HudStyle.TYPE_BODY)
+	extraction_result_summary.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION)
 	extraction_result_summary.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
 	content.add_child(extraction_result_summary)
 	extraction_xp_bar = ProgressBar.new()
@@ -1263,21 +1296,21 @@ func build_extraction_progress_ui() -> void:
 	extraction_xp_bar.min_value = 0
 	extraction_xp_bar.max_value = 100
 	extraction_xp_bar.show_percentage = false
-	extraction_xp_bar.add_theme_stylebox_override("background", HudStyle.panel(Color("#141a19"), Color("#53635e"), 7))
-	extraction_xp_bar.add_theme_stylebox_override("fill", HudStyle.panel(Color("#68c89b"), Color("#9ae2bd"), 7))
+	extraction_xp_bar.add_theme_stylebox_override("background", HudStyle.flat(HudStyle.SURFACE_RAISED, 7))
+	extraction_xp_bar.add_theme_stylebox_override("fill", HudStyle.flat(HudStyle.ACCENT, 7))
 	content.add_child(extraction_xp_bar)
 	extraction_xp_label = Label.new()
 	extraction_xp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	extraction_xp_label.add_theme_font_override("font", FONT)
-	extraction_xp_label.add_theme_font_size_override("font_size", 16)
-	extraction_xp_label.add_theme_color_override("font_color", Color("#a9bcb2"))
+	extraction_xp_label.add_theme_font_override("font", HudStyle.tabular())
+	extraction_xp_label.add_theme_font_size_override("font_size", HudStyle.TYPE_BODY)
+	extraction_xp_label.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
 	content.add_child(extraction_xp_label)
 	extraction_level_choice_title = Label.new()
 	# 영문 제목은 이 게임 어디에도 없다. 이 칸이 무엇인지 한국어로 말한다.
 	extraction_level_choice_title.text = "이번 판으로 성장한 것"
-	extraction_level_choice_title.add_theme_font_override("font", FONT)
-	extraction_level_choice_title.add_theme_font_size_override("font_size", 21)
-	extraction_level_choice_title.add_theme_color_override("font_color", Color("#e8d18a"))
+	extraction_level_choice_title.add_theme_font_override("font", HudStyle.bold())
+	extraction_level_choice_title.add_theme_font_size_override("font_size", HudStyle.TYPE_HEADING + 2)
+	extraction_level_choice_title.add_theme_color_override("font_color", HudStyle.TEXT)
 	extraction_level_choice_title.visible = false
 	content.add_child(extraction_level_choice_title)
 	extraction_level_choice_row = HBoxContainer.new()
@@ -1287,10 +1320,12 @@ func build_extraction_progress_ui() -> void:
 	# "탭하면 쉘터로 복귀"가 요약 라벨(y≈707)에 섞여 레벨업 선택 UI(y≈815)보다
 	# 위에 있었다. 화면이 시키는 순서와 실제 순서가 거꾸로였다는 뜻이다.
 	# 나가는 안내와 나가는 버튼은 성장 선택 아래, 마지막 줄에 둔다.
+	# 나가는 줄은 스크롤 밖에 못 박는다 — 안에 두면 내용이 길어질 때 주 버튼이
+	# 화면 밖으로 밀려, 나갈 수 있다는 사실 자체가 안 보였다.
 	extraction_return_row = HBoxContainer.new()
 	extraction_return_row.name = "ExtractionReturnRow"
 	extraction_return_row.add_theme_constant_override("separation", 12)
-	content.add_child(extraction_return_row)
+	shell.add_child(extraction_return_row)
 	extraction_return_hint = Label.new()
 	extraction_return_hint.name = "ReturnHint"
 	extraction_return_hint.text = "탭하면 쉘터로 복귀"
@@ -1310,19 +1345,11 @@ func build_extraction_progress_ui() -> void:
 	extraction_return_button.custom_minimum_size = Vector2(
 		176 if short_viewport else 196, 36 if short_viewport else 46
 	)
-	extraction_return_button.focus_mode = Control.FOCUS_NONE
 	extraction_return_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	extraction_return_button.add_theme_font_override("font", FONT)
-	extraction_return_button.add_theme_font_size_override("font_size", HudStyle.TYPE_BODY)
-	extraction_return_button.add_theme_color_override("font_color", Color("#f0e6c4"))
-	extraction_return_button.add_theme_stylebox_override(
-		"normal", HudStyle.panel(Color("#1b2119"), Color("#9c8646"), 7)
-	)
-	extraction_return_button.add_theme_stylebox_override(
-		"hover", HudStyle.panel(Color("#26301f"), Color("#e0c46f"), 7)
-	)
-	extraction_return_button.add_theme_stylebox_override(
-		"pressed", HudStyle.panel(Color("#333d27"), Color("#f0d77d"), 7)
+	# 이 화면의 주 행동 하나 — 민트 채움 버튼.
+	HudStyle.style_button(extraction_return_button, HudStyle.ACCENT, true)
+	extraction_return_button.add_theme_font_size_override(
+		"font_size", HudStyle.TYPE_BODY if short_viewport else HudStyle.TYPE_HEADING
 	)
 	extraction_return_row.add_child(extraction_return_button)
 
@@ -1338,7 +1365,7 @@ func set_extraction_return_state(pending_choices: int) -> void:
 		extraction_return_hint.text = (
 			"위에서 성장을 %d개 더 골라야 나갈 수 있습니다." % pending_choices
 		)
-		extraction_return_hint.add_theme_color_override("font_color", Color("#e8d18a"))
+		extraction_return_hint.add_theme_color_override("font_color", HudStyle.WARN)
 		extraction_return_button.text = "성장 선택 후 복귀"
 	else:
 		extraction_return_hint.text = "화면을 탭하거나 오른쪽 버튼으로 쉘터에 돌아갑니다."
@@ -1350,7 +1377,7 @@ func flash_extraction_return_warning(pending_choices: int) -> void:
 	if extraction_return_hint == null:
 		return
 	extraction_return_hint.text = "먼저 성장을 고르세요 · 남은 선택 %d개" % maxi(1, pending_choices)
-	extraction_return_hint.add_theme_color_override("font_color", Color("#ffb27a"))
+	extraction_return_hint.add_theme_color_override("font_color", HudStyle.WARN)
 	var flash := extraction_return_hint.create_tween()
 	flash.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
 	for _pulse in 2:
@@ -1372,8 +1399,7 @@ func build_jackpot_hud() -> void:
 	jackpot_hud.offset_right = 215.0
 	jackpot_hud.offset_bottom = 80.0
 	jackpot_hud.add_theme_stylebox_override(
-		"panel",
-		HudStyle.panel(HudStyle.INK, Color("#9c7842"), 7)
+		"panel", HudStyle.flat(HudStyle.INK, HudStyle.RADIUS_CARD)
 	)
 	jackpot_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	jackpot_hud.z_index = 84
@@ -1390,7 +1416,7 @@ func build_jackpot_hud() -> void:
 	var icon := TextureRect.new()
 	icon.name = "EventIcon"
 	icon.custom_minimum_size = Vector2(34, 34)
-	icon.texture = UI_ICONS.get_icon("secure", 38, Color("#e7b860"))
+	icon.texture = UI_ICONS.get_icon("secure", 38, HudStyle.ACCENT)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	row.add_child(icon)
@@ -1399,9 +1425,9 @@ func build_jackpot_hud() -> void:
 	copy.add_theme_constant_override("separation", 3)
 	row.add_child(copy)
 	jackpot_step_label = Label.new()
-	jackpot_step_label.add_theme_font_override("font", FONT)
+	jackpot_step_label.add_theme_font_override("font", HudStyle.bold())
 	jackpot_step_label.add_theme_font_size_override("font_size", 15)
-	jackpot_step_label.add_theme_color_override("font_color", Color("#f0d18a"))
+	jackpot_step_label.add_theme_color_override("font_color", HudStyle.TEXT)
 	jackpot_step_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	copy.add_child(jackpot_step_label)
 	jackpot_detail_label = Label.new()
@@ -1409,8 +1435,8 @@ func build_jackpot_hud() -> void:
 	jackpot_detail_label.max_lines_visible = 1
 	jackpot_detail_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	jackpot_detail_label.add_theme_font_override("font", FONT)
-	jackpot_detail_label.add_theme_font_size_override("font_size", 12)
-	jackpot_detail_label.add_theme_color_override("font_color", Color("#b7c3bd"))
+	jackpot_detail_label.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION)
+	jackpot_detail_label.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
 	copy.add_child(jackpot_detail_label)
 	var status := VBoxContainer.new()
 	status.custom_minimum_size = Vector2(70, 0)
@@ -1420,9 +1446,9 @@ func build_jackpot_hud() -> void:
 	jackpot_pressure_label = Label.new()
 	jackpot_pressure_label.text = "정찰"
 	jackpot_pressure_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	jackpot_pressure_label.add_theme_font_override("font", FONT)
-	jackpot_pressure_label.add_theme_font_size_override("font_size", 11)
-	jackpot_pressure_label.add_theme_color_override("font_color", Color("#8db8a3"))
+	jackpot_pressure_label.add_theme_font_override("font", HudStyle.bold())
+	jackpot_pressure_label.add_theme_font_size_override("font_size", HudStyle.TYPE_FOOTNOTE)
+	jackpot_pressure_label.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
 	status.add_child(jackpot_pressure_label)
 	jackpot_progress = ProgressBar.new()
 	jackpot_progress.custom_minimum_size = Vector2(70, 7)
@@ -1430,13 +1456,9 @@ func build_jackpot_hud() -> void:
 	jackpot_progress.max_value = 4
 	jackpot_progress.show_percentage = false
 	jackpot_progress.add_theme_stylebox_override(
-		"background",
-		HudStyle.panel(Color("#121817"), Color("#4b5a54"), 7)
+		"background", HudStyle.flat(HudStyle.SURFACE_RAISED, 7)
 	)
-	jackpot_progress.add_theme_stylebox_override(
-		"fill",
-		HudStyle.panel(Color("#c88737"), Color("#f0bd61"), 7)
-	)
+	jackpot_progress.add_theme_stylebox_override("fill", HudStyle.flat(HudStyle.ACCENT, 7))
 	status.add_child(jackpot_progress)
 
 
@@ -1667,14 +1689,11 @@ func update_cover_chip(state: String, anchor: Vector2, visible_now: bool = true)
 				cover_chip_icon.texture = UI_ICONS.get_icon("armor", 14, HudStyle.GREEN)
 				cover_chip.add_theme_stylebox_override("panel", HudStyle.chip(HudStyle.GREEN))
 			"peeking":
+				# 테두리 선 없음 — 같은 표면 알약, 글자·아이콘 색(WARN)으로만 구분한다.
 				cover_chip_label.text = "내밈"
 				cover_chip_label.add_theme_color_override("font_color", HudStyle.WARN)
 				cover_chip_icon.texture = UI_ICONS.get_icon("armor", 14, HudStyle.WARN)
-				var outline := HudStyle.chip(HudStyle.WARN)
-				outline.bg_color = Color(outline.bg_color, 0.25)
-				outline.set_border_width_all(1)
-				outline.border_color = HudStyle.WARN
-				cover_chip.add_theme_stylebox_override("panel", outline)
+				cover_chip.add_theme_stylebox_override("panel", HudStyle.chip(HudStyle.WARN))
 	cover_chip.visible = visible_now and not next_state.is_empty()
 	if cover_chip.visible:
 		cover_chip.position = anchor - Vector2(cover_chip.size.x * 0.5, 0.0)
@@ -1858,7 +1877,7 @@ func build_controls_lesson() -> void:
 		item.add_child(keycap)
 		var key_label := Label.new()
 		key_label.text = str(pair[0])
-		key_label.add_theme_font_override("font", font)
+		key_label.add_theme_font_override("font", HudStyle.bold())
 		key_label.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION)
 		key_label.add_theme_color_override("font_color", HudStyle.TEXT)
 		keycap.add_child(key_label)
@@ -1960,6 +1979,7 @@ func setup_aim_feedback() -> void:
 
 static func make_prompt_capsule_style(accent: Color, bg_mix := 0.0) -> StyleBoxFlat:
 	# 필드 하단 프롬프트(상호작용·탄약 줍기)의 공용 캡슐. 어디서 떠도 같은 모양.
+	# 표면색 알약, 테두리 선 없음 — accent는 눌림(bg_mix) 때 바탕에 살짝 섞일 뿐이다.
 	var background := HudStyle.INK
 	if bg_mix > 0.0:
 		background = Color(
@@ -1968,7 +1988,7 @@ static func make_prompt_capsule_style(accent: Color, bg_mix := 0.0) -> StyleBoxF
 			lerpf(background.b, accent.b, bg_mix),
 			background.a
 		)
-	var style := HudStyle.panel(background, Color(accent, 0.72), 999)
+	var style := HudStyle.flat(background, HudStyle.RADIUS_CHIP)
 	style.content_margin_left = 12.0
 	style.content_margin_right = 16.0
 	style.content_margin_top = 9.0
@@ -2038,7 +2058,7 @@ class RingGauge:
 		set(new_value):
 			max_value = maxf(0.01, new_value)
 			queue_redraw()
-	var ring_color := Color("#7fc5a4"):
+	var ring_color := HudStyle.ACCENT:
 		set(new_color):
 			ring_color = new_color
 			queue_redraw()

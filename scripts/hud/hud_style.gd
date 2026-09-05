@@ -1,17 +1,16 @@
 class_name HudStyle
 extends RefCounted
 
-# HUD 디자인 시스템의 단일 출처.
-#
-# 예전에는 화면마다 배경색·보더·라운딩·폰트 크기를 손으로 조금씩 다르게
-# 찍었다. 그 미세한 어긋남이 쌓이면 "만들다 만" 인상이 된다. 여기의 토큰과
-# 프리셋만 쓰면 어떤 화면을 열어도 같은 손이 만든 것처럼 보인다.
+# 필드 HUD 디자인 시스템의 단일 출처 — 2026-09-04부터 쉘터와 같은 언어(ShelterTheme,
+# 이름 짓기 화면 기준)를 쓴다: 거의 검정 바탕, 무광 표면 카드, 테두리 선 없음,
+# 굵은 제목 + 회색 설명, 민트 강조 하나, 둥근 큰 버튼, 알약 칩.
 #
 # 규칙:
-#  - 색은 아래 토큰만. 새 색이 필요하면 여기 추가하고 이름을 붙인다.
+#  - 색은 아래 토큰만. 금색은 재화 아이콘·보상 수치에만, 테두리·제목에는 쓰지 않는다.
 #  - 패널은 card/toast/modal/chip/keycap 프리셋 중 하나로 시작한다.
 #  - 등장/퇴장은 enter()/exit()를 쓴다. 툭 나타나는 패널이 없어야 한다.
-#  - 폰트 크기는 TYPE_* 스케일에서 고른다.
+#  - 폰트 크기는 TYPE_* 스케일에서 고른다. 굵기는 bold()(FontVariation embolden).
+#  - ▸ ✓ ⚠ ▲ 같은 기호는 Pretendard에 없어 깨진다 — 글자·색으로 표현한다.
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const SFX := preload("res://scripts/sfx_bank.gd")
@@ -19,31 +18,66 @@ const SFX := preload("res://scripts/sfx_bank.gd")
 const TOUCH_SCROLL := preload("res://scripts/hud/touch_scroll.gd")
 
 # ── 색 토큰 ────────────────────────────────────────────────────
-const INK := Color(0.014, 0.021, 0.022, 0.96)          # 표준 패널 바탕
-const INK_SOLID := Color(0.018, 0.024, 0.025, 0.985)   # 모달 바탕(불투명에 가깝게)
-const INK_WELL := Color(0.045, 0.061, 0.061, 0.96)     # 패널 속 패널(카드 안 카드)
-const LINE := Color("#3f574c")                         # 기본 보더
-const LINE_FOCUS := Color("#79a994")                   # 강조 보더(활성/포커스)
-const LINE_GOLD := Color("#8f7950")                    # 골드 계열 보더(모달·보상)
-const TEXT := Color("#e9f1ec")                         # 본문
-const TEXT_DIM := Color("#93a89d")                     # 보조 설명
-const TEXT_FAINT := Color("#6d7f76")                   # 힌트/각주
-const GOLD := Color("#d8bd72")                         # 보상·강조 아이콘
-const GOLD_TEXT := Color("#ead69c")                    # 타이틀 골드
-const GREEN := Color("#7fc79e")                        # 긍정·진행
+# 이름은 하위 호환을 위해 그대로 두고 값만 새 언어로 바꿨다.
+const INK := Color(0.043, 0.059, 0.071, 0.94)          # 표준 패널 바탕(#0b0f12, 살짝 비침)
+const INK_SOLID := Color(0.043, 0.059, 0.071, 0.985)   # 모달 바탕(불투명에 가깝게)
+const INK_WELL := Color(0.078, 0.102, 0.118, 0.96)     # 패널 속 패널(#141a1e)
+const SURFACE_RAISED := Color("#1b2227")               # 카드 안 카드 · 보조 버튼
+const SURFACE_HOVER := Color("#222a30")
+const LINE := Color("#243036")                         # 아주 옅은 구분선(꼭 필요할 때만)
+const LINE_FOCUS := Color("#5fd3b8")                   # 강조(민트) — 선택/포커스
+const LINE_GOLD := Color("#243036")                    # (하위 호환) 이제 골드 보더는 없다
+const TEXT := Color("#eef2ee")                         # 본문
+const TEXT_DIM := Color("#8d9a94")                     # 보조 설명
+const TEXT_FAINT := Color("#5f6b67")                   # 힌트/각주
+const ACCENT := Color("#5fd3b8")                       # 강조 하나(민트)
+const ACCENT_INK := Color("#06120f")                   # 민트 위 글자
+const GOLD := Color("#d8bd72")                         # 재화 아이콘·보상 수치에만
+const GOLD_TEXT := Color("#eef2ee")                    # (하위 호환) 제목은 흰 굵은 글자
+const GREEN := Color("#5fd3b8")                        # 긍정·진행 = 민트
 const WARN := Color("#e3bd67")                         # 주의
 const DANGER := Color("#e06c5c")                       # 위험·실패
 
 # ── 형태 토큰 ──────────────────────────────────────────────────
-const RADIUS_CHIP := 5
-const RADIUS_CARD := 7
-const RADIUS_MODAL := 10
+const RADIUS_CHIP := 999
+const RADIUS_CARD := 14
+const RADIUS_MODAL := 20
 
 const TYPE_HEADING := 16    # 섹션 제목·주 행동
 const TYPE_BODY := 14       # 본문
 const TYPE_CAPTION := 12    # 보조 라벨
 const TYPE_FOOTNOTE := 11   # 각주·힌트
 const TYPE_NUMBER := 20     # 강조 수치(탄약 등)
+const TYPE_TITLE := 24      # 모달 제목
+
+static var _bold_font: FontVariation
+static var _tabular_font: FontVariation
+static var _bold_tabular_font: FontVariation
+
+
+static func bold() -> FontVariation:
+	if _bold_font == null:
+		_bold_font = FontVariation.new()
+		_bold_font.base_font = FONT
+		_bold_font.variation_embolden = 0.75
+	return _bold_font
+
+
+static func tabular() -> FontVariation:
+	if _tabular_font == null:
+		_tabular_font = FontVariation.new()
+		_tabular_font.base_font = FONT
+		_tabular_font.opentype_features = {"tnum": 1}
+	return _tabular_font
+
+
+static func bold_tabular() -> FontVariation:
+	if _bold_tabular_font == null:
+		_bold_tabular_font = FontVariation.new()
+		_bold_tabular_font.base_font = FONT
+		_bold_tabular_font.variation_embolden = 0.75
+		_bold_tabular_font.opentype_features = {"tnum": 1}
+	return _bold_tabular_font
 
 
 # ── 스크롤 영역 ────────────────────────────────────────────────
@@ -51,85 +85,86 @@ const TYPE_NUMBER := 20     # 강조 수치(탄약 등)
 
 static func make_scroll() -> ScrollContainer:
 	# 모든 UI 스크롤 영역은 이걸로 만든다. 손가락 드래그(스와이프) 스크롤이
-	# 자동으로 붙는다 — 상세는 TouchScroll 참조. ScrollContainer.new()를 직접
-	# 쓰면 버튼 목록 위에서 스와이프가 먹지 않는다(유저 신고).
-	return TOUCH_SCROLL.install(ScrollContainer.new())
+	# 자동으로 붙는다 — 상세는 TouchScroll 참조.
+	var container := ScrollContainer.new()
+	var bar := container.get_v_scroll_bar()
+	bar.add_theme_stylebox_override("scroll", flat(Color(0, 0, 0, 0), 3))
+	bar.add_theme_stylebox_override("grabber", flat(Color(TEXT_FAINT, 0.5), 3))
+	bar.add_theme_stylebox_override("grabber_highlight", flat(Color(TEXT_DIM, 0.7), 3))
+	bar.add_theme_stylebox_override("grabber_pressed", flat(ACCENT, 3))
+	return TOUCH_SCROLL.install(container)
 
 
 # ── 패널 프리셋 ────────────────────────────────────────────────
 
 
+static func flat(background: Color, radius: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = background
+	style.set_corner_radius_all(radius)
+	style.anti_aliasing = true
+	return style
+
+
 static func style_mobile_action(
 	button: Button, accent: Color, icon_limit := 30, filled := false, label_size := TYPE_CAPTION
 ) -> Button:
-	# 모바일 원형 액션 버튼 — 아이콘 위, 라벨 아래, 완전한 원.
-	# 반경 999는 어느 크기에서도 원으로 수렴한다(크기는 레이아웃이 정한다).
-	# 필드 우하단의 모든 터치 버튼은 이 프리셋 하나만 쓴다. 모양이 하나여야
-	# 손가락이 외운다.
+	# 모바일 원형 액션 버튼 — 아이콘 위, 라벨 아래, 완전한 원. 표면색 원에 민트 채움(filled).
 	button.focus_mode = Control.FOCUS_NONE
 	button.mouse_filter = Control.MOUSE_FILTER_STOP
 	button.expand_icon = true
 	button.add_theme_constant_override("icon_max_width", icon_limit)
-	# 아이콘은 위, 라벨은 아래 — 원 안에서 세로로 쌓는다. 수평/수직 모두
-	# CENTER면 아이콘이 텍스트 '위에 겹쳐' 그려지므로, 수직만 TOP으로 분리한다.
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
 	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	button.add_theme_constant_override("h_separation", 0)
 	button.clip_text = true
-	button.add_theme_font_override("font", FONT)
+	button.add_theme_font_override("font", bold())
 	button.add_theme_font_size_override("font_size", label_size)
-	button.add_theme_color_override("font_color", TEXT)
-	button.add_theme_color_override("font_pressed_color", Color.WHITE)
-	button.add_theme_color_override("font_hover_color", TEXT)
+	var text_color := ACCENT_INK if filled else TEXT
+	button.add_theme_color_override("font_color", text_color)
+	button.add_theme_color_override("font_pressed_color", text_color)
+	button.add_theme_color_override("font_hover_color", text_color)
+	button.add_theme_color_override("font_focus_color", text_color)
 	button.add_theme_color_override("font_disabled_color", TEXT_FAINT)
-	var normal_bg := Color(
-		lerpf(INK.r, accent.r, 0.22),
-		lerpf(INK.g, accent.g, 0.22),
-		lerpf(INK.b, accent.b, 0.22),
-		0.94
-	) if filled else Color(INK.r, INK.g, INK.b, 0.9)
-	var normal := panel(normal_bg, Color(accent, 0.66), 999)
-	normal.set_border_width_all(2)
-	var hover := panel(normal_bg.lightened(0.04), Color(accent, 0.85), 999)
-	hover.set_border_width_all(2)
-	var pressed := panel(
-		Color(accent.r * 0.42, accent.g * 0.42, accent.b * 0.42, 0.96),
-		accent,
-		999
-	)
-	pressed.set_border_width_all(2)
-	var disabled := panel(Color(INK.r, INK.g, INK.b, 0.55), Color(accent, 0.2), 999)
-	button.add_theme_stylebox_override("normal", normal)
-	button.add_theme_stylebox_override("hover", hover)
-	button.add_theme_stylebox_override("pressed", pressed)
-	button.add_theme_stylebox_override("disabled", disabled)
+	var normal_bg := accent if filled else Color(INK_WELL.r, INK_WELL.g, INK_WELL.b, 0.92)
+	button.add_theme_stylebox_override("normal", flat(normal_bg, 999))
+	button.add_theme_stylebox_override("hover", flat(normal_bg.lightened(0.06), 999))
+	button.add_theme_stylebox_override("pressed", flat(normal_bg.darkened(0.14), 999))
+	button.add_theme_stylebox_override("focus", flat(normal_bg, 999))
+	button.add_theme_stylebox_override("disabled", flat(Color(normal_bg, 0.45), 999))
 	return button
 
 
 static func panel(background: Color, border: Color, radius: int = 4) -> StyleBoxFlat:
-	# (하위 호환) 자유 조합. 새 코드는 아래 프리셋을 쓴다.
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
+	# (하위 호환) 자유 조합. 보더 인자는 무시한다 — 새 언어엔 테두리 선이 없다.
+	# 강조 테두리가 정말 필요하면 accent_panel()을 쓴다.
+	var style := flat(background, maxi(radius, 6))
 	style.border_color = border
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(radius)
+	return style
+
+
+static func accent_panel(background: Color, accent: Color = ACCENT, radius: int = RADIUS_CARD) -> StyleBoxFlat:
+	# 선택·강조 카드 — 민트 2px 테두리.
+	var style := flat(background, radius)
+	style.border_color = Color(accent, 0.7)
+	style.set_border_width_all(2)
 	return style
 
 
 static func card(focused := false) -> StyleBoxFlat:
 	# 필드 HUD의 표준 카드: 상호작용 프롬프트, 상태 패널, 무기 정보.
-	var style := panel(INK, LINE_FOCUS if focused else LINE, RADIUS_CARD)
-	style.content_margin_left = 12.0
-	style.content_margin_right = 12.0
-	style.content_margin_top = 9.0
-	style.content_margin_bottom = 9.0
+	var style := accent_panel(INK, ACCENT, RADIUS_CARD) if focused else flat(INK, RADIUS_CARD)
+	style.content_margin_left = 14.0
+	style.content_margin_right = 14.0
+	style.content_margin_top = 10.0
+	style.content_margin_bottom = 10.0
 	return style
 
 
 static func toast() -> StyleBoxFlat:
 	# 잠깐 떴다 사라지는 알림.
-	var style := panel(INK, LINE, RADIUS_CARD)
+	var style := flat(INK, RADIUS_CARD)
 	style.content_margin_left = 16.0
 	style.content_margin_right = 16.0
 	style.content_margin_top = 10.0
@@ -137,91 +172,112 @@ static func toast() -> StyleBoxFlat:
 	return style
 
 
-static func modal(gold := false) -> StyleBoxFlat:
-	# 화면을 멈추는 큰 패널: 정산, 사망, 지도, 시설.
-	var style := StyleBoxFlat.new()
-	style.bg_color = INK_SOLID
-	style.border_color = LINE_GOLD if gold else LINE_FOCUS
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(RADIUS_MODAL)
-	style.shadow_color = Color(0, 0, 0, 0.72)
-	style.shadow_size = 18
-	style.content_margin_left = 18.0
-	style.content_margin_right = 18.0
-	style.content_margin_top = 16.0
-	style.content_margin_bottom = 16.0
+static func modal(_gold := false) -> StyleBoxFlat:
+	# 화면을 멈추는 큰 판: 정산, 사망, 지도, 시설. 거의 검정, 보더 없음, 큰 그림자.
+	var style := flat(INK_SOLID, RADIUS_MODAL)
+	style.shadow_color = Color(0, 0, 0, 0.55)
+	style.shadow_size = 32
+	style.content_margin_left = 24.0
+	style.content_margin_right = 24.0
+	style.content_margin_top = 20.0
+	style.content_margin_bottom = 20.0
 	return style
 
 
-static func chip(accent: Color = LINE) -> StyleBoxFlat:
-	# 재화 칩·태그·작은 배지.
-	var style := panel(INK_WELL, accent, RADIUS_CHIP)
-	style.content_margin_left = 8.0
-	style.content_margin_right = 8.0
-	style.content_margin_top = 4.0
-	style.content_margin_bottom = 4.0
+static func chip(accent: Color = LINE, active := false) -> StyleBoxFlat:
+	# 재화 칩·태그·작은 배지 — 알약. active면 민트 채움.
+	var style := flat(accent if active else SURFACE_RAISED, RADIUS_CHIP)
+	style.content_margin_left = 12.0
+	style.content_margin_right = 12.0
+	style.content_margin_top = 5.0
+	style.content_margin_bottom = 6.0
 	return style
 
 
 static func keycap() -> StyleBoxFlat:
-	# 키 안내([F], [TAB]) 전용.
-	var style := panel(Color("#17231f"), Color("#8bc5a8"), RADIUS_CHIP)
-	style.set_border_width_all(1)
-	style.border_width_bottom = 3
+	# 키 안내([F], [TAB]) 전용 — 표면색 작은 알약.
+	var style := flat(SURFACE_RAISED, 8)
+	style.content_margin_left = 7.0
+	style.content_margin_right = 7.0
+	style.content_margin_top = 2.0
+	style.content_margin_bottom = 3.0
 	return style
 
 
-static func label(text: String, size: int, color: Color) -> Label:
+static func label(text: String, size: int, color: Color, is_bold := false) -> Label:
 	var result := Label.new()
 	result.text = text
-	result.add_theme_font_override("font", FONT)
+	result.add_theme_font_override("font", bold() if is_bold else FONT)
+	result.add_theme_font_size_override("font_size", size)
+	result.add_theme_color_override("font_color", color)
+	return result
+
+
+static func number(text: String, size: int = TYPE_NUMBER, color: Color = TEXT) -> Label:
+	var result := Label.new()
+	result.text = text
+	result.add_theme_font_override("font", bold_tabular())
 	result.add_theme_font_size_override("font_size", size)
 	result.add_theme_color_override("font_color", color)
 	return result
 
 
 # ── 버튼 프리셋 ────────────────────────────────────────────────
-# 6개 파일이 제각각 버튼 공장을 갖고 있었다(폰트 14/15/16 혼재, pressed/disabled
-# 누락 제각각). 여기 하나로 통일한다: 4상태 전부 정의, 폰트는 HEADING(주 행동)
-# 또는 BODY(보조 행동).
+# primary = 민트 채움/어두운 글자(주 행동 하나), 아니면 표면색 채움/흰 글자.
 
 
 static func style_button(button: Button, accent: Color = LINE_FOCUS, primary := false) -> Button:
 	# 공용 스타일을 입는 모든 버튼은 같은 탭 클릭음을 낸다(UI 버스, 중복 연결 방지).
 	if not button.pressed.is_connected(_play_button_tap):
 		button.pressed.connect(_play_button_tap)
-	button.add_theme_font_override("font", FONT)
+	button.add_theme_font_override("font", bold())
 	button.add_theme_font_size_override("font_size", TYPE_HEADING if primary else TYPE_BODY)
-	button.add_theme_color_override("font_color", TEXT)
-	button.add_theme_color_override("font_hover_color", TEXT)
-	button.add_theme_color_override("font_pressed_color", GOLD_TEXT)
-	button.add_theme_color_override("font_disabled_color", TEXT_FAINT)
+	var fill := accent if primary else SURFACE_RAISED
+	var text_color := ACCENT_INK if primary else TEXT
+	button.add_theme_color_override("font_color", text_color)
+	button.add_theme_color_override("font_hover_color", text_color)
+	button.add_theme_color_override("font_pressed_color", text_color)
+	button.add_theme_color_override("font_focus_color", text_color)
+	button.add_theme_color_override("font_disabled_color", Color(text_color, 0.55) if primary else TEXT_FAINT)
 	button.focus_mode = Control.FOCUS_NONE
-	var base := INK_WELL if primary else INK
-	var normal := panel(base, accent.darkened(0.25), RADIUS_CARD)
-	normal.content_margin_left = 12.0
-	normal.content_margin_right = 12.0
-	normal.content_margin_top = 7.0
-	normal.content_margin_bottom = 7.0
-	button.add_theme_stylebox_override("normal", normal)
-	var hover := panel(base.lightened(0.06), accent, RADIUS_CARD)
-	hover.content_margin_left = 12.0
-	hover.content_margin_right = 12.0
-	hover.content_margin_top = 7.0
-	hover.content_margin_bottom = 7.0
+	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var color := fill
+		match state:
+			"hover":
+				color = fill.lightened(0.06)
+			"pressed":
+				color = fill.darkened(0.14)
+			"disabled":
+				color = Color(fill, 0.35) if primary else Color(fill, 0.6)
+		var style := flat(color, RADIUS_CARD)
+		style.content_margin_left = 14.0
+		style.content_margin_right = 14.0
+		style.content_margin_top = 8.0
+		style.content_margin_bottom = 8.0
+		button.add_theme_stylebox_override(state, style)
+	return button
+
+
+static func style_pill(button: Button, active := false, accent: Color = ACCENT) -> Button:
+	# 알약 탭/토글.
+	if not button.pressed.is_connected(_play_button_tap):
+		button.pressed.connect(_play_button_tap)
+	button.add_theme_font_override("font", bold() if active else FONT)
+	button.add_theme_font_size_override("font_size", TYPE_CAPTION + 1)
+	var color := ACCENT_INK if active else TEXT
+	button.add_theme_color_override("font_color", color)
+	button.add_theme_color_override("font_hover_color", color)
+	button.add_theme_color_override("font_pressed_color", color)
+	button.add_theme_color_override("font_focus_color", color)
+	button.add_theme_color_override("font_disabled_color", TEXT_FAINT)
+	button.add_theme_stylebox_override("normal", chip(accent, active))
+	var hover := chip(accent, active)
+	hover.bg_color = accent.lightened(0.08) if active else SURFACE_HOVER
 	button.add_theme_stylebox_override("hover", hover)
-	var pressed := panel(base.darkened(0.15), GOLD, RADIUS_CARD)
-	pressed.content_margin_left = 12.0
-	pressed.content_margin_right = 12.0
-	pressed.content_margin_top = 8.0
-	pressed.content_margin_bottom = 6.0
-	button.add_theme_stylebox_override("pressed", pressed)
-	var disabled := panel(Color(base.r, base.g, base.b, base.a * 0.6), accent.darkened(0.55), RADIUS_CARD)
-	disabled.content_margin_left = 12.0
-	disabled.content_margin_right = 12.0
-	disabled.content_margin_top = 7.0
-	disabled.content_margin_bottom = 7.0
-	button.add_theme_stylebox_override("disabled", disabled)
+	button.add_theme_stylebox_override("pressed", hover)
+	button.add_theme_stylebox_override("focus", chip(accent, active))
+	button.add_theme_stylebox_override("disabled", chip(LINE, false))
+	button.focus_mode = Control.FOCUS_NONE
 	return button
 
 
@@ -230,20 +286,26 @@ static func _play_button_tap() -> void:
 
 
 static func close_button(icon: Texture2D) -> Button:
-	# 다섯 파일이 각자 만들던 40×40 닫기 버튼의 단일 출처.
+	# 둥근 40×40 닫기 버튼의 단일 출처.
 	var button := Button.new()
 	button.name = "CloseButton"
 	button.custom_minimum_size = Vector2(40, 40)
 	button.tooltip_text = "닫기"
 	button.icon = icon
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	style_button(button, LINE)
+	if not button.pressed.is_connected(_play_button_tap):
+		button.pressed.connect(_play_button_tap)
+	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_stylebox_override("normal", flat(SURFACE_RAISED, 999))
+	button.add_theme_stylebox_override("hover", flat(SURFACE_HOVER, 999))
+	button.add_theme_stylebox_override("pressed", flat(INK_WELL, 999))
+	button.add_theme_stylebox_override("focus", flat(SURFACE_RAISED, 999))
+	button.add_theme_stylebox_override("disabled", flat(Color(SURFACE_RAISED, 0.5), 999))
 	return button
 
 
 # ── 모션 ──────────────────────────────────────────────────────
 # 모든 패널의 등장·퇴장은 같은 리듬을 탄다: 0.16초, 아래에서 6px 떠오르며 페이드.
-# "툭" 나타나는 UI가 하나도 없게 하는 것이 완성도의 절반이다.
 
 
 static func enter(control: Control, from_offset := Vector2(0.0, 6.0)) -> void:
@@ -260,8 +322,7 @@ static func enter(control: Control, from_offset := Vector2(0.0, 6.0)) -> void:
 
 
 static func enter_modal(panel: Control) -> void:
-	# 컨테이너(CenterContainer 등) 안의 모달용: position은 컨테이너가 덮어쓰므로
-	# 페이드 + 미세 스케일로 떠오른다. 툭 나타나는 팝업을 없애는 표준 등장.
+	# 컨테이너 안의 모달용: 페이드 + 미세 스케일로 떠오른다.
 	if not is_instance_valid(panel):
 		return
 	panel.pivot_offset = panel.size * 0.5
@@ -274,20 +335,14 @@ static func enter_modal(panel: Control) -> void:
 
 
 static func pop_in(control: Control, duration := 0.2) -> void:
-	# 이미 자리를 잡은 컨테이너 안에서 '새로 생긴' 요소용(해금된 독 버튼, 새 목표 행).
-	# position은 컨테이너가 매 프레임 덮어쓰므로 건드리지 않는다 — 스케일 + 페이드만.
-	# enter()가 아니라 이걸 쓰는 이유: 컨테이너 자식에게 enter()를 쓰면 이동이
-	# 첫 프레임에 지워져 "툭" 나타난 것처럼 보인다.
+	# 이미 자리를 잡은 컨테이너 안에서 '새로 생긴' 요소용 — 스케일 + 페이드만.
 	if not is_instance_valid(control):
 		return
 	control.visible = true
-	# 트리 밖에서는 트윈을 만들 수 없다(빌드 중 호출). 그럴 땐 그냥 보이게 둔다.
 	if not control.is_inside_tree():
 		control.modulate.a = 1.0
 		control.scale = Vector2.ONE
 		return
-	# 방금 보이게 된 노드는 size가 아직 0이다(레이아웃은 다음 프레임에 돈다).
-	# 그 상태로 pivot을 잡으면 좌상단에서 자라 어색하다 — 최소 크기로 대신한다.
 	var extent := control.size
 	if extent.x <= 1.0 or extent.y <= 1.0:
 		extent = control.get_combined_minimum_size()

@@ -139,76 +139,57 @@ func _create_reset_confirmation() -> Control:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.add_child(center)
 
+	# 거의 검정 판(HudStyle.modal) — 붉은 테두리 없이, 위험은 주 버튼 색 하나로만.
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(350, 244)
-	panel.add_theme_stylebox_override(
-		"panel",
-		_make_style(Color(0.018, 0.025, 0.026, 0.98), Color("#bd6257"), 2, 7)
-	)
+	panel.custom_minimum_size = Vector2(360, 0)
+	var panel_style := HudStyle.modal()
+	panel_style.content_margin_left = 24.0
+	panel_style.content_margin_right = 24.0
+	panel_style.content_margin_top = 26.0
+	panel_style.content_margin_bottom = 22.0
+	panel.add_theme_stylebox_override("panel", panel_style)
 	center.add_child(panel)
 
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 18)
-	margin.add_theme_constant_override("margin_right", 18)
-	margin.add_theme_constant_override("margin_top", 24)
-	margin.add_theme_constant_override("margin_bottom", 24)
-	panel.add_child(margin)
-
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 14)
-	margin.add_child(column)
+	column.add_theme_constant_override("separation", 8)
+	panel.add_child(column)
 
-	var title := Label.new()
-	title.text = "처음부터 시작할까요?"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_override("font", FONT)
-	title.add_theme_font_size_override("font_size", 25)
-	title.add_theme_color_override("font_color", Color("#f3ded9"))
+	var title := HudStyle.label("처음부터 시작할까요?", HudStyle.TYPE_TITLE, HudStyle.TEXT, true)
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(title)
 
-	var description := Label.new()
-	description.text = "주민, 창고, 재화, 장비와 모든 진행 데이터가 삭제됩니다.\n삭제한 데이터는 되돌릴 수 없습니다."
-	description.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var description := HudStyle.label(
+		"주민, 창고, 재화, 장비와 모든 진행 데이터가 삭제됩니다.\n삭제한 데이터는 되돌릴 수 없습니다.",
+		HudStyle.TYPE_BODY,
+		HudStyle.TEXT_DIM
+	)
 	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	description.add_theme_font_override("font", FONT)
-	description.add_theme_font_size_override("font_size", 17)
-	description.add_theme_color_override("font_color", Color("#b9c5c1"))
 	column.add_child(description)
 
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 12)
+	column.add_child(gap)
+
 	var actions := HBoxContainer.new()
-	actions.add_theme_constant_override("separation", 8)
-	actions.alignment = BoxContainer.ALIGNMENT_CENTER
+	actions.add_theme_constant_override("separation", 10)
 	column.add_child(actions)
 
 	var cancel_button := Button.new()
 	cancel_button.text = "취소"
-	cancel_button.custom_minimum_size = Vector2(132, 52)
-	cancel_button.focus_mode = Control.FOCUS_NONE
-	cancel_button.add_theme_font_override("font", FONT)
-	cancel_button.add_theme_font_size_override("font_size", 18)
-	cancel_button.add_theme_stylebox_override(
-		"normal",
-		_make_style(Color("#121a1b"), Color("#526661"), 1, 6)
-	)
+	cancel_button.custom_minimum_size = Vector2(0, 52)
+	cancel_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	HudStyle.style_button(cancel_button, HudStyle.TEXT_DIM, false)
+	cancel_button.add_theme_font_size_override("font_size", HudStyle.TYPE_HEADING)
 	cancel_button.pressed.connect(_hide_reset_confirmation)
 	actions.add_child(cancel_button)
 	reset_cancel_button = cancel_button
 
 	var confirm_button := Button.new()
 	confirm_button.text = "전체 초기화"
-	confirm_button.custom_minimum_size = Vector2(146, 52)
-	confirm_button.focus_mode = Control.FOCUS_NONE
-	confirm_button.add_theme_font_override("font", FONT)
-	confirm_button.add_theme_font_size_override("font_size", 18)
-	confirm_button.add_theme_color_override("font_color", Color.WHITE)
-	confirm_button.add_theme_stylebox_override(
-		"normal",
-		_make_style(Color("#9d4038"), Color("#ee8b7d"), 2, 6)
-	)
-	confirm_button.add_theme_stylebox_override(
-		"pressed",
-		_make_style(Color("#692822"), Color("#ffab9f"), 2, 6)
-	)
+	confirm_button.custom_minimum_size = Vector2(0, 52)
+	confirm_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	confirm_button.size_flags_stretch_ratio = 1.2
+	HudStyle.style_button(confirm_button, HudStyle.DANGER, true)
 	confirm_button.pressed.connect(_perform_full_reset)
 	actions.add_child(confirm_button)
 	reset_confirm_button = confirm_button
@@ -260,12 +241,23 @@ func _show_reset_confirmation() -> void:
 		reset_confirmation = _create_reset_confirmation()
 		reset_layer.add_child(reset_confirmation)
 	reset_confirmation.visible = true
+	# 포인터 UI 등록 — 필드는 조준선 모드라 OS 커서를 숨기는데, 이 창이 목록에
+	# 없어 "커서 없이 버튼을 누르는" 상태였다(2026-09-04 유저 신고).
+	if not reset_confirmation.is_in_group("pointer_ui"):
+		reset_confirmation.add_to_group("pointer_ui")
+	if not DisplayServer.is_touchscreen_available():
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
 
 func _hide_reset_confirmation() -> void:
 	if reset_confirmation == null:
 		return
 	reset_confirmation.visible = false
+	if reset_confirmation.is_in_group("pointer_ui"):
+		reset_confirmation.remove_from_group("pointer_ui")
+	var host := get_parent()
+	if host != null and host.has_method("_refresh_pointer_mode"):
+		host.call("_refresh_pointer_mode")
 
 
 func _perform_debug_unlock() -> void:

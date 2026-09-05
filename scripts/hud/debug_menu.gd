@@ -10,6 +10,7 @@ class_name DebugMenu
 # "디버그로는 되는데 실제로는 안 되는" 상태가 생겨 도구가 거짓말을 한다.
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
+const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const PANEL_WIDTH := 340.0
 const CHEAT_AMOUNT := 9_999_999
 
@@ -39,9 +40,11 @@ func _build_open_button() -> void:
 	open_button.name = "DebugOpenButton"
 	open_button.text = "DEV"
 	open_button.focus_mode = Control.FOCUS_NONE
-	open_button.add_theme_font_override("font", FONT)
-	open_button.add_theme_font_size_override("font_size", 13)
-	open_button.add_theme_color_override("font_color", Color("#8fe0c8"))
+	# 작은 알약 — 표면색 채움, 민트 글자.
+	HudStyle.style_pill(open_button, false)
+	open_button.add_theme_color_override("font_color", HudStyle.ACCENT)
+	open_button.add_theme_color_override("font_hover_color", HudStyle.ACCENT)
+	open_button.add_theme_color_override("font_pressed_color", HudStyle.ACCENT)
 	open_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	open_button.offset_left = 14.0
 	open_button.offset_top = -52.0
@@ -55,15 +58,12 @@ func _build_open_button() -> void:
 func _build_panel() -> void:
 	panel = PanelContainer.new()
 	panel.name = "DebugPanel"
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.05, 0.07, 0.08, 0.96)
-	style.border_color = Color("#41e0c9")
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(10)
-	style.content_margin_left = 14.0
-	style.content_margin_right = 14.0
-	style.content_margin_top = 12.0
-	style.content_margin_bottom = 12.0
+	# 거의 검정 판(HudStyle.modal) — 테두리 선 없음, 큰 그림자.
+	var style := HudStyle.modal()
+	style.content_margin_left = 20.0
+	style.content_margin_right = 20.0
+	style.content_margin_top = 18.0
+	style.content_margin_bottom = 18.0
 	panel.add_theme_stylebox_override("panel", style)
 	# 세로로 꽉 채운다 — 모바일에서 600px 고정이면 목록 끝(닫기 버튼)이
 	# 화면 밖으로 밀려 "열고 나면 닫을 수가 없다"(유저 신고)가 된다.
@@ -77,39 +77,37 @@ func _build_panel() -> void:
 	# 헤더(제목 + 큰 닫기 버튼)는 스크롤 밖에 고정한다. 스크롤을 어디까지
 	# 내렸든 닫기는 항상 같은 자리에 있어야 한다.
 	var root_column := VBoxContainer.new()
-	root_column.add_theme_constant_override("separation", 8)
+	root_column.add_theme_constant_override("separation", 10)
 	panel.add_child(root_column)
 
+	# [굵은 제목 / 회색 설명]  ······  [둥근 닫기]
 	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 8)
+	header.add_theme_constant_override("separation", 12)
 	root_column.add_child(header)
-	var header_title := Label.new()
-	header_title.text = "개발자 메뉴"
-	header_title.add_theme_font_override("font", FONT)
-	header_title.add_theme_font_size_override("font_size", 16)
-	header_title.add_theme_color_override("font_color", Color("#41e0c9"))
-	header_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	header.add_child(header_title)
-	var close_button := Button.new()
-	close_button.text = "✕ 닫기"
-	close_button.focus_mode = Control.FOCUS_NONE
-	close_button.add_theme_font_override("font", FONT)
-	close_button.add_theme_font_size_override("font_size", 15)
-	# 손가락으로 누르는 버튼이다 — 44px 아래로 내리지 않는다.
-	close_button.custom_minimum_size = Vector2(96.0, 44.0)
+	var title_column := VBoxContainer.new()
+	title_column.add_theme_constant_override("separation", 2)
+	title_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title_column)
+	var header_title := HudStyle.label("개발자 메뉴", HudStyle.TYPE_NUMBER, HudStyle.TEXT, true)
+	title_column.add_child(header_title)
+	var header_subtitle := HudStyle.label(
+		"누른 즉시 반영되고 바로 저장됩니다.", HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM
+	)
+	header_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title_column.add_child(header_subtitle)
+	# 손가락으로 누르는 버튼이다 — 40px 둥근 닫기(HudStyle.close_button).
+	var close_button := HudStyle.close_button(UI_ICONS.get_icon("close", 18, HudStyle.TEXT))
+	close_button.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	close_button.pressed.connect(func() -> void: set_open(false))
 	header.add_child(close_button)
 
-	status_label = Label.new()
-	status_label.add_theme_font_override("font", FONT)
-	status_label.add_theme_font_size_override("font_size", 12)
-	status_label.add_theme_color_override("font_color", Color("#f0d78a"))
+	# 마지막 실행 결과 — 민트 한 줄.
+	status_label = HudStyle.label("", HudStyle.TYPE_CAPTION, HudStyle.ACCENT)
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.custom_minimum_size.y = 34.0
 	root_column.add_child(status_label)
 
-	var scroll := ScrollContainer.new()
+	var scroll := HudStyle.make_scroll()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	# 터치 드래그로 굴린다 — 모바일에는 스크롤 휠이 없다(유저 신고: 스크롤 불편).
@@ -248,12 +246,9 @@ func _build_panel() -> void:
 
 
 func _add_title(text: String) -> void:
-	var label := Label.new()
-	label.text = text
-	label.add_theme_font_override("font", FONT)
-	label.add_theme_font_size_override("font_size", 14)
-	label.add_theme_color_override("font_color", Color("#41e0c9"))
-	label.custom_minimum_size.y = 22.0
+	# 섹션 이름표 — 민트 eyebrow. 첫 섹션이 아니면 위로 여백을 더 둔다.
+	var label := HudStyle.label(text, HudStyle.TYPE_CAPTION, HudStyle.ACCENT)
+	label.custom_minimum_size.y = 22.0 if button_column.get_child_count() == 0 else 34.0
 	label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	button_column.add_child(label)
 
@@ -261,11 +256,12 @@ func _add_title(text: String) -> void:
 func _add_action(text: String, action: Callable) -> void:
 	var button := Button.new()
 	button.text = text
-	button.focus_mode = Control.FOCUS_NONE
-	button.add_theme_font_override("font", FONT)
-	button.add_theme_font_size_override("font_size", 14)
-	# 손가락 기준 최소 44px — 32px는 모바일에서 자꾸 빗나간다.
-	button.custom_minimum_size.y = 44.0
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.clip_text = true
+	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	# 보조 버튼(표면색 채움, 흰 굵은 글자). 손가락 기준 높이 40.
+	HudStyle.style_button(button, HudStyle.ACCENT, false)
+	button.custom_minimum_size.y = 40.0
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.pressed.connect(func() -> void:
 		var result: Variant = action.call()

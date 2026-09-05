@@ -172,9 +172,9 @@ func _setup_extraction_site(world: ProceduralCityMap) -> void:
 	extraction_success_label.text = "탈출 성공"
 	extraction_success_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	extraction_success_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	extraction_success_label.add_theme_font_override("font", preload("res://assets/fonts/Pretendard-Regular.otf"))
+	extraction_success_label.add_theme_font_override("font", HudStyle.bold())
 	extraction_success_label.add_theme_font_size_override("font_size", 44)
-	extraction_success_label.add_theme_color_override("font_color", Color("#e6dfc4"))
+	extraction_success_label.add_theme_color_override("font_color", HudStyle.TEXT)
 	extraction_success_label.modulate.a = 0.0
 	extraction_success_label.z_index = 501
 	host.get_node("HUD").add_child(extraction_success_label)
@@ -215,8 +215,12 @@ func _show_extraction_result(rescued_count: int) -> void:
 	var route_xp_bonus := maxi(0, xp_reward - base_xp_reward)
 	var route_bonus := _grant_extraction_route_bonus()
 	var route_definition := RAID_EXTRACTION_POLICY.get_route(selected_extraction_index)
-	var route_color: Color = route_definition.get("color", Color("#d9b44a"))
-	host.hud.extraction_route_icon.texture = UI_ICONS.get_icon("raid", 44, route_color)
+	# 경로 고유색(금·주황)은 이 화면의 강조를 둘로 쪼갠다. 위험을 감수한 길만
+	# 주의색으로 말하고, 나머지는 민트 하나로 통일한다.
+	var route_accent: Color = (
+		HudStyle.WARN if selected_extraction_multiplier > 1.0 else HudStyle.ACCENT
+	)
+	host.hud.extraction_route_icon.texture = UI_ICONS.get_icon("raid", 44, route_accent)
 	# "정산 배율 ×1.40"은 개발자 말이다. 플레이어가 아는 건 "위험한 길로
 	# 나와서 더 받았다"뿐 — 그 문장으로 쓴다.
 	var route_gain_percent := roundi((selected_extraction_multiplier - 1.0) * 100.0)
@@ -226,15 +230,14 @@ func _show_extraction_result(rescued_count: int) -> void:
 	else:
 		route_headline += "  —  안전하게 빠져나왔습니다"
 	var route_supply := str(route_bonus.get("summary", ""))
-	host.hud.extraction_route_label.text = (
-		route_headline
-		if route_supply.is_empty() or route_supply.begins_with("경로 보급 보너스 없음")
-		else "%s\n길에서 주운 것 · %s" % [route_headline, route_supply.replace("경로 보급 · ", "")]
-	)
-	host.hud.extraction_route_label.add_theme_color_override(
-		"font_color",
-		route_color.lightened(0.18)
-	)
+	# 한 라벨에 두 줄을 밀어 넣으면 굵기·색이 같아 무엇이 제목인지 안 보인다.
+	# 어떤 길로 나왔는가(굵은 흰 글자) / 그 길이 준 것(회색 보조)으로 나눈다.
+	host.hud.extraction_route_label.text = route_headline
+	var route_detail := ""
+	if not (route_supply.is_empty() or route_supply.begins_with("경로 보급 보너스 없음")):
+		route_detail = "길에서 주운 것 · %s" % route_supply.replace("경로 보급 · ", "")
+	host.hud.extraction_route_detail.text = route_detail
+	host.hud.extraction_route_detail.visible = not route_detail.is_empty()
 	var risk_payout := GameState.grant_extraction_risk_payout(
 		host.run_kills, host.raid_pressure_level, selected_extraction_multiplier
 	)
@@ -264,7 +267,7 @@ func _show_extraction_result(rescued_count: int) -> void:
 		"weapon",
 		str(host.run_kills + host.enemy_director.run_boss_kills),
 		"처치" if host.enemy_director.run_boss_kills == 0 else "처치 · 보스 %d" % host.enemy_director.run_boss_kills,
-		HudStyle.DANGER
+		HudStyle.TEXT_DIM
 	)
 	host.hud.add_result_stat("resident", str(rescued_count), "주민 후송", HudStyle.GREEN)
 	host.hud.add_result_stat(
@@ -281,7 +284,7 @@ func _show_extraction_result(rescued_count: int) -> void:
 		host.hud.add_result_reward_chip(
 			"secure",
 			"지난 판에서 안 고른 성장 %d개 · 아래에서 지금 고를 수 있습니다" % carried_level_choices,
-			HudStyle.GOLD
+			HudStyle.ACCENT
 		)
 	if ghost_scrap > 0:
 		host.hud.add_result_reward_chip(
@@ -289,7 +292,7 @@ func _show_extraction_result(rescued_count: int) -> void:
 			"끝까지 들키지 않음 · 고철 +%s · 경험치 +%d" % [
 				GameState.format_compact_number(ghost_scrap), ghost_xp,
 			],
-			HudStyle.GOLD
+			HudStyle.ACCENT
 		)
 	if stealth_xp > 0:
 		host.hud.add_result_reward_chip(
@@ -297,15 +300,15 @@ func _show_extraction_result(rescued_count: int) -> void:
 		)
 	if headshot_xp > 0:
 		host.hud.add_result_reward_chip(
-			"weapon", "헤드샷 %d회 · 경험치 +%d" % [headshot_count, headshot_xp], HudStyle.GOLD
+			"weapon", "헤드샷 %d회 · 경험치 +%d" % [headshot_count, headshot_xp], HudStyle.ACCENT
 		)
 	if route_xp_bonus > 0:
 		host.hud.add_result_reward_chip(
-			"raid", "위험한 탈출로 선택 · 경험치 +%d" % route_xp_bonus, HudStyle.GOLD
+			"raid", "위험한 탈출로 선택 · 경험치 +%d" % route_xp_bonus, HudStyle.ACCENT
 		)
 	if host.completed_mission_xp > 0:
 		host.hud.add_result_reward_chip(
-			"check", "현장 임무 완료 · 경험치 +%d" % host.completed_mission_xp, HudStyle.GOLD
+			"check", "현장 임무 완료 · 경험치 +%d" % host.completed_mission_xp, HudStyle.ACCENT
 		)
 	# 도시 의뢰(계약 완주 후 반복 목표) 달성 시 즉시 지급 + 칩으로 보여준다.
 	var commission_payout: Dictionary = GameState.settle_city_commission(
@@ -361,15 +364,19 @@ func _show_extraction_result(rescued_count: int) -> void:
 			HudStyle.GOLD
 		)
 	if haul_progression > 0:
-		host.hud.add_result_reward_chip("secure", "청사진·열쇠 %d점" % haul_progression, HudStyle.GOLD)
+		host.hud.add_result_reward_chip("secure", "청사진·열쇠 %d점" % haul_progression, HudStyle.ACCENT)
 	if haul_ammo > 0:
 		host.hud.add_result_reward_chip("ammo", "탄약 %d발" % haul_ammo, HudStyle.TEXT_DIM)
 	# 마지막 칩 — 쉘터 다음 목표까지의 거리. 정산은 "이번 판" 영수증이지만, 다음 판을
 	# 왜 나가야 하는지는 여기서 이어져야 한다. 보상(츄르·키)은 위에서 전부 지급된 뒤다.
 	var shelter_goal_line: String = SHELTER_REQUISITION.get_settlement_line()
 	if not shelter_goal_line.is_empty():
-		host.hud.add_result_reward_chip("upgrade", "쉘터 · %s" % shelter_goal_line, HudStyle.GOLD)
-	var lines: PackedStringArray = [mission_summary]
+		host.hud.add_result_reward_chip("upgrade", "쉘터 · %s" % shelter_goal_line, HudStyle.ACCENT)
+	# mission_summary가 비어 있으면 빈 줄이 맨 앞에 남아 요약 위로 한 줄 크기의
+	# 구멍이 생겼다 — 빈 줄은 넣지 않는다.
+	var lines: PackedStringArray = []
+	if not mission_summary.is_empty():
+		lines.append(mission_summary)
 	if cargo_summary != "특별 화물 없음":
 		lines.append(cargo_summary)
 	# 끝난 것만 정리하지 말고 다음까지 남은 거리를 보여준다.
@@ -485,7 +492,7 @@ func _play_extraction_xp_bar() -> void:
 						step.get("level", GameState.player_level)
 					)
 				)
-				xp_tween.tween_property(bar, "modulate", Color("#fff3c4"), 0.12)
+				xp_tween.tween_property(bar, "modulate", Color("#d8fff4"), 0.12)
 				xp_tween.tween_property(bar, "modulate", Color.WHITE, 0.18)
 	xp_tween.tween_callback(func() -> void:
 		label.text = "Lv.%d   %d / %d XP" % [GameState.player_level, new_xp, new_required]

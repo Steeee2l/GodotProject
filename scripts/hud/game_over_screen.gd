@@ -5,6 +5,11 @@ extends RefCounted
 #
 # main.gd에서 370줄을 떼어냈다. 이 화면이 쓰는 상태는 전부 여기 있고,
 # 바깥에서는 build() / present() / apply_layout() 세 개만 부른다.
+#
+# 2026-09-05 재도색 — 이름 짓기 화면의 디자인 언어(HudStyle). 붉은 테두리·경보
+# 아이콘 판을 걷어내고, 거의 검정 판 위에 붉은 eyebrow("사망") + 굵은 제목 +
+# 회색 원인 한 줄, 큰 숫자 stat 카드, 교훈은 표면 카드, 남긴 휴대품은 알약 칩,
+# 하단에 민트 주 버튼 하나.
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
@@ -12,6 +17,7 @@ const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const SUBWAY_SEALED_CARGO_TEXTURE := preload("res://assets/events/subway_sealed_cargo_v2.png")
 const HudStyle := preload("res://scripts/hud/hud_style.gd")
 
+var host: Node
 var canvas: CanvasLayer
 var fade: ColorRect
 var panel: PanelContainer
@@ -24,12 +30,16 @@ var loss_label: Label
 var loss_count_label: Label
 var loss_value_label: Label
 var loss_grid: HFlowContainer
+var lesson_card: PanelContainer
+var lesson_label: Label
+var continue_button: Button
 var continue_label: Label
 var ready_to_continue := false
 var continue_started := false
 
 
-func build(host: Node) -> void:
+func build(host_node: Node) -> void:
+	host = host_node
 	canvas = CanvasLayer.new()
 	canvas.name = "GameOverCanvas"
 	canvas.layer = 180
@@ -47,169 +57,69 @@ func build(host: Node) -> void:
 	canvas.add_child(center)
 	panel = PanelContainer.new()
 	panel.name = "GameOverPanel"
-	# 세로 화면(캔버스 폭 720)에서 딱 맞아 떨어지면 테두리가 잘린다. 여백을 남긴다.
+	# 세로 화면(캔버스 폭 720)에서 딱 맞아 떨어지면 그림자가 잘린다. 여백을 남긴다.
 	var over_viewport: Vector2 = canvas.get_viewport().get_visible_rect().size
 	panel.custom_minimum_size = Vector2(minf(720.0, over_viewport.x - 24.0), 500)
 	panel.modulate.a = 0.0
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color("#0b1111")
-	panel_style.border_color = Color("#a86f5d")
-	panel_style.set_border_width_all(2)
-	panel_style.set_corner_radius_all(8)
-	panel_style.shadow_color = Color(0, 0, 0, 0.72)
-	panel_style.shadow_size = 18
-	panel.add_theme_stylebox_override("panel", panel_style)
+	# 거의 검정 판, 테두리 없음, 큰 그림자 — 붉은 기운은 eyebrow 글자 하나뿐.
+	panel.add_theme_stylebox_override("panel", HudStyle.modal())
 	center.add_child(panel)
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 24)
-	margin.add_theme_constant_override("margin_top", 20)
-	margin.add_theme_constant_override("margin_right", 24)
-	margin.add_theme_constant_override("margin_bottom", 18)
-	panel.add_child(margin)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 10)
-	margin.add_child(box)
+	box.add_theme_constant_override("separation", 12)
+	panel.add_child(box)
 
-	var header := HBoxContainer.new()
+	var header := VBoxContainer.new()
 	header.name = "GameOverHeader"
-	header.add_theme_constant_override("separation", 14)
+	header.add_theme_constant_override("separation", 4)
 	box.add_child(header)
-	var alert_plate := PanelContainer.new()
-	alert_plate.custom_minimum_size = Vector2(64, 64)
-	alert_plate.add_theme_stylebox_override(
-		"panel",
-		HudStyle.panel(Color("#241716"), Color("#bd6f59"), 7)
-	)
-	header.add_child(alert_plate)
-	var alert_icon := TextureRect.new()
-	alert_icon.texture = UI_ICONS.get_icon("alert", 42, Color("#e58a70"))
-	alert_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	alert_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	alert_plate.add_child(alert_icon)
-	var title_box := VBoxContainer.new()
-	title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_box.add_theme_constant_override("separation", 1)
-	header.add_child(title_box)
-	var eyebrow := Label.new()
-	eyebrow.text = "서울 외곽 탐사 · 종료"
-	eyebrow.add_theme_font_override("font", FONT)
-	eyebrow.add_theme_font_size_override("font_size", 13)
-	eyebrow.add_theme_color_override("font_color", Color("#c88973"))
-	title_box.add_child(eyebrow)
-	title_label = Label.new()
+	var eyebrow := HudStyle.label("사망", HudStyle.TYPE_CAPTION, HudStyle.DANGER, true)
+	eyebrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(eyebrow)
+	title_label = HudStyle.label("작전 실패", 30, HudStyle.TEXT, true)
 	title_label.name = "GameOverLabel"
-	title_label.text = "작전 실패"
-	title_label.add_theme_font_override("font", FONT)
-	title_label.add_theme_font_size_override("font_size", 34)
-	title_label.add_theme_color_override("font_color", Color("#f0e5ce"))
-	title_box.add_child(title_label)
-	var subtitle := Label.new()
-	subtitle.text = "생존자가 전투 불능 상태가 되었습니다."
-	subtitle.add_theme_font_override("font", FONT)
-	subtitle.add_theme_font_size_override("font_size", 14)
-	subtitle.add_theme_color_override("font_color", Color("#91a49d"))
-	title_box.add_child(subtitle)
-	var recovery_chip := PanelContainer.new()
-	recovery_chip.custom_minimum_size = Vector2(150, 54)
-	recovery_chip.add_theme_stylebox_override(
-		"panel",
-		HudStyle.panel(Color("#121c1a"), Color("#55796c"), 7)
-	)
-	header.add_child(recovery_chip)
-	var recovery_chip_label := Label.new()
-	recovery_chip_label.text = "회수 기회\n1회"
-	recovery_chip_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	recovery_chip_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	recovery_chip_label.add_theme_font_override("font", FONT)
-	recovery_chip_label.add_theme_font_size_override("font_size", 14)
-	recovery_chip_label.add_theme_color_override("font_color", Color("#9bd2b8"))
-	recovery_chip.add_child(recovery_chip_label)
-
-	var divider := HSeparator.new()
-	divider.modulate = Color(0.45, 0.54, 0.49, 0.55)
-	box.add_child(divider)
-	var cause_panel := PanelContainer.new()
-	cause_panel.add_theme_stylebox_override(
-		"panel",
-		HudStyle.panel(Color("#1b1312"), Color("#8e5547"), 6)
-	)
-	box.add_child(cause_panel)
-	var cause_margin := MarginContainer.new()
-	cause_margin.add_theme_constant_override("margin_left", 12)
-	cause_margin.add_theme_constant_override("margin_top", 8)
-	cause_margin.add_theme_constant_override("margin_right", 12)
-	cause_margin.add_theme_constant_override("margin_bottom", 8)
-	cause_panel.add_child(cause_margin)
-	cause_label = Label.new()
-	cause_label.text = "치명상 원인 확인 중"
-	cause_label.add_theme_font_override("font", FONT)
-	cause_label.add_theme_font_size_override("font_size", 14)
-	cause_label.add_theme_color_override("font_color", Color("#e7b5a5"))
+	title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(title_label)
+	cause_label = HudStyle.label("치명상 원인 확인 중", HudStyle.TYPE_BODY, HudStyle.TEXT_DIM)
 	cause_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	cause_margin.add_child(cause_label)
+	cause_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(cause_label)
+
 	var stats_row := HBoxContainer.new()
 	stats_row.name = "GameOverStats"
 	stats_row.add_theme_constant_override("separation", 10)
 	box.add_child(stats_row)
-	survival_value = _add_stat_card(
-		stats_row, "time", "생존 시간", Color("#d9bd72")
-	)
-	kills_value = _add_stat_card(
-		stats_row, "weapon", "처치", Color("#df866e")
-	)
-	damage_value = _add_stat_card(
-		stats_row, "health", "가한 피해", Color("#8ac5ad")
-	)
+	kills_value = _add_stat_card(stats_row, "처치")
+	survival_value = _add_stat_card(stats_row, "생존 시간")
+	damage_value = _add_stat_card(stats_row, "가한 피해")
+	loss_value_label = _add_stat_card(stats_row, "손실 가치")
+
+	# 교훈 — 표면 카드 안의 본문 글자. 교훈이 없으면 카드째 숨긴다.
+	lesson_card = _surface_card()
+	lesson_card.name = "GameOverLessonCard"
+	lesson_card.visible = false
+	box.add_child(lesson_card)
+	lesson_label = HudStyle.label("", HudStyle.TYPE_BODY, HudStyle.TEXT)
+	lesson_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lesson_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lesson_card.add_child(lesson_label)
 
 	var loss_heading := HBoxContainer.new()
 	loss_heading.add_theme_constant_override("separation", 8)
 	box.add_child(loss_heading)
-	var loss_heading_icon := TextureRect.new()
-	loss_heading_icon.texture = UI_ICONS.get_icon("backpack", 26, Color("#d9c08b"))
-	loss_heading_icon.custom_minimum_size = Vector2(26, 26)
-	loss_heading_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	loss_heading_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	loss_heading.add_child(loss_heading_icon)
-	var loss_title := Label.new()
-	loss_title.text = "현장에 남긴 휴대품"
+	var loss_title := HudStyle.label("현장에 남긴 휴대품", HudStyle.TYPE_HEADING, HudStyle.TEXT, true)
 	loss_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	loss_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	loss_title.add_theme_font_override("font", FONT)
-	loss_title.add_theme_font_size_override("font_size", 18)
-	loss_title.add_theme_color_override("font_color", Color("#e0c99d"))
+	loss_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	loss_heading.add_child(loss_title)
-	loss_count_label = Label.new()
-	loss_count_label.text = "0종"
+	loss_count_label = HudStyle.label("0종", HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
 	loss_count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	loss_count_label.add_theme_font_override("font", FONT)
-	loss_count_label.add_theme_font_size_override("font_size", 13)
-	loss_count_label.add_theme_color_override("font_color", Color("#91a49d"))
+	loss_count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	loss_heading.add_child(loss_count_label)
-	loss_value_label = Label.new()
-	loss_value_label.text = "가치 0"
-	loss_value_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	loss_value_label.add_theme_font_override("font", FONT)
-	loss_value_label.add_theme_font_size_override("font_size", 13)
-	loss_value_label.add_theme_color_override("font_color", Color("#d7b96d"))
-	loss_heading.add_child(loss_value_label)
-	var loss_frame := PanelContainer.new()
-	loss_frame.custom_minimum_size.y = 112
-	loss_frame.add_theme_stylebox_override(
-		"panel",
-		HudStyle.panel(Color("#080d0d"), Color("#30453e"), 6)
-	)
-	box.add_child(loss_frame)
-	var loss_margin := MarginContainer.new()
-	loss_margin.add_theme_constant_override("margin_left", 10)
-	loss_margin.add_theme_constant_override("margin_top", 8)
-	loss_margin.add_theme_constant_override("margin_right", 10)
-	loss_margin.add_theme_constant_override("margin_bottom", 8)
-	loss_frame.add_child(loss_margin)
 	var loss_scroll := HudStyle.make_scroll()
-	loss_scroll.custom_minimum_size.y = 94
+	loss_scroll.custom_minimum_size.y = 76
 	loss_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	loss_margin.add_child(loss_scroll)
+	box.add_child(loss_scroll)
 	loss_grid = HFlowContainer.new()
 	loss_grid.name = "GameOverLossGrid"
 	loss_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -217,96 +127,60 @@ func build(host: Node) -> void:
 	loss_grid.add_theme_constant_override("v_separation", 8)
 	loss_scroll.add_child(loss_grid)
 
-	var recovery_banner := PanelContainer.new()
+	var recovery_banner := _surface_card()
 	recovery_banner.name = "GameOverRecoveryBanner"
-	recovery_banner.add_theme_stylebox_override(
-		"panel",
-		HudStyle.panel(Color("#111b19"), Color("#55796c"), 6)
-	)
 	box.add_child(recovery_banner)
-	var recovery_margin := MarginContainer.new()
-	recovery_margin.add_theme_constant_override("margin_left", 12)
-	recovery_margin.add_theme_constant_override("margin_top", 8)
-	recovery_margin.add_theme_constant_override("margin_right", 12)
-	recovery_margin.add_theme_constant_override("margin_bottom", 8)
-	recovery_banner.add_child(recovery_margin)
-	var recovery_row := HBoxContainer.new()
-	recovery_row.add_theme_constant_override("separation", 10)
-	recovery_margin.add_child(recovery_row)
-	var recovery_icon := TextureRect.new()
-	recovery_icon.texture = UI_ICONS.get_icon("secure", 34, Color("#8ec9ad"))
-	recovery_icon.custom_minimum_size = Vector2(34, 34)
-	recovery_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	recovery_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	recovery_row.add_child(recovery_icon)
-	loss_label = Label.new()
+	loss_label = HudStyle.label("", HudStyle.TYPE_CAPTION + 1, HudStyle.TEXT_DIM)
 	loss_label.name = "GameOverLossLabel"
-	loss_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	loss_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	loss_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	loss_label.add_theme_font_override("font", FONT)
-	loss_label.add_theme_font_size_override("font_size", 14)
-	loss_label.add_theme_color_override("font_color", Color("#b8cdc3"))
+	loss_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	loss_label.text = "장비(무기·방어구·부착물)는 전부 남고 가방의 재료·탄약·귀중품만 잃습니다. 다음 탐사에서 사망 지점의 가방을 한 번 회수할 수 있습니다."
-	recovery_row.add_child(loss_label)
+	recovery_banner.add_child(loss_label)
 
-	var continue_separator := HSeparator.new()
-	continue_separator.modulate = Color(0.45, 0.54, 0.49, 0.42)
-	box.add_child(continue_separator)
-	continue_label = Label.new()
-	continue_label.text = "SPACE / 화면 터치  ·  쉘터로 복귀"
+	var footer := VBoxContainer.new()
+	footer.name = "GameOverFooter"
+	footer.add_theme_constant_override("separation", 8)
+	box.add_child(footer)
+	continue_button = Button.new()
+	continue_button.name = "GameOverContinueButton"
+	continue_button.text = "쉘터로"
+	continue_button.custom_minimum_size = Vector2(0, 52)
+	HudStyle.style_button(continue_button, HudStyle.ACCENT, true)
+	continue_button.pressed.connect(_on_continue_pressed)
+	footer.add_child(continue_button)
+	continue_label = HudStyle.label("SPACE 또는 화면 터치  ·  쉘터로 복귀", HudStyle.TYPE_CAPTION, HudStyle.TEXT_FAINT)
 	continue_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	continue_label.add_theme_font_override("font", FONT)
-	continue_label.add_theme_font_size_override("font_size", 15)
-	continue_label.add_theme_color_override("font_color", Color("#a9c8ba"))
-	box.add_child(continue_label)
+	continue_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	footer.add_child(continue_label)
 
 
-func _add_stat_card(
-	parent: HBoxContainer,
-	icon_name: String,
-	caption: String,
-	accent: Color
-) -> Label:
+func _surface_card() -> PanelContainer:
+	# 판 속 무광 표면 카드(반지름 14, 테두리 없음).
 	var card := PanelContainer.new()
+	var style := HudStyle.flat(HudStyle.INK_WELL, HudStyle.RADIUS_CARD)
+	style.content_margin_left = 16.0
+	style.content_margin_right = 16.0
+	style.content_margin_top = 12.0
+	style.content_margin_bottom = 12.0
+	card.add_theme_stylebox_override("panel", style)
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return card
+
+
+func _add_stat_card(parent: HBoxContainer, caption: String) -> Label:
+	# 작은 회색 설명 + 큰 굵은 tabular 숫자. 아이콘·색 테두리 없음.
+	var card := _surface_card()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.custom_minimum_size.y = 72
-	card.add_theme_stylebox_override(
-		"panel",
-		HudStyle.panel(Color("#111817"), accent.darkened(0.42), 6)
-	)
 	parent.add_child(card)
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 12)
-	margin.add_theme_constant_override("margin_top", 9)
-	margin.add_theme_constant_override("margin_right", 12)
-	margin.add_theme_constant_override("margin_bottom", 9)
-	card.add_child(margin)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 9)
-	margin.add_child(row)
-	var icon := TextureRect.new()
-	icon.texture = UI_ICONS.get_icon(icon_name, 32, accent)
-	icon.custom_minimum_size = Vector2(32, 32)
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	row.add_child(icon)
-	var labels := VBoxContainer.new()
-	labels.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	labels.add_theme_constant_override("separation", 0)
-	row.add_child(labels)
-	var caption_label := Label.new()
-	caption_label.text = caption
-	caption_label.add_theme_font_override("font", FONT)
-	caption_label.add_theme_font_size_override("font_size", 12)
-	caption_label.add_theme_color_override("font_color", Color("#82968e"))
-	labels.add_child(caption_label)
-	var value_label := Label.new()
-	value_label.text = "-"
-	value_label.add_theme_font_override("font", FONT)
-	value_label.add_theme_font_size_override("font_size", 23)
-	value_label.add_theme_color_override("font_color", accent)
-	labels.add_child(value_label)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 2)
+	card.add_child(column)
+	var caption_label := HudStyle.label(caption, HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
+	caption_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(caption_label)
+	var value_label := HudStyle.number("-", 22, HudStyle.TEXT)
+	value_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(value_label)
 	return value_label
 
 
@@ -347,58 +221,43 @@ func populate_loss_icons(loot: Dictionary) -> void:
 			"texture": SUBWAY_SEALED_CARGO_TEXTURE,
 		})
 	if entries.is_empty():
-		var empty := Label.new()
-		empty.text = "분실한 휴대품이 없습니다."
-		empty.custom_minimum_size = Vector2(240, 78)
+		var empty := HudStyle.label("분실한 휴대품이 없습니다.", HudStyle.TYPE_BODY, HudStyle.TEXT_DIM)
+		empty.custom_minimum_size = Vector2(240, 32)
 		empty.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		empty.add_theme_font_override("font", FONT)
-		empty.add_theme_font_size_override("font_size", 15)
-		empty.add_theme_color_override("font_color", Color("#81948d"))
+		empty.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		loss_grid.add_child(empty)
 		loss_count_label.text = "없음"
 		return
 	loss_count_label.text = "%d종" % entries.size()
 	for entry in entries:
-		var card := PanelContainer.new()
-		card.custom_minimum_size = Vector2(106, 90)
-		card.add_theme_stylebox_override(
-			"panel",
-			HudStyle.panel(Color("#111817"), Color("#344a42"), 5)
-		)
-		loss_grid.add_child(card)
-		var margin := MarginContainer.new()
-		margin.add_theme_constant_override("margin_left", 7)
-		margin.add_theme_constant_override("margin_top", 6)
-		margin.add_theme_constant_override("margin_right", 7)
-		margin.add_theme_constant_override("margin_bottom", 6)
-		card.add_child(margin)
-		var content := VBoxContainer.new()
-		content.add_theme_constant_override("separation", 2)
-		margin.add_child(content)
+		# 알약 칩: 작은 아이콘 + 이름 + 개수(tabular).
+		var chip := PanelContainer.new()
+		chip.add_theme_stylebox_override("panel", HudStyle.chip())
+		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		chip.tooltip_text = str(entry.get("name", "휴대품"))
+		loss_grid.add_child(chip)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		chip.add_child(row)
 		var icon := TextureRect.new()
-		icon.custom_minimum_size = Vector2(48, 48)
+		icon.custom_minimum_size = Vector2(18, 18)
 		icon.texture = entry.get("texture") as Texture2D
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.tooltip_text = str(entry.get("name", "휴대품"))
-		content.add_child(icon)
-		var item_row := HBoxContainer.new()
-		item_row.add_theme_constant_override("separation", 4)
-		content.add_child(item_row)
-		var name_label := Label.new()
-		name_label.text = str(entry.get("name", "휴대품"))
-		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(icon)
+		var name_label := HudStyle.label(str(entry.get("name", "휴대품")), HudStyle.TYPE_CAPTION + 1, HudStyle.TEXT)
 		name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		name_label.add_theme_font_override("font", FONT)
-		name_label.add_theme_font_size_override("font_size", 11)
-		name_label.add_theme_color_override("font_color", Color("#b7c6c0"))
-		item_row.add_child(name_label)
+		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(name_label)
 		var count_label := Label.new()
 		count_label.text = "x%d" % int(entry.get("count", 0))
-		count_label.add_theme_font_override("font", FONT)
-		count_label.add_theme_font_size_override("font_size", 12)
-		count_label.add_theme_color_override("font_color", Color("#d9bd72"))
-		item_row.add_child(count_label)
+		count_label.add_theme_font_override("font", HudStyle.bold_tabular())
+		count_label.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION + 1)
+		count_label.add_theme_color_override("font_color", HudStyle.TEXT_DIM)
+		count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(count_label)
 
 
 
@@ -430,16 +289,24 @@ func present(result: Dictionary) -> void:
 	var blocked := int(result.get("blocked", 0))
 	if blocked > 0:
 		cause += "  ·  방어구가 마지막 공격에서 %d 방어" % blocked
-	var lesson := str(result.get("lesson", ""))
-	if not lesson.is_empty():
-		cause += "\n%s" % lesson
 	cause_label.text = cause
-	loss_value_label.text = "회수 가치 %s" % result.get("loss_value_text", "0")
+	# 교훈 문장은 원인 줄에 붙이지 않고 표면 카드에 따로 앉힌다.
+	var lesson := str(result.get("lesson", ""))
+	lesson_label.text = lesson
+	lesson_card.visible = not lesson.is_empty()
+	loss_value_label.text = str(result.get("loss_value_text", "0"))
 	# 영구 귀속(2026-08) — 장비는 시체로 가지 않는다. 잃는 건 가방의 재료·탄약·귀중품뿐.
 	loss_label.text = "가방의 재료·탄약·귀중품은 현장에, 장비(무기·방어구·부착물)는 전부 손에 남았습니다. 다음 탐사에서 사망 지점의 가방을 한 번 회수할 수 있습니다."
 	populate_loss_icons(result.get("loot", {}) as Dictionary)
 	ready_to_continue = false
 	continue_started = false
+
+
+func _on_continue_pressed() -> void:
+	# 화면 어디를 눌러도 host의 _input이 먼저 받아 복귀시킨다. 버튼은 그 경로가
+	# 막힌 경우의 안전망 — 같은 함수를 부른다(can_continue 가드는 그쪽에 있다).
+	if host != null and host.has_method("_continue_after_death"):
+		host.call("_continue_after_death")
 
 
 func apply_layout(viewport_size: Vector2) -> void:

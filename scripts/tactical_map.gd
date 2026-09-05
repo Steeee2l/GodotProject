@@ -41,6 +41,20 @@ const LABEL_PRIORITY_EVENT := 50
 const LABEL_PRIORITY_HOTSPOT := 40
 const LABEL_PRIORITY_EXTRACTION := 30
 
+# 디자인 언어(2026-09-04, 이름 짓기 화면 기준 — HudStyle): 거의 검정 모달, 보더 없음,
+# 민트 강조 하나. 마커 색은 역할로만 나눈다 — 목표/탈출 민트, 위험 DANGER, 표식 TEXT,
+# 비활성 TEXT_FAINT. 도로·건물·강 같은 지형 색은 지도 읽기용이라 그대로 둔다.
+const CLOSE_SIZE := 44.0
+const PANEL_PADDING := 28.0
+const HEADER_HEIGHT := 104.0
+const CHIP_HEIGHT := 26.0
+const CHIP_GAP := 8.0
+const CHIP_ROW_GAP := 6.0
+const CHIP_FONT_SIZE := 12
+const EXTRACTION_COLOR := Color("#8fe3cf")   # 탈출구 — 목표보다 한 톤 옅은 민트
+const OBJECTIVE_COLOR := HudStyle.ACCENT
+const MARKER_INK := Color("#06120f")        # 민트 위 점(ACCENT_INK)
+
 
 func setup(
 	world_node: Node3D,
@@ -167,29 +181,13 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	visible = false
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	close_button = Button.new()
+	# 둥근 닫기 — 쉘터 모달과 같은 단일 출처(HudStyle.close_button). 판의 오른쪽 위
+	# 헤더 안에 앉힌다(위치는 _apply_safe_layout).
+	close_button = HudStyle.close_button(UI_ICONS.get_icon("close", 22, HudStyle.TEXT))
 	close_button.name = "MapCloseButton"
+	close_button.custom_minimum_size = Vector2(CLOSE_SIZE, CLOSE_SIZE)
 	close_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	close_button.offset_left = -78.0
-	close_button.offset_top = 18.0
-	close_button.offset_right = -18.0
-	close_button.offset_bottom = 78.0
-	close_button.icon = UI_ICONS.get_icon("close", 30, Color("#e7ece8"))
-	close_button.expand_icon = true
-	close_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	close_button.tooltip_text = "지도 닫기"
-	close_button.add_theme_stylebox_override("normal", _map_button_style(
-		Color(0.035, 0.046, 0.045, 0.98),
-		Color("#6e837b")
-	))
-	close_button.add_theme_stylebox_override("hover", _map_button_style(
-		Color(0.07, 0.083, 0.078, 1.0),
-		Color("#d3bd79")
-	))
-	close_button.add_theme_stylebox_override("pressed", _map_button_style(
-		Color(0.095, 0.079, 0.044, 1.0),
-		Color("#f0cf72")
-	))
 	close_button.pressed.connect(close)
 	add_child(close_button)
 	if not get_viewport().size_changed.is_connected(_apply_safe_layout):
@@ -197,14 +195,23 @@ func _ready() -> void:
 	_apply_safe_layout()
 
 
+func _panel_rect(viewport_size: Vector2) -> Rect2:
+	var panel_size := Vector2(minf(1040.0, viewport_size.x - 64.0), minf(720.0, viewport_size.y - 54.0))
+	return Rect2((viewport_size - panel_size) * 0.5, panel_size)
+
+
 func _apply_safe_layout() -> void:
 	if not is_instance_valid(close_button):
 		return
-	var safe := UISafeArea.get_margins(get_viewport().get_visible_rect().size)
-	close_button.offset_left = -78.0 - safe.z
-	close_button.offset_top = 18.0 + safe.y
-	close_button.offset_right = -18.0 - safe.z
-	close_button.offset_bottom = 78.0 + safe.y
+	var viewport_size := get_viewport().get_visible_rect().size
+	var safe := UISafeArea.get_margins(viewport_size)
+	var panel_rect := _panel_rect(viewport_size)
+	var right := minf(panel_rect.end.x - 20.0, viewport_size.x - 18.0 - safe.z)
+	var top := maxf(panel_rect.position.y + 18.0, 18.0 + safe.y)
+	close_button.offset_left = right - CLOSE_SIZE - viewport_size.x
+	close_button.offset_right = right - viewport_size.x
+	close_button.offset_top = top
+	close_button.offset_bottom = top + CLOSE_SIZE
 
 
 func toggle() -> void:
@@ -367,10 +374,24 @@ func _draw() -> void:
 	pending_labels.clear()
 	if not is_instance_valid(world):
 		return
-	var panel_size := Vector2(minf(1040.0, viewport_size.x - 64.0), minf(720.0, viewport_size.y - 54.0))
-	var panel_rect := Rect2((viewport_size - panel_size) * 0.5, panel_size)
+	var panel_rect := _panel_rect(viewport_size)
 	draw_style_box(_panel_style(), panel_rect)
-	draw_string(UI_FONT, panel_rect.position + Vector2(28, 40), "현장 전술 지도", HORIZONTAL_ALIGNMENT_LEFT, -1, 25, Color("#e4e1d3"))
+	# 헤더 — 민트 이름표 / 굵은 제목(지금 있는 구역) / 회색 설명. 닫기 버튼 자리를
+	# 오른쪽에 비워 둔다.
+	var header_left := panel_rect.position.x + PANEL_PADDING
+	var header_limit := panel_rect.size.x - PANEL_PADDING * 2.0 - CLOSE_SIZE - 12.0
+	draw_string(
+		UI_FONT, Vector2(header_left, panel_rect.position.y + 32.0), "전술 지도",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, HudStyle.TYPE_CAPTION, HudStyle.ACCENT
+	)
+	var sector := ""
+	if is_instance_valid(player):
+		sector = str(world.call("get_sector_label", player.global_position))
+	var title_text := sector if not sector.is_empty() else "현장"
+	draw_string(
+		HudStyle.bold(), Vector2(header_left, panel_rect.position.y + 62.0), title_text,
+		HORIZONTAL_ALIGNMENT_LEFT, header_limit, HudStyle.TYPE_TITLE, HudStyle.TEXT
+	)
 	# 부제는 개발 메모("이동한 구역만 기록 · 탭: 개인 표식")가 그대로 남아 있었다.
 	# 플레이어에게 하는 말로 고쳐 쓴다.
 	var map_hint := (
@@ -379,19 +400,30 @@ func _draw() -> void:
 		else "가 본 곳만 지도에 남는다 · 클릭하면 표식, 우클릭하면 삭제 · 보는 동안 전투는 멈춘다"
 	)
 	# 세로 화면에서는 패널이 좁다 — 문장을 자르는 대신 글자를 한 단계씩 줄여 담는다.
-	var hint_size := 14
-	var hint_limit := panel_rect.size.x - 56.0
+	var hint_size := HudStyle.TYPE_BODY
+	var hint_limit := panel_rect.size.x - PANEL_PADDING * 2.0
 	while (
 		hint_size > 10
 		and UI_FONT.get_string_size(map_hint, HORIZONTAL_ALIGNMENT_LEFT, -1, hint_size).x > hint_limit
 	):
 		hint_size -= 1
-	draw_string(UI_FONT, panel_rect.position + Vector2(28, 65), map_hint, HORIZONTAL_ALIGNMENT_LEFT, -1, hint_size, Color("#aebbb4"))
+	draw_string(
+		UI_FONT, Vector2(header_left, panel_rect.position.y + 86.0), map_hint,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, hint_size, HudStyle.TEXT_DIM
+	)
 
 	var data: Dictionary = world.call("get_map_snapshot_data")
 	var grid_size := int(data.get("grid_size", 22))
 	var map_size := float(data.get("map_size", grid_size * 20.0))
-	var map_rect := Rect2(panel_rect.position + Vector2(52, 78), panel_rect.size - Vector2(104, 142))
+	# 바닥 칩 줄(범례 + 현황)이 몇 줄이 될지 먼저 재서 지도 높이를 정한다 — 세로
+	# 화면에서 칩이 두 줄로 접히면 지도가 그만큼 올라간다.
+	var chips := _footer_chips()
+	var chip_rows := _pack_chip_rows(chips, hint_limit)
+	var footer_height := chip_rows.size() * CHIP_HEIGHT + maxi(0, chip_rows.size() - 1) * CHIP_ROW_GAP
+	var map_rect := Rect2(
+		panel_rect.position + Vector2(52.0, HEADER_HEIGHT),
+		panel_rect.size - Vector2(104.0, HEADER_HEIGHT + footer_height + 36.0)
+	)
 	last_map_rect = map_rect
 	last_map_size = map_size
 	var map_center := map_rect.get_center()
@@ -444,7 +476,12 @@ func _draw() -> void:
 			if extraction_index < extraction_profiles.size()
 			else {}
 		) as Dictionary
-		var route_color: Color = profile.get("color", Color("#dcb64b"))
+		# 탈출구는 민트 계열 하나로. 봉쇄된 곳은 비활성 색으로 남긴다.
+		var route_color := (
+			HudStyle.TEXT_FAINT
+			if bool(sealed_extraction_indices.get(extraction_index, false))
+			else EXTRACTION_COLOR
+		)
 		var route_multiplier := float(profile.get("multiplier", 1.0))
 		if is_instance_valid(player):
 			var distance := player.global_position.distance_to(extraction_position)
@@ -482,15 +519,13 @@ func _draw() -> void:
 			map_size
 		)
 		var marker_type := str(marker.get("type", "hotspot"))
-		var marker_color := Color("#65d5ca")
+		# 목표(jackpot=임무 지점, hotspot/loot=보급)는 민트, 위험은 DANGER.
+		var marker_color := OBJECTIVE_COLOR
 		if marker_type == "incident":
-			marker_color = Color("#ef7252")
-		elif marker_type == "jackpot":
-			marker_color = Color("#f0ad4f")
+			marker_color = HudStyle.DANGER
 		elif marker_type == "cleared":
-			# 소탕 구역 — 옅은 청록. 위협 마커들과 달리 '조용해진 곳'이라
-			# 채도를 낮추고 맥동도 거의 없앤다(아래 pulse 감쇠).
-			marker_color = Color("#9fe8d9")
+			# 소탕 구역 — '조용해진 곳'이라 비활성 색, 맥동도 거의 없앤다(아래 pulse 감쇠).
+			marker_color = HudStyle.TEXT_FAINT
 		var marker_pulse := 0.5 + 0.5 * sin(
 			Time.get_ticks_msec() * (0.011 if marker_type == "incident" else 0.006)
 		)
@@ -540,12 +575,12 @@ func _draw() -> void:
 			)
 		)
 		draw_polyline(_closed_polygon(diamond), marker_color.lightened(0.18), 2.0)
-		draw_circle(marker_center, marker_radius * 0.22, Color("#f5f0d5"))
+		draw_circle(marker_center, marker_radius * 0.22, HudStyle.TEXT)
 		_queue_label(
 			marker_center + Vector2(marker_radius + 6.0, -marker_radius * 0.3),
 			str(marker.get("label", "고가치 지점")),
 			13,
-			marker_color.lightened(0.2),
+			marker_color.lightened(0.12),
 			(
 				LABEL_PRIORITY_EVENT
 				if marker_type in ["incident", "jackpot"]
@@ -564,26 +599,26 @@ func _draw() -> void:
 		draw_circle(
 			corpse_center,
 			marker_size * (0.72 + corpse_pulse * 0.16),
-			Color(0.95, 0.35, 0.12, 0.18)
+			Color(HudStyle.WARN, 0.18)
 		)
-		draw_circle(corpse_center, marker_size * 0.5, Color("#ef8b45"), false, 3.0)
+		draw_circle(corpse_center, marker_size * 0.5, HudStyle.WARN, false, 3.0)
 		draw_line(
 			corpse_center + Vector2(-marker_size * 0.28, -marker_size * 0.28),
 			corpse_center + Vector2(marker_size * 0.28, marker_size * 0.28),
-			Color("#ffd0a2"),
+			HudStyle.WARN.lightened(0.3),
 			3.0
 		)
 		draw_line(
 			corpse_center + Vector2(marker_size * 0.28, -marker_size * 0.28),
 			corpse_center + Vector2(-marker_size * 0.28, marker_size * 0.28),
-			Color("#ffd0a2"),
+			HudStyle.WARN.lightened(0.3),
 			3.0
 		)
 		_queue_label(
 			corpse_center + Vector2(marker_size * 0.7, -marker_size * 0.55),
 			"분실 장비",
 			15,
-			Color("#ffd0a2"),
+			HudStyle.WARN.lightened(0.2),
 			LABEL_PRIORITY_CORPSE,
 			110.0
 		)
@@ -592,14 +627,14 @@ func _draw() -> void:
 		var manual_center := _world_position_to_map_point(manual_marker_position, map_rect, map_size)
 		var manual_pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.009)
 		var manual_radius := marker_size * (0.48 + manual_pulse * 0.08)
-		draw_circle(manual_center, manual_radius * 1.65, Color(0.95, 0.79, 0.32, 0.14))
-		draw_circle(manual_center, manual_radius, Color("#f2cb62"), false, 3.0)
-		draw_circle(manual_center, 3.0, Color("#fff2bf"))
+		draw_circle(manual_center, manual_radius * 1.65, Color(HudStyle.TEXT, 0.12))
+		draw_circle(manual_center, manual_radius, HudStyle.TEXT, false, 3.0)
+		draw_circle(manual_center, 3.0, HudStyle.TEXT)
 		_queue_label(
 			manual_center + Vector2(manual_radius + 7.0, 4.0),
 			"개인 표식",
 			13,
-			Color("#f2d481"),
+			HudStyle.TEXT,
 			LABEL_PRIORITY_MANUAL,
 			90.0
 		)
@@ -615,75 +650,134 @@ func _draw() -> void:
 		)
 		var boss_pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.013)
 		var boss_radius := marker_size * (0.72 + boss_pulse * 0.18)
-		draw_circle(boss_center, boss_radius, Color(1.0, 0.14, 0.08, 0.18))
-		draw_circle(boss_center, marker_size * 0.5, Color("#ff5747"), false, 3.0)
+		draw_circle(boss_center, boss_radius, Color(HudStyle.DANGER, 0.18))
+		draw_circle(boss_center, marker_size * 0.5, HudStyle.DANGER, false, 3.0)
 		var diamond := PackedVector2Array([
 			boss_center + Vector2(0, -marker_size * 0.42),
 			boss_center + Vector2(marker_size * 0.36, 0),
 			boss_center + Vector2(0, marker_size * 0.42),
 			boss_center + Vector2(-marker_size * 0.36, 0),
 		])
-		draw_colored_polygon(diamond, Color("#ff6a52"))
-		draw_polyline(_closed_polygon(diamond), Color("#fff0d2"), 2.0)
+		draw_colored_polygon(diamond, HudStyle.DANGER)
+		draw_polyline(_closed_polygon(diamond), HudStyle.TEXT, 2.0)
 		_queue_label(
 			boss_center + Vector2(marker_size * 0.68, -marker_size * 0.52),
 			str(boss.get_meta("display_name", "위험 개체")),
 			15,
-			Color("#ffc4a8"),
+			HudStyle.DANGER.lightened(0.2),
 			LABEL_PRIORITY_BOSS,
 			160.0
 		)
 
 	if is_instance_valid(player):
 		if nearest_distance < INF:
-			draw_line(player_center, nearest_extraction, Color(0.87, 0.73, 0.3, 0.34), 2.0)
+			draw_line(player_center, nearest_extraction, Color(EXTRACTION_COLOR, 0.34), 2.0)
 		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)
 		var outer_radius := marker_size + 5.0 + pulse * 6.0
 		var inner_radius := maxf(8.0, marker_size * 0.42)
-		draw_circle(player_center, outer_radius, Color(0.25, 1.0, 0.78, 0.16))
-		draw_circle(player_center, outer_radius, Color.WHITE, false, 4.0)
-		draw_circle(player_center, outer_radius - 3.0, Color("#5dffd0"), false, 2.0)
-		draw_circle(player_center, inner_radius, Color("#07110f"))
-		draw_circle(player_center, inner_radius * 0.72, Color("#65ffd2"))
+		draw_circle(player_center, outer_radius, Color(HudStyle.ACCENT, 0.16))
+		draw_circle(player_center, outer_radius, HudStyle.TEXT, false, 4.0)
+		draw_circle(player_center, outer_radius - 3.0, HudStyle.ACCENT, false, 2.0)
+		draw_circle(player_center, inner_radius, MARKER_INK)
+		draw_circle(player_center, inner_radius * 0.72, HudStyle.ACCENT)
 		_draw_player_heading(player_center, marker_size * 1.35, map_rect)
-		var sector := str(world.call("get_sector_label", player.global_position))
 		var label_position := player_center + Vector2(outer_radius + 7.0, -outer_radius * 0.45)
 		_queue_label(
 			label_position,
 			"내 위치  %s" % sector,
 			17,
-			Color.WHITE,
+			HudStyle.TEXT,
 			LABEL_PRIORITY_PLAYER
 		)
-		var footer := "현재 %s   ·   회수 가치 %s   ·   %s" % [
-			sector,
-			_compact_number(current_bag_value),
-			current_risk_label,
-		]
-		if nearest_distance < INF:
-			footer += "   ·   발견 탈출구 %.0fm" % nearest_distance
-		draw_string(
-			UI_FONT,
-			panel_rect.position + Vector2(28, panel_rect.size.y - 22),
-			footer,
-			HORIZONTAL_ALIGNMENT_LEFT,
-			-1,
-			16,
-			Color("#d7d4b9")
-		)
-	if discovered_extraction_indices.is_empty():
-		_queue_label(
-			map_rect.get_center() + Vector2(-170, 6),
-			"탈출구 미발견 · 직접 시야로 찾아야 합니다",
-			17,
-			Color("#d9c579"),
-			LABEL_PRIORITY_NOTICE,
-			340.0,
-			HORIZONTAL_ALIGNMENT_CENTER
-		)
-
 	draw_polyline(_closed_polygon(map_boundary), Color("#7c8982"), 2.0)
 	_draw_queued_labels(panel_rect.grow(-16.0))
+	# 바닥 — 범례와 현황을 알약 칩으로. 문장 하나로 이어 붙이던 푸터를 대신한다.
+	_draw_chip_rows(
+		chip_rows,
+		Vector2(header_left, panel_rect.end.y - PANEL_PADDING * 0.5 - footer_height - 4.0)
+	)
+
+
+func _footer_chips() -> Array[Dictionary]:
+	# {text, dot(색 점, 없으면 null), color(글자색)} — 범례 먼저, 현황 뒤.
+	var chips: Array[Dictionary] = [
+		{"text": "목표", "dot": OBJECTIVE_COLOR, "color": HudStyle.TEXT_DIM},
+		{"text": "탈출구", "dot": EXTRACTION_COLOR, "color": HudStyle.TEXT_DIM},
+		{"text": "위험", "dot": HudStyle.DANGER, "color": HudStyle.TEXT_DIM},
+		{"text": "표식", "dot": HudStyle.TEXT, "color": HudStyle.TEXT_DIM},
+	]
+	# 탈출구를 아직 못 찾았다는 안내는 지도 한가운데에 있었다 — 하필 내 위치
+	# 표식과 같은 자리라 글자가 겹쳤다. 상태는 다른 상태들과 같이 아래 칩으로.
+	if discovered_extraction_indices.is_empty():
+		chips.append({
+			"text": "탈출구 미발견 · 직접 찾아야 합니다",
+			"dot": HudStyle.WARN,
+			"color": HudStyle.TEXT,
+		})
+	if corpse_recovery_available:
+		chips.append({"text": "분실 장비", "dot": HudStyle.WARN, "color": HudStyle.TEXT_DIM})
+	chips.append({"text": "회수 가치 %s" % _compact_number(current_bag_value), "dot": null, "color": HudStyle.TEXT})
+	if not current_risk_label.is_empty():
+		chips.append({"text": current_risk_label, "dot": null, "color": HudStyle.TEXT})
+	if is_instance_valid(player):
+		var nearest := INF
+		for extraction_index in extraction_positions.size():
+			if not is_extraction_discovered(extraction_index):
+				continue
+			nearest = minf(nearest, player.global_position.distance_to(extraction_positions[extraction_index]))
+		if nearest < INF:
+			chips.append({"text": "발견 탈출구 %.0fm" % nearest, "dot": null, "color": HudStyle.TEXT})
+	return chips
+
+
+func _chip_width(chip: Dictionary) -> float:
+	var text_width := UI_FONT.get_string_size(
+		str(chip.get("text", "")), HORIZONTAL_ALIGNMENT_LEFT, -1, CHIP_FONT_SIZE
+	).x
+	return text_width + 24.0 + (14.0 if chip.get("dot") != null else 0.0)
+
+
+func _pack_chip_rows(chips: Array[Dictionary], max_width: float) -> Array:
+	# 왼쪽부터 채우다 넘치면 다음 줄. 반환: [[chip, ...], ...]
+	var rows: Array = []
+	var current: Array[Dictionary] = []
+	var used := 0.0
+	for chip in chips:
+		var width := _chip_width(chip)
+		if not current.is_empty() and used + CHIP_GAP + width > max_width:
+			rows.append(current)
+			current = []
+			used = 0.0
+		used += (CHIP_GAP if not current.is_empty() else 0.0) + width
+		current.append(chip)
+	if not current.is_empty():
+		rows.append(current)
+	return rows
+
+
+func _draw_chip_rows(rows: Array, origin: Vector2) -> void:
+	var chip_style := HudStyle.chip()
+	var ascent := UI_FONT.get_ascent(CHIP_FONT_SIZE)
+	var text_height := UI_FONT.get_height(CHIP_FONT_SIZE)
+	var cursor_y := origin.y
+	for row_value in rows:
+		var cursor_x := origin.x
+		for chip_value in row_value:
+			var chip := chip_value as Dictionary
+			var rect := Rect2(cursor_x, cursor_y, _chip_width(chip), CHIP_HEIGHT)
+			draw_style_box(chip_style, rect)
+			var text_x := rect.position.x + 12.0
+			if chip.get("dot") != null:
+				draw_circle(rect.position + Vector2(13.0, CHIP_HEIGHT * 0.5), 3.5, chip["dot"] as Color)
+				text_x += 14.0
+			draw_string(
+				UI_FONT,
+				Vector2(text_x, rect.position.y + (CHIP_HEIGHT - text_height) * 0.5 + ascent),
+				str(chip.get("text", "")),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, CHIP_FONT_SIZE, chip.get("color", HudStyle.TEXT) as Color
+			)
+			cursor_x += rect.size.x + CHIP_GAP
+		cursor_y += CHIP_HEIGHT + CHIP_ROW_GAP
 
 
 func _queue_label(
@@ -759,21 +853,8 @@ func _draw_queued_labels(bounds: Rect2) -> void:
 
 
 func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.028, 0.034, 0.034, 0.98)
-	style.border_color = Color(0.35, 0.38, 0.36, 0.94)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(5)
-	return style
-
-
-func _map_button_style(background: Color, border: Color) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
-	style.border_color = border
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(5)
-	return style
+	# 쉘터 모달과 같은 판 — 거의 검정, 반지름 20, 보더 없음, 그림자.
+	return HudStyle.modal()
 
 
 func _world_position_to_map_point(world_position: Vector3, map_rect: Rect2, map_size: float) -> Vector2:
@@ -824,8 +905,8 @@ func _draw_player_heading(center: Vector2, length: float, map_rect: Rect2) -> vo
 		back + side * length * 0.32,
 		back - side * length * 0.32,
 	])
-	draw_colored_polygon(points, Color("#8fffd0"))
-	draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[0]]), Color("#06100e"), 2.0)
+	draw_colored_polygon(points, HudStyle.ACCENT)
+	draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[0]]), MARKER_INK, 2.0)
 
 
 func _normalized_to_isometric(normalized: Vector2, map_rect: Rect2) -> Vector2:
