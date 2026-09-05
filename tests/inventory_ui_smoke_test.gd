@@ -57,8 +57,13 @@ func _run() -> void:
 	for empty_slot_name in ["몸 방어구", "머리 방어구", "신발"]:
 		var empty_slot := ui.equipped_grid.get_node("Equipment_%s" % empty_slot_name) as Button
 		assert(empty_slot != null, "Every empty equipment category needs a dedicated slot.")
-		assert(empty_slot.icon == null, "Empty equipment slots must use text only.")
+		# 2026-09-05 — 빈 칸도 흐린 슬롯 아이콘을 보여 준다. "글자만" 규칙은
+		# 가운데 아이콘과 가운데 라벨이 겹치던 시절의 회피책이었고, 지금은 라벨이
+		# 칸 아래로 내려가 겹치지 않는다.
+		assert(empty_slot.icon != null, "Empty equipment slots must show a dimmed slot icon.")
 		assert(empty_slot.get_child_count() == 1 and (empty_slot.get_child(0) as Label).text == empty_slot_name, "Empty equipment slots must show their category name.")
+		var empty_label := empty_slot.get_child(0) as Label
+		assert(empty_label.anchor_top >= 1.0, "Empty slot labels must sit at the bottom so the icon stays clear.")
 	for bag_item in ui.bag_grid.get_children():
 		assert(((bag_item as Control).size_flags_horizontal & Control.SIZE_EXPAND) != 0, "Bag slots must share the full panel width.")
 		if bag_item is Button:
@@ -129,12 +134,25 @@ func _run() -> void:
 	assert(armor_card != null, "Looted armor must appear in the bag as an equippable item.")
 	armor_card.pressed.emit()
 	assert(ui.item_detail_description.text.contains("[몸 방어구]"), "Armor details must identify the equipped slot.")
-	assert(ui.item_detail_description.text.contains("받는 피해 -12%"), "Armor details must show the applied damage reduction stat.")
+	# 수치를 박아 두면 밸런스가 바뀔 때마다 조용히 어긋난다(-12%로 남아 있다가
+	# scav_vest가 0.15로 오르며 깨졌다) — 정의에서 읽어 비교한다.
+	var vest_definition: Dictionary = state.call("get_equipment_definition", "scav_vest")
+	var vest_reduction := roundi(float(vest_definition.get("damage_reduction", 0.0)) * 100.0)
+	assert(
+		ui.item_detail_description.text.contains("받는 피해 -%d%%" % vest_reduction),
+		"Armor details must show the applied damage reduction stat."
+	)
 	ui.item_action_button.pressed.emit()
 	assert(str(state.get("equipped_body_armor_id")) == "scav_vest", "The armor action must equip the selected body armor.")
 	assert(int(state.call("get_equipment_count", "scav_vest")) == 0, "Equipped armor must leave the bag inventory.")
-	armor_card = ui.bag_grid.get_node("BagItem_scav_vest") as Button
-	assert(armor_card.get_node_or_null("EquippedBadge") is Label, "Equipped armor must remain visible with an E badge.")
+	# 장착한 방어구는 위 장비 슬롯이 보여 준다 — 가방 목록에는 예비(미장착)
+	# 수량만 남는다(장착품이 가방 자리를 먹는 것처럼 보이던 혼선을 없앤 규칙).
+	assert(
+		ui.bag_grid.get_node_or_null("BagItem_scav_vest") == null,
+		"Equipped armor must leave the bag list and live in the equipment slot."
+	)
+	var body_slot := ui.equipped_grid.get_node_or_null("Equipment_%s" % ui._equipped_equipment_label("body", "몸 방어구")) as Button
+	assert(body_slot != null and body_slot.icon != null, "The body slot must show the equipped armor.")
 	ui._select_equipped_equipment("body")
 	assert(ui.item_detail_description.text.contains("현재 장착 중"), "Equipped armor must retain its stat detail and status.")
 	ui.item_action_button.pressed.emit()
@@ -143,7 +161,7 @@ func _run() -> void:
 
 	state.call("add_equipment", "patched_sneakers", 1)
 	ui._refresh_contents()
-	var footwear_card := ui.bag_grid.get_node("BagItem_patched_sneakers") as Button
+	var footwear_card := ui.bag_grid.get_node_or_null("BagItem_patched_sneakers") as Button
 	assert(footwear_card != null, "Looted footwear must appear in the bag.")
 	footwear_card.pressed.emit()
 	assert(ui.item_detail_description.text.contains("이동 속도 +6%"), "Footwear details must show movement speed.")
@@ -153,8 +171,11 @@ func _run() -> void:
 	assert(str(state.get("equipped_footwear_id")) == "patched_sneakers", "Footwear must equip into the feet slot.")
 	assert(is_equal_approx(float(state.call("get_move_speed_multiplier")), 1.06), "Equipped lightweight footwear must increase movement speed.")
 	assert(is_equal_approx(float(state.call("get_stamina_cost_multiplier")), 0.92), "Equipped lightweight footwear must reduce dash stamina cost.")
-	footwear_card = ui.bag_grid.get_node("BagItem_patched_sneakers") as Button
-	assert(footwear_card.get_node_or_null("EquippedBadge") is Label, "Equipped footwear must keep its bag slot marker.")
+	# 방어구와 같은 규칙 — 장착하면 가방 목록에서 빠지고 신발 슬롯이 보여 준다.
+	assert(
+		ui.bag_grid.get_node_or_null("BagItem_patched_sneakers") == null,
+		"Equipped footwear must leave the bag list and live in the feet slot."
+	)
 
 	state.call("add_equipment", "patched_helmet", 1)
 	ui._refresh_contents()
@@ -162,7 +183,12 @@ func _run() -> void:
 	assert(helmet_card != null, "Looted helmets must appear in the bag.")
 	helmet_card.pressed.emit()
 	assert(ui.item_detail_description.text.contains("[머리 방어구]"), "Helmet details must identify the equipped slot.")
-	assert(ui.item_detail_description.text.contains("받는 피해 -8%"), "Helmet details must show damage reduction.")
+	var helmet_definition: Dictionary = state.call("get_equipment_definition", "patched_helmet")
+	var helmet_reduction := roundi(float(helmet_definition.get("damage_reduction", 0.0)) * 100.0)
+	assert(
+		ui.item_detail_description.text.contains("받는 피해 -%d%%" % helmet_reduction),
+		"Helmet details must show damage reduction."
+	)
 	assert(ui.item_detail_description.max_lines_visible >= 6, "Equipment descriptions must have enough visible lines for all stats.")
 
 	var medkit_card := ui.bag_grid.get_node("BagItem_medkit") as Button

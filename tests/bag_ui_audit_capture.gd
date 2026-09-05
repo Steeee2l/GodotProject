@@ -4,6 +4,7 @@ extends SceneTree
 #   bag_ui_light.png    : 두어 칸만 든 가방 — 세로 여백이 남지 않는지
 #   bag_ui_full.png     : 재료·부착물·장비·소모품을 채운 가방
 #   bag_ui_selected.png : 아이템 하나를 고른 상태(상세 카드 + 행동 버튼)
+#   bag_ui_weapon.png   : 주무기 슬롯 → 총기 상세(부착 슬롯·스탯)
 # 실행: godot --path . --script res://tests/bag_ui_audit_capture.gd
 
 const OUTPUT_DIR := "res://test-output/field_ui"
@@ -15,7 +16,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUTPUT_DIR))
-	for shot_name in ["light", "full", "selected"]:
+	for shot_name in ["light", "full", "selected", "weapon"]:
 		var game_state := root.get_node("GameState")
 		game_state.set("persistence_enabled", false)
 		game_state.call("reset_run")
@@ -41,6 +42,9 @@ func _run() -> void:
 		var inventory: Control = hud.inventory_ui
 		inventory.call("toggle")
 		await _wait(0.6)
+		if shot_name == "weapon":
+			inventory.call("_show_weapon_detail")
+			await _wait(0.6)
 		if shot_name == "selected":
 			var grid: Control = inventory.get("bag_grid")
 			for child in grid.get_children():

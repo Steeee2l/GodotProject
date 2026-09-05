@@ -425,7 +425,7 @@ func _build_item_detail_panel() -> Control:
 	item_detail_description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	item_detail_description.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	item_detail_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	item_detail_description.max_lines_visible = 3
+	item_detail_description.max_lines_visible = 6
 	item_detail_description.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(item_detail_description)
 	item_detail_reason = _label("", HudStyle.TYPE_FOOTNOTE, HudStyle.WARN)
@@ -1504,6 +1504,8 @@ func _configure_discard_button(item_type: String) -> void:
 			else "장착을 해제한 뒤 버릴 수 있습니다."
 		)
 		item_detail_reason.visible = true
+	# 흐린 "버리기"가 남으면 고장난 버튼으로 읽힌다 — 이유는 위 한 줄이 말한다.
+	_hide_disabled_action(item_discard_button)
 
 
 var discard_armed_item_id := ""
@@ -1735,6 +1737,12 @@ func _request_weapon_unequip() -> void:
 		_refresh_contents()
 	else:
 		_show_inventory_feedback("해제할 무기가 없습니다.", HudStyle.DANGER)
+
+
+func _hide_disabled_action(button: Button) -> void:
+	# 비활성 버튼은 "고장"으로 읽힌다. 지금 할 수 없는 행동은 아예 감춘다.
+	if button != null and button.disabled:
+		button.visible = false
 
 
 func _build_mod_slot_button(slot: String) -> Button:
@@ -2029,6 +2037,21 @@ func _apply_responsive_layout() -> void:
 				inventory_panel.custom_minimum_size.y = panel_height
 			if shell != null:
 				shell.custom_minimum_size.y = panel_height
+	if showing_weapon and weapon_panel != null:
+		# 총기 상세도 화면 높이만큼 늘어나 아래가 156px 비어 있었다(부착 슬롯 밑).
+		# 내용의 자연 높이를 재서 그만큼만 쓴다 — 두 판이 나란히 설 때는 큰 쪽에
+		# 맞춘다(높이가 어긋난 두 판은 잘려 보인다).
+		weapon_panel.custom_minimum_size = Vector2(panel_width, 0)
+		var weapon_natural := weapon_panel.get_combined_minimum_size().y
+		var weapon_height := clampf(weapon_natural, 260.0, panel_height)
+		weapon_panel.custom_minimum_size.y = weapon_height
+		var pair_height := weapon_height
+		if inventory_panel != null and inventory_panel.visible:
+			pair_height = maxf(pair_height, inventory_panel.custom_minimum_size.y)
+			inventory_panel.custom_minimum_size.y = pair_height
+			weapon_panel.custom_minimum_size.y = pair_height
+		if shell != null:
+			shell.custom_minimum_size.y = pair_height
 	if equipped_grid:
 		equipped_grid.columns = 2 if panel_width >= 290.0 else 1
 		equipped_grid.custom_minimum_size = Vector2(0, 0)
@@ -2470,20 +2493,9 @@ func _mod_description(mod_id: String) -> String:
 func _slot_icon(slot: String) -> ImageTexture:
 	var image := Image.create(48, 48, false, Image.FORMAT_RGBA8)
 	image.fill(Color(0, 0, 0, 0))
-	var color := Color("#8fcdb2")
-	match slot:
-		"sight":
-			color = Color("#64d4de")
-		"muzzle":
-			color = Color("#b8bdae")
-		"stock":
-			color = Color("#a7d27a")
-		"magazine":
-			color = Color("#d6c06f")
-		"tactical":
-			color = Color("#dca65b")
-		"special":
-			color = Color("#e28b5c")
+	# 슬롯마다 다른 색을 주면 여섯 색이 한 화면에 뜬다 — 빈 슬롯은 전부 같은
+	# 흐린 링이고, 무엇이 들었는지는 부착물 아이콘이 말한다.
+	var color := Color(HudStyle.TEXT_FAINT, 0.85)
 	for y in range(9, 39):
 		for x in range(9, 39):
 			var distance := Vector2(x - 24, y - 24).length()
