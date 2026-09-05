@@ -395,7 +395,7 @@ func _build_inventory_panel() -> Control:
 func _build_item_detail_panel() -> Control:
 	var panel := PanelContainer.new()
 	panel.name = "SelectedItemDetail"
-	panel.custom_minimum_size = Vector2(0, 132)
+	panel.custom_minimum_size = Vector2(0, 84)
 	panel.clip_contents = false
 	panel.add_theme_stylebox_override("panel", _card_style())
 	var margin := _margin(12, 10, 12, 10)
@@ -421,11 +421,11 @@ func _build_item_detail_panel() -> Control:
 	item_detail_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(item_detail_title)
 	item_detail_description = _label("가방 슬롯에는 아이콘과 수량만 표시됩니다.", HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
-	item_detail_description.custom_minimum_size = Vector2(0, 64)
+	item_detail_description.custom_minimum_size = Vector2(0, 0)
 	item_detail_description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	item_detail_description.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	item_detail_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	item_detail_description.max_lines_visible = 6
+	item_detail_description.max_lines_visible = 3
 	item_detail_description.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(item_detail_description)
 	item_detail_reason = _label("", HudStyle.TYPE_FOOTNOTE, HudStyle.WARN)
@@ -1371,11 +1371,14 @@ func _refresh_item_detail() -> void:
 		item_detail_reason.text = ""
 		item_detail_reason.visible = false
 	if selected_item.is_empty():
-		item_detail_icon.texture = UI_ICONS.get_icon("backpack", 72, HudStyle.TEXT_FAINT)
-		item_detail_title.text = "가방"
-		item_detail_description.text = "아이템을 누르면 여기서 살펴본다."
+		# 아무것도 안 고른 상태에서 큰 배낭 아이콘은 빈 카드를 더 비어 보이게 한다.
+		item_detail_icon.texture = null
+		item_detail_icon.custom_minimum_size = Vector2(0, 0)
+		item_detail_title.text = "고른 것 없음"
+		item_detail_description.text = "아이템을 누르면 여기서 살펴보고 장착합니다."
 		return
 
+	item_detail_icon.custom_minimum_size = Vector2(60, 60)
 	item_detail_icon.texture = _item_texture(selected_item)
 	item_detail_title.text = str(selected_item.get("title", ""))
 	item_detail_description.text = str(selected_item.get("description", ""))
@@ -1836,19 +1839,25 @@ func _get_mod_in_slot(slot: String) -> String:
 func _equipment_button(slot_name: String, texture: Texture2D, active: bool, callback: Callable = Callable()) -> Button:
 	var button := _tile_button("", active)
 	button.name = "Equipment_%s" % slot_name
-	button.custom_minimum_size = Vector2(132, 74)
+	button.custom_minimum_size = Vector2(132, 66)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.tooltip_text = slot_name
-	button.icon = (texture if texture != null else UI_ICONS.get_icon(_equipment_icon_name(slot_name), 38, HudStyle.TEXT_DIM)) if active else null
-	button.expand_icon = active
+	# 빈 칸도 아이콘을 흐리게 보여 준다 — 라벨만 떠 있으면 "무엇을 넣는 칸"인지
+	# 읽히지 않고, 큰 회색 판 넷이 화면을 먹는 것처럼만 보였다.
+	button.icon = (
+		(texture if texture != null else UI_ICONS.get_icon(_equipment_icon_name(slot_name), 38, HudStyle.TEXT_DIM))
+		if active
+		else UI_ICONS.get_icon(_equipment_icon_name(slot_name), 34, Color(HudStyle.TEXT_FAINT, 0.55))
+	)
+	button.expand_icon = true
 	button.add_theme_constant_override("icon_max_width", 42)
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
 	var label := Label.new()
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE if active else Control.PRESET_FULL_RECT)
+	label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	label.offset_left = 6
-	label.offset_top = -24 if active else 4
+	label.offset_top = -22
 	label.offset_right = -6
 	label.offset_bottom = -4
 	label.text = slot_name
@@ -1857,7 +1866,7 @@ func _equipment_button(slot_name: String, texture: Texture2D, active: bool, call
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	# 장착 중이면 아이콘 아래 작은 굵은 이름, 비어 있으면 회색 슬롯 이름만.
 	label.add_theme_font_override("font", HudStyle.bold())
-	label.add_theme_font_size_override("font_size", HudStyle.TYPE_FOOTNOTE if active else HudStyle.TYPE_BODY)
+	label.add_theme_font_size_override("font_size", HudStyle.TYPE_FOOTNOTE)
 	label.add_theme_color_override("font_color", HudStyle.TEXT if active else HudStyle.TEXT_DIM)
 	if active:
 		# 아이콘 위에 걸릴 수 있어 살짝만 받친다.
@@ -1976,22 +1985,6 @@ func _apply_responsive_layout() -> void:
 			content.add_theme_constant_override("margin_right", 12 if not responsive_compact else 10)
 			content.add_theme_constant_override("margin_bottom", 10 if not responsive_compact else 8)
 
-	if bag_scroll:
-		# 이중 스크롤 함정: 바깥 패널 스크롤 안에서는 EXPAND_FILL이 무력해서
-		# 가방 영역이 최소 110px(1.5줄)로 잘리고 패널 아래엔 죽은 여백이 남았다.
-		# 가방을 제외한 섹션들의 자연 높이를 재고, 남는 공간을 전부 가방에 준다.
-		var sections_box := bag_scroll.get_parent() as Control
-		if sections_box:
-			var other_content_height := (
-				sections_box.get_combined_minimum_size().y
-				- bag_scroll.custom_minimum_size.y
-			)
-			var inner_available := panel_height - 28.0 - 24.0
-			bag_scroll.custom_minimum_size.y = clampf(
-				inner_available - other_content_height,
-				110.0,
-				640.0
-			)
 	if bag_grid:
 		var slot_min := 82.0
 		var gap := 6.0
@@ -2002,6 +1995,40 @@ func _apply_responsive_layout() -> void:
 			bag_grid.columns = 3
 		if panel_width < (slot_min * 3.0 + gap * 2.0):
 			bag_grid.columns = 2
+	if bag_scroll:
+		# 이중 스크롤 함정: 바깥 패널 스크롤 안에서는 EXPAND_FILL이 무력해서
+		# 가방 영역이 최소 110px(1.5줄)로 잘리고 패널 아래엔 죽은 여백이 남았다.
+		# 반대로 화면 높이의 94%를 늘 차지하면, 두어 칸 든 가방에서는 패널 아래가
+		# 통째로 비어 보인다(유저: "위아래 마진이 너무 크다"). 필요한 줄 수만큼만
+		# 쓰고, 넘칠 때만 남는 공간을 전부 가방에 준다.
+		var sections_box := bag_scroll.get_parent() as Control
+		if sections_box:
+			var other_content_height := (
+				sections_box.get_combined_minimum_size().y
+				- bag_scroll.custom_minimum_size.y
+			)
+			var chrome := 28.0 + 24.0
+			var inner_available := panel_height - chrome
+			var room_for_bag := clampf(inner_available - other_content_height, 80.0, 640.0)
+			var wanted_bag := room_for_bag
+			if bag_grid != null:
+				var columns := maxi(1, bag_grid.columns)
+				var rows := ceili(float(maxi(1, bag_grid.get_child_count())) / float(columns))
+				# 타일 74 + 세로 간격 6. 줄 단위로만 자른다 — 반 칸이 삐죽 잘려
+				# 보이면 스크롤이 아니라 고장으로 읽힌다.
+				var row_pitch := 74.0 + 6.0
+				var needed := float(rows) * 74.0 + float(rows - 1) * 6.0
+				if needed <= room_for_bag:
+					wanted_bag = maxf(74.0, needed)
+				else:
+					var whole_rows := maxi(1, floori((room_for_bag + 6.0) / row_pitch))
+					wanted_bag = float(whole_rows) * 74.0 + float(whole_rows - 1) * 6.0
+			bag_scroll.custom_minimum_size.y = wanted_bag
+			panel_height = minf(panel_height, other_content_height + wanted_bag + chrome)
+			if inventory_panel != null and inventory_panel.visible:
+				inventory_panel.custom_minimum_size.y = panel_height
+			if shell != null:
+				shell.custom_minimum_size.y = panel_height
 	if equipped_grid:
 		equipped_grid.columns = 2 if panel_width >= 290.0 else 1
 		equipped_grid.custom_minimum_size = Vector2(0, 0)
@@ -2050,22 +2077,27 @@ func _bag_item_button(item: Dictionary) -> Button:
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	if has_quantity:
 		button.pressed.connect(func() -> void: _on_bag_item_pressed(item))
+	# 수량은 타일 안쪽 오른쪽 아래 알약 — 아웃라인 글자로 아이콘 위에 얹으면
+	# 타일 모서리에 걸쳐 잘려 보였다(가방 검수 캡처).
 	var badge := Label.new()
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	badge.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	badge.offset_left = -45
-	badge.offset_top = -24
-	badge.offset_right = -6
-	badge.offset_bottom = -4
+	badge.offset_left = -48
+	badge.offset_top = -23
+	badge.offset_right = -5
+	badge.offset_bottom = -5
 	badge.text = "x%d" % int(item.get("badge_quantity", quantity))
 	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	badge.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-	# 수량은 굵은 tabular 숫자. 아이콘 위에 얹히므로 검정 받침만 살짝.
+	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	badge.add_theme_font_override("font", HudStyle.bold_tabular())
-	badge.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION)
+	badge.add_theme_font_size_override("font_size", HudStyle.TYPE_FOOTNOTE)
 	badge.add_theme_color_override("font_color", HudStyle.TEXT if quantity > 0 else HudStyle.TEXT_FAINT)
-	badge.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
-	badge.add_theme_constant_override("outline_size", 3)
+	var badge_style := HudStyle.flat(Color(0.0, 0.0, 0.0, 0.62), 999)
+	badge_style.content_margin_left = 7
+	badge_style.content_margin_right = 7
+	badge_style.content_margin_top = 1
+	badge_style.content_margin_bottom = 2
+	badge.add_theme_stylebox_override("normal", badge_style)
 	button.add_child(badge)
 	if item_type == "component":
 		# "재료" 표식 — 작은 알약 칩(표면색). 테두리 선·아웃라인 트릭 없이.
