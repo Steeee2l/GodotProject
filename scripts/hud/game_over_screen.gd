@@ -73,14 +73,14 @@ func build(host_node: Node) -> void:
 	header.name = "GameOverHeader"
 	header.add_theme_constant_override("separation", 4)
 	box.add_child(header)
-	var eyebrow := HudStyle.label("사망", HudStyle.TYPE_CAPTION, HudStyle.DANGER, true)
+	var eyebrow := HudStyle.label(tr("사망"), HudStyle.TYPE_CAPTION, HudStyle.DANGER, true)
 	eyebrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	header.add_child(eyebrow)
-	title_label = HudStyle.label("작전 실패", 30, HudStyle.TEXT, true)
+	title_label = HudStyle.label(tr("작전 실패"), 30, HudStyle.TEXT, true)
 	title_label.name = "GameOverLabel"
 	title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	header.add_child(title_label)
-	cause_label = HudStyle.label("치명상 원인 확인 중", HudStyle.TYPE_BODY, HudStyle.TEXT_DIM)
+	cause_label = HudStyle.label(tr("치명상 원인 확인 중"), HudStyle.TYPE_BODY, HudStyle.TEXT_DIM)
 	cause_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	cause_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	header.add_child(cause_label)
@@ -89,10 +89,10 @@ func build(host_node: Node) -> void:
 	stats_row.name = "GameOverStats"
 	stats_row.add_theme_constant_override("separation", 10)
 	box.add_child(stats_row)
-	kills_value = _add_stat_card(stats_row, "처치")
-	survival_value = _add_stat_card(stats_row, "생존 시간")
-	damage_value = _add_stat_card(stats_row, "가한 피해")
-	loss_value_label = _add_stat_card(stats_row, "손실 가치")
+	kills_value = _add_stat_card(stats_row, tr("처치"))
+	survival_value = _add_stat_card(stats_row, tr("생존 시간"))
+	damage_value = _add_stat_card(stats_row, tr("가한 피해"))
+	loss_value_label = _add_stat_card(stats_row, tr("손실 가치"))
 
 	# 교훈 — 표면 카드 안의 본문 글자. 교훈이 없으면 카드째 숨긴다.
 	lesson_card = _surface_card()
@@ -107,12 +107,12 @@ func build(host_node: Node) -> void:
 	var loss_heading := HBoxContainer.new()
 	loss_heading.add_theme_constant_override("separation", 8)
 	box.add_child(loss_heading)
-	var loss_title := HudStyle.label("현장에 남긴 휴대품", HudStyle.TYPE_HEADING, HudStyle.TEXT, true)
+	var loss_title := HudStyle.label(tr("현장에 남긴 휴대품"), HudStyle.TYPE_HEADING, HudStyle.TEXT, true)
 	loss_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	loss_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	loss_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	loss_heading.add_child(loss_title)
-	loss_count_label = HudStyle.label("0종", HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
+	loss_count_label = HudStyle.label(tr("0종"), HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
 	loss_count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	loss_count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	loss_heading.add_child(loss_count_label)
@@ -134,7 +134,7 @@ func build(host_node: Node) -> void:
 	loss_label.name = "GameOverLossLabel"
 	loss_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	loss_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	loss_label.text = "장비(무기·방어구·부착물)는 전부 남고 가방의 재료·탄약·귀중품만 잃습니다. 다음 탐사에서 사망 지점의 가방을 한 번 회수할 수 있습니다."
+	loss_label.text = tr("장비(무기·방어구·부착물)는 전부 남고 가방의 재료·탄약·귀중품만 잃습니다. 다음 탐사에서 사망 지점의 가방을 한 번 회수할 수 있습니다.")
 	recovery_banner.add_child(loss_label)
 
 	var footer := VBoxContainer.new()
@@ -143,12 +143,12 @@ func build(host_node: Node) -> void:
 	box.add_child(footer)
 	continue_button = Button.new()
 	continue_button.name = "GameOverContinueButton"
-	continue_button.text = "쉘터로"
+	continue_button.text = tr("쉘터로")
 	continue_button.custom_minimum_size = Vector2(0, 52)
 	HudStyle.style_button(continue_button, HudStyle.ACCENT, true)
 	continue_button.pressed.connect(_on_continue_pressed)
 	footer.add_child(continue_button)
-	continue_label = HudStyle.label("SPACE 또는 화면 터치  ·  쉘터로 복귀", HudStyle.TYPE_CAPTION, HudStyle.TEXT_FAINT)
+	continue_label = HudStyle.label(tr("SPACE 또는 화면 터치  ·  쉘터로 복귀"), HudStyle.TYPE_CAPTION, HudStyle.TEXT_FAINT)
 	continue_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	continue_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	footer.add_child(continue_label)
@@ -199,9 +199,9 @@ func populate_loss_icons(loot: Dictionary) -> void:
 			var texture := load(str(definition.get("texture_path", ""))) as Texture2D
 			entries.append({"name": str(definition.get("display_name", equipment_id)), "count": count, "texture": texture})
 	var simple := [
-		["ammo_inventory", "탄약", "ammo"],
-		["mod_component_inventory", "부품", "parts"],
-		["weapon_mod_inventory", "부착물", "mod"],
+		["ammo_inventory", tr("탄약"), "ammo"],
+		["mod_component_inventory", tr("부품"), "parts"],
+		["weapon_mod_inventory", tr("부착물"), "mod"],
 	]
 	for spec in simple:
 		var count := 0
@@ -209,32 +209,32 @@ func populate_loss_icons(loot: Dictionary) -> void:
 			count += int(amount)
 		if count > 0:
 			entries.append({"name": spec[1], "count": count, "texture": UI_ICONS.get_icon(spec[2], 64)})
-	for spec in [["medkits", "구급약", "medkit"], ["canned_food", "통조림", "food"], ["churu", "츄르", "churu"]]:
+	for spec in [["medkits", tr("구급약"), "medkit"], ["canned_food", tr("통조림"), "food"], ["churu", tr("츄르"), "churu"]]:
 		var count := int(loot.get(spec[0], 0))
 		if count > 0:
 			entries.append({"name": spec[1], "count": count, "texture": UI_ICONS.get_icon(spec[2], 64)})
 	var lost_cargo := loot.get("raid_special_cargo", {}) as Dictionary
 	if not lost_cargo.is_empty():
 		entries.append({
-			"name": str(lost_cargo.get("title", "봉인된 지하철 화물")),
+			"name": str(lost_cargo.get("title", tr("봉인된 지하철 화물"))),
 			"count": 1,
 			"texture": SUBWAY_SEALED_CARGO_TEXTURE,
 		})
 	if entries.is_empty():
-		var empty := HudStyle.label("분실한 휴대품이 없습니다.", HudStyle.TYPE_BODY, HudStyle.TEXT_DIM)
+		var empty := HudStyle.label(tr("분실한 휴대품이 없습니다."), HudStyle.TYPE_BODY, HudStyle.TEXT_DIM)
 		empty.custom_minimum_size = Vector2(240, 32)
 		empty.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		empty.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		loss_grid.add_child(empty)
-		loss_count_label.text = "없음"
+		loss_count_label.text = tr("없음")
 		return
-	loss_count_label.text = "%d종" % entries.size()
+	loss_count_label.text = tr("%d종") % entries.size()
 	for entry in entries:
 		# 알약 칩: 작은 아이콘 + 이름 + 개수(tabular).
 		var chip := PanelContainer.new()
 		chip.add_theme_stylebox_override("panel", HudStyle.chip())
 		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		chip.tooltip_text = str(entry.get("name", "휴대품"))
+		chip.tooltip_text = str(entry.get("name", tr("휴대품")))
 		loss_grid.add_child(chip)
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 6)
@@ -247,7 +247,7 @@ func populate_loss_icons(loot: Dictionary) -> void:
 		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(icon)
-		var name_label := HudStyle.label(str(entry.get("name", "휴대품")), HudStyle.TYPE_CAPTION + 1, HudStyle.TEXT)
+		var name_label := HudStyle.label(str(entry.get("name", tr("휴대품"))), HudStyle.TYPE_CAPTION + 1, HudStyle.TEXT)
 		name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(name_label)
@@ -278,17 +278,17 @@ func present(result: Dictionary) -> void:
 	# 사망 시점의 결과를 한 번에 채운다. 예전에는 이 열 줄이
 	# _begin_player_death_sequence 안에 흩어져 있었다.
 	canvas.visible = true
-	title_label.text = "작전 실패"
+	title_label.text = tr("작전 실패")
 	survival_value.text = str(result.get("survival_time", "00:00"))
 	kills_value.text = "%d" % int(result.get("kills", 0))
 	damage_value.text = str(result.get("damage_text", "0"))
-	var cause := "치명상 · %s  /  %s" % [
+	var cause := tr("치명상 · %s  /  %s") % [
 		result.get("source_name", "?"),
 		result.get("weapon_name", "?"),
 	]
 	var blocked := int(result.get("blocked", 0))
 	if blocked > 0:
-		cause += "  ·  방어구가 마지막 공격에서 %d 방어" % blocked
+		cause += tr("  ·  방어구가 마지막 공격에서 %d 방어") % blocked
 	cause_label.text = cause
 	# 교훈 문장은 원인 줄에 붙이지 않고 표면 카드에 따로 앉힌다.
 	var lesson := str(result.get("lesson", ""))
@@ -296,7 +296,7 @@ func present(result: Dictionary) -> void:
 	lesson_card.visible = not lesson.is_empty()
 	loss_value_label.text = str(result.get("loss_value_text", "0"))
 	# 영구 귀속(2026-08) — 장비는 시체로 가지 않는다. 잃는 건 가방의 재료·탄약·귀중품뿐.
-	loss_label.text = "가방의 재료·탄약·귀중품은 현장에, 장비(무기·방어구·부착물)는 전부 손에 남았습니다. 다음 탐사에서 사망 지점의 가방을 한 번 회수할 수 있습니다."
+	loss_label.text = tr("가방의 재료·탄약·귀중품은 현장에, 장비(무기·방어구·부착물)는 전부 손에 남았습니다. 다음 탐사에서 사망 지점의 가방을 한 번 회수할 수 있습니다.")
 	populate_loss_icons(result.get("loot", {}) as Dictionary)
 	ready_to_continue = false
 	continue_started = false

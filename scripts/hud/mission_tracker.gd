@@ -89,7 +89,7 @@ func build(mount: PanelContainer) -> void:
 	title_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	header.add_child(title_label)
-	map_key_chip = _build_keycap("TAB", "전술지도")
+	map_key_chip = _build_keycap("TAB", tr("전술지도"))
 	map_key_chip.visible = not DisplayServer.is_touchscreen_available()
 	header.add_child(map_key_chip)
 

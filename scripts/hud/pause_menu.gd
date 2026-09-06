@@ -91,7 +91,7 @@ func _open() -> void:
 	box.add_theme_constant_override("separation", 10)
 	panel.add_child(box)
 
-	var title := HudStyle.label("일시 정지", HudStyle.TYPE_TITLE, HudStyle.TEXT, true)
+	var title := HudStyle.label(tr("일시 정지"), HudStyle.TYPE_TITLE, HudStyle.TEXT, true)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(title)
 	var spacer := Control.new()
@@ -99,11 +99,11 @@ func _open() -> void:
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(spacer)
 
-	var resume := _button("계속하기", true)
+	var resume := _button(tr("계속하기"), true)
 	resume.pressed.connect(_close)
 	box.add_child(resume)
 
-	var quit := _button(quit_label, false)
+	var quit := _button(tr(quit_label), false)
 	quit.pressed.connect(func() -> void:
 		GameState.save_persistent_state()
 		get_tree().quit()

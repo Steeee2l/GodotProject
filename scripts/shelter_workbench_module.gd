@@ -414,7 +414,7 @@ func _ready() -> void:
 
 func get_interaction_prompt() -> String:
 	# 이름만으로는 무엇을 하는지 모른다. 기능을 한 줄로 말한다.
-	return "작업대 · 장비 +99 강화 · 제작"
+	return tr("작업대 · 장비 +99 강화 · 제작")
 
 
 func get_interaction_radius() -> float:
@@ -425,7 +425,7 @@ func interact() -> String:
 	GameState.process_shelter_progress()
 	GameState.claim_workbench_starter_parts()
 	_open_ui()
-	return "작업대 강화 보드를 열었습니다."
+	return tr("작업대 강화 보드를 열었습니다.")
 
 
 func set_interaction_focus(value: bool) -> void:
@@ -613,7 +613,7 @@ func _build_header(stacked: bool) -> Control:
 	top_row.add_child(title_box)
 	# 예전엔 "먼지 · WORKBENCH 01 · SHELTER Lv.1" — 내 이름도 설비 번호도 여기서
 	# 쓸 일이 없다(유저: "이상한 정보"). 이 판이 뭘 하는 곳인지만 남긴다.
-	var eyebrow := SHELTER_THEME.eyebrow("제작과 강화 · 작업대 Lv.%d" % GameState.shelter_workbench_level)
+	var eyebrow := SHELTER_THEME.eyebrow(tr("제작과 강화 · 작업대 Lv.%d") % GameState.shelter_workbench_level)
 	eyebrow.name = "WorkbenchEyebrow"
 	eyebrow.autowrap_mode = TextServer.AUTOWRAP_OFF
 	eyebrow.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -621,7 +621,7 @@ func _build_header(stacked: bool) -> Control:
 	var title_row := HBoxContainer.new()
 	title_row.add_theme_constant_override("separation", 12)
 	title_box.add_child(title_row)
-	var title := SHELTER_THEME.title("작업대", SHELTER_THEME.TYPE_TITLE if not stacked else SHELTER_THEME.TYPE_TITLE - 4)
+	var title := SHELTER_THEME.title(tr("작업대"), SHELTER_THEME.TYPE_TITLE if not stacked else SHELTER_THEME.TYPE_TITLE - 4)
 	title.name = "WorkbenchTitle"
 	title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	# 짧은 고정 문구 — ELLIPSIS면 최소 폭이 0이 돼 HBox에서 지갑 칩에 밀려 사라진다.
@@ -713,8 +713,8 @@ func _tab_text(tab_id: String) -> String:
 	# 제작 탭은 "조각 3/3 + 재료 = 지금 만들 수 있는 수"를 숫자로 단다.
 	if tab_id == "craft":
 		var count := _craftable_gear_count()
-		return "제작 %d" % count if count > 0 else "제작"
-	return str(TAB_NAMES.get(tab_id, tab_id))
+		return tr("제작 %d") % count if count > 0 else tr("제작")
+	return tr(str(TAB_NAMES.get(tab_id, tab_id)))
 
 
 func _style_tab(tab: Button, lit: bool) -> void:
@@ -834,7 +834,7 @@ func _build_enhance_board(stacked: bool, compact: bool) -> Control:
 	list_column.add_theme_constant_override("separation", 8)
 	list_margin.add_child(list_column)
 	if not stacked:
-		var list_title := SHELTER_THEME.caption("보유 장비 · 평생 귀속")
+		var list_title := SHELTER_THEME.caption(tr("보유 장비 · 평생 귀속"))
 		list_title.autowrap_mode = TextServer.AUTOWRAP_OFF
 		list_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		list_column.add_child(list_title)
@@ -897,7 +897,7 @@ func _build_enhance_board(stacked: bool, compact: bool) -> Control:
 	actions.add_theme_constant_override("separation", 10)
 	stage_column.add_child(actions)
 	enhance_primary_button = Button.new()
-	enhance_primary_button.text = "강화 +1"
+	enhance_primary_button.text = tr("강화 +1")
 	enhance_primary_button.name = "WorkbenchEnhanceButton"
 	enhance_primary_button.custom_minimum_size = Vector2(0, 56)
 	enhance_primary_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -910,7 +910,7 @@ func _build_enhance_board(stacked: bool, compact: bool) -> Control:
 	enhance_primary_button.pressed.connect(_on_primary_pressed)
 	enhance_primary_button.mouse_exited.connect(_stop_enhance_hold)
 	actions.add_child(enhance_primary_button)
-	enhance_max_button = SHELTER_THEME.secondary_button("가능한 만큼")
+	enhance_max_button = SHELTER_THEME.secondary_button(tr("가능한 만큼"))
 	enhance_max_button.name = "WorkbenchEnhanceMaxButton"
 	enhance_max_button.custom_minimum_size = Vector2(0, 56)
 	enhance_max_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1057,9 +1057,9 @@ func _gear_kind_text(kind: String, gear_id: String) -> String:
 		var weapon := WeaponSystem.get_weapon(gear_id)
 		var caliber := str(weapon.get("ammo_type", ""))
 		var caliber_text := str({"762x39": "7.62", "9mm": "9mm", "45_acp": ".45", "12g": "12g"}.get(caliber, caliber))
-		return "%s · %s" % [str(weapon.get("category", "무기")), caliber_text]
+		return "%s · %s" % [tr(str(weapon.get("category", "무기"))), caliber_text]
 	var definition := GameState.get_equipment_definition(gear_id)
-	var slot_text := str({"body": "몸", "head": "머리", "feet": "발"}.get(str(definition.get("slot", "")), "장비"))
+	var slot_text := str({"body": tr("몸"), "head": tr("머리"), "feet": tr("발")}.get(str(definition.get("slot", "")), tr("장비")))
 	return "%s · T%d" % [slot_text, int(GameState.get_armor_family_index(gear_id)) + 1]
 
 
@@ -1127,7 +1127,7 @@ func _refresh_gear_list() -> void:
 		text_box.add_theme_constant_override("separation", 1)
 		text_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		content.add_child(text_box)
-		var name_label := SHELTER_THEME.label(str(entry["name"]), SHELTER_THEME.TYPE_BODY, TEXT if owned else FAINT, true)
+		var name_label := SHELTER_THEME.label(tr(str(entry["name"])), SHELTER_THEME.TYPE_BODY, TEXT if owned else FAINT, true)
 		name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 		name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		text_box.add_child(name_label)
@@ -1139,7 +1139,7 @@ func _refresh_gear_list() -> void:
 		if owned:
 			level_label = SHELTER_THEME.number("+%d" % int(entry["level"]), SHELTER_THEME.TYPE_NUMBER_SMALL, SHELTER_THEME.ACCENT)
 		else:
-			level_label = SHELTER_THEME.caption("조각 %d/%d" % [int(entry["shards"]), GameState.BLUEPRINT_SHARDS_REQUIRED], FAINT)
+			level_label = SHELTER_THEME.caption(tr("조각 %d/%d") % [int(entry["shards"]), GameState.BLUEPRINT_SHARDS_REQUIRED], FAINT)
 		level_label.name = "GearLevel"
 		level_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 		level_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -1158,13 +1158,13 @@ func _enhance_recipe_for(kind: String, gear_id: String) -> Dictionary:
 	if kind == "armor":
 		return {
 			"id": "enhance_armor_%s" % gear_id,
-			"name": "%s 영구 강화" % _equipment_display_name(gear_id),
+			"name": tr("%s 영구 강화") % _equipment_display_name(gear_id),
 			"cost": {},
 			"result": {"enhance_armor": gear_id},
 		}
 	return {
 		"id": "enhance_weapon_%s" % gear_id,
-		"name": "%s 영구 강화" % _resource_name(gear_id),
+		"name": tr("%s 영구 강화") % _resource_name(gear_id),
 		"cost": {},
 		"result": {"enhance": true, "weapon_id": gear_id},
 	}
@@ -1190,7 +1190,7 @@ func _refresh_enhance_card() -> void:
 	var entry := _find_gear_entry(enhance_selected_kind, enhance_selected_id)
 	var insert_at := 0
 	if entry.is_empty():
-		var empty := SHELTER_THEME.subtitle("보유한 장비가 없습니다 — 제작 탭에서 첫 장비를 만드세요.")
+		var empty := SHELTER_THEME.subtitle(tr("보유한 장비가 없습니다 — 제작 탭에서 첫 장비를 만드세요."))
 		empty.name = "WorkbenchEnhanceEmpty"
 		enhance_card_body.add_child(empty)
 		enhance_card_body.move_child(empty, 0)
@@ -1233,7 +1233,7 @@ func _build_stage_head(entry: Dictionary, big_caption: String, big_text: String,
 	text_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	text_box.add_theme_constant_override("separation", 3)
 	head.add_child(text_box)
-	var name_label := SHELTER_THEME.title(str(entry["name"]), 22)
+	var name_label := SHELTER_THEME.title(tr(str(entry["name"])), 22)
 	name_label.name = "WorkbenchEnhanceName"
 	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -1263,7 +1263,7 @@ func _build_owned_card_blocks(entry: Dictionary) -> Array[Control]:
 	var gear_id := str(entry["id"])
 	var level := int(entry["level"])
 	var blocks: Array[Control] = []
-	blocks.append(_build_stage_head(entry, "ENHANCE", "+%d" % level, "평생 귀속"))
+	blocks.append(_build_stage_head(entry, "ENHANCE", "+%d" % level, tr("평생 귀속")))
 	blocks.append(_build_breakthrough_track(kind, gear_id, level))
 	blocks.append(_build_stat_grid(kind, gear_id, level))
 	blocks.append(_build_perk_row(kind, gear_id, level))
@@ -1287,10 +1287,10 @@ func _build_tuning_block(gear_id: String) -> Control:
 	block.name = "WorkbenchTuningBlock"
 	block.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	block.add_theme_constant_override("separation", 8)
-	var title := SHELTER_THEME.label("부품 튜닝", SHELTER_THEME.TYPE_SECTION, TEXT, true)
+	var title := SHELTER_THEME.label(tr("부품 튜닝"), SHELTER_THEME.TYPE_SECTION, TEXT, true)
 	title.name = "WorkbenchTuningTitle"
 	block.add_child(title)
-	var hint := SHELTER_THEME.caption("먹인 만큼 이 무기가 영구히 좋아진다")
+	var hint := SHELTER_THEME.caption(tr("먹인 만큼 이 무기가 영구히 좋아진다"))
 	hint.autowrap_mode = TextServer.AUTOWRAP_OFF
 	hint.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	block.add_child(hint)
@@ -1328,13 +1328,13 @@ func _build_tuning_row(gear_id: String, component_id: String) -> Control:
 	text_box.add_theme_constant_override("separation", 1)
 	line.add_child(text_box)
 	var name_label := SHELTER_THEME.label(
-		"%s · %s" % [str(track.get("name", "")), str(track.get("effect", ""))], SHELTER_THEME.TYPE_BODY, TEXT, true
+		"%s · %s" % [tr(str(track.get("name", ""))), tr(str(track.get("effect", "")))], SHELTER_THEME.TYPE_BODY, TEXT, true
 	)
 	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(name_label)
 	var value_label := SHELTER_THEME.caption(
-		"+%.1f%% · 먹임 %d · 보유 %d" % [bonus * 100.0, fed, have], SHELTER_THEME.ACCENT if bonus > 0.0 else DIM
+		tr("+%.1f%% · 먹임 %d · 보유 %d") % [bonus * 100.0, fed, have], SHELTER_THEME.ACCENT if bonus > 0.0 else DIM
 	)
 	value_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	value_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -1375,14 +1375,14 @@ func _build_perk_row(kind: String, gear_id: String, level: int) -> Control:
 		var perk: Dictionary = table.get(int(perk_level), {})
 		if perk.is_empty() or not earned.has(str(perk.get("id", ""))):
 			continue
-		var chip := SHELTER_THEME.chip("+%d %s" % [int(perk_level), str(perk.get("label", ""))])
+		var chip := SHELTER_THEME.chip("+%d %s" % [int(perk_level), tr(str(perk.get("label", "")))])
 		chip.name = "PerkChip_%s" % str(perk.get("id", ""))
-		chip.tooltip_text = str(perk.get("description", ""))
+		chip.tooltip_text = tr(str(perk.get("description", "")))
 		(chip.get_meta("label") as Label).add_theme_color_override("font_color", SHELTER_THEME.ACCENT)
 		row.add_child(chip)
 	var next_perk_level := _next_perk_level(level)
-	var next_text := str(GameState.describe_breakthrough_perk(kind, next_perk_level)) if next_perk_level > 0 else ""
-	var next_label := SHELTER_THEME.caption(("다음 보너스 · %s" % next_text) if not next_text.is_empty() else "돌파 보너스 전부 획득", DIM if not next_text.is_empty() else FAINT)
+	var next_text := _describe_breakthrough_perk(kind, next_perk_level) if next_perk_level > 0 else ""
+	var next_label := SHELTER_THEME.caption((tr("다음 보너스 · %s") % next_text) if not next_text.is_empty() else tr("돌파 보너스 전부 획득"), DIM if not next_text.is_empty() else FAINT)
 	next_label.name = "WorkbenchNextPerk"
 	next_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	next_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -1390,6 +1390,15 @@ func _build_perk_row(kind: String, gear_id: String, level: int) -> Control:
 	next_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(next_label)
 	return row
+
+
+func _describe_breakthrough_perk(kind: String, perk_level: int) -> String:
+	# GameState.describe_breakthrough_perk()과 같은 한 줄이지만, 서식과 라벨을
+	# 따로 tr()하려고 여기서 조립한다(GameState는 이 모듈 소유가 아니다).
+	var table: Dictionary = (GameState.BREAKTHROUGH_PERKS as Dictionary).get(kind, {})
+	if not table.has(perk_level):
+		return ""
+	return tr("+%d 돌파: %s") % [perk_level, tr(str((table[perk_level] as Dictionary).get("label", "")))]
 
 
 func _build_breakthrough_track(kind: String, gear_id: String, level: int) -> Control:
@@ -1408,13 +1417,13 @@ func _build_breakthrough_track(kind: String, gear_id: String, level: int) -> Con
 	box.add_child(bar)
 	var labels := HBoxContainer.new()
 	labels.name = "TrackLabels"
-	var left := SHELTER_THEME.caption("돌파 대기 · +%d 도달" % level if gate_required else "다음 +%d" % (level + 1))
+	var left := SHELTER_THEME.caption(tr("돌파 대기 · +%d 도달") % level if gate_required else tr("다음 +%d") % (level + 1))
 	left.name = "TrackNextLabel"
 	left.autowrap_mode = TextServer.AUTOWRAP_OFF
 	left.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	labels.add_child(left)
-	var right := SHELTER_THEME.caption("돌파 +%d" % (decade_base + step), DANGER if gate_required else DIM)
+	var right := SHELTER_THEME.caption(tr("돌파 +%d") % (decade_base + step), DANGER if gate_required else DIM)
 	right.name = "TrackGateLabel"
 	right.autowrap_mode = TextServer.AUTOWRAP_OFF
 	right.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -1434,10 +1443,10 @@ func _stat_cells(kind: String, gear_id: String, level: int) -> Array:
 		var damage_now := "%dx%d" % [roundi(float(now.get("damage", 0))), pellets] if pellets > 1 else str(roundi(float(now.get("damage", 0))))
 		# 상승은 민트 "+N"(다음 단계에서 오르는 양). 특수기호(▲) 없이.
 		var damage_gain := roundi(float(next.get("damage", 0))) - roundi(float(now.get("damage", 0)))
-		cells.append(["피해", damage_now, _gain_text(damage_gain) if level < GameState.MAX_WEAPON_ENHANCEMENT else ""])
-		cells.append(["연사", "%d" % roundi(60.0 / maxf(0.01, float(now.get("fire_interval", 0.2)))), ""])
-		cells.append(["장탄", str(int(now.get("magazine_size", 0))), ""])
-		cells.append(["장전", "%.2fs" % float(now.get("reload_time", 0.0)), ""])
+		cells.append([tr("피해"), damage_now, _gain_text(damage_gain) if level < GameState.MAX_WEAPON_ENHANCEMENT else ""])
+		cells.append([tr("연사"), "%d" % roundi(60.0 / maxf(0.01, float(now.get("fire_interval", 0.2)))), ""])
+		cells.append([tr("장탄"), str(int(now.get("magazine_size", 0))), ""])
+		cells.append([tr("장전"), "%.2fs" % float(now.get("reload_time", 0.0)), ""])
 		return cells
 	var definition := GameState.get_equipment_definition(gear_id)
 	var multiplier_now := float(GameState.armor_enhancement_multiplier_for_level(level))
@@ -1445,20 +1454,20 @@ func _stat_cells(kind: String, gear_id: String, level: int) -> Array:
 	var can_grow := level < GameState.MAX_ARMOR_ENHANCEMENT
 	if definition.has("damage_reduction"):
 		var base := float(definition["damage_reduction"])
-		cells.append(["피해 감소", "%d%%" % roundi(base * multiplier_now * 100.0), _gain_text(roundi(base * multiplier_next * 100.0) - roundi(base * multiplier_now * 100.0), "%") if can_grow else ""])
+		cells.append([tr("피해 감소"), "%d%%" % roundi(base * multiplier_now * 100.0), _gain_text(roundi(base * multiplier_next * 100.0) - roundi(base * multiplier_now * 100.0), "%") if can_grow else ""])
 	elif definition.has("move_speed_bonus"):
 		var base := float(definition["move_speed_bonus"])
-		cells.append(["이동", "+%d%%" % roundi(base * multiplier_now * 100.0), _gain_text(roundi(base * multiplier_next * 100.0) - roundi(base * multiplier_now * 100.0), "%") if can_grow else ""])
+		cells.append([tr("이동"), "+%d%%" % roundi(base * multiplier_now * 100.0), _gain_text(roundi(base * multiplier_next * 100.0) - roundi(base * multiplier_now * 100.0), "%") if can_grow else ""])
 	else:
-		cells.append(["효과", "x%.2f" % multiplier_now, ("+%.2f" % (multiplier_next - multiplier_now)) if can_grow and multiplier_next > multiplier_now else ""])
-	cells.append(["무게", "%.1f" % float(definition.get("weight", 0.0)), ""])
+		cells.append([tr("효과"), "x%.2f" % multiplier_now, ("+%.2f" % (multiplier_next - multiplier_now)) if can_grow and multiplier_next > multiplier_now else ""])
+	cells.append([tr("무게"), "%.1f" % float(definition.get("weight", 0.0)), ""])
 	if definition.has("visibility_multiplier"):
-		cells.append(["가시성", "+%d%%" % roundi((float(definition["visibility_multiplier"]) - 1.0) * 100.0), ""])
+		cells.append([tr("가시성"), "+%d%%" % roundi((float(definition["visibility_multiplier"]) - 1.0) * 100.0), ""])
 	elif definition.has("scent_multiplier"):
-		cells.append(["냄새", "-%d%%" % roundi((1.0 - float(definition["scent_multiplier"])) * 100.0), ""])
+		cells.append([tr("냄새"), "-%d%%" % roundi((1.0 - float(definition["scent_multiplier"])) * 100.0), ""])
 	else:
-		cells.append(["가시성", "—", ""])
-	cells.append(["슬롯", str({"body": "몸", "head": "머리", "feet": "발"}.get(str(definition.get("slot", "")), "—")), ""])
+		cells.append([tr("가시성"), "—", ""])
+	cells.append([tr("슬롯"), str({"body": tr("몸"), "head": tr("머리"), "feet": tr("발")}.get(str(definition.get("slot", "")), "—")), ""])
 	return cells
 
 
@@ -1535,13 +1544,13 @@ func _build_enhance_cost_row(kind: String, gear_id: String, level: int) -> Contr
 		# 강화비 ×3}). 인장·정밀 기어·합금 요구는 폐지 — 고철 칩 하나만, 부족하면 빨강.
 		var gate_cost: Dictionary = GameState.get_breakthrough_cost(kind, gear_id)
 		var gate_scrap := int(gate_cost.get("scrap", 0))
-		flow.add_child(_cost_pair("돌파 · 고철", GameState.format_compact_number(gate_scrap), _owned_resource("scrap") >= gate_scrap, "scrap"))
+		flow.add_child(_cost_pair(tr("돌파 · 고철"), GameState.format_compact_number(gate_scrap), _owned_resource("scrap") >= gate_scrap, "scrap"))
 	elif level >= max_level:
-		flow.add_child(_cost_pair("최고 단계", "+%d" % max_level, true))
+		flow.add_child(_cost_pair(tr("최고 단계"), "+%d" % max_level, true))
 	else:
 		var cost: Dictionary = _effective_cost(_enhance_recipe_for(kind, gear_id))
 		var scrap_cost := int(cost.get("scrap", 0))
-		flow.add_child(_cost_pair("고철", GameState.format_compact_number(scrap_cost), _owned_resource("scrap") >= scrap_cost, "scrap"))
+		flow.add_child(_cost_pair(tr("고철"), GameState.format_compact_number(scrap_cost), _owned_resource("scrap") >= scrap_cost, "scrap"))
 		for key_value in cost.keys():
 			var key := str(key_value)
 			if key == "scrap":
@@ -1550,7 +1559,7 @@ func _build_enhance_cost_row(kind: String, gear_id: String, level: int) -> Contr
 			var have := _owned_resource(key)
 			flow.add_child(_cost_pair(_resource_name(key), "%d /%d" % [need, have], have >= need, key))
 	var next_label := SHELTER_THEME.caption(
-		("돌파 +%d" % level) if gate_required else ("다음 +%d" % mini(level + 1, max_level)),
+		(tr("돌파 +%d") % level) if gate_required else (tr("다음 +%d") % mini(level + 1, max_level)),
 		DANGER if gate_required else DIM
 	)
 	next_label.name = "WorkbenchEnhanceNext"
@@ -1567,7 +1576,7 @@ func _build_locked_card_blocks(entry: Dictionary) -> Array[Control]:
 	var recipe: Dictionary = entry["recipe"]
 	var shards := int(entry["shards"])
 	var blocks: Array[Control] = []
-	blocks.append(_build_stage_head(entry, "설계도", "%d/%d" % [shards, GameState.BLUEPRINT_SHARDS_REQUIRED], "미제작"))
+	blocks.append(_build_stage_head(entry, tr("설계도"), "%d/%d" % [shards, GameState.BLUEPRINT_SHARDS_REQUIRED], tr("미제작")))
 	var panel := PanelContainer.new()
 	panel.name = "WorkbenchEnhanceCost"
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1577,7 +1586,7 @@ func _build_locked_card_blocks(entry: Dictionary) -> Array[Control]:
 	flow.add_theme_constant_override("h_separation", 8)
 	flow.add_theme_constant_override("v_separation", 6)
 	panel.add_child(flow)
-	flow.add_child(_cost_pair("잔해", "%d / %d" % [shards, GameState.BLUEPRINT_SHARDS_REQUIRED], shards >= GameState.BLUEPRINT_SHARDS_REQUIRED))
+	flow.add_child(_cost_pair(tr("잔해"), "%d / %d" % [shards, GameState.BLUEPRINT_SHARDS_REQUIRED], shards >= GameState.BLUEPRINT_SHARDS_REQUIRED))
 	var cost := _effective_cost(recipe)
 	for key_value in cost.keys():
 		var key := str(key_value)
@@ -1585,7 +1594,7 @@ func _build_locked_card_blocks(entry: Dictionary) -> Array[Control]:
 		var have := _owned_resource(key)
 		flow.add_child(_cost_pair(_resource_name(key), GameState.format_compact_number(need) if key == "scrap" else "%d /%d" % [need, have], have >= need, key))
 	blocks.append(panel)
-	var source := SHELTER_THEME.subtitle("조각은 %s에서 나옵니다.%s" % [_blueprint_source_text(gear_id), _transfer_preview_sentence(kind, gear_id)])
+	var source := SHELTER_THEME.subtitle(tr("조각은 %s에서 나옵니다.%s") % [_blueprint_source_text(gear_id), _transfer_preview_sentence(kind, gear_id)])
 	source.name = "WorkbenchCraftGuide"
 	source.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	blocks.append(source)
@@ -1593,7 +1602,7 @@ func _build_locked_card_blocks(entry: Dictionary) -> Array[Control]:
 	var required_tier := int(recipe.get("required_tier", 1))
 	var required_workbench := int(recipe.get("required_workbench", 1))
 	if GameState.shelter_tier < required_tier or GameState.shelter_workbench_level < required_workbench:
-		var lock_text := ("쉘터 Tier %d 필요" % required_tier) if GameState.shelter_tier < required_tier else ("작업대 Lv.%d 필요 (제작 탭 하단 '보급품'에서 확장)" % required_workbench)
+		var lock_text := (tr("쉘터 Tier %d 필요") % required_tier) if GameState.shelter_tier < required_tier else (tr("작업대 Lv.%d 필요 (제작 탭 하단 '보급품'에서 확장)") % required_workbench)
 		var lock_label := SHELTER_THEME.label(lock_text, SHELTER_THEME.TYPE_CAPTION + 1, DANGER)
 		lock_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		lock_label.name = "WorkbenchBlockedReason"
@@ -1622,7 +1631,7 @@ func _transfer_preview_sentence(kind: String, gear_id: String) -> String:
 	if from_id.is_empty() or from_level <= 0:
 		return ""
 	var transferred := int(floor(float(from_level) * WeaponSystem.ENHANCEMENT_TRANSFER_RATIO))
-	return " 만들면 %s +%d의 %d%%를 이어받아 +%d로 시작합니다." % [
+	return tr(" 만들면 %s +%d의 %d%%를 이어받아 +%d로 시작합니다.") % [
 		_gear_short_name(kind, from_id), from_level, roundi(WeaponSystem.ENHANCEMENT_TRANSFER_RATIO * 100.0), transferred,
 	]
 
@@ -1662,9 +1671,9 @@ func _refresh_enhance_actions() -> void:
 	enhance_primary_button.tooltip_text = ""
 	if entry.is_empty():
 		primary_mode = "none"
-		enhance_primary_button.text = "강화 +1"
+		enhance_primary_button.text = tr("강화 +1")
 		enhance_primary_button.disabled = true
-		enhance_max_button.text = "가능한 만큼"
+		enhance_max_button.text = tr("가능한 만큼")
 		enhance_max_button.disabled = true
 		_style_action_button(enhance_primary_button, "enhance")
 		return
@@ -1674,7 +1683,7 @@ func _refresh_enhance_actions() -> void:
 		primary_mode = "craft"
 		var recipe: Dictionary = entry["recipe"]
 		var missing := GameState.BLUEPRINT_SHARDS_REQUIRED - int(entry["shards"])
-		enhance_primary_button.text = "제작 · 조각 %d개 더" % missing if missing > 0 else "제작"
+		enhance_primary_button.text = tr("제작 · 조각 %d개 더") % missing if missing > 0 else tr("제작")
 		enhance_primary_button.disabled = not _can_craft(recipe)
 		_style_action_button(enhance_primary_button, "craft")
 		enhance_max_button.text = "—"
@@ -1689,26 +1698,26 @@ func _refresh_enhance_actions() -> void:
 		var gate_cost: Dictionary = GameState.get_breakthrough_cost(kind, gear_id)
 		var gate_scrap := int(gate_cost.get("scrap", 0))
 		var gate_ok := _owned_resource("scrap") >= gate_scrap
-		enhance_primary_button.text = "돌파 · x%s" % GameState.format_compact_number(gate_scrap)
+		enhance_primary_button.text = tr("돌파 · x%s") % GameState.format_compact_number(gate_scrap)
 		enhance_primary_button.icon = _resource_icon("scrap")
 		enhance_primary_button.add_theme_constant_override("icon_max_width", 22)
 		# CENTER 정렬은 센터 텍스트와 아이콘이 겹친다(실측) — 왼끝 고정이 칩처럼 읽힌다.
 		enhance_primary_button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		enhance_primary_button.tooltip_text = "돌파 · 고철 %s 소모" % GameState.format_compact_number(gate_scrap)
+		enhance_primary_button.tooltip_text = tr("돌파 · 고철 %s 소모") % GameState.format_compact_number(gate_scrap)
 		enhance_primary_button.disabled = false
 		_style_action_button(enhance_primary_button, "gate" if gate_ok else "gate_short")
-		enhance_max_button.text = "가능한 만큼"
+		enhance_max_button.text = tr("가능한 만큼")
 		enhance_max_button.disabled = true
 		return
 	primary_mode = "enhance"
 	enhance_primary_button.text = (
-		"강화 +1  [SPACE]\n길게 누르면 연타"
+		tr("강화 +1  [SPACE]\n길게 누르면 연타")
 		if level < max_level
-		else "최고 단계 +%d" % max_level
+		else tr("최고 단계 +%d") % max_level
 	)
 	enhance_primary_button.disabled = level >= max_level
 	_style_action_button(enhance_primary_button, "enhance")
-	enhance_max_button.text = "가능한 만큼"
+	enhance_max_button.text = tr("가능한 만큼")
 	enhance_max_button.disabled = level >= max_level
 
 
@@ -1802,7 +1811,7 @@ func _enhance_once(show_failure: bool, with_fx: bool) -> bool:
 		if after % GameState.BREAKTHROUGH_STEP == 0:
 			# 돌파는 고철 단독(그 단계 강화비 ×3) — 정확한 값을 미리 말한다.
 			var gate_scrap := int((GameState.get_breakthrough_cost(kind, gear_id) as Dictionary).get("scrap", 0))
-			_toast("%s +%d 달성! 다음은 돌파 — 고철 %s" % [_gear_short_name(kind, gear_id), after, GameState.format_compact_number(gate_scrap)])
+			_toast(tr("%s +%d 달성! 다음은 돌파 — 고철 %s") % [_gear_short_name(kind, gear_id), after, GameState.format_compact_number(gate_scrap)])
 	return true
 
 
@@ -1822,17 +1831,17 @@ func _enhance_as_much_as_possible() -> void:
 	_refresh_after_change()
 	var short_name := _gear_short_name(kind, gear_id)
 	var level := int(GameState.get_gear_enhancement_level(kind, gear_id))
-	var stop_reason := "돌파 관문에서 멈춤" if bool(GameState.is_breakthrough_required(kind, gear_id)) else _batch_stop_reason(kind, gear_id)
+	var stop_reason := tr("돌파 관문에서 멈춤") if bool(GameState.is_breakthrough_required(kind, gear_id)) else _batch_stop_reason(kind, gear_id)
 	if count > 0:
 		_play_enhance_fx(level)
-		_toast("%s +%d 강화 → +%d (%s)" % [short_name, count, level, stop_reason])
+		_toast(tr("%s +%d 강화 → +%d (%s)") % [short_name, count, level, stop_reason])
 	else:
-		_toast("더 올릴 수 없습니다 · %s" % stop_reason, DANGER)
+		_toast(tr("더 올릴 수 없습니다 · %s") % stop_reason, DANGER)
 
 
 func _batch_stop_reason(kind: String, gear_id: String) -> String:
 	var reason := _weapon_enhance_failure_reason(gear_id) if kind == "weapon" else _armor_enhance_failure_reason(gear_id)
-	return reason.trim_prefix("강화 불가 · ")
+	return reason.trim_prefix(tr("강화 불가 · "))
 
 
 func _breakthrough_selected() -> void:
@@ -1845,7 +1854,7 @@ func _breakthrough_selected() -> void:
 	var after := int(GameState.get_breakthrough_level_done(kind, gear_id))
 	if after > before:
 		_play_breakthrough_fx()
-		_toast("돌파 성공 · %s +%d의 벽을 넘었다 — 다음 강화가 열립니다" % [_gear_short_name(kind, gear_id), after])
+		_toast(tr("돌파 성공 · %s +%d의 벽을 넘었다 — 다음 강화가 열립니다") % [_gear_short_name(kind, gear_id), after])
 	else:
 		_toast(craft_feedback_text, DANGER)
 
@@ -1972,7 +1981,7 @@ func _build_recipe_list() -> Control:
 	for sub_value in CRAFT_SUBCATEGORIES:
 		var sub_id := str(sub_value)
 		var sub_button := Button.new()
-		sub_button.text = str(CRAFT_SUBCATEGORY_NAMES.get(sub_id, sub_id))
+		sub_button.text = tr(str(CRAFT_SUBCATEGORY_NAMES.get(sub_id, sub_id)))
 		sub_button.name = "WorkbenchCraftSubtab_%s" % sub_id
 		sub_button.toggle_mode = true
 		sub_button.button_pressed = craft_subcategory == sub_id
@@ -2078,20 +2087,20 @@ func _refresh_recipe_list() -> void:
 		var recipe: Dictionary = recipe_raw
 		if not heavy_divider_added and heavy_ids.has(str(recipe.get("id", ""))):
 			heavy_divider_added = true
-			var heavy_divider := SHELTER_THEME.caption("중장비 · 쓰면 부서진다")
+			var heavy_divider := SHELTER_THEME.caption(tr("중장비 · 쓰면 부서진다"))
 			heavy_divider.name = "WorkbenchHeavySection"
 			heavy_divider.autowrap_mode = TextServer.AUTOWRAP_OFF
 			recipe_list.add_child(heavy_divider)
 		if not supply_divider_added and supply_ids.has(str(recipe.get("id", ""))):
 			supply_divider_added = true
-			var divider := SHELTER_THEME.caption("보급품")
+			var divider := SHELTER_THEME.caption(tr("보급품"))
 			divider.name = "WorkbenchSupplySection"
 			divider.autowrap_mode = TextServer.AUTOWRAP_OFF
 			recipe_list.add_child(divider)
 		# 상태를 글자로만 말하면 목록을 한 줄씩 읽어야 한다. 색으로 먼저 말한다.
 		var state_color := _recipe_state_color(recipe)
 		var selected := str(recipe["id"]) == selected_recipe_id
-		var button := SHELTER_THEME.secondary_button("%s\n%s" % [str(recipe["name"]), _recipe_list_subtitle(recipe)])
+		var button := SHELTER_THEME.secondary_button("%s\n%s" % [tr(str(recipe["name"])), _recipe_list_subtitle(recipe)])
 		button.name = "WorkbenchRecipeRow_%s" % str(recipe["id"])
 		# 강화 보드의 장비 행과 같은 카드 문법 — 선택 행만 민트 2px 테두리.
 		var row_style := _row_style(selected)
@@ -2138,19 +2147,19 @@ func _refresh_detail_panel() -> void:
 		action_host = detail_action_bar
 	var recipe := _selected_recipe()
 	if recipe.is_empty():
-		detail_box.add_child(SHELTER_THEME.subtitle("선택된 설계도가 없습니다."))
+		detail_box.add_child(SHELTER_THEME.subtitle(tr("선택된 설계도가 없습니다.")))
 		return
 
 	# 강화 카드의 헤드와 같은 문법 — 굵은 큰 제목 + 회색 설명.
 	var head := VBoxContainer.new()
 	head.add_theme_constant_override("separation", 4)
 	detail_box.add_child(head)
-	var title := SHELTER_THEME.title(str(recipe["name"]), 22)
+	var title := SHELTER_THEME.title(tr(str(recipe["name"])), 22)
 	title.name = "WorkbenchRecipeTitle"
 	title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	head.add_child(title)
-	var description := SHELTER_THEME.subtitle(str(recipe.get("desc", "")))
+	var description := SHELTER_THEME.subtitle(tr(str(recipe.get("desc", ""))))
 	description.name = "WorkbenchRecipeDescription"
 	description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(description)
@@ -2179,7 +2188,7 @@ func _refresh_detail_panel() -> void:
 	icon_margin.add_child(icon_texture)
 	detail_box.add_child(icon_card)
 
-	detail_box.add_child(_section("필요 재료"))
+	detail_box.add_child(_section(tr("필요 재료")))
 	var cost_box := VBoxContainer.new()
 	cost_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cost_box.add_theme_constant_override("separation", 8)
@@ -2193,26 +2202,26 @@ func _refresh_detail_panel() -> void:
 		cost_box.add_child(_resource_row(str(key), owned, needed, color))
 	var required_tier := int(recipe.get("required_tier", 1))
 	if GameState.shelter_tier < required_tier:
-		cost_box.add_child(_label("쉘터 Tier %d에서 해금" % required_tier, 14, DANGER))
+		cost_box.add_child(_label(tr("쉘터 Tier %d에서 해금") % required_tier, 14, DANGER))
 	if bool((recipe.get("result", {}) as Dictionary).get("enhance", false)):
 		var detail_weapon_id := _enhance_weapon_id(recipe)
 		var level := GameState.get_weapon_enhancement_level(detail_weapon_id)
-		cost_box.add_child(_label("%s  +%d 에서 +%d" % [_gear_short_name("weapon", detail_weapon_id), level, mini(99, level + 1)], 14, TEXT))
+		cost_box.add_child(_label(tr("%s  +%d 에서 +%d") % [_gear_short_name("weapon", detail_weapon_id), level, mini(99, level + 1)], 14, TEXT))
 	if (recipe.get("result", {}) as Dictionary).has("enhance_armor"):
 		var armor_id := str((recipe.get("result", {}) as Dictionary)["enhance_armor"])
 		var armor_level := int(GameState.get_armor_enhancement_level(armor_id))
-		cost_box.add_child(_label("%s  +%d 에서 +%d · 효과 x%.2f" % [
+		cost_box.add_child(_label(tr("%s  +%d 에서 +%d · 효과 x%.2f") % [
 			_equipment_display_name(armor_id), armor_level, mini(99, armor_level + 1),
 			float(GameState.get_armor_enhancement_multiplier(armor_id)),
 		], 14, TEXT))
 	if (recipe.get("result", {}) as Dictionary).has("breakthrough"):
 		var target := (recipe.get("result", {}) as Dictionary)["breakthrough"] as Dictionary
-		cost_box.add_child(_label("돌파 단계 +%d · 완료한 돌파 +%d" % [
+		cost_box.add_child(_label(tr("돌파 단계 +%d · 완료한 돌파 +%d") % [
 			int(GameState.get_gear_enhancement_level(str(target.get("kind", "")), str(target.get("id", "")))),
 			int(GameState.get_breakthrough_level_done(str(target.get("kind", "")), str(target.get("id", "")))),
 		], 14, TEXT))
 	if _is_gear_recipe_owned(recipe):
-		cost_box.add_child(_label("제작됨 · 영구 보유 — 잃지 않으며 다시 만들 수 없습니다", 13, SHELTER_THEME.ACCENT))
+		cost_box.add_child(_label(tr("제작됨 · 영구 보유 — 잃지 않으며 다시 만들 수 없습니다"), 13, SHELTER_THEME.ACCENT))
 	elif not str(recipe.get("gear_id", "")).is_empty():
 		# 예전엔 회색 글자 한 줄("설계도 조각 0/3")이라 재료인지 안내문인지 몰랐고,
 		# 같은 말이 아래 잠긴 이유에 또 나왔다. 다른 재료와 같은 행으로 올린다.
@@ -2224,7 +2233,7 @@ func _refresh_detail_panel() -> void:
 			mini(shard_have, shard_need),
 			shard_need,
 			SHELTER_THEME.ACCENT if shard_have >= shard_need else DANGER,
-			"부서진 것 %d개를 긁어모아 쓸만한 하나를 조립합니다 · %s에서 나옵니다" % [
+			tr("부서진 것 %d개를 긁어모아 쓸만한 하나를 조립합니다 · %s에서 나옵니다") % [
 				shard_need, _blueprint_source_text(shard_gear_id),
 			]
 		))
@@ -2251,7 +2260,7 @@ func _refresh_detail_panel() -> void:
 		if not str(recipe.get("gear_id", "")).is_empty() and reason.begins_with("잔해"):
 			reason = ""
 		if not reason.is_empty():
-			var reason_label := SHELTER_THEME.label("잠긴 이유: %s" % reason, SHELTER_THEME.TYPE_CAPTION + 1, DANGER)
+			var reason_label := SHELTER_THEME.label(tr("잠긴 이유: %s") % reason, SHELTER_THEME.TYPE_CAPTION + 1, DANGER)
 			reason_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			reason_label.name = "WorkbenchBlockedReason"
 			action_host.add_child(reason_label)
@@ -2312,7 +2321,7 @@ func _recipes_for_category(category: String) -> Array:
 			var gear_id := str((heavy_recipe.get("result", {}) as Dictionary).get("heavy_gear", ""))
 			var definition := GameState.HEAVY_GEAR_DEFS.get(gear_id, {}) as Dictionary
 			if str(heavy_recipe.get("desc", "")).is_empty():
-				heavy_recipe["desc"] = "%s\n쓰면 부서지는 소모품 — 부품으로 다시 만든다. 필드에서 T로 선택해 사용." % str(definition.get("description", ""))
+				heavy_recipe["desc"] = tr("%s\n쓰면 부서지는 소모품 — 부품으로 다시 만든다. 필드에서 T로 선택해 사용.") % str(definition.get("description", ""))
 		return recipes
 	if category == "artisan":
 		# 돌파 행 — 장착 무기 + 장착 방어구 3슬롯. 데이터만(2단계 UI가 재구성).
@@ -2333,8 +2342,8 @@ func _recipes_for_category(category: String) -> Array:
 		var base_id := str(GameState.armor_enhancement_key(equipped_id))
 		recipes.append({
 			"id": "enhance_armor_%s" % base_id,
-			"name": "%s 영구 강화" % _equipment_display_name(base_id),
-			"desc": "장착 중인 방어구를 +99까지 영구 강화합니다. 피해 감소(신발은 이동·스태미나)가 수렴 곡선으로 오릅니다. +10·+20·…에서는 돌파가 필요합니다.",
+			"name": tr("%s 영구 강화") % _equipment_display_name(base_id),
+			"desc": tr("장착 중인 방어구를 +99까지 영구 강화합니다. 피해 감소(신발은 이동·스태미나)가 수렴 곡선으로 오릅니다. +10·+20·…에서는 돌파가 필요합니다."),
 			"cost": {},
 			"result": {"enhance_armor": base_id},
 		})
@@ -2344,8 +2353,8 @@ func _recipes_for_category(category: String) -> Array:
 			continue
 		recipes.append({
 			"id": "enhance_mod_%s" % mod_id,
-			"name": "%s 영구 강화" % str(definition.get("display_name", mod_id)),
-			"desc": "장착 파츠의 고유 보정치를 +99까지 영구 강화합니다.",
+			"name": tr("%s 영구 강화") % str(definition.get("display_name", mod_id)),
+			"desc": tr("장착 파츠의 고유 보정치를 +99까지 영구 강화합니다."),
 			"cost": {},
 			"result": {"enhance_mod": mod_id},
 		})
@@ -2357,8 +2366,8 @@ func _breakthrough_recipe(kind: String, item_id: String) -> Dictionary:
 	var display_name := _resource_name(item_id) if kind == "weapon" else _equipment_display_name(item_id)
 	return {
 		"id": "breakthrough_%s_%s" % [kind, item_id],
-		"name": "%s 돌파 (+%d)" % [display_name, level],
-		"desc": "고철을 크게 태워(그 단계 강화비 ×3) +10·+20·…·+90의 벽을 넘습니다. 돌파 전엔 그 단계에서 강화가 멈춥니다.",
+		"name": tr("%s 돌파 (+%d)") % [display_name, level],
+		"desc": tr("고철을 크게 태워(그 단계 강화비 ×3) +10·+20·…·+90의 벽을 넘습니다. 돌파 전엔 그 단계에서 강화가 멈춥니다."),
 		"cost": {},
 		"result": {"breakthrough": {"kind": kind, "id": item_id}},
 	}
@@ -2415,7 +2424,7 @@ func _craft(recipe: Dictionary) -> void:
 		# 조용한 return은 버튼 고장으로 읽힌다 — 못 만드는 이유를 그대로 말한다.
 		var blocked_reason := _recipe_list_subtitle(recipe)
 		_set_craft_feedback(
-			"제작 불가" if blocked_reason.is_empty() else "제작 불가 · %s" % blocked_reason
+			tr("제작 불가") if blocked_reason.is_empty() else tr("제작 불가 · %s") % blocked_reason
 		)
 		return
 	var result: Dictionary = recipe.get("result", {})
@@ -2423,13 +2432,13 @@ func _craft(recipe: Dictionary) -> void:
 		GameState.workbench_repair_active = true
 		GameState.workbench_repair_weapon_id = GameState.equipped_weapon_id
 		GameState.save_persistent_state()
-		_set_craft_feedback("정비 시작 — 다음 출정 복귀까지 수리됩니다")
+		_set_craft_feedback(tr("정비 시작 — 다음 출정 복귀까지 수리됩니다"))
 		_refresh_after_change()
 		return
 	if bool(result.get("workbench_upgrade", false)):
 		if GameState.try_upgrade_workbench():
 			GameState.save_persistent_state()
-			_set_craft_feedback("작업대 확장 완료 · Lv.%d" % GameState.shelter_workbench_level)
+			_set_craft_feedback(tr("작업대 확장 완료 · Lv.%d") % GameState.shelter_workbench_level)
 		else:
 			# 예전엔 실패하면 아무 말도 없어서 버튼이 고장 난 것처럼 읽혔다.
 			_set_craft_feedback(_workbench_upgrade_failure_reason())
@@ -2440,9 +2449,9 @@ func _craft(recipe: Dictionary) -> void:
 		var kind := str(target.get("kind", ""))
 		var target_id := str(target.get("id", ""))
 		if bool(GameState.try_breakthrough(kind, target_id)):
-			_set_craft_feedback("돌파 완료 · +%d의 벽을 넘었다 — 다음 강화가 열립니다" % int(GameState.get_gear_enhancement_level(kind, target_id)))
+			_set_craft_feedback(tr("돌파 완료 · +%d의 벽을 넘었다 — 다음 강화가 열립니다") % int(GameState.get_gear_enhancement_level(kind, target_id)))
 		else:
-			_set_craft_feedback("돌파 불가 · %s" % str(GameState.get_breakthrough_block_reason(kind, target_id)))
+			_set_craft_feedback(tr("돌파 불가 · %s") % str(GameState.get_breakthrough_block_reason(kind, target_id)))
 		_refresh_after_change()
 		return
 	if result.has("enhance_armor"):
@@ -2458,7 +2467,7 @@ func _craft(recipe: Dictionary) -> void:
 			for part_key in armor_parts:
 				_consume_resource(str(part_key), int(armor_parts[part_key]))
 			GameState.save_persistent_state()
-			_set_craft_feedback("강화 완료 · %s +%d" % [
+			_set_craft_feedback(tr("강화 완료 · %s +%d") % [
 				_equipment_display_name(base_id),
 				int(GameState.get_armor_enhancement_level(base_id)),
 			])
@@ -2483,7 +2492,7 @@ func _craft(recipe: Dictionary) -> void:
 			for part_key in enhance_parts:
 				_consume_resource(str(part_key), int(enhance_parts[part_key]))
 			GameState.save_persistent_state()
-			_set_craft_feedback("강화 완료 · %s +%d" % [
+			_set_craft_feedback(tr("강화 완료 · %s +%d") % [
 				_gear_short_name("weapon", enhance_weapon_id),
 				GameState.get_weapon_enhancement_level(enhance_weapon_id),
 			])
@@ -2494,7 +2503,7 @@ func _craft(recipe: Dictionary) -> void:
 	if result.has("enhance_mod"):
 		var enhance_mod_id := str(result["enhance_mod"])
 		if GameState.try_enhance_mod(enhance_mod_id):
-			_set_craft_feedback("파츠 강화 완료 · +%d" % GameState.get_mod_enhancement_level(enhance_mod_id))
+			_set_craft_feedback(tr("파츠 강화 완료 · +%d") % GameState.get_mod_enhancement_level(enhance_mod_id))
 		else:
 			_set_craft_feedback(_mod_enhance_failure_reason(enhance_mod_id))
 		_refresh_after_change()
@@ -2526,10 +2535,10 @@ func _craft(recipe: Dictionary) -> void:
 	if transfer_notice.is_empty():
 		transfer_notice = GameState.take_armor_enhancement_transfer_notice()
 	if transfer_notice.is_empty():
-		_set_craft_feedback("제작 완료 · %s" % str(recipe.get("name", "")))
+		_set_craft_feedback(tr("제작 완료 · %s") % tr(str(recipe.get("name", ""))))
 	else:
 		# 사다리 상위 무기 첫 제작 — 강화 이관 결과를 완료 문구에 붙인다.
-		_set_craft_feedback("제작 완료 · %s · %s" % [str(recipe.get("name", "")), transfer_notice])
+		_set_craft_feedback(tr("제작 완료 · %s · %s") % [tr(str(recipe.get("name", ""))), transfer_notice])
 	_refresh_after_change()
 
 
@@ -2542,7 +2551,7 @@ func _set_craft_feedback(message: String) -> void:
 # GameState의 try_* 는 bool만 돌려준다. "왜 안 됐는지"는 같은 조건을 여기서
 # 다시 읽어 만든다. 사유 없는 실패는 유저에게 버튼 고장으로 읽힌다.
 func _shortage_text(key: String, cost: int) -> String:
-	return "%s %s 부족" % [
+	return tr("%s %s 부족") % [
 		_resource_name(key),
 		GameState.format_compact_number(maxi(0, cost - _owned_resource(key))),
 	]
@@ -2550,13 +2559,13 @@ func _shortage_text(key: String, cost: int) -> String:
 
 func _workbench_upgrade_failure_reason() -> String:
 	if GameState.shelter_workbench_level >= 5:
-		return "작업대가 이미 최고 레벨(Lv.5)입니다."
+		return tr("작업대가 이미 최고 레벨(Lv.5)입니다.")
 	var cost := GameState.get_workbench_upgrade_cost()
 	for key in cost.keys():
 		var need := int(cost[key])
 		if _owned_resource(str(key)) < need:
-			return "작업대 확장 불가 · %s" % _shortage_text(str(key), need)
-	return "작업대를 지금 확장할 수 없습니다."
+			return tr("작업대 확장 불가 · %s") % _shortage_text(str(key), need)
+	return tr("작업대를 지금 확장할 수 없습니다.")
 
 
 func _enhance_weapon_id(recipe: Dictionary) -> String:
@@ -2568,47 +2577,47 @@ func _weapon_enhance_failure_reason(weapon_id: String = "") -> String:
 	if weapon_id.is_empty():
 		weapon_id = str(GameState.equipped_weapon_id)
 	if weapon_id.is_empty() or GameState.get_weapon_count(weapon_id) <= 0:
-		return "강화 불가 · 보유하지 않은 무기입니다."
+		return tr("강화 불가 · 보유하지 않은 무기입니다.")
 	if GameState.get_weapon_enhancement_level(weapon_id) >= GameState.MAX_WEAPON_ENHANCEMENT:
-		return "강화 불가 · 이미 최고 강화 단계입니다."
+		return tr("강화 불가 · 이미 최고 강화 단계입니다.")
 	if bool(GameState.is_breakthrough_required("weapon", weapon_id)):
-		return "강화 불가 · +%d 돌파 필요([돌파] 버튼 · 고철 ×3)" % GameState.get_weapon_enhancement_level(weapon_id)
+		return tr("강화 불가 · +%d 돌파 필요([돌파] 버튼 · 고철 ×3)") % GameState.get_weapon_enhancement_level(weapon_id)
 	var cost := GameState.get_weapon_enhancement_cost(weapon_id)
 	if GameState.scrap < cost:
-		return "강화 불가 · %s" % _shortage_text("scrap", cost)
+		return tr("강화 불가 · %s") % _shortage_text("scrap", cost)
 	var part_cost: Dictionary = GameState.get_weapon_enhancement_part_cost(weapon_id)
 	for part_key in part_cost:
 		if _owned_resource(str(part_key)) < int(part_cost[part_key]):
-			return "강화 불가 · %s (필드에서 구해 오는 부품)" % _shortage_text(str(part_key), int(part_cost[part_key]))
-	return "강화에 실패했습니다."
+			return tr("강화 불가 · %s (필드에서 구해 오는 부품)") % _shortage_text(str(part_key), int(part_cost[part_key]))
+	return tr("강화에 실패했습니다.")
 
 
 func _armor_enhance_failure_reason(base_id: String) -> String:
 	if not bool(GameState.is_armor_base_owned(base_id)):
-		return "강화 불가 · 보유하지 않은 방어구입니다."
+		return tr("강화 불가 · 보유하지 않은 방어구입니다.")
 	if GameState.get_armor_enhancement_level(base_id) >= GameState.MAX_ARMOR_ENHANCEMENT:
-		return "강화 불가 · 이미 최고 강화 단계입니다."
+		return tr("강화 불가 · 이미 최고 강화 단계입니다.")
 	if bool(GameState.is_breakthrough_required("armor", base_id)):
-		return "강화 불가 · +%d 돌파 필요([돌파] 버튼 · 고철 ×3)" % GameState.get_armor_enhancement_level(base_id)
+		return tr("강화 불가 · +%d 돌파 필요([돌파] 버튼 · 고철 ×3)") % GameState.get_armor_enhancement_level(base_id)
 	var cost := int(GameState.get_armor_enhancement_cost(base_id))
 	if GameState.scrap < cost:
-		return "강화 불가 · %s" % _shortage_text("scrap", cost)
+		return tr("강화 불가 · %s") % _shortage_text("scrap", cost)
 	var part_cost: Dictionary = GameState.get_armor_enhancement_part_cost(base_id)
 	for part_key in part_cost:
 		if _owned_resource(str(part_key)) < int(part_cost[part_key]):
-			return "강화 불가 · %s (필드에서 구해 오는 부품)" % _shortage_text(str(part_key), int(part_cost[part_key]))
-	return "강화에 실패했습니다."
+			return tr("강화 불가 · %s (필드에서 구해 오는 부품)") % _shortage_text(str(part_key), int(part_cost[part_key]))
+	return tr("강화에 실패했습니다.")
 
 
 func _mod_enhance_failure_reason(mod_id: String) -> String:
 	if not GameState.equipped_weapon_mods.has(mod_id):
-		return "파츠 강화 불가 · 해당 부착물을 장착하지 않았습니다."
+		return tr("파츠 강화 불가 · 해당 부착물을 장착하지 않았습니다.")
 	if GameState.get_mod_enhancement_level(mod_id) >= GameState.MAX_WEAPON_ENHANCEMENT:
-		return "파츠 강화 불가 · 이미 최고 강화 단계입니다."
+		return tr("파츠 강화 불가 · 이미 최고 강화 단계입니다.")
 	var cost := GameState.get_mod_enhancement_cost(mod_id)
 	if GameState.scrap < cost:
-		return "파츠 강화 불가 · %s" % _shortage_text("scrap", cost)
-	return "파츠 강화에 실패했습니다."
+		return tr("파츠 강화 불가 · %s") % _shortage_text("scrap", cost)
+	return tr("파츠 강화에 실패했습니다.")
 
 
 func _largest_shortage_text(recipe: Dictionary) -> String:
@@ -2624,7 +2633,7 @@ func _largest_shortage_text(recipe: Dictionary) -> String:
 			worst_key = str(key)
 	if worst_key.is_empty():
 		return ""
-	return "%s %s 부족" % [
+	return tr("%s %s 부족") % [
 		_resource_name(worst_key), GameState.format_compact_number(worst_gap)
 	]
 
@@ -2632,7 +2641,7 @@ func _largest_shortage_text(recipe: Dictionary) -> String:
 func _blueprint_hint_text(recipe_id: String) -> String:
 	# 설계도 조각이 어디서 나오는지까지 말해 준다 — 조각은 그 존 가족의 엘리트·보스·
 	# 봉인 상자·일반 적(소량)에서 나온다. 모르면 영원히 잠긴 줄로 읽힌다.
-	return "%s · %s에서 나옵니다" % [str(GameState.get_blueprint_progress_text(recipe_id)), _blueprint_source_text(recipe_id)]
+	return tr("%s · %s에서 나옵니다") % [str(GameState.get_blueprint_progress_text(recipe_id)), _blueprint_source_text(recipe_id)]
 
 
 func _blueprint_source_text(recipe_id: String) -> String:
@@ -2649,10 +2658,10 @@ func _blueprint_source_text(recipe_id: String) -> String:
 	var mission_source: Dictionary = SHELTER_REQUISITION.get_key_item_source(
 		LOOT_ECONOMY.blueprint_shard_item_id(recipe_id)
 	)
-	var source := "%s 엘리트·보스·봉인 상자" % zone_name if not zone_name.is_empty() else "엘리트·보스·봉인 상자"
+	var source := tr("%s 엘리트·보스·봉인 상자") % zone_name if not zone_name.is_empty() else tr("엘리트·보스·봉인 상자")
 	if not mission_source.is_empty():
 		var mission_zone := str(GameState.get_raid_zone(str(mission_source.get("zone_id", ""))).get("name", ""))
-		source += " · %s 메인 미션 %d단계" % [mission_zone, int(mission_source.get("stage_index", 0)) + 1]
+		source += tr(" · %s 메인 미션 %d단계") % [mission_zone, int(mission_source.get("stage_index", 0)) + 1]
 	return source
 
 
@@ -2802,59 +2811,59 @@ func _recipe_state_color(recipe: Dictionary) -> Color:
 func _recipe_list_subtitle(recipe: Dictionary) -> String:
 	var gear_id := str(recipe.get("gear_id", ""))
 	if _is_gear_recipe_owned(recipe):
-		return "제작됨 · 영구 보유"
+		return tr("제작됨 · 영구 보유")
 	if not _has_required_blueprint(recipe):
 		# "설계도 조각 n/3 · <존> 엘리트·보스·봉인 상자에서 나옵니다" — 조각 수와 출처만, 접두사 중복 없이.
 		return _blueprint_hint_text(gear_id)
 	var required_tier := int(recipe.get("required_tier", 1))
 	if GameState.shelter_tier < required_tier:
-		return "쉘터 Tier %d 필요" % required_tier
+		return tr("쉘터 Tier %d 필요") % required_tier
 	var required_workbench := int(recipe.get("required_workbench", 1))
 	if GameState.shelter_workbench_level < required_workbench:
-		return "작업대 Lv.%d 필요" % required_workbench
+		return tr("작업대 Lv.%d 필요") % required_workbench
 	var result := recipe.get("result", {}) as Dictionary
 	if bool(result.get("auto_repair", false)):
 		if GameState.workbench_repair_active:
-			return "수리 진행 중"
-		return "수리 가능" if GameState.weapon_durability < 100.0 else "수리 불필요"
+			return tr("수리 진행 중")
+		return tr("수리 가능") if GameState.weapon_durability < 100.0 else tr("수리 불필요")
 	# 강화 계열은 재료가 아니라 단계 상한·돌파에 걸리는 경우가 따로 있다.
 	if bool(result.get("enhance", false)):
 		var subtitle_weapon_id := _enhance_weapon_id(recipe)
 		if subtitle_weapon_id.is_empty() or GameState.get_weapon_count(subtitle_weapon_id) <= 0:
-			return "보유한 무기 없음"
+			return tr("보유한 무기 없음")
 		if GameState.get_weapon_enhancement_level(subtitle_weapon_id) >= GameState.MAX_WEAPON_ENHANCEMENT:
-			return "최고 강화 단계"
+			return tr("최고 강화 단계")
 		if bool(GameState.is_breakthrough_required("weapon", subtitle_weapon_id)):
-			return "돌파 필요 · 강화 보드 [돌파]"
+			return tr("돌파 필요 · 강화 보드 [돌파]")
 	if result.has("enhance_armor"):
 		var base_id := str(result["enhance_armor"])
 		if GameState.get_armor_enhancement_level(base_id) >= GameState.MAX_ARMOR_ENHANCEMENT:
-			return "최고 강화 단계"
+			return tr("최고 강화 단계")
 		if bool(GameState.is_breakthrough_required("armor", base_id)):
-			return "돌파 필요 · 강화 보드 [돌파]"
+			return tr("돌파 필요 · 강화 보드 [돌파]")
 	if result.has("breakthrough"):
 		var target := result["breakthrough"] as Dictionary
 		var kind := str(target.get("kind", ""))
 		var target_id := str(target.get("id", ""))
 		if not bool(GameState.is_breakthrough_required(kind, target_id)):
-			return "돌파 단계 아님 · 현재 +%d (다음 돌파 +%d)" % [
+			return tr("돌파 단계 아님 · 현재 +%d (다음 돌파 +%d)") % [
 				int(GameState.get_gear_enhancement_level(kind, target_id)),
 				(int(GameState.get_gear_enhancement_level(kind, target_id)) / GameState.BREAKTHROUGH_STEP + 1) * GameState.BREAKTHROUGH_STEP,
 			]
 		var block := str(GameState.get_breakthrough_block_reason(kind, target_id))
-		return "돌파 가능" if block.is_empty() else block
+		return tr("돌파 가능") if block.is_empty() else block
 	if result.has("enhance_mod"):
 		var subtitle_mod_id := str(result["enhance_mod"])
 		if not GameState.equipped_weapon_mods.has(subtitle_mod_id):
-			return "해당 부착물 미장착"
+			return tr("해당 부착물 미장착")
 		if GameState.get_mod_enhancement_level(subtitle_mod_id) >= GameState.MAX_WEAPON_ENHANCEMENT:
-			return "최고 강화 단계"
+			return tr("최고 강화 단계")
 	# "재료 부족"에는 가장 많이 모자란 재료 하나를 병기한다.
 	var shortage := _largest_shortage_text(recipe)
-	var short_label := "재료 부족" if shortage.is_empty() else "재료 부족 · %s" % shortage
+	var short_label := tr("재료 부족") if shortage.is_empty() else tr("재료 부족 · %s") % shortage
 	if bool(result.get("workbench_upgrade", false)):
-		return "최고 레벨" if GameState.shelter_workbench_level >= 5 else ("확장 가능" if _can_craft(recipe) else short_label)
-	return "제작 가능" if _can_craft(recipe) else short_label
+		return tr("최고 레벨") if GameState.shelter_workbench_level >= 5 else (tr("확장 가능") if _can_craft(recipe) else short_label)
+	return tr("제작 가능") if _can_craft(recipe) else short_label
 
 
 func _result_text(recipe: Dictionary) -> String:
@@ -2879,27 +2888,27 @@ func _result_text(recipe: Dictionary) -> String:
 	if result.has("heavy_gear"):
 		var heavy_id := str(result["heavy_gear"])
 		var heavy_definition := GameState.HEAVY_GEAR_DEFS.get(heavy_id, {}) as Dictionary
-		return "%s x%d" % [str(heavy_definition.get("name", heavy_id)), int(result.get("amount", 1))]
+		return "%s x%d" % [tr(str(heavy_definition.get("name", heavy_id))), int(result.get("amount", 1))]
 	if result.has("canned_food"):
-		return "통조림 x%d" % int(result["canned_food"])
+		return tr("통조림 x%d") % int(result["canned_food"])
 	if result.has("repair"):
-		return "내구도 +%d%%" % int(result["repair"])
+		return tr("내구도 +%d%%") % int(result["repair"])
 	if bool(result.get("auto_repair", false)):
 		return (
-			"수리 진행 중 · 시간당 %.0f%%"
+			tr("수리 진행 중 · 시간당 %.0f%%")
 			% GameState.get_workbench_repair_per_hour()
 			if GameState.workbench_repair_active
-			else "시간당 내구도 %.0f%% 회복" % GameState.get_workbench_repair_per_hour()
+			else tr("시간당 내구도 %.0f%% 회복") % GameState.get_workbench_repair_per_hour()
 		)
 	if bool(result.get("workbench_upgrade", false)):
 		return (
-			"최고 레벨"
+			tr("최고 레벨")
 			if GameState.shelter_workbench_level >= 5
-			else "작업대 Lv.%d" % (GameState.shelter_workbench_level + 1)
+			else tr("작업대 Lv.%d") % (GameState.shelter_workbench_level + 1)
 		)
 	if result.has("breakthrough"):
 		var target := result["breakthrough"] as Dictionary
-		return "+%d 돌파 → 다음 강화 해금" % int(GameState.get_gear_enhancement_level(str(target.get("kind", "")), str(target.get("id", ""))))
+		return tr("+%d 돌파 → 다음 강화 해금") % int(GameState.get_gear_enhancement_level(str(target.get("kind", "")), str(target.get("id", ""))))
 	if result.has("enhance_armor"):
 		var base_id := str(result["enhance_armor"])
 		return "%s +%d" % [_equipment_display_name(base_id), GameState.get_armor_enhancement_level(base_id) + 1]
@@ -2962,10 +2971,10 @@ func _recipe_icon(recipe: Dictionary) -> Texture2D:
 func _craft_action_text(recipe: Dictionary) -> String:
 	var result := recipe.get("result", {}) as Dictionary
 	if bool(result.get("auto_repair", false)):
-		return "수리 진행 중" if GameState.workbench_repair_active else "자동 수리 맡기기"
+		return tr("수리 진행 중") if GameState.workbench_repair_active else tr("자동 수리 맡기기")
 	if bool(result.get("workbench_upgrade", false)):
-		return "최고 레벨" if GameState.shelter_workbench_level >= 5 else "시설 업그레이드"
-	return "제작"
+		return tr("최고 레벨") if GameState.shelter_workbench_level >= 5 else tr("시설 업그레이드")
+	return tr("제작")
 
 
 func _craft_action_icon(recipe: Dictionary) -> String:
@@ -3056,7 +3065,7 @@ func _resource_row(key: String, owned: int, needed: int, color: Color, note: Str
 	var stored := _stored_resource(key)
 	if stored > 0:
 		var source_label := SHELTER_THEME.caption(
-			"가방 %s + 창고 %s" % [
+			tr("가방 %s + 창고 %s") % [
 				GameState.format_compact_number(_bag_resource(key)),
 				GameState.format_compact_number(stored),
 			],
@@ -3103,16 +3112,16 @@ func _equipment_stat_line(equipment_id: String) -> String:
 		return ""
 	var parts: PackedStringArray = []
 	if definition.has("damage_reduction"):
-		parts.append("피해감소 %d%%" % roundi(float(definition["damage_reduction"]) * 100.0))
+		parts.append(tr("피해감소 %d%%") % roundi(float(definition["damage_reduction"]) * 100.0))
 	if definition.has("move_speed_bonus"):
-		parts.append("이동 +%d%%" % roundi(float(definition["move_speed_bonus"]) * 100.0))
+		parts.append(tr("이동 +%d%%") % roundi(float(definition["move_speed_bonus"]) * 100.0))
 	if definition.has("stamina_cost_multiplier"):
 		parts.append(
-			"스태미나 소모 -%d%%"
+			tr("스태미나 소모 -%d%%")
 			% roundi((1.0 - float(definition["stamina_cost_multiplier"])) * 100.0)
 		)
 	if definition.has("visibility_multiplier"):
-		parts.append("피탐지 +%d%%" % roundi((float(definition["visibility_multiplier"]) - 1.0) * 100.0))
+		parts.append(tr("피탐지 +%d%%") % roundi((float(definition["visibility_multiplier"]) - 1.0) * 100.0))
 	return " · ".join(parts)
 
 
@@ -3134,9 +3143,9 @@ func _enhancement_transfer_preview(weapon_id: String) -> String:
 			from_level = level
 			from_id = candidate_id
 	if from_id.is_empty():
-		return "첫 제작 시 하위 무기 강화 60% 이관"
+		return tr("첫 제작 시 하위 무기 강화 60% 이관")
 	var transferred := int(floor(float(from_level) * WeaponSystem.ENHANCEMENT_TRANSFER_RATIO))
-	return "첫 제작 시 %s +%d → %s +%d (강화 60%% 이관)" % [
+	return tr("첫 제작 시 %s +%d → %s +%d (강화 60%% 이관)") % [
 		_resource_name(from_id).split(" ")[0], from_level, _resource_name(weapon_id).split(" ")[0], transferred,
 	]
 
@@ -3150,7 +3159,7 @@ func _result_stat_line(recipe: Dictionary) -> String:
 		if weapon.is_empty():
 			return ""
 		var interval := maxf(0.01, float(weapon.get("fire_interval", 0.2)))
-		var line := "피해 %d · 탄창 %d · 연사 %.1f/s" % [
+		var line := tr("피해 %d · 탄창 %d · 연사 %.1f/s") % [
 			int(weapon.get("damage", 0)),
 			int(weapon.get("magazine_size", 0)),
 			1.0 / interval,
@@ -3164,9 +3173,9 @@ func _result_stat_line(recipe: Dictionary) -> String:
 		return str(mod.get("slot", "")).to_upper() if not mod.is_empty() else ""
 	if result.has("heavy_gear"):
 		var heavy_id := str(result["heavy_gear"])
-		var line := "현재 보유 x%d" % GameState.get_heavy_gear_count(heavy_id)
+		var line := tr("현재 보유 x%d") % GameState.get_heavy_gear_count(heavy_id)
 		if heavy_id == "rocket_launcher":
-			line += " · 3발 쏘면 소멸"
+			line += tr(" · 3발 쏘면 소멸")
 		return line
 	return ""
 
@@ -3174,45 +3183,45 @@ func _result_stat_line(recipe: Dictionary) -> String:
 func _resource_name(key: String) -> String:
 	match key:
 		"blueprint_shard":
-			return "잔해"
+			return tr("잔해")
 		"scrap":
-			return "고철"
+			return tr("고철")
 		"catnip":
-			return "캣닢"
+			return tr("캣닢")
 		"scope_lens":
-			return "스코프 렌즈"
+			return tr("스코프 렌즈")
 		"rubber_gasket":
-			return "고무 패킹"
+			return tr("고무 패킹")
 		"magazine_spring":
-			return "탄창 스프링"
+			return tr("탄창 스프링")
 		"precision_gear":
-			return "정밀 기어"
+			return tr("정밀 기어")
 		"military_alloy":
-			return "군용 합금"
+			return tr("군용 합금")
 		"artisan_seal":
-			return "장인의 인장"
+			return tr("장인의 인장")
 		"762_fmj":
-			return "7.62mm 보통탄"
+			return tr("7.62mm 보통탄")
 		"9mm_fmj":
-			return "9mm 보통탄"
+			return tr("9mm 보통탄")
 		"12g_buckshot":
-			return "12게이지 벅샷"
+			return tr("12게이지 벅샷")
 		"m1911":
-			return "M1911 솜방망이"
+			return tr("M1911 솜방망이")
 		"mp5":
-			return "MP5 하악이"
+			return tr("MP5 하악이")
 		"ak47":
-			return "AK-47 캣라시니코프"
+			return tr("AK-47 캣라시니코프")
 		"double_barrel":
-			return "더블배럴 참치 헌터"
+			return tr("더블배럴 참치 헌터")
 		"akm":
-			return "AKM 개조형"
+			return tr("AKM 개조형")
 		"pump_shotgun":
-			return "펌프 산탄총 하울러"
+			return tr("펌프 산탄총 하울러")
 		"k2":
-			return "K2 전투소총"
+			return tr("K2 전투소총")
 		"canned_food":
-			return "통조림"
+			return tr("통조림")
 	# 방어구 ID는 장비 정의가 이름을 안다(레벨 접미사까지 해석한다).
 	var equipment_definition: Dictionary = GameState.get_equipment_definition(key)
 	if not equipment_definition.is_empty():
@@ -3238,7 +3247,7 @@ func _close_button() -> Button:
 	# 둥근 40px 닫기(공용 빌더) — 이름 짓기 화면과 같은 언어.
 	var button := SHELTER_THEME.close_button()
 	button.name = "CloseButton"
-	button.tooltip_text = "닫기"
+	button.tooltip_text = tr("닫기")
 	return button
 
 

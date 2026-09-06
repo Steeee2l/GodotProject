@@ -37,7 +37,7 @@ func _ready() -> void:
 
 
 func get_interaction_prompt() -> String:
-	return "훈련장 · 통조림으로 능력치 강화"
+	return tr("훈련장 · 통조림으로 능력치 강화")
 
 
 func get_interaction_radius() -> float:
@@ -46,7 +46,7 @@ func get_interaction_radius() -> float:
 
 func interact() -> String:
 	_open_ui()
-	return "통조림을 소비해 플레이어 능력을 영구 강화합니다."
+	return tr("통조림을 소비해 플레이어 능력을 영구 강화합니다.")
 
 
 func set_interaction_focus(value: bool) -> void:
@@ -141,10 +141,10 @@ func _rebuild_ui() -> void:
 		if is_instance_valid(ui_layer):
 			ui_layer.queue_free()
 	var header := SHELTER_THEME.modal_header(
-		"영구 강화",
-		"출정에서 모아 온 통조림을 소비해 능력을 영구히 올립니다.",
+		tr("영구 강화"),
+		tr("출정에서 모아 온 통조림을 소비해 능력을 영구히 올립니다."),
 		on_close,
-		"훈련장"
+		tr("훈련장")
 	)
 	header.name = "TrainingHeader"
 	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -166,7 +166,7 @@ func _rebuild_ui() -> void:
 	close.text = ""
 	close.icon = UI_ICONS.get_icon("close", 20, SHELTER_THEME.TEXT)
 	close.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	close.tooltip_text = "닫기"
+	close.tooltip_text = tr("닫기")
 
 	var summary := GridContainer.new()
 	summary.columns = 2 if narrow_layout or compact_layout else 4
@@ -174,12 +174,12 @@ func _rebuild_ui() -> void:
 	summary.add_theme_constant_override("h_separation", 10)
 	summary.add_theme_constant_override("v_separation", 10)
 	content.add_child(summary)
-	_add_summary_chip(summary, "health", "최대 체력", "%d" % GameState.get_max_health(), SUMMARY_ICON_COLORS["health"])
-	_add_summary_chip(summary, "stamina", "스태미나", "%d" % roundi(GameState.get_max_stamina()), SUMMARY_ICON_COLORS["stamina"])
-	_add_summary_chip(summary, "speed", "이동 배율", "x%.2f" % GameState.get_move_speed_multiplier(), SUMMARY_ICON_COLORS["speed"])
-	_add_summary_chip(summary, "fitness", "반동 제어", "x%.2f" % GameState.get_recoil_control_multiplier(), SUMMARY_ICON_COLORS["fitness"])
+	_add_summary_chip(summary, "health", tr("최대 체력"), "%d" % GameState.get_max_health(), SUMMARY_ICON_COLORS["health"])
+	_add_summary_chip(summary, "stamina", tr("스태미나"), "%d" % roundi(GameState.get_max_stamina()), SUMMARY_ICON_COLORS["stamina"])
+	_add_summary_chip(summary, "speed", tr("이동 배율"), "x%.2f" % GameState.get_move_speed_multiplier(), SUMMARY_ICON_COLORS["speed"])
+	_add_summary_chip(summary, "fitness", tr("반동 제어"), "x%.2f" % GameState.get_recoil_control_multiplier(), SUMMARY_ICON_COLORS["fitness"])
 
-	var section_hint := SHELTER_THEME.caption("카드를 눌러 즉시 훈련")
+	var section_hint := SHELTER_THEME.caption(tr("카드를 눌러 즉시 훈련"))
 	section_hint.name = "TrainingSectionHint"
 	section_hint.custom_minimum_size = Vector2(150, 0)
 	section_hint.size_flags_horizontal = Control.SIZE_SHRINK_END
@@ -187,7 +187,7 @@ func _rebuild_ui() -> void:
 	section_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	section_hint.autowrap_mode = TextServer.AUTOWRAP_OFF
 	section_hint.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	var section_row := SHELTER_THEME.section_header("훈련 과목", section_hint)
+	var section_row := SHELTER_THEME.section_header(tr("훈련 과목"), section_hint)
 	content.add_child(section_row)
 	var scroll := SHELTER_THEME.scroll()
 	scroll.name = "TrainingTreeScroll"
@@ -337,12 +337,12 @@ func _add_training_card(parent: GridContainer, node_id: String) -> void:
 	action_row.add_theme_constant_override("separation", 6)
 	details.add_child(action_row)
 	if maxed:
-		var done := SHELTER_THEME.caption("최고 단계", SHELTER_THEME.ACCENT)
+		var done := SHELTER_THEME.caption(tr("최고 단계"), SHELTER_THEME.ACCENT)
 		done.name = "Action"
 		action_row.add_child(done)
 	elif not requirements_met:
 		var locked := SHELTER_THEME.caption(
-			"선행 필요 · %s" % _training_requirement_text(definition),
+			tr("선행 필요 · %s") % _training_requirement_text(definition),
 			SHELTER_THEME.TEXT_FAINT
 		)
 		locked.name = "Action"
@@ -362,7 +362,7 @@ func _add_training_card(parent: GridContainer, node_id: String) -> void:
 			action_label.add_theme_color_override("font_color", SHELTER_THEME.DANGER)
 		action_row.add_child(cost_chip)
 	# 재화 이름은 화면에서 뺐으니 카드 툴팁이 대신 말한다.
-	card.tooltip_text = "%s · 훈련 비용 통조림 %s개 (보유 %s)" % [
+	card.tooltip_text = tr("%s · 훈련 비용 통조림 %s개 (보유 %s)") % [
 		str(definition.get("title", node_id)),
 		GameState.format_compact_number(cost),
 		GameState.format_compact_number(GameState.shelter_canned_food),
@@ -384,18 +384,18 @@ func _training_description_text(node_id: String, definition: Dictionary) -> Stri
 			var base := int(stats.get("base_magazine_size", 0))
 			var now := int(stats.get("magazine_size", base))
 			if base > 0:
-				text += " · 현재 장탄 %d → %d" % [base, now]
+				text += tr(" · 현재 장탄 %d → %d") % [base, now]
 		"quick_hands":
 			var base := float(stats.get("base_reload_time", 0.0))
 			var now := float(stats.get("reload_time", base))
 			if base > 0.0:
-				text += " · 현재 장전 %.2fs → %.2fs" % [base, now]
+				text += tr(" · 현재 장전 %.2fs → %.2fs") % [base, now]
 		"ammo_carry":
-			text += " · 현재 줍는 탄약 x%.2f" % GameState.get_ammo_pickup_multiplier()
+			text += tr(" · 현재 줍는 탄약 x%.2f") % GameState.get_ammo_pickup_multiplier()
 		"sortie_supply":
 			var magazine := int(stats.get("magazine_size", 0))
 			if magazine > 0:
-				text += " · 현재 %d탄창(%d발)" % [rank, rank * magazine]
+				text += tr(" · 현재 %d탄창(%d발)") % [rank, rank * magazine]
 	return text
 
 
@@ -405,12 +405,12 @@ func _training_requirement_text(definition: Dictionary) -> String:
 	for required_id in requirements.keys():
 		var required_definition := GameState.get_training_definition(str(required_id))
 		labels.append(
-			"%s %d단계" % [
+			tr("%s %d단계") % [
 				str(required_definition.get("title", required_id)),
 				int(requirements[required_id]),
 			]
 		)
-	return " · ".join(labels) if not labels.is_empty() else "기초 훈련"
+	return " · ".join(labels) if not labels.is_empty() else tr("기초 훈련")
 
 
 func _set_mouse_passthrough(control: Control) -> void:
@@ -427,7 +427,7 @@ func _upgrade_training(node_id: String) -> void:
 	if bool(result.get("ok", false)):
 		# 성공도 조용하면 통조림만 줄어든 것처럼 보인다. 무엇이 몇 단계가 됐는지 남긴다.
 		_set_status(
-			"%s %d단계 훈련 완료 · 통조림 -%s" % [
+			tr("%s %d단계 훈련 완료 · 통조림 -%s") % [
 				title,
 				int(result.get("rank", 0)),
 				GameState.format_compact_number(int(result.get("cost", 0))),
@@ -441,19 +441,19 @@ func _upgrade_training(node_id: String) -> void:
 	match str(result.get("reason", "")):
 		"canned_food":
 			var short: int = maxi(0, int(result.get("cost", 0)) - GameState.shelter_canned_food)
-			_set_status("통조림이 %s개 부족합니다. (필요 %s개)" % [
+			_set_status(tr("통조림이 %s개 부족합니다. (필요 %s개)") % [
 				GameState.format_compact_number(short),
 				GameState.format_compact_number(int(result.get("cost", 0))),
 			], false)
 		"prerequisite":
 			_set_status(
-				"선행 훈련이 필요합니다 · %s" % _training_requirement_text(definition),
+				tr("선행 훈련이 필요합니다 · %s") % _training_requirement_text(definition),
 				false
 			)
 		"max_rank":
-			_set_status("%s 훈련은 이미 최대 단계입니다." % title, false)
+			_set_status(tr("%s 훈련은 이미 최대 단계입니다.") % title, false)
 		_:
-			_set_status("훈련 정보를 찾을 수 없습니다.", false)
+			_set_status(tr("훈련 정보를 찾을 수 없습니다."), false)
 
 
 func _set_status(message: String, success: bool) -> void:

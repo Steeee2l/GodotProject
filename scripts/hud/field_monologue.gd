@@ -183,11 +183,11 @@ func _ensure_panel() -> void:
 	var keycap := PanelContainer.new()
 	keycap.add_theme_stylebox_override("panel", HudStyle.keycap())
 	keycap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var keycap_label := HudStyle.label("클릭", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT, true)
+	var keycap_label := HudStyle.label(tr("클릭"), HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT, true)
 	keycap_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	keycap.add_child(keycap_label)
 	hint_row.add_child(keycap)
-	var hint_label := HudStyle.label("빨리 넘기기", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_FAINT)
+	var hint_label := HudStyle.label(tr("빨리 넘기기"), HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_FAINT)
 	hint_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hint_row.add_child(hint_label)

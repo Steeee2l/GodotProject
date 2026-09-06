@@ -88,7 +88,7 @@ func _ready() -> void:
 
 
 func get_interaction_prompt() -> String:
-	return "창고 · 전리품 보관/판매"
+	return tr("창고 · 전리품 보관/판매")
 
 
 func get_interaction_radius() -> float:
@@ -97,7 +97,7 @@ func get_interaction_radius() -> float:
 
 func interact() -> String:
 	_open_ui()
-	return "창고를 열었습니다."
+	return tr("창고를 열었습니다.")
 
 
 func set_interaction_focus(value: bool) -> void:
@@ -189,10 +189,10 @@ func _rebuild_ui() -> void:
 	var compact := viewport_size.y < 680.0
 	# 헤더: 민트 이름표 / 굵은 제목 / 회색 설명 ······ [고철·츄르 칩] [둥근 닫기]
 	var header := SHELTER_THEME.modal_header(
-		"쉘터 창고",
-		"Lv.%d · 가방과 창고 사이에서 장비를 옮깁니다." % GameState.storage_level,
+		tr("쉘터 창고"),
+		tr("Lv.%d · 가방과 창고 사이에서 장비를 옮깁니다.") % GameState.storage_level,
 		_close_ui,
-		"창고"
+		tr("창고")
 	)
 	header.name = "StorageHeader"
 	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -213,13 +213,13 @@ func _rebuild_ui() -> void:
 	close.text = ""
 	close.icon = UI_ICONS.get_icon("close", 20, SHELTER_THEME.TEXT)
 	close.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	close.tooltip_text = "닫기"
+	close.tooltip_text = tr("닫기")
 
 	# 귀중품은 쓸 데가 없다. 여기가 유일한 출구다.
 	var valuable_total: int = GameState.get_valuable_total_value()
 	if valuable_total > 0:
 		var sell := SHELTER_THEME.secondary_button(
-			"귀중품 전부 팔기 · 고철 +%s" % GameState.format_compact_number(valuable_total),
+			tr("귀중품 전부 팔기 · 고철 +%s") % GameState.format_compact_number(valuable_total),
 			true
 		)
 		sell.name = "SellValuablesButton"
@@ -233,7 +233,7 @@ func _rebuild_ui() -> void:
 	summary.add_theme_constant_override("v_separation", 10)
 	content.add_child(summary)
 	summary.add_child(_summary_card(
-		"사용 슬롯",
+		tr("사용 슬롯"),
 		"%d / %d" % [GameState.get_storage_used_slots(), GameState.get_storage_capacity()],
 		"loot"
 	))
@@ -278,8 +278,8 @@ func _build_backpack_panel(narrow: bool, list_height: float) -> Control:
 		backpack_count += int(entry.get("count", 0))
 	# 예전엔 가운데 스페이서가 EXPAND_FILL로 남는 폭을 다 먹어, 양옆 라벨이
 	# 폭 1px로 찌그러지고 ELLIPSIS 때문에 글자가 통째로 사라졌다.
-	title_row.add_child(_section_title("가방"))
-	title_row.add_child(_section_value("%d개" % backpack_count, 56.0))
+	title_row.add_child(_section_title(tr("가방")))
+	title_row.add_child(_section_value(tr("%d개") % backpack_count, 56.0))
 
 	var scroll := SHELTER_THEME.scroll()
 	scroll.name = "BackpackItemScroll"
@@ -294,7 +294,7 @@ func _build_backpack_panel(narrow: bool, list_height: float) -> Control:
 	scroll.add_child(list)
 	var entries := _get_backpack_entries()
 	if entries.is_empty():
-		var empty := _label("보관 가능한 소지품이 없습니다.", SHELTER_THEME.TYPE_BODY - 1, SHELTER_THEME.TEXT_FAINT)
+		var empty := _label(tr("보관 가능한 소지품이 없습니다."), SHELTER_THEME.TYPE_BODY - 1, SHELTER_THEME.TEXT_FAINT)
 		empty.custom_minimum_size.y = 72
 		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		empty.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -320,9 +320,9 @@ func _build_storage_panel(narrow: bool, compact: bool, list_height: float) -> Co
 	title_row.add_theme_constant_override("separation", 8)
 	box.add_child(title_row)
 	# 스페이서가 폭을 다 먹어 "창고"/"0 / 30 슬롯"이 1px로 사라지던 자리.
-	title_row.add_child(_section_title("창고"))
+	title_row.add_child(_section_title(tr("창고")))
 	title_row.add_child(_section_value(
-		"%d / %d 슬롯" % [GameState.get_storage_used_slots(), GameState.get_storage_capacity()],
+		tr("%d / %d 슬롯") % [GameState.get_storage_used_slots(), GameState.get_storage_capacity()],
 		94.0
 	))
 
@@ -363,7 +363,7 @@ func _backpack_item_button(entry: Dictionary) -> Button:
 	var button := Button.new()
 	button.name = "Store_%s_%s" % [item_type, item_id]
 	button.custom_minimum_size = Vector2(0, 58)
-	button.text = "%s\n보유 %d · 보관" % [_item_name(item_id), count]
+	button.text = tr("%s\n보유 %d · 보관") % [_item_name(item_id), count]
 	button.icon = _item_texture(item_type, item_id, 42)
 	button.expand_icon = true
 	button.add_theme_constant_override("icon_max_width", 42)
@@ -406,7 +406,7 @@ func _storage_slot_button(slot_index: int, entry: Dictionary, cell_size: int) ->
 	button.add_theme_constant_override("icon_max_width", 40)
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	button.text = "x%d" % count
-	button.tooltip_text = "%s x%d\n꺼내기" % [_item_name(item_id), count]
+	button.tooltip_text = tr("%s x%d\n꺼내기") % [_item_name(item_id), count]
 	button.pressed.connect(_withdraw_slot.bind(slot_index))
 	return button
 
@@ -438,7 +438,7 @@ func _slot_style(background: Color, accent_border := false) -> StyleBoxFlat:
 func _upgrade_card() -> Control:
 	var cost := GameState.get_storage_upgrade_cost()
 	if cost.is_empty():
-		return _summary_card("확장", "최대 등급", "upgrade")
+		return _summary_card(tr("확장"), tr("최대 등급"), "upgrade")
 	var scrap_cost := int(cost.get("scrap", 0))
 	var churu_cost := int(cost.get("churu", 0))
 	# 확장 카드: 왼쪽에 설명 + 비용 칩, 오른쪽에 주 버튼 하나.
@@ -452,7 +452,7 @@ func _upgrade_card() -> Control:
 	column.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	column.add_theme_constant_override("separation", 6)
 	row.add_child(column)
-	column.add_child(SHELTER_THEME.caption("확장 비용"))
+	column.add_child(SHELTER_THEME.caption(tr("확장 비용")))
 	var costs := HFlowContainer.new()
 	costs.add_theme_constant_override("h_separation", 6)
 	costs.add_theme_constant_override("v_separation", 6)
@@ -468,7 +468,7 @@ func _upgrade_card() -> Control:
 		if GameState.churu < churu_cost:
 			(churu_chip.get_meta("label") as Label).add_theme_color_override("font_color", SHELTER_THEME.DANGER)
 		costs.add_child(churu_chip)
-	var button := SHELTER_THEME.primary_button("Lv.%d 확장" % (GameState.storage_level + 1))
+	var button := SHELTER_THEME.primary_button(tr("Lv.%d 확장") % (GameState.storage_level + 1))
 	button.name = "StorageUpgradeButton"
 	button.custom_minimum_size = Vector2(116, SHELTER_THEME.BUTTON_HEIGHT_SMALL + 4.0)
 	button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -565,11 +565,11 @@ func _deposit_item(item_type: String, item_id: String) -> void:
 	if bool(result.get("ok", false)):
 		call_deferred(
 			"_rebuild_after_transfer",
-			"%s %d개를 보관했습니다." % [_item_name(item_id), int(result.get("moved", 0))],
+			tr("%s %d개를 보관했습니다.") % [_item_name(item_id), int(result.get("moved", 0))],
 			true
 		)
 	else:
-		_set_feedback(str(result.get("reason", "보관하지 못했습니다.")), false)
+		_set_feedback(str(result.get("reason", tr("보관하지 못했습니다."))), false)
 
 
 func _withdraw_slot(slot_index: int) -> void:
@@ -583,22 +583,22 @@ func _withdraw_slot(slot_index: int) -> void:
 	if bool(result.get("ok", false)):
 		call_deferred(
 			"_rebuild_after_transfer",
-			"%s %d개를 꺼냈습니다." % [_item_name(item_id), int(result.get("moved", 0))],
+			tr("%s %d개를 꺼냈습니다.") % [_item_name(item_id), int(result.get("moved", 0))],
 			true
 		)
 	else:
-		_set_feedback(str(result.get("reason", "꺼내지 못했습니다.")), false)
+		_set_feedback(str(result.get("reason", tr("꺼내지 못했습니다."))), false)
 
 
 func _upgrade_storage() -> void:
 	if GameState.try_upgrade_storage():
 		call_deferred(
 			"_rebuild_after_transfer",
-			"창고가 Lv.%d로 확장되었습니다." % GameState.storage_level,
+			tr("창고가 Lv.%d로 확장되었습니다.") % GameState.storage_level,
 			true
 		)
 	else:
-		_set_feedback("창고 확장 재료가 부족합니다.", false)
+		_set_feedback(tr("창고 확장 재료가 부족합니다."), false)
 
 
 func _rebuild_after_transfer(message: String, success: bool) -> void:
@@ -633,7 +633,7 @@ func _item_name(item_id: String) -> String:
 	if not equipment_definition.is_empty():
 		return str(equipment_definition.get("display_name", item_id))
 	if ITEM_NAMES.has(item_id):
-		return str(ITEM_NAMES[item_id])
+		return tr(str(ITEM_NAMES[item_id]))
 	# 설계도 조각 등 새 진행 아이템은 카탈로그 이름으로.
 	var catalog_name := str((GameState.LOOT_ECONOMY.ITEM_CATALOG.get(item_id, {}) as Dictionary).get("display_name", ""))
 	return catalog_name if not catalog_name.is_empty() else item_id.replace("_", " ").capitalize()
@@ -681,14 +681,14 @@ func _sell_valuables() -> void:
 	# 전량 판매는 되돌릴 수 없다 — 첫 탭 무장, 4초 안의 두 번째 탭만 실행.
 	if Time.get_ticks_msec() - sell_valuables_armed_msec > 4000:
 		sell_valuables_armed_msec = Time.get_ticks_msec()
-		_set_feedback("한 번 더 누르면 귀중품 전부를 고철 %s에 판다" % GameState.format_compact_number(
+		_set_feedback(tr("한 번 더 누르면 귀중품 전부를 고철 %s에 판다") % GameState.format_compact_number(
 			GameState.get_valuable_total_value()
 		), false)
 		return
 	sell_valuables_armed_msec = 0
 	var result: Dictionary = GameState.sell_all_valuables()
 	if int(result.get("count", 0)) > 0:
-		_set_feedback("귀중품 %d점 판매 · 고철 +%s" % [
+		_set_feedback(tr("귀중품 %d점 판매 · 고철 +%s") % [
 			int(result.get("count", 0)),
 			GameState.format_compact_number(int(result.get("scrap", 0))),
 		], true)

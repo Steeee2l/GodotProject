@@ -13,6 +13,8 @@ extends RefCounted
 ## 쓰는 쪽:
 ##   DebugGate.request(host_node, func() -> void: debug_menu.call("toggle"))
 
+const LOC := preload("res://scripts/hud/loc.gd")
+
 const HudStyle := preload("res://scripts/hud/hud_style.gd")
 const CODE := "2943"
 const LAYER_INDEX := 142  # 디버그 메뉴(140)보다 위 — 게이트가 메뉴에 가리면 안 된다.
@@ -64,12 +66,12 @@ static func _build(root: Node, on_unlocked: Callable) -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 10)
 	panel.add_child(box)
-	box.add_child(HudStyle.label("잠김", HudStyle.TYPE_CAPTION, HudStyle.ACCENT, true))
-	box.add_child(HudStyle.label("개발자 메뉴", 22, HudStyle.TEXT, true))
+	box.add_child(HudStyle.label(LOC.t("잠김"), HudStyle.TYPE_CAPTION, HudStyle.ACCENT, true))
+	box.add_child(HudStyle.label(LOC.t("개발자 메뉴"), 22, HudStyle.TEXT, true))
 
 	var field := LineEdit.new()
 	field.name = "DebugGateCode"
-	field.placeholder_text = "코드"
+	field.placeholder_text = LOC.t("코드")
 	field.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	field.max_length = 8
 	field.secret = true
@@ -93,14 +95,14 @@ static func _build(root: Node, on_unlocked: Callable) -> void:
 	row.add_theme_constant_override("separation", 8)
 	box.add_child(row)
 	var cancel := Button.new()
-	cancel.text = "닫기"
+	cancel.text = LOC.t("닫기")
 	cancel.custom_minimum_size = Vector2(0, 44)
 	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	HudStyle.style_button(cancel)
 	row.add_child(cancel)
 	var confirm := Button.new()
 	confirm.name = "DebugGateConfirm"
-	confirm.text = "열기"
+	confirm.text = LOC.t("열기")
 	confirm.custom_minimum_size = Vector2(0, 44)
 	confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	HudStyle.style_button(confirm, HudStyle.ACCENT, true)
@@ -116,7 +118,7 @@ static func _build(root: Node, on_unlocked: Callable) -> void:
 			on_unlocked.call()
 			return
 		# 틀리면 이유만 말하고 비운다 — 몇 번 틀렸는지 세지 않는다(나만 쓰는 문이다).
-		hint.text = "코드가 다릅니다"
+		hint.text = LOC.t("코드가 다릅니다")
 		field.text = ""
 		field.grab_focus()
 

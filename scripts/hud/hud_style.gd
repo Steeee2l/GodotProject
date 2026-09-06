@@ -12,6 +12,8 @@ extends RefCounted
 #  - 폰트 크기는 TYPE_* 스케일에서 고른다. 굵기는 bold()(FontVariation embolden).
 #  - ▸ ✓ ⚠ ▲ 같은 기호는 Pretendard에 없어 깨진다 — 글자·색으로 표현한다.
 
+const LOC := preload("res://scripts/hud/loc.gd")
+
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const SFX := preload("res://scripts/sfx_bank.gd")
 # class_name 캐시(.godot)가 갱신되기 전에도 헤드리스 테스트가 돌도록 직접 preload.
@@ -290,7 +292,7 @@ static func close_button(icon: Texture2D) -> Button:
 	var button := Button.new()
 	button.name = "CloseButton"
 	button.custom_minimum_size = Vector2(40, 40)
-	button.tooltip_text = "닫기"
+	button.tooltip_text = LOC.t("닫기")
 	button.icon = icon
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	if not button.pressed.is_connected(_play_button_tap):

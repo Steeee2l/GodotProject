@@ -35,6 +35,12 @@ window/stretch/aspect="expand"
 
 enabled=PackedStringArray()
 
+[internationalization]
+
+locale/translations=PackedStringArray("res://assets/locale/ui.ko.translation", "res://assets/locale/ui.en.translation")
+locale/fallback="ko"
+locale/test="ko"
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"

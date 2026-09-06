@@ -134,16 +134,16 @@ func _build() -> void:
 	portrait_frame.add_child(border)
 
 	_spacer(16)
-	var eyebrow := _make_label("생존자 등록", 12, ACCENT)
+	var eyebrow := _make_label(tr("생존자 등록"), 12, ACCENT)
 	eyebrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	eyebrow.add_theme_constant_override("line_spacing", 0)
 	column.add_child(eyebrow)
 	_spacer(8)
-	title_label = _make_label("어떤 이름으로\n불러 드릴까요?", 30, TEXT, true)
+	title_label = _make_label(tr("어떤 이름으로\n불러 드릴까요?"), 30, TEXT, true)
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(title_label)
 	_spacer(8)
-	subtitle_label = _make_label("쉘터 사람들이 이 이름으로 부릅니다.\n나중에 바꿀 수 없어요.", 14, TEXT_DIM)
+	subtitle_label = _make_label(tr("쉘터 사람들이 이 이름으로 부릅니다.\n나중에 바꿀 수 없어요."), 14, TEXT_DIM)
 	subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(subtitle_label)
 	_spacer(22)
@@ -154,7 +154,7 @@ func _build() -> void:
 	column.add_child(input_row)
 	name_input = LineEdit.new()
 	name_input.name = "NameInput"
-	name_input.placeholder_text = "먼지"
+	name_input.placeholder_text = tr("먼지")
 	name_input.max_length = MAX_LENGTH
 	name_input.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	name_input.offset_right = -56.0
@@ -191,7 +191,7 @@ func _build() -> void:
 	counter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	input_row.add_child(counter_label)
 	_spacer(8)
-	helper_label = _make_label("한글, 영문, 숫자 1~8자", 13, TEXT_DIM)
+	helper_label = _make_label(tr("한글, 영문, 숫자 1~8자"), 13, TEXT_DIM)
 	column.add_child(helper_label)
 	_spacer(14)
 
@@ -199,9 +199,10 @@ func _build() -> void:
 	chips_row = HBoxContainer.new()
 	chips_row.add_theme_constant_override("separation", 8)
 	column.add_child(chips_row)
-	for suggestion in SUGGESTIONS:
+	for suggestion_key in SUGGESTIONS:
+		var suggestion := tr(str(suggestion_key))
 		var chip := Button.new()
-		chip.text = str(suggestion)
+		chip.text = suggestion
 		chip.focus_mode = Control.FOCUS_NONE
 		chip.custom_minimum_size = Vector2(0, 34)
 		chip.add_theme_font_override("font", FONT)
@@ -235,7 +236,7 @@ func _build() -> void:
 	# 하단 큰 버튼.
 	confirm_button = Button.new()
 	confirm_button.name = "ConfirmButton"
-	confirm_button.text = "이 이름으로 시작하기"
+	confirm_button.text = tr("이 이름으로 시작하기")
 	confirm_button.custom_minimum_size = Vector2(0, 56)
 	confirm_button.focus_mode = Control.FOCUS_NONE
 	confirm_button.add_theme_font_override("font", bold_font)
@@ -310,13 +311,13 @@ func _on_text_changed(text: String) -> void:
 	var valid := is_valid_name(trimmed)
 	confirm_button.disabled = not valid
 	if trimmed.is_empty():
-		helper_label.text = "한글, 영문, 숫자 1~8자"
+		helper_label.text = tr("한글, 영문, 숫자 1~8자")
 		helper_label.add_theme_color_override("font_color", TEXT_DIM)
 	elif not valid:
-		helper_label.text = "한글, 영문, 숫자만 쓸 수 있어요"
+		helper_label.text = tr("한글, 영문, 숫자만 쓸 수 있어요")
 		helper_label.add_theme_color_override("font_color", DANGER)
 	else:
-		helper_label.text = "%s. 좋은 이름이에요." % trimmed
+		helper_label.text = tr("%s. 좋은 이름이에요.") % trimmed
 		helper_label.add_theme_color_override("font_color", ACCENT)
 
 
@@ -360,7 +361,7 @@ func _show_confirmation(chosen: String) -> void:
 	confirm_label.modulate.a = 0.0
 	column.add_child(confirm_label)
 	column.move_child(confirm_label, 3)
-	var line := _make_label("다리 끝의 문이 열립니다.", 15, TEXT_DIM)
+	var line := _make_label(tr("다리 끝의 문이 열립니다."), 15, TEXT_DIM)
 	line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	line.modulate.a = 0.0
 	column.add_child(line)

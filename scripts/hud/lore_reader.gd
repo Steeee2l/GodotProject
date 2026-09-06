@@ -70,7 +70,7 @@ func build(host: Node) -> void:
 	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	heading.add_theme_constant_override("separation", 4)
 	header.add_child(heading)
-	var eyebrow := HudStyle.label("기록", HudStyle.TYPE_CAPTION, HudStyle.ACCENT)
+	var eyebrow := HudStyle.label(tr("기록"), HudStyle.TYPE_CAPTION, HudStyle.ACCENT)
 	eyebrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	heading.add_child(eyebrow)
 	title_label = HudStyle.label("", HudStyle.TYPE_TITLE, HudStyle.TEXT, true)
@@ -83,7 +83,7 @@ func build(host: Node) -> void:
 	heading.add_child(source_label)
 	var close_button := HudStyle.close_button(UI_ICONS.get_icon("close", 22, HudStyle.TEXT))
 	close_button.name = "LoreCloseButton"
-	close_button.tooltip_text = "기록 닫기"
+	close_button.tooltip_text = tr("기록 닫기")
 	close_button.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	close_button.pressed.connect(close)
 	header.add_child(close_button)
@@ -155,12 +155,12 @@ func show_entry(point: Node3D) -> void:
 		lore_discovered.emit()
 		var marker_label := point.get_node_or_null("LoreMarkerLabel") as Label3D
 		if marker_label:
-			marker_label.text = "확인한 기록"
+			marker_label.text = tr("확인한 기록")
 			marker_label.modulate = HudStyle.TEXT_DIM
-	title_label.text = str(entry.get("title", "이름 없는 기록"))
-	source_label.text = str(entry.get("source", "출처 불명"))
-	body_label.text = str(entry.get("body", "기록이 심하게 망가져서 읽을 수 없다."))
-	progress_label.text = "발견한 세계 기록  %d / %d" % [
+	title_label.text = str(entry.get("title", tr("이름 없는 기록")))
+	source_label.text = str(entry.get("source", tr("출처 불명")))
+	body_label.text = str(entry.get("body", tr("기록이 심하게 망가져서 읽을 수 없다.")))
+	progress_label.text = tr("발견한 세계 기록  %d / %d") % [
 		clues_discovered,
 		LORE_ENTRIES.size(),
 	]

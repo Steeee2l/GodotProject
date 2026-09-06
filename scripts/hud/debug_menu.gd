@@ -95,10 +95,10 @@ func _build_panel() -> void:
 	title_column.add_theme_constant_override("separation", 2)
 	title_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title_column)
-	var header_title := HudStyle.label("개발자 메뉴", HudStyle.TYPE_NUMBER, HudStyle.TEXT, true)
+	var header_title := HudStyle.label(tr("개발자 메뉴"), HudStyle.TYPE_NUMBER, HudStyle.TEXT, true)
 	title_column.add_child(header_title)
 	var header_subtitle := HudStyle.label(
-		"누른 즉시 반영되고 바로 저장됩니다.", HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM
+		tr("누른 즉시 반영되고 바로 저장됩니다."), HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM
 	)
 	header_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	title_column.add_child(header_subtitle)
@@ -126,23 +126,23 @@ func _build_panel() -> void:
 	button_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(button_column)
 
-	_add_title("재화")
-	_add_action("고철 +999만", func() -> String:
+	_add_title(tr("재화"))
+	_add_action(tr("고철 +999만"), func() -> String:
 		GameState.scrap += CHEAT_AMOUNT
-		return "고철 %s" % GameState.format_compact_number(GameState.scrap)
+		return tr("고철 %s") % GameState.format_compact_number(GameState.scrap)
 	)
-	_add_action("캣닢 · 츄르 · 통조림 +9999", func() -> String:
+	_add_action(tr("캣닢 · 츄르 · 통조림 +9999"), func() -> String:
 		GameState.catnip += 9999
 		GameState.churu += 9999
 		GameState.shelter_canned_food += 9999
-		return "캣닢/츄르/통조림 충전"
+		return tr("캣닢/츄르/통조림 충전")
 	)
-	_add_action("부품 전 종류 +999", func() -> String:
+	_add_action(tr("부품 전 종류 +999"), func() -> String:
 		for component_id in GameState.mod_component_inventory.keys():
 			GameState.add_mod_component(str(component_id), 999)
-		return "부품 전 종류 +999"
+		return tr("부품 전 종류 +999")
 	)
-	_add_action("탄약 · 구급약 보충", func() -> String:
+	_add_action(tr("탄약 · 구급약 보충"), func() -> String:
 		GameState.medkits += 20
 		for ammo_id in GameState.ammo_inventory.keys():
 			GameState.set_ammo_count(str(ammo_id), GameState.get_ammo_count(str(ammo_id)) + 2000)
@@ -151,15 +151,15 @@ func _build_panel() -> void:
 		if host != null and host.has_method("_update_equipment_ui"):
 			host.set("reserve_ammo", GameState.reserve_ammo)
 			host.call("_update_equipment_ui")
-		return "탄약 2000 · 구급약 +20"
+		return tr("탄약 2000 · 구급약 +20")
 	)
 
-	_add_title("메타 해금")
-	_add_action("모든 시설 해금", func() -> String:
+	_add_title(tr("메타 해금"))
+	_add_action(tr("모든 시설 해금"), func() -> String:
 		GameState.unlock_all_shelter_facilities()
-		return "시설 전부 해금"
+		return tr("시설 전부 해금")
 	)
-	_add_action("쉘터 티어 최대 · 전 구역 개방", func() -> String:
+	_add_action(tr("쉘터 티어 최대 · 전 구역 개방"), func() -> String:
 		GameState.shelter_tier = int(GameState.SHELTER_CAPACITY_BY_TIER.keys().max())
 		GameState.ensure_story_key_items()
 		# 티어만 올리면 티어 4↑ 구역은 '봉인 구역 키카드'가 없어 계속 잠긴다
@@ -176,47 +176,47 @@ func _build_panel() -> void:
 			get_tree().call_deferred(
 				"change_scene_to_file", "res://scenes/shelter_interior.tscn"
 			)
-		return "쉘터 티어 %d · 출정 가능 구역 %d곳" % [GameState.shelter_tier, open_zones]
+		return tr("쉘터 티어 %d · 출정 가능 구역 %d곳") % [GameState.shelter_tier, open_zones]
 	)
-	_add_action("모든 무기 지급", func() -> String:
+	_add_action(tr("모든 무기 지급"), func() -> String:
 		var count := 0
 		for weapon_id in WeaponSystem.WEAPONS.keys():
 			GameState.add_weapon(str(weapon_id), 1)
 			count += 1
-		return "무기 %d종 지급" % count
+		return tr("무기 %d종 지급") % count
 	)
 	# 정상 경로는 생환 3회 뒤(4번째 출정부터) 합류다 — 이건 그걸 건너뛰는 치트.
-	_add_action("주홍 즉시 해금 (정상: 4번째 출정부터)", func() -> String:
+	_add_action(tr("주홍 즉시 해금 (정상: 4번째 출정부터)"), func() -> String:
 		GameState.companion_unlocked = true
 		GameState.companion_enabled = true
-		return "주홍 동행 해금"
+		return tr("주홍 동행 해금")
 	)
-	_add_action("주민 5명 영입", func() -> String:
+	_add_action(tr("주민 5명 영입"), func() -> String:
 		var accepted := int(GameState.try_add_rescued_workers(5))
 		# 명단만 늘리면 화면에는 아무 일도 안 일어난다 — 쉘터에 다시 세우게 한다.
 		GameState._ensure_resident_records()
 		get_tree().call_group("shelter_resident_host", "refresh_shelter_residents", true)
-		return "주민 +%d명(정원 여유만큼)" % accepted
+		return tr("주민 +%d명(정원 여유만큼)") % accepted
 	)
 
-	_add_title("판 조작")
-	_add_action("위험도 90%로", func() -> String:
+	_add_title(tr("판 조작"))
+	_add_action(tr("위험도 90%로"), func() -> String:
 		GameState.raid_danger = 0.9
 		if host != null and host.has_method("_refresh_danger_hud"):
 			host.set("raid_danger", 0.9)
 			host.call("_refresh_danger_hud")
-		return "위험도 90% — 곧 처형자가 온다"
+		return tr("위험도 90% — 곧 처형자가 온다")
 	)
-	_add_action("위험도 0%로", func() -> String:
+	_add_action(tr("위험도 0%로"), func() -> String:
 		GameState.raid_danger = 0.0
 		if host != null and host.has_method("_refresh_danger_hud"):
 			host.set("raid_danger", 0.0)
 			host.set("danger_overcap_seconds", 0.0)
 			host.set("danger_enforcers_spawned", 0)
 			host.call("_refresh_danger_hud")
-		return "위험도 초기화"
+		return tr("위험도 초기화")
 	)
-	_add_action("체력 회복", func() -> String:
+	_add_action(tr("체력 회복"), func() -> String:
 		GameState.player_health = GameState.get_max_health()
 		if host != null:
 			host.set("player_health", GameState.player_health)
@@ -225,36 +225,36 @@ func _build_panel() -> void:
 			if health_bar != null:
 				health_bar.max_value = GameState.get_max_health()
 				health_bar.value = GameState.player_health
-		return "체력 %d" % GameState.player_health
+		return tr("체력 %d") % GameState.player_health
 	)
-	_add_action("엘리트 소환(눈앞)", func() -> String:
+	_add_action(tr("엘리트 소환(눈앞)"), func() -> String:
 		# 시각(덩치·붉은 이름표·두툼한 체력바)과 밸런스를 판 시작까지 기다리지 않고 본다.
 		if host == null or not host.has_method("_get_current_facing_world_direction"):
-			return "필드에서만 됩니다"
+			return tr("필드에서만 됩니다")
 		var director: Object = host.get("enemy_director")
 		if director == null or not director.has_method("spawn_test_elite_near_player"):
-			return "적 디렉터를 찾지 못했습니다"
+			return tr("적 디렉터를 찾지 못했습니다")
 		return str(director.call("spawn_test_elite_near_player"))
 	)
-	_add_action("레벨 +5 (선택권 지급)", func() -> String:
+	_add_action(tr("레벨 +5 (선택권 지급)"), func() -> String:
 		GameState.pending_level_choices += 5
 		GameState.player_level += 5
-		return "레벨 %d · 선택권 %d" % [GameState.player_level, GameState.pending_level_choices]
+		return tr("레벨 %d · 선택권 %d") % [GameState.player_level, GameState.pending_level_choices]
 	)
 
-	_add_title("초기화")
-	_add_action("이번 판만 초기화(reset_run)", func() -> String:
+	_add_title(tr("초기화"))
+	_add_action(tr("이번 판만 초기화(reset_run)"), func() -> String:
 		GameState.reset_run()
-		return "판 상태 초기화 — 쉘터로 나갔다 오면 반영"
+		return tr("판 상태 초기화 — 쉘터로 나갔다 오면 반영")
 	)
-	_add_action("전체 삭제 후 오프닝부터 새로 시작", func() -> String:
+	_add_action(tr("전체 삭제 후 오프닝부터 새로 시작"), func() -> String:
 		# 예전에는 여기서 reset_run만 부르고 쉘터로 보냈다 — 세이브는 지워졌는데
 		# 이름·주홍 해금·사자 첫 만남 같은 진행 플래그가 메모리에 남아 다시 저장됐고,
 		# 무엇보다 오프닝을 건너뛰어 "처음부터"가 처음이 아니었다.
 		# 설정 화면·쉘터 단축키와 같은 경로(reset_all_progress_for_opening)를 쓴다.
 		GameState.reset_all_progress_for_opening()
 		get_tree().call_deferred("change_scene_to_file", OPENING_SCENE_PATH)
-		return "전체 초기화 — 오프닝부터 다시 시작"
+		return tr("전체 초기화 — 오프닝부터 다시 시작")
 	)
 
 	# 목록 맨 아래 닫기는 없앴다 — 헤더의 고정 닫기 버튼이 그 역할을 한다.

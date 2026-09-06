@@ -208,11 +208,11 @@ func is_open() -> bool:
 func _build_open_button() -> void:
 	open_button = Button.new()
 	open_button.name = "InventoryButton"
-	open_button.text = "가방"
+	open_button.text = tr("가방")
 	open_button.icon = UI_ICONS.get_icon("backpack", 40, HudStyle.TEXT)
 	open_button.expand_icon = true
 	open_button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	open_button.tooltip_text = "가방 열기  [E]"
+	open_button.tooltip_text = tr("가방 열기  [E]")
 	open_button.focus_mode = Control.FOCUS_NONE
 	open_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	open_button.z_as_relative = false
@@ -312,27 +312,27 @@ func _build_inventory_panel() -> Control:
 	header_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_column.add_theme_constant_override("separation", 3)
 	header.add_child(header_column)
-	header_column.add_child(_label("가방", HudStyle.TYPE_CAPTION, HudStyle.ACCENT))
-	var title := _label("들고 있는 것", HudStyle.TYPE_TITLE, HudStyle.TEXT, true)
+	header_column.add_child(_label(tr("가방"), HudStyle.TYPE_CAPTION, HudStyle.ACCENT))
+	var title := _label(tr("들고 있는 것"), HudStyle.TYPE_TITLE, HudStyle.TEXT, true)
 	header_column.add_child(title)
 	# 7~9초에 한 번 60ms 색수차(단말기 질감). 글로우는 새 언어에 없다 — 레이아웃 무변경.
 	HudFx.attach_title_aberration(title)
 	var header_meta := HBoxContainer.new()
 	header_meta.add_theme_constant_override("separation", 8)
 	header_column.add_child(header_meta)
-	var subtitle := _label("아이템을 누르면 아래에서 살펴보고 장착한다.", HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
+	var subtitle := _label(tr("아이템을 누르면 아래에서 살펴보고 장착한다."), HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
 	subtitle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_meta.add_child(subtitle)
-	bag_count_chip = _chip("0종")
+	bag_count_chip = _chip(tr("0종"))
 	bag_count_chip.name = "BagCountChip"
 	header_meta.add_child(bag_count_chip)
 	var close_button := HudStyle.close_button(UI_ICONS.get_icon("close", 20, HudStyle.TEXT))
-	close_button.tooltip_text = "가방 닫기 [Esc]"
+	close_button.tooltip_text = tr("가방 닫기 [Esc]")
 	close_button.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	close_button.pressed.connect(func() -> void: set_open(false))
 	header.add_child(close_button)
 
-	box.add_child(_section("장비"))
+	box.add_child(_section(tr("장비")))
 	equipped_grid = GridContainer.new()
 	equipped_grid.name = "EquipmentGrid"
 	equipped_grid.columns = 2
@@ -349,7 +349,7 @@ func _build_inventory_panel() -> Control:
 	bag_header.add_theme_constant_override("separation", 8)
 	box.add_child(bag_header)
 	# 헤더 이름표가 이미 "가방"이라 섹션은 "보관 중"으로 — 같은 말이 두 번 서지 않게.
-	var bag_title := _section("보관 중")
+	var bag_title := _section(tr("보관 중"))
 	bag_title.custom_minimum_size.x = 44
 	bag_header.add_child(bag_title)
 	# 용량 표시는 통째로 없앴다(2026-08-30 유저: "무제한 같은 표시는 없어도 될 듯").
@@ -383,7 +383,7 @@ func _build_inventory_panel() -> Control:
 	bag_grid.add_theme_constant_override("v_separation", 6)
 	bag_scroll.add_child(bag_grid)
 
-	bag_empty_hint = _label("가방에 보관 중인 아이템이 없습니다.", HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
+	bag_empty_hint = _label(tr("가방에 보관 중인 아이템이 없습니다."), HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
 	bag_empty_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	bag_empty_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bag_empty_hint.visible = false
@@ -416,11 +416,11 @@ func _build_item_detail_panel() -> Control:
 	text_box.clip_contents = false
 	text_box.add_theme_constant_override("separation", 4)
 	row.add_child(text_box)
-	item_detail_title = _label("가방", HudStyle.TYPE_HEADING, HudStyle.TEXT, true)
+	item_detail_title = _label(tr("가방"), HudStyle.TYPE_HEADING, HudStyle.TEXT, true)
 	item_detail_title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	item_detail_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(item_detail_title)
-	item_detail_description = _label("가방 슬롯에는 아이콘과 수량만 표시됩니다.", HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
+	item_detail_description = _label(tr("가방 슬롯에는 아이콘과 수량만 표시됩니다."), HudStyle.TYPE_CAPTION, HudStyle.TEXT_DIM)
 	item_detail_description.custom_minimum_size = Vector2(0, 0)
 	item_detail_description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	item_detail_description.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -449,7 +449,7 @@ func _build_item_detail_panel() -> Control:
 	action_box.add_child(item_action_button)
 	item_discard_button = Button.new()
 	item_discard_button.name = "ItemDiscardButton"
-	item_discard_button.text = "버리기"
+	item_discard_button.text = tr("버리기")
 	HudStyle.style_button(item_discard_button)
 	item_discard_button.custom_minimum_size = Vector2(92, 40)
 	item_discard_button.visible = false
@@ -484,16 +484,16 @@ func _build_weapon_panel() -> Control:
 	header_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_column.add_theme_constant_override("separation", 3)
 	header.add_child(header_column)
-	header_column.add_child(_label("주무기", HudStyle.TYPE_CAPTION, HudStyle.ACCENT))
-	weapon_title = _label("총기 상세", 20, HudStyle.TEXT, true)
+	header_column.add_child(_label(tr("주무기"), HudStyle.TYPE_CAPTION, HudStyle.ACCENT))
+	weapon_title = _label(tr("총기 상세"), 20, HudStyle.TEXT, true)
 	header_column.add_child(weapon_title)
-	weapon_state_action_button = _icon_text_button("장착 해제", "현재 무기를 가방으로 내립니다.")
+	weapon_state_action_button = _icon_text_button(tr("장착 해제"), tr("현재 무기를 가방으로 내립니다."))
 	weapon_state_action_button.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	weapon_state_action_button.custom_minimum_size = Vector2(0, 40)
 	weapon_state_action_button.pressed.connect(_request_weapon_unequip)
 	header.add_child(weapon_state_action_button)
 	var detail_close := HudStyle.close_button(UI_ICONS.get_icon("close", 20, HudStyle.TEXT))
-	detail_close.tooltip_text = "총기 상세 접기"
+	detail_close.tooltip_text = tr("총기 상세 접기")
 	detail_close.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	detail_close.pressed.connect(_hide_weapon_detail)
 	header.add_child(detail_close)
@@ -519,9 +519,9 @@ func _build_weapon_panel() -> Control:
 	weapon_stats.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	preview.add_child(weapon_stats)
 
-	box.add_child(_section("부착 슬롯"))
+	box.add_child(_section(tr("부착 슬롯")))
 	var help := _label(
-		"완성 부착물만 가방에서 장착할 수 있습니다. 제작 재료는 쉘터 작업대에서 완성품 제작에 사용합니다.",
+		tr("완성 부착물만 가방에서 장착할 수 있습니다. 제작 재료는 쉘터 작업대에서 완성품 제작에 사용합니다."),
 		HudStyle.TYPE_FOOTNOTE,
 		HudStyle.TEXT_DIM
 	)
@@ -534,7 +534,7 @@ func _build_weapon_panel() -> Control:
 	mod_slot_grid.add_theme_constant_override("v_separation", 10)
 	box.add_child(mod_slot_grid)
 
-	var footer := _label("변경된 부품과 방어 수치는 즉시 전투 능력에 반영됩니다.", HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_FAINT)
+	var footer := _label(tr("변경된 부품과 방어 수치는 즉시 전투 능력에 반영됩니다."), HudStyle.TYPE_FOOTNOTE, HudStyle.TEXT_FAINT)
 	footer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	footer.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	box.add_child(footer)
@@ -547,7 +547,7 @@ func _build_bag_filter_bar() -> Control:
 	row.add_theme_constant_override("separation", 6)
 	for filter_id in BAG_FILTER_ORDER:
 		var filter_name := _get_filter_display_name(str(filter_id))
-		var button := _icon_text_button("", "%s만 보기" % filter_name, _filter_icon_name(filter_id))
+		var button := _icon_text_button("", tr("%s만 보기") % filter_name, _filter_icon_name(filter_id))
 		button.name = "BagFilter_%s" % filter_id
 		button.toggle_mode = true
 		button.scale = Vector2.ONE
@@ -658,8 +658,8 @@ func _animate_bag_filter_selection_flash(button: Button, selected: bool) -> void
 	bag_filter_selection_tweens[button] = tween
 func _get_filter_display_name(filter_id: String) -> String:
 	if not BAG_FILTER_TITLES.has(filter_id):
-		return "전체"
-	return str(BAG_FILTER_TITLES[filter_id])
+		return tr("전체")
+	return tr(str(BAG_FILTER_TITLES[filter_id]))
 
 
 func _should_show_bag_item(item: Dictionary) -> bool:
@@ -691,7 +691,7 @@ func _refresh_bag_filter_buttons() -> void:
 			var count := _count_bag_items_for_filter(str(filter_id))
 			var prev_count := int(bag_filter_button_counts.get(filter_id, -1))
 			(button as Button).text = ""
-			(button as Button).tooltip_text = "%s만 보기" % _get_filter_display_name(str(filter_id))
+			(button as Button).tooltip_text = tr("%s만 보기") % _get_filter_display_name(str(filter_id))
 			var count_label: Variant = bag_filter_count_labels.get(filter_id, null)
 			var count_badge: Variant = bag_filter_count_badges.get(filter_id, null)
 			if count_label is Label:
@@ -933,34 +933,34 @@ func _refresh_contents() -> void:
 	_clear(mod_slot_grid)
 	visible_bag_items = 0
 
-	equipped_grid.add_child(_equipment_button("주무기", weapon_texture, has_weapon_state, _show_weapon_detail))
+	equipped_grid.add_child(_equipment_button(tr("주무기"), weapon_texture, has_weapon_state, _show_weapon_detail))
 	var body_id := str(game_state.equipped_body_armor_id)
 	var head_id := str(game_state.equipped_head_armor_id)
 	var footwear_id := str(game_state.equipped_footwear_id)
 	equipped_grid.add_child(_equipment_button(
-		_equipped_equipment_label("body", "몸 방어구"),
+		_equipped_equipment_label("body", tr("몸 방어구")),
 		_equipment_texture(body_id, 48),
 		not body_id.is_empty(),
 		func() -> void: _select_equipped_equipment("body")
 	))
 	equipped_grid.add_child(_equipment_button(
-		_equipped_equipment_label("head", "머리 방어구"),
+		_equipped_equipment_label("head", tr("머리 방어구")),
 		_equipment_texture(head_id, 48),
 		not head_id.is_empty(),
 		func() -> void: _select_equipped_equipment("head")
 	))
 	equipped_grid.add_child(_equipment_button(
-		_equipped_equipment_label("feet", "신발"),
+		_equipped_equipment_label("feet", tr("신발")),
 		_equipment_texture(footwear_id, 48),
 		not footwear_id.is_empty(),
 		func() -> void: _select_equipped_equipment("feet")
 	))
 
 	var ammo_names := {
-		"9mm_fmj": "9mm FMJ 탄환",
-		"45_fmj": ".45 ACP FMJ 탄환",
-		"762_fmj": "7.62mm FMJ 탄환",
-		"12g_buckshot": "12게이지 벅샷",
+		"9mm_fmj": tr("9mm FMJ 탄환"),
+		"45_fmj": tr(".45 ACP FMJ 탄환"),
+		"762_fmj": tr("7.62mm FMJ 탄환"),
+		"12g_buckshot": tr("12게이지 벅샷"),
 	}
 	var ammo_ids: Array = game_state.ammo_inventory.keys()
 	ammo_ids.sort()
@@ -971,7 +971,7 @@ func _refresh_contents() -> void:
 			"id": ammo_id,
 			"type": "ammo",
 			"title": str(ammo_names.get(ammo_id, ammo_id)),
-			"description": "총기에 장전하는 소모 탄약입니다. 무기 구경과 맞아야 사용할 수 있습니다.",
+			"description": tr("총기에 장전하는 소모 탄약입니다. 무기 구경과 맞아야 사용할 수 있습니다."),
 			"quantity": ammo_count,
 			"texture": ammo_texture if ammo_id == "762_fmj" else UI_ICONS.get_icon(
 				"ammo",
@@ -982,24 +982,24 @@ func _refresh_contents() -> void:
 	_add_bag_item({
 		"id": "canned_food",
 		"type": "resource",
-		"title": "통조림",
-		"description": "먹는 물건이 아닙니다. T로 던져 적을 유인하고, 귀환하면 쉘터 훈련 재고로 들어가 훈련 비용이 됩니다.",
+		"title": tr("통조림"),
+		"description": tr("먹는 물건이 아닙니다. T로 던져 적을 유인하고, 귀환하면 쉘터 훈련 재고로 들어가 훈련 비용이 됩니다."),
 		"quantity": game_state.get_backpack_storage_count("food", "canned_food"),
 		"texture": UI_ICONS.get_icon("food", 64, Color("#e6b65c")),
 	})
 	_add_bag_item({
 		"id": "medkit",
 		"type": "resource",
-		"title": "구급약",
-		"description": "전투 중 체력을 회복하는 응급 치료품입니다. SHIFT 또는 모바일 치료 버튼으로 사용합니다.",
+		"title": tr("구급약"),
+		"description": tr("전투 중 체력을 회복하는 응급 치료품입니다. SHIFT 또는 모바일 치료 버튼으로 사용합니다."),
 		"quantity": int(game_state.medkits),
 		"texture": UI_ICONS.get_icon("medkit", 64, Color("#dce8df")),
 	})
 	_add_bag_item({
 		"id": "churu",
 		"type": "resource",
-		"title": "츄르",
-		"description": "희귀 구역과 보스에게서 확보하는 쉘터 확장 재화입니다.",
+		"title": tr("츄르"),
+		"description": tr("희귀 구역과 보스에게서 확보하는 쉘터 확장 재화입니다."),
 		"quantity": int(game_state.churu),
 		"texture": UI_ICONS.get_icon("churu", 64, Color("#e7b561")),
 	})
@@ -1026,7 +1026,7 @@ func _refresh_contents() -> void:
 			"id": weapon_id,
 			"type": "weapon",
 			"title": str(definition.get("display_name", weapon_id)),
-			"description": "사용 탄약 · %s\n선택 후 장착하면 현재 주무기와 교체됩니다." % default_ammo_name,
+			"description": tr("사용 탄약 · %s\n선택 후 장착하면 현재 주무기와 교체됩니다.") % default_ammo_name,
 			"quantity": count,
 			"equipped": false,
 			"texture": weapon_textures.get(weapon_id) as Texture2D,
@@ -1081,7 +1081,7 @@ func _refresh_contents() -> void:
 			"id": heavy_id,
 			"type": "heavy",
 			"title": str(heavy_definition.get("name", heavy_id)),
-			"description": str(heavy_definition.get("description", "소모성 중장비입니다.")),
+			"description": str(heavy_definition.get("description", tr("소모성 중장비입니다."))),
 			"quantity": heavy_count,
 			"texture": UI_ICONS.get_icon(
 				str(HEAVY_GEAR_ICONS.get(heavy_id, "parts")), 64, Color("#7fd8c8")
@@ -1127,7 +1127,7 @@ func _refresh_contents() -> void:
 			"id": valuable_id,
 			"type": "valuable",
 			"title": str(valuable_catalog.get("display_name", valuable_id)),
-			"description": "귀중품 · 개당 가치 %d — 쉘터 창고에서 고철로 판다." % unit_value,
+			"description": tr("귀중품 · 개당 가치 %d — 쉘터 창고에서 고철로 판다.") % unit_value,
 			"quantity": valuable_count,
 			"texture": UI_ICONS.get_icon("loot", 64, Color("#e6c979")),
 		})
@@ -1157,10 +1157,10 @@ func _refresh_contents() -> void:
 		_add_bag_item({
 			"id": str(cargo.get("id", "sealed_subway_cargo")),
 			"type": "special_cargo",
-			"title": str(cargo.get("title", "봉인된 지하철 화물")),
+			"title": str(cargo.get("title", tr("봉인된 지하철 화물"))),
 			"description": str(cargo.get(
 				"description",
-				"인간 격리구역에서 회수한 대형 화물입니다. 탈출해야 내용물을 확인할 수 있습니다."
+				tr("인간 격리구역에서 회수한 대형 화물입니다. 탈출해야 내용물을 확인할 수 있습니다.")
 			)),
 			"quantity": 1,
 			"texture": UI_ICONS.get_icon("secure", 64, Color("#f0ad55")),
@@ -1168,11 +1168,11 @@ func _refresh_contents() -> void:
 
 	# 가방 무제한 — 빈 칸 타일도, 만재 경고도, 용량 표시도 없다.
 	if scrap_label:
-		scrap_label.text = "쉘터 고철 %d" % int(game_state.scrap if game_state else 0)
+		scrap_label.text = tr("쉘터 고철 %d") % int(game_state.scrap if game_state else 0)
 	if bag_count_chip:
 		var count_label := bag_count_chip.get_meta("label", null) as Label
 		if count_label:
-			count_label.text = "%d종" % visible_bag_items
+			count_label.text = tr("%d종") % visible_bag_items
 	if weapon_detail_open and has_weapon_state:
 		_refresh_weapon_detail()
 	_refresh_item_detail()
@@ -1207,14 +1207,14 @@ func _update_bag_empty_hint() -> void:
 
 func _show_weapon_detail() -> void:
 	if not has_weapon_state:
-		_select_empty_equipment_slot("주무기")
+		_select_empty_equipment_slot(tr("주무기"))
 		return
 	weapon_detail_open = true
 	selected_item = {
 		"id": game_state.equipped_weapon_id,
 		"type": "weapon",
 		"title": weapon_name_state,
-		"description": "현재 장착 중인 총기입니다. 오른쪽에서 부착 상태를 확인할 수 있습니다.",
+		"description": tr("현재 장착 중인 총기입니다. 오른쪽에서 부착 상태를 확인할 수 있습니다."),
 		"quantity": 1,
 		"texture": weapon_texture,
 	}
@@ -1236,11 +1236,11 @@ func _select_equipped_equipment(slot: String) -> void:
 	var equipment_id := str(game_state.get_equipped_equipment(slot))
 	if equipment_id.is_empty():
 		var empty_slot_names := {
-			"body": "몸 방어구",
-			"head": "머리 방어구",
-			"feet": "신발",
+			"body": tr("몸 방어구"),
+			"head": tr("머리 방어구"),
+			"feet": tr("신발"),
 		}
-		_select_empty_equipment_slot(str(empty_slot_names.get(slot, "장비")))
+		_select_empty_equipment_slot(str(empty_slot_names.get(slot, tr("장비"))))
 		return
 	var definition: Dictionary = game_state.get_equipment_definition(equipment_id)
 	selected_item = {
@@ -1253,7 +1253,7 @@ func _select_equipped_equipment(slot: String) -> void:
 		"texture": _equipment_texture(equipment_id, 64),
 	}
 	_refresh_item_detail()
-	_show_inventory_feedback("%s 선택" % str(selected_item.get("title", "장비")), HudStyle.ACCENT)
+	_show_inventory_feedback(tr("%s 선택") % str(selected_item.get("title", tr("장비"))), HudStyle.ACCENT)
 
 
 func _select_empty_equipment_slot(slot_name: String) -> void:
@@ -1261,12 +1261,12 @@ func _select_empty_equipment_slot(slot_name: String) -> void:
 		"id": "empty_%s" % slot_name,
 		"type": "empty_slot",
 		"title": slot_name,
-		"description": "현재 장착된 장비가 없습니다. 가방의 아이템을 선택해 장착할 수 있습니다.",
+		"description": tr("현재 장착된 장비가 없습니다. 가방의 아이템을 선택해 장착할 수 있습니다."),
 		"quantity": 0,
 		"texture": UI_ICONS.get_icon(_equipment_icon_name(slot_name), 64, HudStyle.TEXT_FAINT),
 	}
 	_refresh_item_detail()
-	_show_inventory_feedback("%s 슬롯은 비어 있습니다." % slot_name, HudStyle.TEXT_DIM)
+	_show_inventory_feedback(tr("%s 슬롯은 비어 있습니다.") % slot_name, HudStyle.TEXT_DIM)
 
 
 func _hide_weapon_detail() -> void:
@@ -1296,7 +1296,7 @@ func _refresh_weapon_detail() -> void:
 			"display_name", game_state.equipped_ammo_id
 		)
 	)
-	weapon_stats.text = "사용 탄약 · %s\n현재 탄창 %02d / %02d\n예비 %03d발  ·  완전 탄창 %d개 + 낱탄 %d발\n내구도 %.1f%%  ·  탄퍼짐 %.1f°\n피해 %d  ·  반동 %.2f  ·  장전 %.1fs" % [
+	weapon_stats.text = tr("사용 탄약 · %s\n현재 탄창 %02d / %02d\n예비 %03d발  ·  완전 탄창 %d개 + 낱탄 %d발\n내구도 %.1f%%  ·  탄퍼짐 %.1f°\n피해 %d  ·  반동 %.2f  ·  장전 %.1fs") % [
 		ammo_name,
 		magazine_state,
 		magazine_size_state,
@@ -1325,7 +1325,7 @@ func _select_item(item: Dictionary) -> void:
 func _on_bag_item_pressed(item: Dictionary) -> void:
 	_select_item(item)
 	_update_bag_selection_visual(str(item.get("id", "")))
-	_show_inventory_feedback("%s 선택" % str(item.get("title", "아이템")), HudStyle.ACCENT)
+	_show_inventory_feedback(tr("%s 선택") % str(item.get("title", tr("아이템"))), HudStyle.ACCENT)
 	if not weapon_detail_open or str(item.get("type", "")) != "mod":
 		return
 	var mod_id := str(item.get("id", ""))
@@ -1374,8 +1374,8 @@ func _refresh_item_detail() -> void:
 		# 아무것도 안 고른 상태에서 큰 배낭 아이콘은 빈 카드를 더 비어 보이게 한다.
 		item_detail_icon.texture = null
 		item_detail_icon.custom_minimum_size = Vector2(0, 0)
-		item_detail_title.text = "고른 것 없음"
-		item_detail_description.text = "아이템을 누르면 여기서 살펴보고 장착합니다."
+		item_detail_title.text = tr("고른 것 없음")
+		item_detail_description.text = tr("아이템을 누르면 여기서 살펴보고 장착합니다.")
 		return
 
 	item_detail_icon.custom_minimum_size = Vector2(60, 60)
@@ -1387,15 +1387,15 @@ func _refresh_item_detail() -> void:
 		var weapon_id := str(selected_item.get("id", ""))
 		var is_equipped: bool = has_weapon_state and weapon_id == str(game_state.equipped_weapon_id)
 		if is_equipped:
-			item_detail_description.text = "현재 장착 중인 주무기입니다. 해제하면 가방으로 돌아갑니다."
-			item_action_button.text = "해제"
+			item_detail_description.text = tr("현재 장착 중인 주무기입니다. 해제하면 가방으로 돌아갑니다.")
+			item_action_button.text = tr("해제")
 			item_action_button.visible = true
 		else:
-			item_detail_description.text += "  ·  장착하면 현재 주무기와 교체됩니다."
+			item_detail_description.text += tr("  ·  장착하면 현재 주무기와 교체됩니다.")
 			var weapon_comparison := _format_weapon_comparison(weapon_id)
 			if not weapon_comparison.is_empty():
 				item_detail_description.text += "\n" + weapon_comparison
-			item_action_button.text = "장착"
+			item_action_button.text = tr("장착")
 			item_action_button.visible = true
 	elif item_type == "mod":
 		var mod_id := str(selected_item.get("id", ""))
@@ -1404,12 +1404,12 @@ func _refresh_item_detail() -> void:
 		var installed := _get_mod_in_slot(slot)
 		var has_quantity := int(selected_item.get("quantity", 0)) > 0
 		var available: int = int(game_state.get_weapon_mod_count(mod_id))
-		item_detail_description.text = "%s  ·  %s 슬롯  ·  완성 부착물 %d개 보유" % [
+		item_detail_description.text = tr("%s  ·  %s 슬롯  ·  완성 부착물 %d개 보유") % [
 			_mod_description(mod_id),
 			_slot_name(slot),
 			available,
 		]
-		item_action_button.text = "해제" if installed == mod_id else ("교체" if not installed.is_empty() else "장착")
+		item_action_button.text = tr("해제") if installed == mod_id else (tr("교체") if not installed.is_empty() else tr("장착"))
 		item_action_button.visible = true
 		var check := _get_mod_install_check(mod_id)
 		var can_install := bool(check.get("can_install", false))
@@ -1417,7 +1417,7 @@ func _refresh_item_detail() -> void:
 		if item_action_button.disabled:
 			var reason_text := ""
 			if installed != mod_id and not has_quantity:
-				reason_text = "수량이 부족합니다."
+				reason_text = tr("수량이 부족합니다.")
 			else:
 				reason_text = str(check.get("reason", ""))
 			if not reason_text.is_empty() and item_detail_reason:
@@ -1425,42 +1425,42 @@ func _refresh_item_detail() -> void:
 				item_detail_reason.visible = true
 	elif item_type == "component":
 		var item_id := str(selected_item.get("id", ""))
-		item_detail_title.text = "제작 재료 · %s" % _component_name(item_id)
+		item_detail_title.text = tr("제작 재료 · %s") % _component_name(item_id)
 		item_detail_description.text = (
-			"%s\n\n제작 재료 · 총기에 직접 장착할 수 없습니다.\n"
-			+ "쉘터 작업대에서 완성 부착물을 제작할 때 사용합니다.\n"
-			+ "보유 수량 %d개"
+			tr("%s\n\n제작 재료 · 총기에 직접 장착할 수 없습니다.\n")
+			+ tr("쉘터 작업대에서 완성 부착물을 제작할 때 사용합니다.\n")
+			+ tr("보유 수량 %d개")
 		) % [_component_description(item_id), int(selected_item.get("quantity", 0))]
 	elif item_type == "ammo":
-		item_detail_description.text = "%s\n보유 수량 %d발" % [
-			str(selected_item.get("description", "총기용 탄약입니다.")),
+		item_detail_description.text = tr("%s\n보유 수량 %d발") % [
+			str(selected_item.get("description", tr("총기용 탄약입니다."))),
 			int(selected_item.get("quantity", 0)),
 		]
 	elif item_type == "resource":
-		item_detail_description.text = "%s\n보유 수량 %d개" % [
-			str(selected_item.get("description", "레이드에서 사용하는 자원입니다.")),
+		item_detail_description.text = tr("%s\n보유 수량 %d개") % [
+			str(selected_item.get("description", tr("레이드에서 사용하는 자원입니다."))),
 			int(selected_item.get("quantity", 0)),
 		]
 		# 통조림에는 가방 행동 버튼이 없다 — 던지기는 필드의 T(투척 버튼)가 쥐고,
 		# 훈련 지불은 쉘터 훈련장이 쥔다. 가방은 수량만 보여 준다.
 	elif item_type == "churu":
-		item_detail_description.text = "%s\n보유 수량 %d개" % [
-			str(selected_item.get("description", "희귀 재화입니다.")),
+		item_detail_description.text = tr("%s\n보유 수량 %d개") % [
+			str(selected_item.get("description", tr("희귀 재화입니다."))),
 			int(selected_item.get("quantity", 0)),
 		]
 	elif item_type == "special_cargo":
-		item_detail_description.text = "%s\n특수 화물 · 탈출 시 정산" % str(
-			selected_item.get("description", "봉인된 대형 화물입니다.")
+		item_detail_description.text = tr("%s\n특수 화물 · 탈출 시 정산") % str(
+			selected_item.get("description", tr("봉인된 대형 화물입니다."))
 		)
 	elif item_type == "progression":
-		item_detail_description.text = "%s\n보유 수량 %d개" % [
-			str(selected_item.get("description", "진행에 필요한 중요 아이템입니다.")),
+		item_detail_description.text = tr("%s\n보유 수량 %d개") % [
+			str(selected_item.get("description", tr("진행에 필요한 중요 아이템입니다."))),
 			int(selected_item.get("quantity", 0)),
 		]
 	elif item_type == "heavy":
 		# 사용 버튼은 없다 — 필드에서 T(투척/배치 선택기)로 쓰고, 여기선 버리기만 된다.
-		item_detail_description.text = "%s\n\n필드에서 T(투척 버튼)로 선택해 사용합니다. 소모품 — 사망 시 시체로 갑니다.\n보유 수량 %d개" % [
-			str(selected_item.get("description", "소모성 중장비입니다.")),
+		item_detail_description.text = tr("%s\n\n필드에서 T(투척 버튼)로 선택해 사용합니다. 소모품 — 사망 시 시체로 갑니다.\n보유 수량 %d개") % [
+			str(selected_item.get("description", tr("소모성 중장비입니다."))),
 			int(selected_item.get("quantity", 0)),
 		]
 	elif item_type == "equipment":
@@ -1469,14 +1469,14 @@ func _refresh_item_detail() -> void:
 		var equipment_slot := str(equipment_definition.get("slot", "body"))
 		var equipped_id := str(game_state.get_equipped_equipment(equipment_slot))
 		var equipment_detail_lines: Array[String] = [
-			str(equipment_definition.get("description", "생존 장비입니다.")),
+			str(equipment_definition.get("description", tr("생존 장비입니다."))),
 			_format_equipment_stats(equipment_definition),
 		]
 		var comparison := _format_equipment_comparison(equipment_id, equipment_definition)
 		if not comparison.is_empty():
 			equipment_detail_lines.append(comparison)
 		item_detail_description.text = "\n".join(equipment_detail_lines)
-		item_action_button.text = "해제" if equipped_id == equipment_id else "장착"
+		item_action_button.text = tr("해제") if equipped_id == equipment_id else tr("장착")
 		item_action_button.visible = true
 
 	_configure_discard_button(item_type)
@@ -1487,7 +1487,7 @@ func _configure_discard_button(item_type: String) -> void:
 		return
 	var item_id := str(selected_item.get("id", ""))
 	item_discard_button.visible = true
-	item_discard_button.text = "버리기"
+	item_discard_button.text = tr("버리기")
 	var protected_item: bool = RAID_ITEM_ECONOMY.is_protected(item_type, item_id)
 	var equipped_item: bool = bool(selected_item.get("equipped", false))
 	if item_type == "weapon":
@@ -1499,9 +1499,9 @@ func _configure_discard_button(item_type: String) -> void:
 	item_discard_button.disabled = protected_item or equipped_item
 	if item_discard_button.disabled and item_detail_reason:
 		item_detail_reason.text = (
-			"중요 임무 물품은 버릴 수 없습니다."
+			tr("중요 임무 물품은 버릴 수 없습니다.")
 			if protected_item
-			else "장착을 해제한 뒤 버릴 수 있습니다."
+			else tr("장착을 해제한 뒤 버릴 수 있습니다.")
 		)
 		item_detail_reason.visible = true
 	# 흐린 "버리기"가 남으면 고장난 버튼으로 읽힌다 — 이유는 위 한 줄이 말한다.
@@ -1517,7 +1517,7 @@ func _disarm_discard() -> void:
 	if discard_disarm_tween != null and discard_disarm_tween.is_valid():
 		discard_disarm_tween.kill()
 	if item_discard_button != null:
-		item_discard_button.text = "버리기"
+		item_discard_button.text = tr("버리기")
 		item_discard_button.add_theme_color_override("font_color", HudStyle.TEXT)
 
 
@@ -1534,7 +1534,7 @@ func _on_selected_item_discard() -> void:
 			"churu": "churu",
 		}.get(item_id, ""))
 	if discard_type.is_empty():
-		apply_discard_result(false, "버릴 수 없는 아이템입니다.")
+		apply_discard_result(false, tr("버릴 수 없는 아이템입니다."))
 		return
 	var quantity := maxi(1, int(selected_item.get("quantity", 1)))
 	var amount: int = mini(quantity, int(game_state.get_raid_item_stack_limit(discard_type)))
@@ -1542,7 +1542,7 @@ func _on_selected_item_discard() -> void:
 	# 탄약 60발이 오탭 한 번에 증발하던 문제의 안전핀.
 	if discard_armed_item_id != item_id:
 		discard_armed_item_id = item_id
-		item_discard_button.text = "한 번 더: x%d 버리기" % amount
+		item_discard_button.text = tr("한 번 더: x%d 버리기") % amount
 		item_discard_button.add_theme_color_override("font_color", HudStyle.DANGER)
 		if discard_disarm_tween != null and discard_disarm_tween.is_valid():
 			discard_disarm_tween.kill()
@@ -1593,7 +1593,7 @@ func _on_selected_item_action() -> void:
 		else:
 			weapon_equipped.emit(item_id)
 			if game_state.equipped_weapon_id == item_id and bool(game_state.has_ak):
-				_show_inventory_feedback("%s 장착" % str(selected_item.get("title", item_id)), HudStyle.ACCENT)
+				_show_inventory_feedback(tr("%s 장착") % str(selected_item.get("title", item_id)), HudStyle.ACCENT)
 				selected_item = {}
 				weapon_detail_open = false
 				_refresh_contents()
@@ -1609,12 +1609,12 @@ func _on_selected_item_action() -> void:
 		var slot := str(definition.get("slot", "body"))
 		if str(game_state.get_equipped_equipment(slot)) == item_id:
 			if game_state.unequip_equipment(slot):
-				_show_inventory_feedback("%s 해제" % str(definition.get("display_name", item_id)), HudStyle.ACCENT)
+				_show_inventory_feedback(tr("%s 해제") % str(definition.get("display_name", item_id)), HudStyle.ACCENT)
 			else:
-				_show_inventory_feedback("해제할 장비가 없습니다.", HudStyle.DANGER)
+				_show_inventory_feedback(tr("해제할 장비가 없습니다."), HudStyle.DANGER)
 		else:
 			game_state.equip_equipment(item_id)
-			_show_inventory_feedback("%s 장착" % str(definition.get("display_name", item_id)), HudStyle.ACCENT)
+			_show_inventory_feedback(tr("%s 장착") % str(definition.get("display_name", item_id)), HudStyle.ACCENT)
 		game_state.save_persistent_state()
 		equipment_changed.emit()
 		selected_item = {}
@@ -1627,20 +1627,20 @@ func _format_equipment_stats(definition: Dictionary) -> String:
 	stats.append("[%s]" % _equipment_slot_display_name(slot))
 	var reduction_percent := roundi(float(definition.get("damage_reduction", 0.0)) * 100.0)
 	if reduction_percent > 0:
-		stats.append("받는 피해 -%d%%" % reduction_percent)
+		stats.append(tr("받는 피해 -%d%%") % reduction_percent)
 	var move_speed_percent := roundi(float(definition.get("move_speed_bonus", 0.0)) * 100.0)
 	if move_speed_percent != 0:
-		stats.append("이동 속도 %s%d%%" % ["+" if move_speed_percent > 0 else "", move_speed_percent])
+		stats.append(tr("이동 속도 %s%d%%") % ["+" if move_speed_percent > 0 else "", move_speed_percent])
 	var stamina_cost_percent := roundi((float(definition.get("stamina_cost_multiplier", 1.0)) - 1.0) * 100.0)
 	if stamina_cost_percent != 0:
-		stats.append("대시 스태미나 %s%d%%" % ["+" if stamina_cost_percent > 0 else "", stamina_cost_percent])
+		stats.append(tr("대시 스태미나 %s%d%%") % ["+" if stamina_cost_percent > 0 else "", stamina_cost_percent])
 	# 트레이드오프 — 좋은 것만 보여주면 선택이 아니라 사다리다.
 	var visibility_percent := roundi((float(definition.get("visibility_multiplier", 1.0)) - 1.0) * 100.0)
 	if visibility_percent != 0:
-		stats.append("피탐지 %s%d%%" % ["+" if visibility_percent > 0 else "", visibility_percent])
+		stats.append(tr("피탐지 %s%d%%") % ["+" if visibility_percent > 0 else "", visibility_percent])
 	var scent_percent := roundi((float(definition.get("scent_multiplier", 1.0)) - 1.0) * 100.0)
 	if scent_percent != 0:
-		stats.append("냄새 흔적 %s%d%%" % ["+" if scent_percent > 0 else "", scent_percent])
+		stats.append(tr("냄새 흔적 %s%d%%") % ["+" if scent_percent > 0 else "", scent_percent])
 	return "  ·  ".join(stats)
 
 
@@ -1662,20 +1662,20 @@ func _format_weapon_comparison(weapon_id: String) -> String:
 	var differences: Array[String] = []
 	var damage_delta := roundi(float(other.get("damage", 0))) - roundi(float(mine.get("damage", 0)))
 	if damage_delta != 0:
-		differences.append("피해 %+d" % damage_delta)
+		differences.append(tr("피해 %+d") % damage_delta)
 	var mine_rate := 1.0 / maxf(0.01, float(mine.get("fire_interval", 0.2)))
 	var other_rate := 1.0 / maxf(0.01, float(other.get("fire_interval", 0.2)))
 	if absf(other_rate - mine_rate) >= 0.1:
-		differences.append("연사 %+.1f/s" % (other_rate - mine_rate))
+		differences.append(tr("연사 %+.1f/s") % (other_rate - mine_rate))
 	var magazine_delta := int(other.get("magazine_size", 0)) - int(mine.get("magazine_size", 0))
 	if magazine_delta != 0:
-		differences.append("장탄 %+d" % magazine_delta)
+		differences.append(tr("장탄 %+d") % magazine_delta)
 	var reload_delta := float(other.get("reload_time", 0.0)) - float(mine.get("reload_time", 0.0))
 	if absf(reload_delta) >= 0.05:
-		differences.append("장전 %+.1fs" % reload_delta)
+		differences.append(tr("장전 %+.1fs") % reload_delta)
 	if differences.is_empty():
 		return ""
-	return "현재 %s 대비  %s" % [
+	return tr("현재 %s 대비  %s") % [
 		str(mine.get("display_name", equipped_id)),
 		"  ·  ".join(differences),
 	]
@@ -1685,9 +1685,9 @@ func _format_equipment_comparison(equipment_id: String, definition: Dictionary) 
 	var slot := str(definition.get("slot", "body"))
 	var equipped_id := str(game_state.get_equipped_equipment(slot))
 	if equipped_id == equipment_id:
-		return "현재 장착 중"
+		return tr("현재 장착 중")
 	if equipped_id.is_empty():
-		return "현재 비어 있는 %s 슬롯에 장착 가능" % _equipment_slot_display_name(slot)
+		return tr("현재 비어 있는 %s 슬롯에 장착 가능") % _equipment_slot_display_name(slot)
 
 	var equipped_definition: Dictionary = game_state.get_equipment_definition(equipped_id)
 	var differences: Array[String] = []
@@ -1696,33 +1696,33 @@ func _format_equipment_comparison(equipment_id: String, definition: Dictionary) 
 		- float(equipped_definition.get("damage_reduction", 0.0))) * 100.0
 	)
 	if damage_difference != 0:
-		differences.append("피해 감소 %s%d%%p" % ["+" if damage_difference > 0 else "", damage_difference])
+		differences.append(tr("피해 감소 %s%d%%p") % ["+" if damage_difference > 0 else "", damage_difference])
 	var speed_difference := roundi(
 		(float(definition.get("move_speed_bonus", 0.0))
 		- float(equipped_definition.get("move_speed_bonus", 0.0))) * 100.0
 	)
 	if speed_difference != 0:
-		differences.append("이동 속도 %s%d%%p" % ["+" if speed_difference > 0 else "", speed_difference])
+		differences.append(tr("이동 속도 %s%d%%p") % ["+" if speed_difference > 0 else "", speed_difference])
 	var stamina_difference := roundi(
 		(float(equipped_definition.get("stamina_cost_multiplier", 1.0))
 		- float(definition.get("stamina_cost_multiplier", 1.0))) * 100.0
 	)
 	if stamina_difference != 0:
-		differences.append("스태미나 효율 %s%d%%p" % ["+" if stamina_difference > 0 else "", stamina_difference])
+		differences.append(tr("스태미나 효율 %s%d%%p") % ["+" if stamina_difference > 0 else "", stamina_difference])
 	if differences.is_empty():
-		return "현재 %s와 동일한 기본 성능" % str(equipped_definition.get("display_name", "장비"))
-	return "현재 %s 대비  %s" % [
-		str(equipped_definition.get("display_name", "장비")),
+		return tr("현재 %s와 동일한 기본 성능") % str(equipped_definition.get("display_name", tr("장비")))
+	return tr("현재 %s 대비  %s") % [
+		str(equipped_definition.get("display_name", tr("장비"))),
 		"  ·  ".join(differences),
 	]
 
 
 func _equipment_slot_display_name(slot: String) -> String:
 	return str({
-		"body": "몸 방어구",
-		"head": "머리 방어구",
-		"feet": "신발",
-	}.get(slot, "장비"))
+		"body": tr("몸 방어구"),
+		"head": tr("머리 방어구"),
+		"feet": tr("신발"),
+	}.get(slot, tr("장비")))
 
 
 func _request_weapon_unequip() -> void:
@@ -1733,10 +1733,10 @@ func _request_weapon_unequip() -> void:
 		has_weapon_state = false
 		weapon_detail_open = false
 		selected_item = {}
-		_show_inventory_feedback("주무기를 가방에 보관했습니다.", HudStyle.ACCENT)
+		_show_inventory_feedback(tr("주무기를 가방에 보관했습니다."), HudStyle.ACCENT)
 		_refresh_contents()
 	else:
-		_show_inventory_feedback("해제할 무기가 없습니다.", HudStyle.DANGER)
+		_show_inventory_feedback(tr("해제할 무기가 없습니다."), HudStyle.DANGER)
 
 
 func _hide_disabled_action(button: Button) -> void:
@@ -1747,9 +1747,9 @@ func _hide_disabled_action(button: Button) -> void:
 
 func _build_mod_slot_button(slot: String) -> Button:
 	var installed := _get_mod_in_slot(slot)
-	var text := "%s\n비어 있음" % _slot_name(slot)
+	var text := tr("%s\n비어 있음") % _slot_name(slot)
 	if not installed.is_empty():
-		text = "%s\n%s\n클릭: 해제" % [_slot_name(slot), _mod_name(installed)]
+		text = tr("%s\n%s\n클릭: 해제") % [_slot_name(slot), _mod_name(installed)]
 	var button := _tile_button(text, not installed.is_empty())
 	button.name = "ModSlot_%s" % slot
 	button.custom_minimum_size = Vector2(216, 72)
@@ -1772,23 +1772,23 @@ func _get_mod_install_check(mod_id: String) -> Dictionary:
 	var available_mods: int = int(game_state.get_weapon_mod_count(mod_id))
 	if available_mods < 1:
 		result["can_install"] = false
-		result["reason"] = "완성 부착물이 없습니다. 제작 재료는 쉘터 작업대에서 먼저 제작해야 합니다."
+		result["reason"] = tr("완성 부착물이 없습니다. 제작 재료는 쉘터 작업대에서 먼저 제작해야 합니다.")
 		return result
-	result["reason"] = "설치 가능"
+	result["reason"] = tr("설치 가능")
 	return result
 
 
 func _get_mod_compatibility_check(mod_id: String) -> Dictionary:
 	var result: Dictionary = {"can_install": false, "reason": ""}
 	if not MOD_COMPONENTS.has(mod_id):
-		result["reason"] = "모듈 정보가 없습니다."
+		result["reason"] = tr("모듈 정보가 없습니다.")
 		return result
 	if not has_weapon_state or str(game_state.equipped_weapon_id).is_empty():
-		result["reason"] = "먼저 주무기를 장착하세요."
+		result["reason"] = tr("먼저 주무기를 장착하세요.")
 		return result
 	var definition: Dictionary = WEAPON_SYSTEM.get_mod(mod_id)
 	if definition.is_empty():
-		result["reason"] = "알 수 없는 모듈입니다."
+		result["reason"] = tr("알 수 없는 모듈입니다.")
 		return result
 	var slot: String = str(definition.get("slot", ""))
 	var next_mods: Array[String] = []
@@ -1798,19 +1798,19 @@ func _get_mod_compatibility_check(mod_id: String) -> Dictionary:
 		next_mods.erase(currently_installed)
 	next_mods.append(mod_id)
 	if slot == "special" and game_state.shelter_workbench_level < 5:
-		result["reason"] = "작업대 레벨 5가 필요합니다."
+		result["reason"] = tr("작업대 레벨 5가 필요합니다.")
 		return result
 	if not WEAPON_SYSTEM.validate_mod_loadout(next_mods, game_state.equipped_weapon_id):
-		result["reason"] = "슬롯 충돌 또는 장착 불가 부품입니다."
+		result["reason"] = tr("슬롯 충돌 또는 장착 불가 부품입니다.")
 		return result
 	result["can_install"] = true
-	result["reason"] = "설치 가능"
+	result["reason"] = tr("설치 가능")
 	return result
 
 func _install_mod(mod_id: String) -> void:
 	var check := _get_mod_install_check(mod_id)
 	if not bool(check.get("can_install", false)):
-		_show_inventory_feedback("장착 실패: %s" % str(check.get("reason", "")), HudStyle.DANGER)
+		_show_inventory_feedback(tr("장착 실패: %s") % str(check.get("reason", "")), HudStyle.DANGER)
 		return
 	var definition := WEAPON_SYSTEM.get_mod(mod_id)
 	var slot := str(definition.get("slot", ""))
@@ -1821,7 +1821,7 @@ func _install_mod(mod_id: String) -> void:
 	game_state.add_weapon_mod(mod_id, -1)
 	game_state.equipped_weapon_mods.append(mod_id)
 	game_state.save_equipped_weapon_loadout()
-	_show_inventory_feedback("%s 장착" % _mod_name(mod_id), HudStyle.ACCENT)
+	_show_inventory_feedback(tr("%s 장착") % _mod_name(mod_id), HudStyle.ACCENT)
 	weapon_mods_changed.emit()
 	_refresh_contents()
 
@@ -1831,7 +1831,7 @@ func _unequip_mod(mod_id: String) -> void:
 	game_state.add_weapon_mod(mod_id, 1)
 	game_state.equipped_weapon_mods.erase(mod_id)
 	game_state.save_equipped_weapon_loadout()
-	_show_inventory_feedback("%s 해제" % _mod_name(mod_id), HudStyle.WARN)
+	_show_inventory_feedback(tr("%s 해제") % _mod_name(mod_id), HudStyle.WARN)
 	weapon_mods_changed.emit()
 	_refresh_contents()
 
@@ -1928,7 +1928,7 @@ func _apply_responsive_layout() -> void:
 		if not touch:
 			open_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER if responsive_compact else HORIZONTAL_ALIGNMENT_LEFT
 			open_button.add_theme_font_size_override("font_size", 14 if viewport_size.x >= 760 else 11)
-		open_button.text = "가방"
+		open_button.text = tr("가방")
 
 	var safe_width := clampf(viewport_size.x - safe.x - safe.z - 24.0, 300.0, 1600.0)
 	# 예전에는 최소 340으로 올려 잡아서, 가로 모드 폰처럼 낮은 화면에서는
@@ -2089,12 +2089,12 @@ func _bag_item_button(item: Dictionary) -> Button:
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.tooltip_text = "%s  x%d" % [str(item.get("title", "")), quantity]
 	if not has_quantity:
-		button.tooltip_text += " (보유하지 않음)"
+		button.tooltip_text += tr(" (보유하지 않음)")
 	elif item_type == "component":
-		button.tooltip_text += " · 제작 재료 (직접 장착 불가)"
+		button.tooltip_text += tr(" · 제작 재료 (직접 장착 불가)")
 	elif item_type == "mod" and not _can_install_mod(item_id):
 		var check: Dictionary = _get_mod_install_check(item_id)
-		button.tooltip_text += " · %s" % str(check.get("reason", "장착 불가"))
+		button.tooltip_text += " · %s" % str(check.get("reason", tr("장착 불가")))
 	button.icon = _item_texture(item)
 	button.expand_icon = true
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -2124,7 +2124,7 @@ func _bag_item_button(item: Dictionary) -> Button:
 	button.add_child(badge)
 	if item_type == "component":
 		# "재료" 표식 — 작은 알약 칩(표면색). 테두리 선·아웃라인 트릭 없이.
-		var material_badge := _corner_tag("재료", false)
+		var material_badge := _corner_tag(tr("재료"), false)
 		material_badge.name = "CraftingMaterialBadge"
 		button.add_child(material_badge)
 	if item_type == "equipment" and has_quantity and not bool(item.get("equipped", false)):
@@ -2366,61 +2366,61 @@ func _clear(node: Node) -> void:
 func _slot_name(slot: String) -> String:
 	match slot:
 		"sight":
-			return "조준경"
+			return tr("조준경")
 		"muzzle":
-			return "소염기"
+			return tr("소염기")
 		"stock":
-			return "개머리판"
+			return tr("개머리판")
 		"magazine":
-			return "탄창"
+			return tr("탄창")
 		"tactical":
-			return "전술"
+			return tr("전술")
 		"special":
-			return "특수 모듈"
+			return tr("특수 모듈")
 	return slot
 
 
 func _mod_name(mod_id: String) -> String:
 	match mod_id:
 		"scope_2x":
-			return "폐점포 2x 스코프"
+			return tr("폐점포 2x 스코프")
 		"muffled_sock":
-			return "소리 방지용 양말"
+			return tr("소리 방지용 양말")
 		"sponge_pad":
-			return "스펀지 턱받이"
+			return tr("스펀지 턱받이")
 		"quick_mag":
-			return "테이프 듀얼 탄창"
+			return tr("테이프 듀얼 탄창")
 		"bell_bait":
-			return "딸랑이 방울"
+			return tr("딸랑이 방울")
 		"ak_precision_receiver":
-			return "AK 정밀 수신부"
+			return tr("AK 정밀 수신부")
 	return mod_id
 
 
 func _component_name(component_id: String) -> String:
 	match component_id:
 		"rubber_gasket":
-			return "소음기용 고무 패킹"
+			return tr("소음기용 고무 패킹")
 		"scope_lens":
-			return "스코프 렌즈"
+			return tr("스코프 렌즈")
 		"magazine_spring":
-			return "탄창 스프링"
+			return tr("탄창 스프링")
 	return component_id.replace("_", " ").capitalize()
 
 
 func _component_description(component_id: String) -> String:
 	match component_id:
 		"rubber_gasket":
-			return "소음기와 완충 개머리판의 제작 재료로 쓰는 탄성 부품입니다."
+			return tr("소음기와 완충 개머리판의 제작 재료로 쓰는 탄성 부품입니다.")
 		"scope_lens":
-			return "배율 조준경과 정밀 모듈의 제작 재료로 쓰는 광학 부품입니다."
+			return tr("배율 조준경과 정밀 모듈의 제작 재료로 쓰는 광학 부품입니다.")
 		"magazine_spring":
-			return "고속 탄창과 전술 부품의 제작 재료로 쓰는 기계 부품입니다."
+			return tr("고속 탄창과 전술 부품의 제작 재료로 쓰는 기계 부품입니다.")
 		"precision_gear":
-			return "+31 이후 강화와 돌파에 드는 희귀 부품입니다. 엘리트·봉인 보급함에서 나옵니다."
+			return tr("+31 이후 강화와 돌파에 드는 희귀 부품입니다. 엘리트·봉인 보급함에서 나옵니다.")
 		"military_alloy":
-			return "+61 이후 강화와 +50 이상 돌파에 드는 희귀 부품입니다. 보스·봉쇄선 금고에서 나옵니다."
-	return "총기 부착물 제작에 쓰는 핵심 제작 재료입니다."
+			return tr("+61 이후 강화와 +50 이상 돌파에 드는 희귀 부품입니다. 보스·봉쇄선 금고에서 나옵니다.")
+	return tr("총기 부착물 제작에 쓰는 핵심 제작 재료입니다.")
 
 
 func _progression_item_name(item_id: String) -> String:
@@ -2429,65 +2429,65 @@ func _progression_item_name(item_id: String) -> String:
 		return str((LOOT_ECONOMY.ITEM_CATALOG.get(item_id, {}) as Dictionary).get("display_name", item_id))
 	match item_id:
 		"rifle_blueprint":
-			return "소총 제작 청사진"
+			return tr("소총 제작 청사진")
 		"shotgun_blueprint":
-			return "산탄총 제작 청사진"
+			return tr("산탄총 제작 청사진")
 		"akm_blueprint":
-			return "AKM 개조 청사진"
+			return tr("AKM 개조 청사진")
 		"pump_blueprint":
-			return "펌프 산탄총 청사진"
+			return tr("펌프 산탄총 청사진")
 		"sealed_zone_keycard":
-			return "봉인구역 키카드"
+			return tr("봉인구역 키카드")
 		"namdaemun_depot_plans":
-			return "남대문 창고 설계도"
+			return tr("남대문 창고 설계도")
 		"euljiro_grid_schematic":
-			return "을지로 배전 도면"
+			return tr("을지로 배전 도면")
 		"yongsan_control_key":
-			return "용산 통제 키"
+			return tr("용산 통제 키")
 	return item_id
 
 
 func _progression_item_description(item_id: String) -> String:
 	if item_id.begins_with("blueprint_shard_"):
 		var recipe_id := item_id.trim_prefix("blueprint_shard_")
-		return "작업대 제작 해금 조각 — 3조각이 모이면 만들 수 있습니다(%s)." % str(game_state.get_blueprint_progress_text(recipe_id))
+		return tr("작업대 제작 해금 조각 — 3조각이 모이면 만들 수 있습니다(%s).") % str(game_state.get_blueprint_progress_text(recipe_id))
 	if item_id == "artisan_seal":
-		return "장인의 인장 — +10·+20·… 강화 돌파 1회에 1개. 보스·메인 미션 3단계에서 나옵니다."
+		return tr("장인의 인장 — +10·+20·… 강화 돌파 1회에 1개. 보스·메인 미션 3단계에서 나옵니다.")
 	match item_id:
 		"rifle_blueprint":
-			return "AK 계열 소총(AKM 개조형) 제작법을 해금하는 희귀 청사진입니다."
+			return tr("AK 계열 소총(AKM 개조형) 제작법을 해금하는 희귀 청사진입니다.")
 		"shotgun_blueprint":
-			return "고화력 산탄총 제작법을 해금하는 희귀 청사진입니다."
+			return tr("고화력 산탄총 제작법을 해금하는 희귀 청사진입니다.")
 		"akm_blueprint":
-			return "작업대에서 AKM 개조형을 만들 수 있습니다. 첫 제작 시 AK-47 강화의 60%를 이어받습니다."
+			return tr("작업대에서 AKM 개조형을 만들 수 있습니다. 첫 제작 시 AK-47 강화의 60%를 이어받습니다.")
 		"pump_blueprint":
-			return "작업대에서 펌프 산탄총을 만들 수 있습니다. 첫 제작 시 참치 헌터 강화의 60%를 이어받습니다."
+			return tr("작업대에서 펌프 산탄총을 만들 수 있습니다. 첫 제작 시 참치 헌터 강화의 60%를 이어받습니다.")
 		"sealed_zone_keycard":
-			return "Stage 4 봉인구역 진입에 필요한 보안 키카드입니다."
+			return tr("Stage 4 봉인구역 진입에 필요한 보안 키카드입니다.")
 		"namdaemun_depot_plans":
-			return "쉘터 Tier 3 확장에 필요한 설계도입니다."
+			return tr("쉘터 Tier 3 확장에 필요한 설계도입니다.")
 		"euljiro_grid_schematic":
-			return "쉘터 Tier 4 확장에 필요한 배전 도면입니다."
+			return tr("쉘터 Tier 4 확장에 필요한 배전 도면입니다.")
 		"yongsan_control_key":
-			return "쉘터 Tier 5 확장에 필요한 통제 키입니다."
-	return "상위 스테이지 진행에 사용하는 희귀 물품입니다."
+			return tr("쉘터 Tier 5 확장에 필요한 통제 키입니다.")
+	return tr("상위 스테이지 진행에 사용하는 희귀 물품입니다.")
 
 
 func _mod_description(mod_id: String) -> String:
 	match mod_id:
 		"scope_2x":
-			return "조준 시 시야와 중거리 집탄율을 개선합니다."
+			return tr("조준 시 시야와 중거리 집탄율을 개선합니다.")
 		"muffled_sock":
-			return "총성을 줄이는 임시 소음기입니다."
+			return tr("총성을 줄이는 임시 소음기입니다.")
 		"sponge_pad":
-			return "반동 회복과 거치 안정성을 높입니다."
+			return tr("반동 회복과 거치 안정성을 높입니다.")
 		"quick_mag":
-			return "재장전 시간을 줄이는 테이프 결합 탄창입니다."
+			return tr("재장전 시간을 줄이는 테이프 결합 탄창입니다.")
 		"bell_bait":
-			return "총기 하단에 다는 전술용 방울입니다."
+			return tr("총기 하단에 다는 전술용 방울입니다.")
 		"ak_precision_receiver":
-			return "AK 단발 명중률을 크게 높이는 특수 모듈입니다."
-	return "총기 성능을 변경하는 부착물입니다."
+			return tr("AK 단발 명중률을 크게 높이는 특수 모듈입니다.")
+	return tr("총기 성능을 변경하는 부착물입니다.")
 
 
 func _slot_icon(slot: String) -> ImageTexture:

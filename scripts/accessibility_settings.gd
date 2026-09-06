@@ -13,8 +13,17 @@ const SAVED_PROPERTIES := [
 	"damage_numbers_enabled", "auto_reload", "vibration_enabled", "battery_saver",
 	"ui_fx_enabled", "active_tutorial_enabled",
 	"master_volume", "sfx_volume", "ui_volume",
+	"language",
+]
+# 지원 언어 — 표시 이름은 그 언어로 쓴다(번역하지 않는다).
+const LANGUAGES := [
+	{"code": "ko", "label": "한국어"},
+	{"code": "en", "label": "English"},
 ]
 
+# 화면 언어. 기본은 한국어이고, 영어는 assets/locale/ui.csv의 en 열을 쓴다.
+# 키가 한국어 원문이라 ko에서는 원문이 그대로 돌아온다(기존 동작·테스트 유지).
+var language := "ko"
 var ui_scale := 1.0
 var combat_text_scale := 1.0
 var camera_shake_scale := 0.75
@@ -49,6 +58,7 @@ func _ready() -> void:
 	layer = 250
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_load_settings()
+	_apply_locale()
 	_apply_audio_volumes()
 	_build_ui()
 	get_viewport().size_changed.connect(_apply_layout)
@@ -136,13 +146,13 @@ func _build_ui() -> void:
 	var titles := VBoxContainer.new()
 	titles.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(titles)
-	titles.add_child(_label("표시 및 조작 설정", 24, Color("#eee5ce")))
-	var header_hint := _label("자동 저장 · F10으로 열기", 12, Color("#91a49c"))
+	titles.add_child(_label(tr("표시 및 조작 설정"), 24, Color("#eee5ce")))
+	var header_hint := _label(tr("자동 저장 · F10으로 열기"), 12, Color("#91a49c"))
 	titles.add_child(header_hint)
 	var close_button := Button.new()
 	close_button.icon = UI_ICONS.get_icon("close", 26, Color("#e8ebe7"))
 	close_button.custom_minimum_size = Vector2(52, 46)
-	close_button.tooltip_text = "설정 닫기"
+	close_button.tooltip_text = tr("설정 닫기")
 	close_button.pressed.connect(close)
 	header.add_child(close_button)
 	shell.add_child(HSeparator.new())
@@ -158,6 +168,9 @@ func _build_ui() -> void:
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_theme_constant_override("separation", 12)
 	scroll.add_child(content)
+	content.add_child(_label(tr("언어"), 13, Color("#b9a86a")))
+	_add_language_row(content)
+	content.add_child(_label(tr("표시"), 13, Color("#b9a86a")))
 	_add_slider(content, "UI 크기", "메뉴와 HUD 전체 크기", 0.8, 1.4, 0.05, ui_scale, func(value: float) -> void: ui_scale = value)
 	_add_slider(content, "전투 알림 크기", "피해량과 전투 경고 글자", 0.8, 1.4, 0.05, combat_text_scale, func(value: float) -> void: combat_text_scale = value)
 	_add_slider(content, "화면 흔들림", "피격·암살·보스 연출", 0.0, 1.0, 0.05, camera_shake_scale, func(value: float) -> void: camera_shake_scale = value)
@@ -166,7 +179,7 @@ func _build_ui() -> void:
 	_add_slider(content, "피격 화면 효과", "붉은 화면·방향 표시·피격 흔들림 (0%면 끔)", 0.0, 1.0, 0.05, hit_feedback_intensity, func(value: float) -> void: hit_feedback_intensity = value)
 	_add_slider(content, "최소 밝기", "밤과 실내의 가장 어두운 정도", 0.0, 0.5, 0.05, minimum_brightness, func(value: float) -> void: minimum_brightness = value)
 	_add_slider(content, "조준 보정", "모바일과 패드의 원뿔 조준 보정", 0.0, 1.0, 0.05, aim_assist_strength, func(value: float) -> void: aim_assist_strength = value)
-	content.add_child(_label("소리", 13, Color("#b9a86a")))
+	content.add_child(_label(tr("소리"), 13, Color("#b9a86a")))
 	_add_slider(content, "전체 음량", "모든 소리의 기준 음량", 0.0, 100.0, 5.0, master_volume, func(value: float) -> void:
 		master_volume = value
 		_apply_audio_volumes()
@@ -186,13 +199,13 @@ func _build_ui() -> void:
 	_add_toggle(content, "모바일 햅틱", vibration_enabled, func(value: bool) -> void: vibration_enabled = value)
 	_add_toggle(content, "모바일 저전력 모드", battery_saver, func(value: bool) -> void: battery_saver = value)
 	_add_toggle(content, "UI 셰이더 효과 (블러·노이즈·입자)", ui_fx_enabled, func(value: bool) -> void: ui_fx_enabled = value)
-	content.add_child(_label("안내", 13, Color("#b9a86a")))
+	content.add_child(_label(tr("안내"), 13, Color("#b9a86a")))
 	_add_toggle(content, "액티브 안내 (화살표로 가리키는 튜토리얼)", active_tutorial_enabled, func(value: bool) -> void: active_tutorial_enabled = value)
 	_add_action(content, "안내 다시 보기", "끝낸 안내를 전부 되돌려 처음부터 다시 가리킵니다.", func() -> String:
 		GameState.reset_tutorial_steps()
-		return "안내를 처음부터 다시 보여줍니다."
+		return tr("안내를 처음부터 다시 보여줍니다.")
 	)
-	content.add_child(_label("데이터", 13, Color("#b9a86a")))
+	content.add_child(_label(tr("데이터"), 13, Color("#b9a86a")))
 	# 초기화·전체 해금은 디버그 빌드에만 있던 떠 있는 버튼이라 배포(웹·모바일)에서는
 	# 손댈 방법이 아예 없었다. 설정은 릴리스에도 있으므로 여기로 옮겨 둔다.
 	# (디버그 빌드의 떠 있는 버튼은 그대로 남는다 — shelter_debug_shortcut.gd)
@@ -212,7 +225,7 @@ func _build_ui() -> void:
 		"해금",
 		_perform_debug_unlock
 	)
-	var footer := _label("색상만으로 상태를 구분하지 않으며 아이콘과 문자를 함께 표시합니다.", 12, Color("#8fa59b"))
+	var footer := _label(tr("색상만으로 상태를 구분하지 않으며 아이콘과 문자를 함께 표시합니다."), 12, Color("#8fa59b"))
 	footer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(footer)
 	# 모바일 우상단 진입 버튼은 화면 정리를 위해 만들지 않는다(F10으로 진입).
@@ -226,8 +239,8 @@ func _add_slider(parent: VBoxContainer, title: String, description: String, mini
 	text_box.custom_minimum_size.x = 185
 	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(text_box)
-	text_box.add_child(_label(title, 14, Color("#d8ded9")))
-	text_box.add_child(_label(description, 11, Color("#81938c")))
+	text_box.add_child(_label(tr(title), 14, Color("#d8ded9")))
+	text_box.add_child(_label(tr(description), 11, Color("#81938c")))
 	var slider := HSlider.new()
 	slider.custom_minimum_size = Vector2(190, 34)
 	slider.min_value = minimum
@@ -243,6 +256,8 @@ func _add_slider(parent: VBoxContainer, title: String, description: String, mini
 
 func _add_action(parent: VBoxContainer, title: String, description: String, action: Callable) -> void:
 	# 한 번 누르는 행동(리셋류). 결과 문구는 설명 자리에 잠시 띄운다.
+	# 번역은 이 헬퍼 안에서 한다 — 호출부는 한국어 원문(=번역 키)을 그대로 넘기고,
+	# 노드 이름(SettingsAction_…)도 그 키로 남는다. 프로브가 그 이름으로 버튼을 찾는다.
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
 	parent.add_child(row)
@@ -250,13 +265,13 @@ func _add_action(parent: VBoxContainer, title: String, description: String, acti
 	text_box.custom_minimum_size.x = 185
 	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(text_box)
-	text_box.add_child(_label(title, 14, Color("#d8ded9")))
-	var description_label := _label(description, 11, Color("#81938c"))
+	text_box.add_child(_label(tr(title), 14, Color("#d8ded9")))
+	var description_label := _label(tr(description), 11, Color("#81938c"))
 	description_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	text_box.add_child(description_label)
 	var button := Button.new()
 	button.name = "SettingsAction_%s" % title
-	button.text = title
+	button.text = tr(title)
 	button.custom_minimum_size = Vector2(150, 44)
 	HudStyle.style_button(button, HudStyle.LINE_FOCUS)
 	button.pressed.connect(func() -> void:
@@ -290,13 +305,13 @@ func _add_confirm_action(
 	text_box.custom_minimum_size.x = 185
 	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(text_box)
-	text_box.add_child(_label(title, 14, Color("#d8ded9")))
-	var description_label := _label(description, 11, Color("#81938c"))
+	text_box.add_child(_label(tr(title), 14, Color("#d8ded9")))
+	var description_label := _label(tr(description), 11, Color("#81938c"))
 	description_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	text_box.add_child(description_label)
 	var open_button := Button.new()
 	open_button.name = "SettingsAction_%s" % title
-	open_button.text = title
+	open_button.text = tr(title)
 	open_button.custom_minimum_size = Vector2(150, 44)
 	HudStyle.style_button(open_button, Color("#c4574f"))
 	row.add_child(open_button)
@@ -306,7 +321,7 @@ func _add_confirm_action(
 	confirm_box.visible = false
 	confirm_box.add_theme_constant_override("separation", 6)
 	box.add_child(confirm_box)
-	var question := _label(confirm_question, 13, Color("#f0b7ad"))
+	var question := _label(tr(confirm_question), 13, Color("#f0b7ad"))
 	question.name = "SettingsConfirmQuestion_%s" % title
 	question.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	confirm_box.add_child(question)
@@ -316,13 +331,13 @@ func _add_confirm_action(
 	confirm_box.add_child(buttons)
 	var cancel_button := Button.new()
 	cancel_button.name = "SettingsCancel_%s" % title
-	cancel_button.text = "취소"
+	cancel_button.text = tr("취소")
 	cancel_button.custom_minimum_size = Vector2(110, 44)
 	HudStyle.style_button(cancel_button, HudStyle.LINE_FOCUS)
 	buttons.add_child(cancel_button)
 	var confirm_button := Button.new()
 	confirm_button.name = "SettingsConfirm_%s" % title
-	confirm_button.text = confirm_label
+	confirm_button.text = tr(confirm_label)
 	confirm_button.custom_minimum_size = Vector2(130, 44)
 	HudStyle.style_button(confirm_button, Color("#e08a7c"), true)
 	buttons.add_child(confirm_button)
@@ -355,7 +370,7 @@ func _perform_full_reset() -> String:
 	get_tree().paused = false
 	_save_settings()
 	get_tree().call_deferred("change_scene_to_file", OPENING_SCENE_PATH)
-	return "초기화했습니다. 오프닝부터 다시 시작합니다."
+	return tr("초기화했습니다. 오프닝부터 다시 시작합니다.")
 
 
 func _perform_debug_unlock() -> String:
@@ -367,12 +382,71 @@ func _perform_debug_unlock() -> String:
 	var current := get_tree().current_scene
 	if current != null and current.has_method("_unlock_all_facilities_debug"):
 		current.call("_unlock_all_facilities_debug")
-	return "모든 시설을 해금했습니다."
+	return tr("모든 시설을 해금했습니다.")
+
+
+func _add_language_row(parent: VBoxContainer) -> void:
+	# 언어는 두 칸짜리 세그먼트 버튼 하나로 끝낸다 — 고를 게 둘뿐이라 드롭다운은 과하다.
+	var row := HBoxContainer.new()
+	row.name = "SettingsLanguageRow"
+	row.add_theme_constant_override("separation", 14)
+	parent.add_child(row)
+	var text_box := VBoxContainer.new()
+	text_box.custom_minimum_size.x = 185
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(text_box)
+	text_box.add_child(_label(tr("화면 언어"), 14, Color("#d8ded9")))
+	var hint := _label(tr("바꾸면 이 설정 화면은 바로, 다른 화면은 다시 열 때 반영됩니다."), 11, Color("#81938c"))
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	text_box.add_child(hint)
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 8)
+	row.add_child(buttons)
+	for entry in LANGUAGES:
+		var code := str(entry["code"])
+		var button := Button.new()
+		button.name = "SettingsLanguage_%s" % code
+		button.text = str(entry["label"])
+		button.custom_minimum_size = Vector2(96, 44)
+		# 고른 쪽은 민트 주 버튼으로 둔다. disabled로 잠그면 회색이 되어
+		# "지금 이 언어"가 오히려 꺼진 것처럼 보인다 — 같은 걸 눌러도 조용히 무시한다.
+		HudStyle.style_button(button, HudStyle.LINE_FOCUS, code == language)
+		button.pressed.connect(func() -> void:
+			if code == language:
+				return
+			language = code
+			_apply_locale()
+			_save_settings()
+			settings_changed.emit()
+			_rebuild_ui()
+		)
+		buttons.add_child(button)
+
+
+func _apply_locale() -> void:
+	# project.godot의 locale/test가 시작 로케일을 ko로 고정하고, 저장된 선택이 그 위에 얹힌다.
+	if language != "ko" and language != "en":
+		language = "ko"
+	TranslationServer.set_locale(language)
+
+
+func _rebuild_ui() -> void:
+	# 언어를 바꾸면 이미 만들어 둔 라벨은 옛 언어 그대로다 — 설정 화면만 즉시 다시 짓는다.
+	# (다른 화면은 닫았다 열 때 새 언어로 만들어진다.)
+	var was_open := is_open()
+	backdrop.queue_free()
+	panel_center.queue_free()
+	remove_child(backdrop)
+	remove_child(panel_center)
+	_build_ui()
+	backdrop.visible = was_open
+	panel_center.visible = was_open
+	_apply_layout()
 
 
 func _add_toggle(parent: VBoxContainer, title: String, value: bool, callback: Callable) -> void:
 	var toggle := CheckButton.new()
-	toggle.text = title
+	toggle.text = tr(title)
 	toggle.button_pressed = value
 	toggle.add_theme_font_override("font", FONT)
 	toggle.add_theme_font_size_override("font_size", 14)

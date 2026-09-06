@@ -187,7 +187,7 @@ func _ready() -> void:
 	close_button.name = "MapCloseButton"
 	close_button.custom_minimum_size = Vector2(CLOSE_SIZE, CLOSE_SIZE)
 	close_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	close_button.tooltip_text = "지도 닫기"
+	close_button.tooltip_text = tr("지도 닫기")
 	close_button.pressed.connect(close)
 	add_child(close_button)
 	if not get_viewport().size_changed.is_connected(_apply_safe_layout):
@@ -381,13 +381,13 @@ func _draw() -> void:
 	var header_left := panel_rect.position.x + PANEL_PADDING
 	var header_limit := panel_rect.size.x - PANEL_PADDING * 2.0 - CLOSE_SIZE - 12.0
 	draw_string(
-		UI_FONT, Vector2(header_left, panel_rect.position.y + 32.0), "전술 지도",
+		UI_FONT, Vector2(header_left, panel_rect.position.y + 32.0), tr("전술 지도"),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, HudStyle.TYPE_CAPTION, HudStyle.ACCENT
 	)
 	var sector := ""
 	if is_instance_valid(player):
 		sector = str(world.call("get_sector_label", player.global_position))
-	var title_text := sector if not sector.is_empty() else "현장"
+	var title_text := sector if not sector.is_empty() else tr("현장")
 	draw_string(
 		HudStyle.bold(), Vector2(header_left, panel_rect.position.y + 62.0), title_text,
 		HORIZONTAL_ALIGNMENT_LEFT, header_limit, HudStyle.TYPE_TITLE, HudStyle.TEXT
@@ -395,9 +395,9 @@ func _draw() -> void:
 	# 부제는 개발 메모("이동한 구역만 기록 · 탭: 개인 표식")가 그대로 남아 있었다.
 	# 플레이어에게 하는 말로 고쳐 쓴다.
 	var map_hint := (
-		"가 본 곳만 지도에 남는다 · 탭하면 표식, 다시 탭하면 삭제 · 보는 동안 전투는 멈춘다"
+		tr("가 본 곳만 지도에 남는다 · 탭하면 표식, 다시 탭하면 삭제 · 보는 동안 전투는 멈춘다")
 		if DisplayServer.is_touchscreen_available()
-		else "가 본 곳만 지도에 남는다 · 클릭하면 표식, 우클릭하면 삭제 · 보는 동안 전투는 멈춘다"
+		else tr("가 본 곳만 지도에 남는다 · 클릭하면 표식, 우클릭하면 삭제 · 보는 동안 전투는 멈춘다")
 	)
 	# 세로 화면에서는 패널이 좁다 — 문장을 자르는 대신 글자를 한 단계씩 줄여 담는다.
 	var hint_size := HudStyle.TYPE_BODY
@@ -578,7 +578,7 @@ func _draw() -> void:
 		draw_circle(marker_center, marker_radius * 0.22, HudStyle.TEXT)
 		_queue_label(
 			marker_center + Vector2(marker_radius + 6.0, -marker_radius * 0.3),
-			str(marker.get("label", "고가치 지점")),
+			str(marker.get("label", tr("고가치 지점"))),
 			13,
 			marker_color.lightened(0.12),
 			(
@@ -616,7 +616,7 @@ func _draw() -> void:
 		)
 		_queue_label(
 			corpse_center + Vector2(marker_size * 0.7, -marker_size * 0.55),
-			"분실 장비",
+			tr("분실 장비"),
 			15,
 			HudStyle.WARN.lightened(0.2),
 			LABEL_PRIORITY_CORPSE,
@@ -632,7 +632,7 @@ func _draw() -> void:
 		draw_circle(manual_center, 3.0, HudStyle.TEXT)
 		_queue_label(
 			manual_center + Vector2(manual_radius + 7.0, 4.0),
-			"개인 표식",
+			tr("개인 표식"),
 			13,
 			HudStyle.TEXT,
 			LABEL_PRIORITY_MANUAL,
@@ -662,7 +662,7 @@ func _draw() -> void:
 		draw_polyline(_closed_polygon(diamond), HudStyle.TEXT, 2.0)
 		_queue_label(
 			boss_center + Vector2(marker_size * 0.68, -marker_size * 0.52),
-			str(boss.get_meta("display_name", "위험 개체")),
+			str(boss.get_meta("display_name", tr("위험 개체"))),
 			15,
 			HudStyle.DANGER.lightened(0.2),
 			LABEL_PRIORITY_BOSS,
@@ -684,7 +684,7 @@ func _draw() -> void:
 		var label_position := player_center + Vector2(outer_radius + 7.0, -outer_radius * 0.45)
 		_queue_label(
 			label_position,
-			"내 위치  %s" % sector,
+			tr("내 위치  %s") % sector,
 			17,
 			HudStyle.TEXT,
 			LABEL_PRIORITY_PLAYER
@@ -701,24 +701,24 @@ func _draw() -> void:
 func _footer_chips() -> Array[Dictionary]:
 	# {text, dot(색 점, 없으면 null), color(글자색)} — 범례 먼저, 현황 뒤.
 	var chips: Array[Dictionary] = [
-		{"text": "목표", "dot": OBJECTIVE_COLOR, "color": HudStyle.TEXT_DIM},
-		{"text": "탈출구", "dot": EXTRACTION_COLOR, "color": HudStyle.TEXT_DIM},
-		{"text": "위험", "dot": HudStyle.DANGER, "color": HudStyle.TEXT_DIM},
-		{"text": "표식", "dot": HudStyle.TEXT, "color": HudStyle.TEXT_DIM},
+		{"text": tr("목표"), "dot": OBJECTIVE_COLOR, "color": HudStyle.TEXT_DIM},
+		{"text": tr("탈출구"), "dot": EXTRACTION_COLOR, "color": HudStyle.TEXT_DIM},
+		{"text": tr("위험"), "dot": HudStyle.DANGER, "color": HudStyle.TEXT_DIM},
+		{"text": tr("표식"), "dot": HudStyle.TEXT, "color": HudStyle.TEXT_DIM},
 	]
 	# 탈출구를 아직 못 찾았다는 안내는 지도 한가운데에 있었다 — 하필 내 위치
 	# 표식과 같은 자리라 글자가 겹쳤다. 상태는 다른 상태들과 같이 아래 칩으로.
 	if discovered_extraction_indices.is_empty():
 		chips.append({
-			"text": "탈출구 미발견 · 직접 찾아야 합니다",
+			"text": tr("탈출구 미발견 · 직접 찾아야 합니다"),
 			"dot": HudStyle.WARN,
 			"color": HudStyle.TEXT,
 		})
 	if corpse_recovery_available:
-		chips.append({"text": "분실 장비", "dot": HudStyle.WARN, "color": HudStyle.TEXT_DIM})
-	chips.append({"text": "회수 가치 %s" % _compact_number(current_bag_value), "dot": null, "color": HudStyle.TEXT})
+		chips.append({"text": tr("분실 장비"), "dot": HudStyle.WARN, "color": HudStyle.TEXT_DIM})
+	chips.append({"text": tr("회수 가치 %s") % _compact_number(current_bag_value), "dot": null, "color": HudStyle.TEXT})
 	if not current_risk_label.is_empty():
-		chips.append({"text": current_risk_label, "dot": null, "color": HudStyle.TEXT})
+		chips.append({"text": tr(current_risk_label), "dot": null, "color": HudStyle.TEXT})
 	if is_instance_valid(player):
 		var nearest := INF
 		for extraction_index in extraction_positions.size():
@@ -726,7 +726,7 @@ func _footer_chips() -> Array[Dictionary]:
 				continue
 			nearest = minf(nearest, player.global_position.distance_to(extraction_positions[extraction_index]))
 		if nearest < INF:
-			chips.append({"text": "발견 탈출구 %.0fm" % nearest, "dot": null, "color": HudStyle.TEXT})
+			chips.append({"text": tr("발견 탈출구 %.0fm") % nearest, "dot": null, "color": HudStyle.TEXT})
 	return chips
 
 

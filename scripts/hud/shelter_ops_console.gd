@@ -96,7 +96,7 @@ func build_dock(hud_layer: CanvasLayer) -> void:
 	header_pad.custom_minimum_size = Vector2(4, 0)
 	header.add_child(header_pad)
 	header_label = SHELTER_THEME.label(
-		"쉘터 운영", SHELTER_THEME.TYPE_EYEBROW, SHELTER_THEME.ACCENT, true
+		tr("쉘터 운영"), SHELTER_THEME.TYPE_EYEBROW, SHELTER_THEME.ACCENT, true
 	)
 	header_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	header.add_child(header_label)
@@ -165,7 +165,7 @@ func _build_fever_card() -> void:
 	title_row.add_theme_constant_override("separation", 8)
 	info.add_child(title_row)
 	fever_title_label = SHELTER_THEME.label(
-		"캣닢 피버", SHELTER_THEME.TYPE_BODY, SHELTER_THEME.TEXT, true
+		tr("캣닢 피버"), SHELTER_THEME.TYPE_BODY, SHELTER_THEME.TEXT, true
 	)
 	fever_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	fever_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -182,7 +182,7 @@ func _build_fever_card() -> void:
 
 	fever_button = Button.new()
 	fever_button.name = "CatnipFeverButton"
-	fever_button.text = "캣닢 붓기"
+	fever_button.text = tr("캣닢 붓기")
 	SHELTER_THEME.style_primary(fever_button)
 	# 주 버튼이지만 카드 안에서는 작게(40) — style_primary가 올린 52를 되돌린다.
 	fever_button.custom_minimum_size = Vector2(0, SHELTER_THEME.BUTTON_HEIGHT_SMALL)
@@ -311,7 +311,7 @@ func charge_fever() -> void:
 	# 시설 버튼(open_facility)과 같은 규약: 잠겨 있어도 탭은 받고 사유를 토스트로
 	# 돌려준다. disabled로 막으면 모바일에서 눌러도 아무 일이 없어 이유가 사라진다.
 	if not GameState.is_shelter_facility_unlocked("catnip_scraper"):
-		host.call("_show_status", FEVER_LOCKED_HINT)
+		host.call("_show_status", tr(FEVER_LOCKED_HINT))
 		return
 	host.call("_charge_catnip_fever")
 	refresh()
@@ -581,9 +581,9 @@ func refresh() -> void:
 	if dock == null or host == null:
 		return
 	var idle_count := _idle_resident_count()
-	header_label.text = "쉘터 운영"
+	header_label.text = tr("쉘터 운영")
 	if header_idle_label != null:
-		header_idle_label.text = "대기 %d" % idle_count
+		header_idle_label.text = tr("대기 %d") % idle_count
 		header_idle_label.visible = idle_count > 0
 	# 이번 refresh에서 '처음으로' 열린 것들 — 자리를 다시 잡은 뒤 팝으로 등장시킨다.
 	var revealed: Array[Control] = []
@@ -605,7 +605,7 @@ func refresh() -> void:
 		if not was_visible:
 			revealed.append(button)
 		var badge := _facility_badge(facility_id)
-		button.text = str(entry["label"])
+		button.text = tr(str(entry["label"]))
 		var badge_label := _badge_of(button)
 		if badge_label != null:
 			badge_label.text = badge
@@ -639,20 +639,20 @@ func _refresh_fever_card(revealed: Array[Control] = []) -> void:
 	var affordable := GameState.catnip >= cost
 	fever_gauge.value = GameState.get_catnip_fever_ratio() * 100.0
 	if GameState.catnip_fever_active:
-		fever_title_label.text = "피버 %.0fx" % GameState.get_catnip_fever_multiplier()
-		fever_value_label.text = "%.0f초" % GameState.get_catnip_fever_remaining_seconds()
-		fever_button.text = "진행 중"
+		fever_title_label.text = tr("피버 %.0fx") % GameState.get_catnip_fever_multiplier()
+		fever_value_label.text = tr("%.0f초") % GameState.get_catnip_fever_remaining_seconds()
+		fever_button.text = tr("진행 중")
 		# 진행 중에는 눌러도 할 일이 없다 — 입력을 막는 건 이 경우뿐이다.
 		fever_button.disabled = true
-		fever_button.tooltip_text = "캣닢 피버 진행 중 — 모든 생산이 폭주합니다."
+		fever_button.tooltip_text = tr("캣닢 피버 진행 중 — 모든 생산이 폭주합니다.")
 	else:
-		fever_title_label.text = "캣닢 피버"
+		fever_title_label.text = tr("캣닢 피버")
 		fever_value_label.text = "%d%%" % roundi(GameState.get_catnip_fever_ratio() * 100.0)
-		fever_button.text = "캣닢 %s 붓기" % GameState.format_compact_number(cost)
+		fever_button.text = tr("캣닢 %s 붓기") % GameState.format_compact_number(cost)
 		# 캣닢이 모자라도 탭은 받는다 — 사유는 host의 _charge_catnip_fever가
 		# 토스트로 돌려준다(시설 버튼과 같은 방식).
 		fever_button.disabled = false
-		fever_button.tooltip_text = "캣닢 %s를 부어 게이지 %d%% 충전 · 만충 시 %.0f배 생산 %.0f초" % [
+		fever_button.tooltip_text = tr("캣닢 %s를 부어 게이지 %d%% 충전 · 만충 시 %.0f배 생산 %.0f초") % [
 			GameState.format_compact_number(cost),
 			roundi(GameState.CATNIP_FEVER_CHARGE_STEP),
 			GameState.get_catnip_fever_multiplier(),
@@ -672,9 +672,9 @@ func open_facility(facility_id: String) -> void:
 	if host == null or bool(host.call("_ui_blocks_player")):
 		return
 	if not GameState.is_shelter_facility_unlocked(facility_id):
-		host.call("_show_status", "잠김 · %s 후 이용할 수 있습니다." % str(
+		host.call("_show_status", tr("잠김 · %s 후 이용할 수 있습니다.") % tr(str(
 			host.LOCKED_FACILITY_HINTS.get(facility_id, "사자의 계약")
-		))
+		)))
 		return
 	var logic := host.get("facility_logic") as Dictionary
 	var module := logic.get(facility_id) as Node
@@ -705,7 +705,7 @@ func handle_touch(screen_position: Vector2) -> bool:
 
 func _facility_badge(facility_id: String) -> String:
 	if not GameState.is_shelter_facility_unlocked(facility_id):
-		return "잠김"
+		return tr("잠김")
 	match facility_id:
 		"scratcher_bank":
 			return "%d/%d" % [
@@ -723,10 +723,10 @@ func _facility_badge(facility_id: String) -> String:
 			if module != null:
 				var craftable := int(module.call("get_craftable_count"))
 				if craftable > 0:
-					return "가능 %d" % craftable
+					return tr("가능 %d") % craftable
 		"storage":
 			if GameState.get_storage_used_slots() >= GameState.get_storage_capacity():
-				return "만재"
+				return tr("만재")
 	return ""
 
 

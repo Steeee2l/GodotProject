@@ -37,7 +37,7 @@ func _ready() -> void:
 
 
 func get_interaction_prompt() -> String:
-	return "스크래핑 생산기 · 주민 배치로 캣닢 생산"
+	return tr("스크래핑 생산기 · 주민 배치로 캣닢 생산")
 
 
 func get_interaction_radius() -> float:
@@ -47,7 +47,7 @@ func get_interaction_radius() -> float:
 func interact() -> String:
 	GameState.process_shelter_progress()
 	_open_ui()
-	return "주민을 배치해 캣닢을 자동 생산합니다."
+	return tr("주민을 배치해 캣닢을 자동 생산합니다.")
 
 
 func set_interaction_focus(value: bool) -> void:
@@ -164,8 +164,8 @@ func _rebuild_ui() -> void:
 	content.add_child(header)
 	# [생산기 / 스크래핑 캣닢 생산기 [Lv.N] / 설명]  ······  [둥근 닫기]
 	header.add_child(_modal_header(
-		"스크래핑 캣닢 생산기",
-		"캣닢 특화 주민이 피버 자원을 생산합니다.",
+		tr("스크래핑 캣닢 생산기"),
+		tr("캣닢 특화 주민이 피버 자원을 생산합니다."),
 		"Lv.%d" % GameState.catnip_scraper_level
 	))
 	var wallet := HFlowContainer.new()
@@ -184,10 +184,10 @@ func _rebuild_ui() -> void:
 	summary.add_theme_constant_override("h_separation", 10)
 	summary.add_theme_constant_override("v_separation", 10)
 	content.add_child(summary)
-	summary.add_child(_summary_card("초당 생산", GameState.format_compact_number(GameState.get_catnip_per_second()), "catnip", compact))
+	summary.add_child(_summary_card(tr("초당 생산"), GameState.format_compact_number(GameState.get_catnip_per_second()), "catnip", compact))
 	summary.add_child(_summary_card(
-		"작업자",
-		"%d / %d명" % [GameState.get_active_catnip_workers(), GameState.get_catnip_worker_slots()],
+		tr("작업자"),
+		tr("%d / %d명") % [GameState.get_active_catnip_workers(), GameState.get_catnip_worker_slots()],
 		"resident",
 		compact
 	))
@@ -201,7 +201,7 @@ func _rebuild_ui() -> void:
 
 	var catnip_slots: int = GameState.get_catnip_worker_slots()
 	body.add_child(_seat_header(
-		"작업 좌석",
+		tr("작업 좌석"),
 		SHELTER_THEME.TEXT,
 		_assign_all_workers,
 		_clear_all_workers
@@ -228,17 +228,17 @@ func _rebuild_ui() -> void:
 		seat_row.add_child(_portrait_card(seat_id, true, catnip_slots))
 	if catnip_slots > rendered_seats:
 		seat_row.add_child(_overflow_card(
-			"그 외 %d석" % (catnip_slots - rendered_seats),
-			"앉은 고양이 %s" % GameState.format_compact_number(
+			tr("그 외 %d석") % (catnip_slots - rendered_seats),
+			tr("앉은 고양이 %s") % GameState.format_compact_number(
 				maxi(0, assigned_ids.size() - rendered_seats)
 			)
 		))
 
-	body.add_child(SHELTER_THEME.section_header("대기 주민", SHELTER_THEME.caption("눌러서 좌석에 앉히기")))
+	body.add_child(SHELTER_THEME.section_header(tr("대기 주민"), SHELTER_THEME.caption(tr("눌러서 좌석에 앉히기"))))
 	if GameState.resident_cat_ids.is_empty():
 		body.add_child(_empty_resident_state(
-			"구출한 주민이 없습니다.",
-			"캣닢 생산에 배치할 주민이 없습니다. 도시에서 구출해 오거나, 시간이 지나면 소문을 듣고 찾아옵니다.",
+			tr("구출한 주민이 없습니다."),
+			tr("캣닢 생산에 배치할 주민이 없습니다. 도시에서 구출해 오거나, 시간이 지나면 소문을 듣고 찾아옵니다."),
 			compact
 		))
 	else:
@@ -265,8 +265,8 @@ func _rebuild_ui() -> void:
 			bench_shown += 1
 		if bench_hidden > 0:
 			bench.add_child(_overflow_card(
-				"그 외 %s명" % GameState.format_compact_number(bench_hidden),
-				"전원 배치로 한 번에"
+				tr("그 외 %s명") % GameState.format_compact_number(bench_hidden),
+				tr("전원 배치로 한 번에")
 			))
 
 	_rebuild_actions()
@@ -290,17 +290,17 @@ func _rebuild_actions() -> void:
 	var upgrade_cost := int(GameState.CATNIP_SCRAPER_UPGRADE_COSTS.get(GameState.catnip_scraper_level + 1, 0))
 	var upgrade := Button.new()
 	upgrade.text = (
-		"최고 레벨"
-		if upgrade_cost == 0 else "좌석 +1 확장\n고철 %s · Lv.%d" % [
+		tr("최고 레벨")
+		if upgrade_cost == 0 else tr("좌석 +1 확장\n고철 %s · Lv.%d") % [
 			GameState.format_compact_number(upgrade_cost),
 			GameState.catnip_scraper_level + 1,
 		]
 	)
 	SHELTER_THEME.style_primary(upgrade)
 	upgrade.tooltip_text = (
-		"이미 최고 레벨입니다."
+		tr("이미 최고 레벨입니다.")
 		if upgrade_cost == 0
-		else "좌석 확장 · 고철 %s (보유 %s)" % [
+		else tr("좌석 확장 · 고철 %s (보유 %s)") % [
 			GameState.format_compact_number(upgrade_cost),
 			GameState.format_compact_number(GameState.scrap),
 		]
@@ -312,12 +312,12 @@ func _rebuild_actions() -> void:
 	# 농축: 캣닢을 다시 캣닢 생산에 넣는 복리 사다리.
 	var infusion_cost := GameState.get_infusion_cost()
 	var infusion := Button.new()
-	infusion.text = "농축 Lv.%d\n캣닢 %s · 생산 +8%%" % [
+	infusion.text = tr("농축 Lv.%d\n캣닢 %s · 생산 +8%%") % [
 		GameState.catnip_infusion_level + 1,
 		GameState.format_compact_number(infusion_cost),
 	]
 	SHELTER_THEME.style_secondary(infusion)
-	infusion.tooltip_text = "농축 · 캣닢 %s (보유 %s)" % [
+	infusion.tooltip_text = tr("농축 · 캣닢 %s (보유 %s)") % [
 		GameState.format_compact_number(infusion_cost),
 		GameState.format_compact_number(GameState.catnip),
 	]
@@ -327,7 +327,7 @@ func _rebuild_actions() -> void:
 	actions.add_child(infusion)
 	# 안내 문구는 버튼 줄과 나란히 두면 폭을 잡아먹는다 — 아래 한 줄로 내린다.
 	# 부스터는 폐지됐다(캣닢의 쓸모는 캣닢 피버 하나로 모음, 2026-08-28).
-	var boost_note := SHELTER_THEME.caption("캣닢은 운영 독의 캣닢 피버에 씁니다 — 쉘터 전체 생산 가속")
+	var boost_note := SHELTER_THEME.caption(tr("캣닢은 운영 독의 캣닢 피버에 씁니다 — 쉘터 전체 생산 가속"))
 	boost_note.name = "CatnipBoostNote"
 	boost_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	boost_note.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -354,7 +354,7 @@ func _stretch_action(button: Button) -> void:
 
 func _modal_header(title_text: String, subtitle_text: String, level_text: String) -> HBoxContainer:
 	# ShelterTheme.modal_header 규격에 레벨 알약 칩을 제목 옆에 얹은 것.
-	var header := SHELTER_THEME.modal_header(title_text, subtitle_text, Callable(), "생산기")
+	var header := SHELTER_THEME.modal_header(title_text, subtitle_text, Callable(), tr("생산기"))
 	var close := header.get_meta("close_button") as Button
 	close.name = "CloseButton"
 	# 글자 × 대신 아이콘 — 특수기호 금지 규칙, 그리고 닫기는 아이콘 하나로 충분하다.
@@ -363,7 +363,7 @@ func _modal_header(title_text: String, subtitle_text: String, level_text: String
 	close.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	close.expand_icon = false
 	close.add_theme_constant_override("icon_max_width", 18)
-	close.tooltip_text = "닫기"
+	close.tooltip_text = tr("닫기")
 	close.pressed.connect(func() -> void:
 		if is_instance_valid(ui_layer):
 			ui_layer.queue_free()
@@ -433,35 +433,35 @@ func _portrait_card(resident_id: String, is_seat: bool, slots: int) -> Button:
 		# 빈 좌석: 실루엣 + 흐린 글자. 여기 앉힐 수 있다는 자리 표시.
 		button.name = "SeatEmpty"
 		button.icon = UI_ICONS.get_icon("resident", 56, SHELTER_THEME.TEXT_FAINT)
-		button.text = "빈 좌석"
+		button.text = tr("빈 좌석")
 		button.disabled = true
 		_apply_card_styles(button, false, false)
 		return button
 	var trait_data: Dictionary = GameState.get_resident_trait(resident_id)
-	var display_name := str(trait_data.get("display_name", "이름 없는 주민"))
+	var display_name := str(trait_data.get("display_name", tr("이름 없는 주민")))
 	var busy_elsewhere := not is_seat and GameState.assigned_worker_ids.has(resident_id)
 	var seats_free := GameState.assigned_catnip_worker_ids.size() < slots
 	button.name = "ResidentCard_%s" % resident_id
 	button.icon = RESIDENT_PORTRAITS.get_portrait(int(trait_data.get("portrait_index", 0)))
 	_apply_card_styles(button, not is_seat, is_seat)
 	if is_seat:
-		button.text = "%s\n캣닢 x%.2f" % [display_name, float(trait_data.get("catnip", 1.0))]
+		button.text = tr("%s\n캣닢 x%.2f") % [display_name, float(trait_data.get("catnip", 1.0))]
 	elif busy_elsewhere:
-		button.text = "%s\n꾹꾹이 작업 중" % display_name
+		button.text = tr("%s\n꾹꾹이 작업 중") % display_name
 		button.disabled = true
 	else:
-		button.text = "%s\n캣닢 x%.2f" % [display_name, float(trait_data.get("catnip", 1.0))]
+		button.text = tr("%s\n캣닢 x%.2f") % [display_name, float(trait_data.get("catnip", 1.0))]
 		button.disabled = not seats_free
 	if not button.disabled:
 		button.pressed.connect(func(): _toggle_worker(resident_id))
 	var quirk_line: String = GameState.get_resident_trait_quirk(resident_id)
-	button.tooltip_text = "%s · %s\n꾹꾹이 x%.2f · 캣닢 x%.2f%s\n%s" % [
+	button.tooltip_text = tr("%s · %s\n꾹꾹이 x%.2f · 캣닢 x%.2f%s\n%s") % [
 		display_name,
 		str(trait_data.get("name", "")),
 		float(trait_data.get("kneading", 1.0)),
 		float(trait_data.get("catnip", 1.0)),
 		"" if quirk_line.is_empty() else "\n" + quirk_line,
-		"좌클릭: 좌석에서 일으키기" if is_seat else "좌클릭: 좌석에 앉히기",
+		tr("좌클릭: 좌석에서 일으키기") if is_seat else tr("좌클릭: 좌석에 앉히기"),
 	]
 	return button
 
@@ -494,12 +494,12 @@ func _seat_header(title: String, _color: Color, assign_all: Callable, clear_all:
 	# 꾹꾹이 생산기와 같은 문법 — 제목 줄 오른쪽에 일괄 배치·해제.
 	var trailing := HBoxContainer.new()
 	trailing.add_theme_constant_override("separation", 6)
-	var assign_button := SHELTER_THEME.secondary_button("전원 배치", true)
+	var assign_button := SHELTER_THEME.secondary_button(tr("전원 배치"), true)
 	assign_button.name = "AssignAllButton"
 	assign_button.custom_minimum_size.x = 84.0
 	assign_button.pressed.connect(assign_all)
 	trailing.add_child(assign_button)
-	var clear_button := SHELTER_THEME.secondary_button("전원 해제", true)
+	var clear_button := SHELTER_THEME.secondary_button(tr("전원 해제"), true)
 	clear_button.name = "ClearAllButton"
 	clear_button.custom_minimum_size.x = 84.0
 	clear_button.pressed.connect(clear_all)
@@ -533,22 +533,22 @@ func _overflow_card(title: String, subtitle: String) -> Control:
 func _assign_all_workers() -> void:
 	var added: int = GameState.assign_all_workers_to_catnip()
 	if added <= 0:
-		_set_feedback("좌석에 앉힐 대기 주민이 없습니다.", false)
+		_set_feedback(tr("좌석에 앉힐 대기 주민이 없습니다."), false)
 		return
 	GameState.save_persistent_state()
 	get_tree().call_group("shelter_resident_host", "refresh_shelter_residents", false)
-	_set_feedback("주민 %s명을 좌석에 앉혔습니다." % GameState.format_compact_number(added), true)
+	_set_feedback(tr("주민 %s명을 좌석에 앉혔습니다.") % GameState.format_compact_number(added), true)
 	_rebuild_ui()
 
 
 func _clear_all_workers() -> void:
 	var removed: int = GameState.unassign_all_workers_from_catnip()
 	if removed <= 0:
-		_set_feedback("좌석에 앉아 있는 주민이 없습니다.", false)
+		_set_feedback(tr("좌석에 앉아 있는 주민이 없습니다."), false)
 		return
 	GameState.save_persistent_state()
 	get_tree().call_group("shelter_resident_host", "refresh_shelter_residents", false)
-	_set_feedback("주민 %s명을 좌석에서 일으켰습니다." % GameState.format_compact_number(removed), true)
+	_set_feedback(tr("주민 %s명을 좌석에서 일으켰습니다.") % GameState.format_compact_number(removed), true)
 	_rebuild_ui()
 
 
@@ -564,19 +564,19 @@ func _upgrade() -> void:
 	var next_level: int = GameState.catnip_scraper_level + 1
 	var cost := int(GameState.CATNIP_SCRAPER_UPGRADE_COSTS.get(next_level, 0))
 	if cost <= 0:
-		_set_feedback("이미 최고 레벨입니다.", false)
+		_set_feedback(tr("이미 최고 레벨입니다."), false)
 		return
 	if GameState.scrap < cost:
 		_set_feedback(
-			"고철이 %s 부족합니다." % GameState.format_compact_number(cost - GameState.scrap),
+			tr("고철이 %s 부족합니다.") % GameState.format_compact_number(cost - GameState.scrap),
 			false
 		)
 		return
 	if not GameState.try_upgrade_catnip_scraper():
-		_set_feedback("확장 조건을 만족하지 못했습니다.", false)
+		_set_feedback(tr("확장 조건을 만족하지 못했습니다."), false)
 		return
 	GameState.save_persistent_state()
-	_set_feedback("Lv.%d 확장 완료 · 작업 좌석 +1" % GameState.catnip_scraper_level, true)
+	_set_feedback(tr("Lv.%d 확장 완료 · 작업 좌석 +1") % GameState.catnip_scraper_level, true)
 	_rebuild_ui()
 
 
@@ -584,14 +584,14 @@ func _upgrade_infusion() -> void:
 	var cost := GameState.get_infusion_cost()
 	if GameState.catnip < cost:
 		_set_feedback(
-			"캣닢이 %s 부족합니다." % GameState.format_compact_number(cost - GameState.catnip),
+			tr("캣닢이 %s 부족합니다.") % GameState.format_compact_number(cost - GameState.catnip),
 			false
 		)
 		return
 	if not GameState.try_upgrade_catnip_infusion():
-		_set_feedback("농축 조건을 만족하지 못했습니다.", false)
+		_set_feedback(tr("농축 조건을 만족하지 못했습니다."), false)
 		return
-	_set_feedback("농축 Lv.%d · 캣닢 생산 +8%%" % GameState.catnip_infusion_level, true)
+	_set_feedback(tr("농축 Lv.%d · 캣닢 생산 +8%%") % GameState.catnip_infusion_level, true)
 	_rebuild_ui()
 
 
@@ -631,7 +631,7 @@ func _close_button() -> Button:
 	button.icon = UI_ICONS.get_icon("close", 22, SHELTER_THEME.TEXT)
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	button.add_theme_constant_override("icon_max_width", 18)
-	button.tooltip_text = "닫기"
+	button.tooltip_text = tr("닫기")
 	return button
 
 

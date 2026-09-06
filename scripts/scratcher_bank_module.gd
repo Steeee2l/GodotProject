@@ -39,7 +39,7 @@ func _ready() -> void:
 
 
 func get_interaction_prompt() -> String:
-	return "꾹꾹이 생산기 · 주민 배치로 고철 생산"
+	return tr("꾹꾹이 생산기 · 주민 배치로 고철 생산")
 
 
 func get_interaction_radius() -> float:
@@ -49,7 +49,7 @@ func get_interaction_radius() -> float:
 func interact() -> String:
 	GameState.process_shelter_progress()
 	_open_ui()
-	return "주민의 특성에 따라 고철을 자동 생산합니다."
+	return tr("주민의 특성에 따라 고철을 자동 생산합니다.")
 
 
 func set_interaction_focus(value: bool) -> void:
@@ -168,8 +168,8 @@ func _rebuild_ui() -> void:
 	content.add_child(header)
 	# [생산기 / 꾹꾹이 고철 생산기 [Lv.N] / 설명]  ······  [둥근 닫기]
 	header.add_child(_modal_header(
-		"꾹꾹이 고철 생산기",
-		"주민을 배치하면 고철이 자동 생산됩니다.",
+		tr("꾹꾹이 고철 생산기"),
+		tr("주민을 배치하면 고철이 자동 생산됩니다."),
 		"Lv.%d" % GameState.scratcher_bank_level
 	))
 	var wallet := HFlowContainer.new()
@@ -190,12 +190,12 @@ func _rebuild_ui() -> void:
 	summary.add_theme_constant_override("h_separation", 10)
 	summary.add_theme_constant_override("v_separation", 10)
 	content.add_child(summary)
-	summary.add_child(_summary_card("시간당", GameState.format_compact_number(GameState.get_scrap_per_hour()), "scrap", compact))
-	summary.add_child(_summary_card("작업자", "%d / %d명" % [workers, slots], "resident", compact))
+	summary.add_child(_summary_card(tr("시간당"), GameState.format_compact_number(GameState.get_scrap_per_hour()), "scrap", compact))
+	summary.add_child(_summary_card(tr("작업자"), tr("%d / %d명") % [workers, slots], "resident", compact))
 	# 세 번째 칸은 오버클럭 누적 배율 — 부스터가 사라진 자리에서 "사다리를 오르면
 	# 이 숫자가 큰다"를 보여 준다.
 	summary.add_child(_summary_card(
-		"오버클럭",
+		tr("오버클럭"),
 		"+%d%%" % (GameState.scratcher_overclock_level * 8),
 		"upgrade",
 		compact
@@ -212,7 +212,7 @@ func _rebuild_ui() -> void:
 	content.add_child(body)
 
 	body.add_child(_seat_header(
-		"작업 좌석",
+		tr("작업 좌석"),
 		SHELTER_THEME.TEXT,
 		_assign_all_workers,
 		_clear_all_workers
@@ -240,22 +240,22 @@ func _rebuild_ui() -> void:
 		seat_row.add_child(_portrait_card(seat_id, true, slots))
 	if slots > rendered_seats:
 		seat_row.add_child(_overflow_card(
-			"그 외 %d석" % (slots - rendered_seats),
-			"앉은 고양이 %s" % GameState.format_compact_number(
+			tr("그 외 %d석") % (slots - rendered_seats),
+			tr("앉은 고양이 %s") % GameState.format_compact_number(
 				maxi(0, assigned_ids.size() - rendered_seats)
 			)
 		))
 
 	var bench_hint := SHELTER_THEME.caption(
-		"눌러서 좌석에 앉히기"
+		tr("눌러서 좌석에 앉히기")
 		if DisplayServer.is_touchscreen_available()
-		else "눌러서 앉히기 · 우클릭 특성 재굴림"
+		else tr("눌러서 앉히기 · 우클릭 특성 재굴림")
 	)
-	body.add_child(SHELTER_THEME.section_header("대기 주민", bench_hint))
+	body.add_child(SHELTER_THEME.section_header(tr("대기 주민"), bench_hint))
 	if GameState.resident_cat_ids.is_empty():
 		body.add_child(_empty_resident_state(
-			"구출한 주민이 없습니다.",
-			"도시에서 구출해 오거나, 시간이 지나면 소문을 듣고 찾아옵니다.",
+			tr("구출한 주민이 없습니다."),
+			tr("도시에서 구출해 오거나, 시간이 지나면 소문을 듣고 찾아옵니다."),
 			compact
 		))
 	else:
@@ -282,8 +282,8 @@ func _rebuild_ui() -> void:
 			bench_shown += 1
 		if bench_hidden > 0:
 			bench.add_child(_overflow_card(
-				"그 외 %s명" % GameState.format_compact_number(bench_hidden),
-				"전원 배치로 한 번에"
+				tr("그 외 %s명") % GameState.format_compact_number(bench_hidden),
+				tr("전원 배치로 한 번에")
 			))
 
 	_rebuild_actions()
@@ -311,13 +311,13 @@ func _rebuild_actions() -> void:
 	var upgrade_cost := int(GameState.SCRATCHER_UPGRADE_COSTS.get(GameState.scratcher_bank_level + 1, 0))
 	var upgrade := Button.new()
 	upgrade.text = (
-		"최고 레벨"
-		if upgrade_cost == 0 else "좌석 +1 확장\n고철 %s · 생산 ×1.9" % (
+		tr("최고 레벨")
+		if upgrade_cost == 0 else tr("좌석 +1 확장\n고철 %s · 생산 ×1.9") % (
 			GameState.format_compact_number(upgrade_cost)
 		)
 	)
 	SHELTER_THEME.style_primary(upgrade)
-	upgrade.tooltip_text = "확장 Lv.%d → Lv.%d" % [
+	upgrade.tooltip_text = tr("확장 Lv.%d → Lv.%d") % [
 		GameState.scratcher_bank_level, GameState.scratcher_bank_level + 1,
 	]
 	upgrade.disabled = upgrade_cost == 0 or GameState.scrap < upgrade_cost
@@ -327,12 +327,12 @@ func _rebuild_actions() -> void:
 	# 오버클럭: 고철을 다시 생산에 넣는 복리 사다리. "항상 다음에 살 것"을 만든다.
 	var overclock_cost := GameState.get_overclock_cost()
 	var overclock := Button.new()
-	overclock.text = "오버클럭 Lv.%d\n고철 %s · 시간당 +8%%" % [
+	overclock.text = tr("오버클럭 Lv.%d\n고철 %s · 시간당 +8%%") % [
 		GameState.scratcher_overclock_level + 1,
 		GameState.format_compact_number(overclock_cost),
 	]
 	SHELTER_THEME.style_secondary(overclock)
-	overclock.tooltip_text = "오버클럭 Lv.%d → Lv.%d" % [
+	overclock.tooltip_text = tr("오버클럭 Lv.%d → Lv.%d") % [
 		GameState.scratcher_overclock_level, GameState.scratcher_overclock_level + 1,
 	]
 	overclock.disabled = GameState.scrap < overclock_cost
@@ -361,7 +361,7 @@ func _stretch_action(button: Button) -> void:
 
 func _modal_header(title_text: String, subtitle_text: String, level_text: String) -> HBoxContainer:
 	# ShelterTheme.modal_header 규격에 레벨 알약 칩을 제목 옆에 얹은 것.
-	var header := SHELTER_THEME.modal_header(title_text, subtitle_text, Callable(), "생산기")
+	var header := SHELTER_THEME.modal_header(title_text, subtitle_text, Callable(), tr("생산기"))
 	var close := header.get_meta("close_button") as Button
 	close.name = "CloseButton"
 	# 글자 × 대신 아이콘 — 특수기호 금지 규칙, 그리고 닫기는 아이콘 하나로 충분하다.
@@ -370,7 +370,7 @@ func _modal_header(title_text: String, subtitle_text: String, level_text: String
 	close.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	close.expand_icon = false
 	close.add_theme_constant_override("icon_max_width", 18)
-	close.tooltip_text = "닫기"
+	close.tooltip_text = tr("닫기")
 	close.pressed.connect(func() -> void:
 		if is_instance_valid(ui_layer):
 			ui_layer.queue_free()
@@ -441,24 +441,24 @@ func _portrait_card(resident_id: String, is_seat: bool, slots: int) -> Button:
 		# 빈 좌석: 실루엣 + 흐린 글자. 여기 앉힐 수 있다는 자리 표시.
 		button.name = "SeatEmpty"
 		button.icon = UI_ICONS.get_icon("resident", 56, SHELTER_THEME.TEXT_FAINT)
-		button.text = "빈 좌석"
+		button.text = tr("빈 좌석")
 		button.disabled = true
 		_apply_card_styles(button, false, false)
 		return button
 	var trait_data: Dictionary = GameState.get_resident_trait(resident_id)
-	var display_name := str(trait_data.get("display_name", "이름 없는 주민"))
+	var display_name := str(trait_data.get("display_name", tr("이름 없는 주민")))
 	var busy_elsewhere := not is_seat and GameState.assigned_catnip_worker_ids.has(resident_id)
 	var seats_free := GameState.assigned_worker_ids.size() < slots
 	button.name = "ResidentCard_%s" % resident_id
 	button.icon = RESIDENT_PORTRAITS.get_portrait(int(trait_data.get("portrait_index", 0)))
 	_apply_card_styles(button, not is_seat, is_seat)
 	if is_seat:
-		button.text = "%s\n꾹꾹이 x%.2f" % [display_name, float(trait_data.get("kneading", 1.0))]
+		button.text = tr("%s\n꾹꾹이 x%.2f") % [display_name, float(trait_data.get("kneading", 1.0))]
 	elif busy_elsewhere:
-		button.text = "%s\n캣닢 작업 중" % display_name
+		button.text = tr("%s\n캣닢 작업 중") % display_name
 		button.disabled = true
 	else:
-		button.text = "%s\n꾹꾹이 x%.2f" % [display_name, float(trait_data.get("kneading", 1.0))]
+		button.text = tr("%s\n꾹꾹이 x%.2f") % [display_name, float(trait_data.get("kneading", 1.0))]
 		button.disabled = not seats_free
 	if not button.disabled:
 		button.pressed.connect(func(): _toggle_worker(resident_id))
@@ -472,13 +472,13 @@ func _portrait_card(resident_id: String, is_seat: bool, slots: int) -> Button:
 			_reroll_worker(resident_id)
 	)
 	var quirk_line: String = GameState.get_resident_trait_quirk(resident_id)
-	button.tooltip_text = "%s · %s\n꾹꾹이 x%.2f · 캣닢 x%.2f%s\n%s\n우클릭: 특성 재굴림 · 츄르 %s" % [
+	button.tooltip_text = tr("%s · %s\n꾹꾹이 x%.2f · 캣닢 x%.2f%s\n%s\n우클릭: 특성 재굴림 · 츄르 %s") % [
 		display_name,
 		str(trait_data.get("name", "")),
 		float(trait_data.get("kneading", 1.0)),
 		float(trait_data.get("catnip", 1.0)),
 		"" if quirk_line.is_empty() else "\n" + quirk_line,
-		"좌클릭: 좌석에서 일으키기" if is_seat else "좌클릭: 좌석에 앉히기",
+		tr("좌클릭: 좌석에서 일으키기") if is_seat else tr("좌클릭: 좌석에 앉히기"),
 		GameState.format_compact_number(GameState.get_resident_reroll_cost(resident_id)),
 	]
 	return button
@@ -513,12 +513,12 @@ func _seat_header(title: String, _color: Color, assign_all: Callable, clear_all:
 	# UI가 아니라 벌이다.
 	var trailing := HBoxContainer.new()
 	trailing.add_theme_constant_override("separation", 6)
-	var assign_button := SHELTER_THEME.secondary_button("전원 배치", true)
+	var assign_button := SHELTER_THEME.secondary_button(tr("전원 배치"), true)
 	assign_button.name = "AssignAllButton"
 	assign_button.custom_minimum_size.x = 84.0
 	assign_button.pressed.connect(assign_all)
 	trailing.add_child(assign_button)
-	var clear_button := SHELTER_THEME.secondary_button("전원 해제", true)
+	var clear_button := SHELTER_THEME.secondary_button(tr("전원 해제"), true)
 	clear_button.name = "ClearAllButton"
 	clear_button.custom_minimum_size.x = 84.0
 	clear_button.pressed.connect(clear_all)
@@ -553,22 +553,22 @@ func _overflow_card(title: String, subtitle: String) -> Control:
 func _assign_all_workers() -> void:
 	var added: int = GameState.assign_all_workers_to_scratcher()
 	if added <= 0:
-		_set_feedback("좌석에 앉힐 대기 주민이 없습니다.", false)
+		_set_feedback(tr("좌석에 앉힐 대기 주민이 없습니다."), false)
 		return
 	GameState.save_persistent_state()
 	get_tree().call_group("shelter_resident_host", "refresh_shelter_residents", false)
-	_set_feedback("주민 %s명을 좌석에 앉혔습니다." % GameState.format_compact_number(added), true)
+	_set_feedback(tr("주민 %s명을 좌석에 앉혔습니다.") % GameState.format_compact_number(added), true)
 	_rebuild_ui()
 
 
 func _clear_all_workers() -> void:
 	var removed: int = GameState.unassign_all_workers_from_scratcher()
 	if removed <= 0:
-		_set_feedback("좌석에 앉아 있는 주민이 없습니다.", false)
+		_set_feedback(tr("좌석에 앉아 있는 주민이 없습니다."), false)
 		return
 	GameState.save_persistent_state()
 	get_tree().call_group("shelter_resident_host", "refresh_shelter_residents", false)
-	_set_feedback("주민 %s명을 좌석에서 일으켰습니다." % GameState.format_compact_number(removed), true)
+	_set_feedback(tr("주민 %s명을 좌석에서 일으켰습니다.") % GameState.format_compact_number(removed), true)
 	_rebuild_ui()
 
 
@@ -577,20 +577,20 @@ func _reroll_worker(resident_id: String) -> void:
 	if bool(result.get("ok", false)):
 		get_tree().call_group("shelter_resident_host", "refresh_shelter_residents", false)
 		var rolled: Dictionary = result.get("trait", {}) as Dictionary
-		_set_feedback("특성 재굴림 완료 · %s" % str(rolled.get("name", "새 특성")), true)
+		_set_feedback(tr("특성 재굴림 완료 · %s") % str(rolled.get("name", tr("새 특성"))), true)
 		_rebuild_ui()
 		return
 	# 재굴림은 우클릭이라 더더욱 조용히 실패하면 안 된다 — 눌린 줄도 모른다.
 	match str(result.get("reason", "")):
 		"churu":
 			_set_feedback(
-				"츄르가 %d개 부족합니다." % maxi(0, int(result.get("cost", 0)) - GameState.churu),
+				tr("츄르가 %d개 부족합니다.") % maxi(0, int(result.get("cost", 0)) - GameState.churu),
 				false
 			)
 		"no_candidates":
-			_set_feedback("바꿀 수 있는 다른 특성이 없습니다.", false)
+			_set_feedback(tr("바꿀 수 있는 다른 특성이 없습니다."), false)
 		_:
-			_set_feedback("이 주민은 재굴림할 수 없습니다.", false)
+			_set_feedback(tr("이 주민은 재굴림할 수 없습니다."), false)
 
 
 func _toggle_worker(resident_id: String) -> void:
@@ -606,19 +606,19 @@ func _upgrade() -> void:
 	var next_level: int = GameState.scratcher_bank_level + 1
 	var cost := int(GameState.SCRATCHER_UPGRADE_COSTS.get(next_level, 0))
 	if cost <= 0:
-		_set_feedback("이미 최고 레벨입니다.", false)
+		_set_feedback(tr("이미 최고 레벨입니다."), false)
 		return
 	if GameState.scrap < cost:
 		_set_feedback(
-			"고철이 %s 부족합니다." % GameState.format_compact_number(cost - GameState.scrap),
+			tr("고철이 %s 부족합니다.") % GameState.format_compact_number(cost - GameState.scrap),
 			false
 		)
 		return
 	if not GameState.try_upgrade_scratcher_bank():
-		_set_feedback("확장 조건을 만족하지 못했습니다.", false)
+		_set_feedback(tr("확장 조건을 만족하지 못했습니다."), false)
 		return
 	GameState.save_persistent_state()
-	_set_feedback("Lv.%d 확장 완료 · 작업 좌석 +1" % GameState.scratcher_bank_level, true)
+	_set_feedback(tr("Lv.%d 확장 완료 · 작업 좌석 +1") % GameState.scratcher_bank_level, true)
 	_rebuild_ui()
 
 
@@ -626,14 +626,14 @@ func _upgrade_overclock() -> void:
 	var cost := GameState.get_overclock_cost()
 	if GameState.scrap < cost:
 		_set_feedback(
-			"고철이 %s 부족합니다." % GameState.format_compact_number(cost - GameState.scrap),
+			tr("고철이 %s 부족합니다.") % GameState.format_compact_number(cost - GameState.scrap),
 			false
 		)
 		return
 	if not GameState.try_upgrade_scratcher_overclock():
-		_set_feedback("오버클럭 조건을 만족하지 못했습니다.", false)
+		_set_feedback(tr("오버클럭 조건을 만족하지 못했습니다."), false)
 		return
-	_set_feedback("오버클럭 Lv.%d · 시간당 +8%%" % GameState.scratcher_overclock_level, true)
+	_set_feedback(tr("오버클럭 Lv.%d · 시간당 +8%%") % GameState.scratcher_overclock_level, true)
 	_rebuild_ui()
 
 
@@ -675,7 +675,7 @@ func _close_button() -> Button:
 	button.icon = UI_ICONS.get_icon("close", 22, SHELTER_THEME.TEXT)
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	button.add_theme_constant_override("icon_max_width", 18)
-	button.tooltip_text = "닫기"
+	button.tooltip_text = tr("닫기")
 	return button
 
 

@@ -43,7 +43,7 @@ func celebrate(title: String, subtitle: String = "", eyebrow: String = "임무 �
 		banner_tween.kill()
 	strip_active = false
 	_relayout_host_banners()
-	eyebrow_label.text = "—  %s  —" % eyebrow
+	eyebrow_label.text = "—  %s  —" % tr(eyebrow)
 	title_label.text = title
 	subtitle_label.text = subtitle
 	subtitle_label.visible = not subtitle.is_empty()
