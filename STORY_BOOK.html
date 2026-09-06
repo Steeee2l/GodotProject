@@ -1,0 +1,1184 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>그레이 던 — 서울 생존묘</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Song+Myung&family=Noto+Sans+KR:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --desk:#16191b;
+  --desk-2:#1f2427;
+  --paper:#e7e4dc;
+  --paper-2:#ddd9d0;
+  --paper-edge:#cfcabf;
+  --ink:#25282a;
+  --ink-2:#5a5e60;
+  --ink-3:#8d9193;
+  --rule:#c4bfb4;
+  --mint:#4fb9ba;
+  --mint-ink:#2f8d8e;
+  --vermilion:#b8453e;
+  --night:#0f1214;
+  --night-2:#171b1e;
+  --night-text:#d9dedf;
+  --night-dim:#7d868a;
+  --serif:"Gowun Batang","Nanum Myeongjo","Apple SD Gothic Neo","Batang",serif;
+  --display:"Song Myung","Gowun Batang","Nanum Myeongjo",serif;
+  --sans:"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --fs:17px;
+  --lh:1.95;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--desk);color:var(--night-text);
+  font-family:var(--sans);
+  background-image:
+    radial-gradient(120% 80% at 50% 100%, #23292c 0%, var(--desk) 60%),
+    linear-gradient(var(--desk),var(--desk));
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+  user-select:none;
+}
+#desk{height:100%;display:grid;grid-template-rows:auto 1fr auto;padding:12px 16px calc(10px + env(safe-area-inset-bottom));gap:10px}
+
+/* ── 상단 바 ─────────────────────────── */
+#topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;letter-spacing:.14em;color:var(--night-dim)}
+#topbar .brand{display:flex;align-items:baseline;gap:10px;color:var(--night-text)}
+#topbar .brand b{font-family:var(--display);font-weight:400;font-size:15px;letter-spacing:.2em}
+#topbar .brand span{font-size:11px;letter-spacing:.22em}
+#topbar .tools{display:flex;gap:6px}
+.btn{appearance:none;border:1px solid #2c3337;background:#1a1f22;color:var(--night-text);font:inherit;font-size:12px;letter-spacing:.1em;padding:6px 10px;border-radius:4px;cursor:pointer}
+.btn:hover{border-color:var(--mint)}
+.btn:focus-visible{outline:2px solid var(--mint);outline-offset:2px}
+#chapter-now{font-family:var(--serif);letter-spacing:.06em;color:var(--night-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40vw}
+
+/* ── 책 ─────────────────────────────── */
+#stage{position:relative;display:grid;place-items:center;min-height:0}
+#book{
+  position:relative;
+  width:min(1180px,96vw);
+  height:min(calc(100vh - 110px), calc(min(1180px,96vw) * .68));
+  perspective:2600px;
+  transform-style:preserve-3d;
+  filter:drop-shadow(0 30px 40px rgba(0,0,0,.55));
+}
+#book.single{width:min(560px,96vw);height:min(calc(100vh - 110px), calc(min(560px,96vw) * 1.48))}
+.page{
+  position:absolute;top:0;height:100%;width:50%;
+  background:var(--paper);color:var(--ink);
+  overflow:hidden;
+  font-family:var(--serif);font-size:var(--fs);line-height:var(--lh);
+}
+.page::before{ /* 종이 결 */
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.55;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .48 0 0 0 .14 0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.page.left{left:0;border-radius:6px 0 0 6px}
+.page.right{left:50%;border-radius:0 6px 6px 0}
+#book.single .page{width:100%;left:0;border-radius:6px}
+.slot{position:absolute;top:0;height:100%;width:50%}
+.slot.l{left:0}.slot.r{left:50%}
+#book.single .slot{width:100%;left:0}
+.slot .page,#leaf .face .page{width:100%;left:0}
+#book #measure{left:-300% !important;visibility:hidden;pointer-events:none}
+/* 접힌 등(spine)과 바깥 낱장 두께 */
+.page.left::after,.page.right::after{content:"";position:absolute;inset:0;pointer-events:none}
+.page.left::after{background:linear-gradient(to left, rgba(0,0,0,.18), rgba(0,0,0,.04) 12%, transparent 22%)}
+.page.right::after{background:linear-gradient(to right, rgba(0,0,0,.18), rgba(0,0,0,.04) 12%, transparent 22%)}
+#book.single .page::after{background:linear-gradient(to right, rgba(0,0,0,.10), transparent 8%)}
+#edges{position:absolute;inset:0;pointer-events:none;border-radius:6px;
+  box-shadow: 2px 0 0 -1px var(--paper-edge), 4px 0 0 -2px var(--paper-2), 6px 0 0 -3px var(--paper-edge), -2px 0 0 -1px var(--paper-edge), -4px 0 0 -2px var(--paper-2), -6px 0 0 -3px var(--paper-edge);}
+#book.single #edges{box-shadow: 2px 2px 0 -1px var(--paper-edge), 4px 4px 0 -2px var(--paper-2), 6px 6px 0 -3px var(--paper-edge)}
+
+.content{position:relative;height:100%;padding:8.5% 9% 9.5%;overflow:hidden}
+.runhead{position:absolute;top:4.2%;left:9%;right:9%;font-family:var(--sans);font-size:10.5px;letter-spacing:.2em;color:var(--ink-3);display:flex;justify-content:space-between}
+.folio{position:absolute;bottom:3.6%;left:9%;right:9%;font-family:var(--sans);font-size:11px;letter-spacing:.12em;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.page.left .folio{text-align:left}.page.right .folio{text-align:right}
+#book.single .folio{text-align:center}
+
+/* ── 본문 블록 ───────────────────────── */
+.content p{margin:0 0 .55em;text-wrap:pretty;word-break:keep-all;overflow-wrap:anywhere}
+.content p.where{font-family:var(--sans);font-size:11px;letter-spacing:.22em;color:var(--mint-ink);margin:.2em 0 1.4em}
+.content p.beat{text-align:center;color:var(--ink-3);letter-spacing:.6em;margin:1.1em 0 1.2em;font-size:.9em}
+.content p.beat::before{content:"· · ·"}
+.content p.say{position:relative;padding-left:1.15em;margin-bottom:.35em}
+.content p.say::before{content:"「";position:absolute;left:0;color:var(--ink-3)}
+.content p.say::after{content:"」";color:var(--ink-3)}
+.content p.say.first,.content p.say.cont{margin-top:.9em}
+.content .who{display:block;font-family:var(--sans);font-size:11px;letter-spacing:.24em;color:var(--ink-2);margin:1.1em 0 .25em}
+.content .who.juhong{color:var(--vermilion)}
+.content .who.saja{color:var(--mint-ink)}
+.content .who.radio{color:var(--ink-3)}
+.content p.say + .who{margin-top:1.1em}
+.content p.radio{
+  margin:1em 0 1.1em;padding:.7em .9em;border-left:2px solid var(--mint);
+  background:rgba(79,185,186,.07);font-size:.94em;line-height:1.8;color:var(--ink-2);
+}
+.content .doc{margin:1em 0 1.15em;padding:.8em 1em .7em;border:1px solid var(--rule);background:rgba(255,255,255,.28);font-size:.92em;line-height:1.75}
+.content .doc .doc-t{display:block;font-family:var(--sans);font-size:10.5px;letter-spacing:.2em;color:var(--ink-3);margin-bottom:.5em}
+.content .doc p{margin:0 0 .3em}
+.content .choice{margin:1em 0 1.2em;padding:.8em 1em;border:1px dashed var(--rule);font-size:.92em;line-height:1.7}
+.content .choice .q{display:block;font-weight:700;margin-bottom:.5em}
+.content .choice .opt{display:block;padding-left:1.2em;position:relative;color:var(--ink-2)}
+.content .choice .opt::before{content:"○";position:absolute;left:0;color:var(--ink-3)}
+.content .choice .opt.on{color:var(--ink)}
+.content .choice .opt.on::before{content:"●";color:var(--mint-ink)}
+.content .choice .opt i{font-style:normal;color:var(--ink-3);font-size:.9em;margin-left:.5em}
+.content h3{font-family:var(--display);font-weight:400;font-size:1.25em;letter-spacing:.06em;margin:.2em 0 1em;color:var(--ink)}
+.content .end{text-align:center;margin-top:2.4em;color:var(--ink-3);letter-spacing:.4em;font-family:var(--sans);font-size:11px}
+.content .end::before{content:"끝";display:block;font-family:var(--display);font-size:1.6em;letter-spacing:.3em;color:var(--ink);margin-bottom:.6em}
+
+/* ── 특수 페이지 ─────────────────────── */
+.page.dark{background:var(--night);color:var(--night-text)}
+.page.dark::before{opacity:.35}
+.page.dark .content{display:flex;flex-direction:column;justify-content:flex-end}
+.page.dark .folio,.page.dark .runhead{color:var(--night-dim)}
+.opener .part{font-family:var(--sans);font-size:11px;letter-spacing:.32em;color:var(--mint);margin-bottom:auto}
+.opener .num{font-family:var(--display);font-size:.9em;letter-spacing:.3em;color:var(--night-dim);margin-bottom:.6em}
+.opener h2{font-family:var(--display);font-weight:400;font-size:2.15em;line-height:1.25;letter-spacing:.04em;margin:0 0 .6em;text-wrap:balance}
+.opener .tag{font-family:var(--sans);font-size:11.5px;letter-spacing:.2em;color:var(--night-dim)}
+.opener .zone{position:absolute;top:8.5%;right:9%;writing-mode:vertical-rl;font-family:var(--display);letter-spacing:.5em;color:#2b3236;font-size:1.05em}
+
+.cover .content{justify-content:space-between}
+.cover .kicker{font-family:var(--sans);font-size:11px;letter-spacing:.34em;color:var(--mint)}
+.cover h1{font-family:var(--display);font-weight:400;font-size:3.6em;line-height:1.05;letter-spacing:.16em;margin:.4em 0 .15em}
+.cover .en{font-family:var(--sans);font-size:12px;letter-spacing:.42em;color:var(--night-dim)}
+.cover .lead{margin-top:auto;font-size:.98em;line-height:1.9;color:#b9c0c2;max-width:26em}
+.cover .lead b{color:var(--night-text);font-weight:400}
+.cover .foot{font-family:var(--sans);font-size:10.5px;letter-spacing:.2em;color:var(--night-dim);margin-top:1.6em}
+.cover .signal{position:absolute;top:8%;right:9%;width:10px;height:10px;border-radius:50%;background:var(--mint);box-shadow:0 0 18px var(--mint);animation:blink 4.5s infinite}
+@keyframes blink{0%,8%{opacity:1}12%,20%{opacity:.1}24%,32%{opacity:1}36%,44%{opacity:.1}48%,56%{opacity:1}60%,100%{opacity:.1}}
+
+.toc h3{margin-bottom:1.1em}
+.toc ol{list-style:none;margin:0;padding:0;font-size:.92em}
+.toc li{display:flex;align-items:baseline;gap:.6em;padding:.22em 0;cursor:pointer;border-radius:3px}
+.toc li:hover .t{color:var(--mint-ink)}
+.toc li .n{font-family:var(--sans);font-size:10.5px;letter-spacing:.14em;color:var(--ink-3);min-width:3.2em}
+.toc li .t{flex:1}
+.toc li .p{font-family:var(--sans);font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.toc li .dots{flex:1;border-bottom:1px dotted var(--rule);transform:translateY(-.35em)}
+.toc li.part{margin-top:.7em;cursor:default}
+.toc li.part .t{font-family:var(--sans);font-size:11px;letter-spacing:.24em;color:var(--mint-ink)}
+.content p.toc-row{display:flex;align-items:baseline;gap:.6em;padding:.1em 0;margin:0;font-size:.92em;cursor:pointer}
+.content p.toc-row:hover .t{color:var(--mint-ink)}
+.content p.toc-row .n{font-family:var(--sans);font-size:10.5px;letter-spacing:.14em;color:var(--ink-3);min-width:3.2em}
+.content p.toc-row .dots{flex:1;border-bottom:1px dotted var(--rule);transform:translateY(-.35em)}
+.content p.toc-row .p{font-family:var(--sans);font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.content p.toc-row.part{margin-top:.9em;cursor:default}
+.content p.toc-row.part .t{font-family:var(--sans);font-size:11px;letter-spacing:.24em;color:var(--mint-ink)}
+
+.blank .content{display:grid;place-items:center}
+.blank .mark{width:14px;height:14px;border:1px solid var(--rule);transform:rotate(45deg)}
+
+.cast dl{margin:0;font-size:.94em}
+.cast dt{font-family:var(--sans);font-size:11px;letter-spacing:.24em;color:var(--ink-2);margin-top:1em}
+.cast dt.juhong{color:var(--vermilion)}.cast dt.saja{color:var(--mint-ink)}
+.cast dd{margin:.15em 0 0;line-height:1.8}
+
+/* ── 넘어가는 낱장 ───────────────────── */
+#leaf{position:absolute;top:0;height:100%;width:50%;transform-style:preserve-3d;will-change:transform;pointer-events:none;z-index:5}
+#leaf[hidden]{display:none}
+#book.single #leaf{width:100%}
+#leaf .face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden}
+#leaf .back{transform:rotateY(180deg)}
+#leaf .shade{position:absolute;inset:0;pointer-events:none;opacity:0;background:linear-gradient(to right,rgba(0,0,0,.0),rgba(0,0,0,.45))}
+#leaf.fwd{left:50%;transform-origin:left center}
+#leaf.bwd{left:0;transform-origin:right center}
+#leaf.fwd .back .shade{background:linear-gradient(to left,rgba(0,0,0,0),rgba(0,0,0,.45))}
+#book.single #leaf.fwd,#book.single #leaf.bwd{left:0;transform-origin:left center}
+#leaf.anim{transition:transform .72s cubic-bezier(.36,.02,.2,1)}
+@media (prefers-reduced-motion:reduce){#leaf.anim{transition-duration:.15s}.cover .signal{animation:none}}
+#ground-shadow{position:absolute;inset:0;pointer-events:none;z-index:4;opacity:0;background:linear-gradient(to right,transparent 50%,rgba(0,0,0,.35) 50.5%,transparent 70%)}
+
+#book{cursor:grab}
+#book.dragging{cursor:grabbing}
+.endpaper .content{background:linear-gradient(135deg,#0f1214,#151a1d)}
+
+/* ── 하단 ────────────────────────────── */
+#bottom{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;font-size:11px;letter-spacing:.14em;color:var(--night-dim);font-variant-numeric:tabular-nums}
+#bar{height:2px;background:#262c30;border-radius:2px;position:relative;overflow:hidden}
+#bar i{position:absolute;left:0;top:0;bottom:0;background:var(--mint);width:0;transition:width .4s}
+#hint{white-space:nowrap}
+
+/* ── 차례 오버레이 ───────────────────── */
+#tocdlg{border:0;padding:0;background:transparent;max-width:min(560px,94vw);width:100%}
+#tocdlg::backdrop{background:rgba(8,10,12,.72);backdrop-filter:blur(2px)}
+#tocdlg .sheet{background:var(--paper);color:var(--ink);padding:28px 30px 24px;border-radius:6px;font-family:var(--serif);max-height:86vh;overflow:auto}
+#tocdlg .sheet h3{font-family:var(--display);font-weight:400;margin:0 0 .8em;letter-spacing:.1em}
+#tocdlg .close{float:right;margin:-6px -8px 0 0;background:transparent;border:0;color:var(--ink-3)}
+
+#source{display:none}
+
+@media (max-width:760px){
+  #desk{padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
+  #topbar .brand span,#hint{display:none}
+  #chapter-now{max-width:46vw}
+  :root{--fs:15.5px;--lh:1.9}
+  .content{padding:11% 9% 10%}
+  .cover h1{font-size:2.9em}
+}
+</style>
+</head>
+<body>
+<div id="desk">
+  <header id="topbar">
+    <div class="brand"><b>그레이 던</b><span>GREY DAWN · 서울 생존묘</span></div>
+    <div id="chapter-now"></div>
+    <div class="tools">
+      <button class="btn" id="fs-minus" title="글자 작게">가−</button>
+      <button class="btn" id="fs-plus" title="글자 크게">가+</button>
+      <button class="btn" id="toc-btn">차례</button>
+    </div>
+  </header>
+
+  <div id="stage">
+    <div id="book" class="spread">
+      <div id="measure" class="page left"><div class="content"></div></div>
+      <div id="base-l" class="slot l"></div>
+      <div id="base-r" class="slot r"></div>
+      <div id="ground-shadow"></div>
+      <div id="leaf" hidden>
+        <div class="face front"></div>
+        <div class="face back"></div>
+      </div>
+      <div id="edges"></div>
+    </div>
+  </div>
+
+  <footer id="bottom">
+    <span id="folio-now">—</span>
+    <div id="bar"><i></i></div>
+    <span id="hint">← → 방향키 · 화면 끝 클릭 · 손가락으로 끌어 넘기기</span>
+  </footer>
+</div>
+
+<dialog id="tocdlg"><div class="sheet"><button class="btn close" id="toc-close">닫기</button><h3>차례</h3><div id="toc-list" class="toc"></div></div></dialog>
+
+<!-- ═══════════════════════════════════════════════════════════
+     원고. 게임 안의 대사·독백·기록물을 그대로 쓰고, 이음새만 먼지의 목소리로 채웠다.
+     ═══════════════════════════════════════════════════════════ -->
+<div id="source">
+<!-- ═══════════════════════════════════════════════════════════
+     원고 v5. 게임 안의 대사·독백·기록물을 그대로 쓰고, 이음새만 먼지의 목소리로 채웠다.
+     ═══════════════════════════════════════════════════════════ -->
+
+<section class="special cover dark" data-title="표지">
+  <div class="signal"></div>
+  <div class="kicker">서울 · 사람이 사라진 지 반년</div>
+  <h1>그레이 던</h1>
+  <div class="en">GREY DAWN · 서울 생존묘</div>
+  <div class="lead">공기에 뭔가 섞였고, 사람들은 지하로 내려갔다. 자리가 모자랐고, 누가 <b>문을 닫아야 했다</b>.<br>반년 뒤, 라디오가 켜졌다.</div>
+  <div class="foot">게임 속 대사와 기록으로 엮은 이야기</div>
+</section>
+
+<section class="chapter toc-page" data-title="차례">
+  <h3>차례</h3>
+</section>
+
+<section class="special cast" data-title="인물">
+  <h3>인물</h3>
+  <dl>
+    <dt>먼지</dt><dd>혼자 살아남은 고양이. 총 한 자루와 통조림 두 개를 들고 강을 건넌다. 말이 짧다.</dd>
+    <dt class="saja">사자</dt><dd>하수구 아래 쉘터의 살림을 보는 노란 고양이. 안전모에 공구 벨트. 말이 많고, 그날 밤 얘기만 안 한다.</dd>
+    <dt class="juhong">주홍</dt><dd>하수구에서 오래 혼자 산 떠돌이. 더블배럴 산탄총. 아무도 안 믿지만 뒤는 봐 준다.</dd>
+    <dt>철근</dt><dd>쉘터의 생존 훈련 교관. 말이 세 마디를 안 넘는다.</dd>
+    <dt>행상인</dt><dd>봉쇄선 바깥을 돌며 장사하는 고양이. 소문도 판다. 이름은 묻지 마라냥.</dd>
+    <dt>방송</dt><dd>열두 초마다 같은 안내. 아파트 관리사무소 말투로 사람을 부른다.</dd>
+  </dl>
+</section>
+
+<!-- ── 프롤로그 ─────────────────────────────────────────── -->
+<section class="opener dark" data-part="프롤로그" data-num="" data-title="들리나" data-tag="한강 다리 · 밤" data-zone="강 건너"></section>
+<section class="chapter" data-title="들리나">
+  <span class="who radio">무전 · 잡음 섞인 목소리</span>
+  <p class="radio">〈…이거 되나. 아, 되네. 되네 이거.〉<br>〈어, 누가 듣고 있으면. 아니 사람 말고. 아무나.〉<br>〈강 남쪽에 있으면 다리로 와. 북쪽 끝에 문 있어. 내가 열어 줄게.〉<br>〈…밤에 와. 낮엔 걔들 돌아다녀.〉</p>
+  <p>같은 말을 세 번 하고 끊겼다. 반년 만이다.</p>
+  <p>그날 밤 무슨 일이 있었는지 나는 모른다. 아침에 눈 떴더니 도시에 사람이 없었다. 그리고 반년 동안 아무도 나를 안 불렀다.</p>
+  <p>총 한 자루, 통조림 두 개. 가서 본다.</p>
+  <p class="beat"></p>
+  <p class="where">한강 다리 · 남단</p>
+  <p>다리는 길다. 난간에 마스크가 하나 걸려서 바람에 떨고 있다. 반년째 저러고 있었을 거다.</p>
+  <p>전광판은 꺼져 있다. 예전엔 저기 숫자가 떴다. 사람들이 아침마다 그걸 보고 창문을 열지 말지 정했다. 그 숫자가 이상해지고 나흘 뒤에 다리가 막혔다.</p>
+  <p>중간쯤에서 경계병이 보인다. 사람이 아니다. 고양이다. 총을 들었다.</p>
+  <p>몸을 낮춘다. 쏜다.</p>
+  <p>한 놈이 넘어지자 뒤에서 둘이 나온다. 구른다. 구르는 동안엔 안 맞는다. 어디서 배웠는지는 모르겠다. 반년쯤 하면 몸이 먼저 안다.</p>
+  <p>총성이 멎자 강물 소리만 남는다. 북쪽 끝에 하수구 뚜껑이 있고, 그 밑에서 불빛이 샌다.</p>
+  <div class="doc"><span class="doc-t">생존자 등록</span><p>어떤 이름으로 불러 드릴까요?</p><p>쉘터 사람들이 이 이름으로 부릅니다. 나중에 바꿀 수 없어요.</p><p>— 먼지</p></div>
+  <p class="beat"></p>
+  <p class="where">쉘터 · 첫 저녁</p>
+  <p>쇠문이 열린다. 노란 고양이가 서 있다. 안전모를 썼다. 나한테 처음 한 말이 이거다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">총 좀 내려 봐.</p>
+  <p>내린다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">아니 겨누라는 게 아니라… 됐다. 들어와. 문 닫아야 돼. 여기 문이 잘 안 닫혀. 밑에가 휘어 가지고.</p>
+  <p>문을 발로 두 번 차서 닫는다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">밥 먹었어?</p>
+  <p>대답을 안 했는데 벌써 안쪽으로 걸어간다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">안 먹었네. 얼굴에 써 있어.</p>
+  <p class="say">국 있어. 아침에 한 거라 좀 짤 거야.</p>
+  <p>그릇을 놓고 건너편에 앉는다. 자기 건 안 가져왔다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">천천히 먹어.</p>
+  <p class="say">…아니다, 식으면 맛없어. 그냥 먹어.</p>
+  <p class="say">여기 밥은 하루 두 번이야. 아침 여섯 시, 저녁 일곱 시. 늦으면 없어. 내가 안 챙겨 주는 게 아니라 원래 없는 거야.</p>
+  <p>국은 안 짰다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">…아니다. 늦으면 말해. 남겨 놓을게.</p>
+  <p>그러고 일어나서 어디서 봉지를 하나 가져온다. 사료다. 한 줌을 덜어서 그릇 옆에 놓는다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">이것도 먹어.</p>
+  <p>배부르다고 했다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">배부른 거랑 상관없어. 그냥 먹어. 매일 한 줌씩.</p>
+  <p>왜냐고 물었다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">…몰라. 먹어.</p>
+  <p>맛이 없었다. 먹었다.</p>
+  <p>숟가락을 놓자 수첩을 꺼낸다. 표지가 다 닳았다. 이름을 적는다. 한 자 한 자 눌러서 쓴다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">먼지, 먼지… 부르기 좋네. 나는 사자야. 여기 살림 봐.</p>
+  <p class="say">뭐 없으면 나한테 말해. 없으면 없다고 할 건데, 그래도 일단 말은 해.</p>
+  <p>수첩을 덮다가 다시 펴서 뭘 고친다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">받침 틀렸었네.</p>
+  <p>그러고 나를 본다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">어디서 왔어?</p>
+  <p>내가 가만있으니까 자기가 먼저 손을 젓는다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">됐어 됐어. 안 궁금해. 궁금한데 안 궁금해.</p>
+  <p class="say">여기 오는 애들 다 사연 있어. 물어보면 말 안 하고, 안 물어보면 지가 알아서 말해.</p>
+  <p>그릇을 치우면서 안쪽을 턱으로 가리킨다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">자는 덴 저기. 아무 데나 누워. 이불은 없어. 있는데 다 젖었어. 어제 관이 터져 가지고.</p>
+  <p class="say">아, 발.</p>
+  <p class="say">발 닦고 들어가. 거기 어제 닦았어.</p>
+</section>
+
+<!-- ── 제1부 · 종로 ─────────────────────────────────────── -->
+<section class="opener dark" data-part="제1부 · 종로 외곽" data-num="1" data-title="신호를 보낸 것" data-tag="셔터가 안에서 잠긴 역" data-zone="종로"></section>
+<section class="chapter" data-title="신호를 보낸 것">
+  <p>아침에 사자가 나를 깨웠다. 정확히는 내 옆에서 혼잣말을 크게 했다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">발전기가 자꾸 서. 벨트가 늘어난 건지 뭔지. 이거 서면 등이 나가고, 등이 나가면 애들이 무서워해. 어른들은 괜찮은데 애들이 무서워해.</p>
+  <p class="say">종로역에 비상 발전기 있을 거야. 지하철은 그런 거 다 있어.</p>
+  <p class="say">…아니다. 위험해. 가지 마.</p>
+  <p>가겠다고 했다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">그래 그럼 다녀와. 벨트만 있으면 돼. 고무로 된 거. 이만한 거.</p>
+  <p class="say">저녁 일곱 시.</p>
+  <p class="beat"></p>
+  <p class="where">종로역</p>
+  <p>셔터가 내려와 있다. 밖에서 잠근 게 아니다. 안에서 잠갔다.</p>
+  <p>안에서 잠갔으면 잠근 놈이 안에 있었다는 소리다.</p>
+  <p>옆문으로 들어간다. 역무실 창문 너머로 모니터가 아직 켜져 있다.</p>
+  <div class="doc"><span class="doc-t">역무실 단말 · 화면</span><p>은행 번호표 같은 화면이다. 큰 숫자 하나.</p><p><b>27</b></p><p>그 밑에 호명된 동호수가 줄줄이 떠 있다. 101동, 102동, 103동…</p><p>27에서 멈췄다. 다음 번호를 부르는 버튼은 아직 안 눌렸다.</p></div>
+  <p>승강장 스피커 선이 비상 발전기로 이어져 있다. 벨트도 저기 있을 거다.</p>
+  <p>발전기를 살린다. 전기가 들어오자 스피커가 혼자 켜졌다.</p>
+  <span class="who radio">승강장 스피커</span>
+  <p class="radio">〈관리사무소에서 안내 말씀 드립니다. 101동부터 순서대로 내려오시기 바랍니다. 짐은 두고 오십시오.〉</p>
+  <p>열두 초 쉬고 다시 튼다. 반년 동안 아무도 없는 승강장에 대고 저러고 있었다.</p>
+  <p>소리를 듣고 놈들이 온다. 그리고 소리를 듣고 온 게 하나 더 있다. 작다. 총을 내리기도 전에 내 앞에서 넘어진다. 갈비뼈가 보인다.</p>
+  <span class="who">겁먹은 고양이</span>
+  <p class="say first">나, 나 그날 봤어.</p>
+  <p class="say">사람들이 줄을 서서 걸어 나갔어.</p>
+  <p class="say">끌려간 게 아니야. 다들 웃으면서 갔어.</p>
+  <p class="say">그, 그게 제일 무서웠어.</p>
+  <div class="choice"><span class="q">쓰러진 고양이를 어떻게 할까.</span><span class="opt on">데려간다<i>호송 · 이동이 느려진다</i></span><span class="opt">두고 간다<i>속도 유지 · 다음에 오겠다고 말한다</i></span></div>
+  <p>업으면 느려진다. 느려지면 위험하다.</p>
+  <p>…그래도 데려간다. 여기 두면 죽는다.</p>
+  <p class="beat"></p>
+  <p>승강장 끝에 화물칸이 서 있다. 붉은 도장이 찍혀 있고 봉인이 아직 안 뜯겼다. 반년 동안 아무도 못 열었다는 소리다. 떼어서 들고 나간다.</p>
+  <div class="doc"><span class="doc-t">화물칸 · 개봉</span><p>안에 짐이 가득하다. 가방, 신발, 지갑. 사람 옷 냄새가 난다.</p><p>맨 위 가방에 세탁소 이름표가 붙어 있다. 3층 아저씨 거다. 참치캔 따 주던 사람.</p><p>이름표 뒷면에 볼펜으로 적어 놨다. 「금방 옴」</p></div>
+  <p>사람들은 끌려간 게 아니다. 줄을 서서 걸어 내려갔다. 번호를 부르는 방송이 있었고, 27번에서 멈췄다.</p>
+  <p>그 방송을 아직도 틀고 있다. …누가 틀어 놨을까.</p>
+  <p>벨트는 못 찾았다.</p>
+  <p class="beat"></p>
+  <p class="where">쉘터 · 저녁</p>
+  <span class="who saja">사자</span>
+  <p class="say first">벨트는?</p>
+  <p>없었다고 했다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">없어? 지하철에 벨트가 없어? 그럴 리가 없는데. 아 몰라, 있어도 못 찾은 거겠지 뭐. 내가 갔어야 되는데.</p>
+  <p class="say">…아니다. 잘했어. 안 다쳤으면 됐어.</p>
+  <p>등에 업힌 애를 내려놓는다. 사자가 보더니 아무 말도 안 하고 부엌으로 간다. 물을 데운다. 수첩을 편다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">이름 뭐야.</p>
+  <p>애가 대답을 못 한다. 한참 걸린다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">천천히 해. 나 시간 많아.</p>
+  <p class="say">어차피 오늘 밤새 발전기 붙들고 있을 거라서.</p>
+  <p>이름을 적는다. 한 자 한 자 눌러서. 그러고 사료 봉지를 꺼내서 한 줌 덜어 준다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">오늘부터 식구야. 밥은 두 번. 늦으면 말하고.</p>
+  <p class="say">이건 꼭 먹어. 맛없어도 먹어.</p>
+  <p>화물칸에서 나온 가방을 내려놓자 사자는 그건 안 본다. 종로역 스피커가 아직 방송을 튼다고 말했다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">아, 그거. 그거 옛날 거야. 전기만 들어오면 지 혼자 튼다니까.</p>
+  <p class="say">그거 말고, 너 이번에 나가서 통조림 몇 개 주웠어? 그거부터 말해 봐.</p>
+  <p class="beat"></p>
+  <p>철근을 만난 건 그날 밤이다. 마당 구석에서 혼자 뭘 하고 있었다.</p>
+  <span class="who">철근</span>
+  <p class="say first">굴러 봐.</p>
+  <p>뭐라고 물었다.</p>
+  <span class="who">철근</span>
+  <p class="say first">굴러.</p>
+  <p>굴렀다.</p>
+  <span class="who">철근</span>
+  <p class="say first">느려.</p>
+  <p class="say">다시.</p>
+</section>
+
+<section class="opener dark" data-part="제1부 · 종로 외곽" data-num="2" data-title="끊긴 수도관" data-tag="반년 만에 흐르는 물" data-zone="종로"></section>
+<section class="chapter" data-title="끊긴 수도관">
+  <span class="who saja">사자</span>
+  <p class="say first">물통이 새. 아니 물통이 아니라 정수기가 샌 건데 물통이 새는 것처럼 보이는 거야. 어제부터.</p>
+  <p class="say">받아 놓은 물로 이틀은 버텨. 이틀 안에 안 되면 그때 걱정하자.</p>
+  <p class="say">…아니다. 지금 걱정하자. 나갈래?</p>
+  <p class="beat"></p>
+  <p class="where">종로 · 대로 밑</p>
+  <p>도로 밑에서 물소리가 난다.</p>
+  <p>수돗물은 그날 끊겼다. 반년 동안 안 나왔다. 그런데 지금 흐른다.</p>
+  <p>배관 표지판에 밸브가 세 군데 적혀 있다. 순서대로 열면 마지막 밸브실이 열린다.</p>
+  <p>1번을 연다. 물이 이쪽으로 안 온다. 반대쪽으로 빨려 나간다. 어디선가 쓰고 있다는 소리다.</p>
+  <p>2번을 연다. 그러자 도로 건너편에 불이 켜진다. 가로등이 아니다. 손전등이다. 여덟 개.</p>
+  <p>저쪽도 물소리를 들었다. 몸을 낮춘다.</p>
+  <div class="doc"><span class="doc-t">배관도 · 손글씨</span><p>인쇄된 선 위에 누가 다른 잉크로 선을 하나 더 그었다.</p><p>본선에서 갈라져 남쪽으로, 산 밑으로 내려가는 관이다.</p><p>선을 따라 짧게 적어 놨다. 「살아 있음」 「살아 있음」 「여기부터 모름」</p></div>
+  <div class="choice"><span class="q">밸브를 열어 둘까, 다시 잠글까.</span><span class="opt on">다시 잠근다<i>조용히 빠진다</i></span><span class="opt">열어 둔 채 더 뒤진다<i>소음이 멀리 퍼진다</i></span></div>
+  <p>열어 두면 다음에 오는 놈도 이 길을 본다. 잠근다.</p>
+  <p>물이 남쪽으로 간다. 산 밑으로. 반년째. 물을 쓴다는 건 저쪽에서 뭔가 아직 돌아간다는 소리다.</p>
+  <p>그리고 이 글씨를 쓴 놈은 거기까지 가 봤다는 거고.</p>
+  <p class="beat"></p>
+  <p class="where">쉘터 · 저녁</p>
+  <p>정수기 밑에 사자가 누워 있다. 안전모가 굴러다닌다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">됐다 이거. 아 됐다니까. …안 됐네.</p>
+  <p class="say">너 이거 좀 잡아 봐. 아니 그거 말고 이거. 아니 그거 놓고.</p>
+  <p>잡았다. 사자가 뭘 조이다가 손을 찧는다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">아 씨.</p>
+  <p>괜찮냐고 물었다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">괜찮아. 이거 원래 이래. 이거 고치다가 손 안 찧으면 그게 이상한 거야.</p>
+  <p class="say">…안 괜찮아. 좀 봐 봐.</p>
+  <p>배관도를 보여 준다. 사자가 안전모를 다시 쓰면서 대충 본다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">물은 원래 아래로 가. 지대가 낮은 데로.</p>
+  <p class="say">그림 잘 그렸네. 누가 그렸는지 손이 좋아.</p>
+  <p>그러고 도로 정수기 밑으로 들어간다.</p>
+  <p class="beat"></p>
+  <p>밤에 문 앞에 낯선 놈이 앉아 있었다. 등에 짐이 산이다.</p>
+  <span class="who">행상인</span>
+  <p class="say first">처음 보는 얼굴이다냥. 나는 봉쇄선 바깥을 돌며 장사하는 행상인이다냥. 이름은 묻지 마라냥.</p>
+  <p class="say">고철만 주면 뭐든 구해 온다냥. 어디서 났는지도 묻지 마라냥.</p>
+  <p class="say">소문도 판다냥. 첫 거래니까 하나는 공짜다냥. …요즘 남대문에 사료가 돈다더라냥. 누가 새벽마다 채워 놓는다더라냥.</p>
+  <p class="say">공짜로 주는 밥이 어디 있냐냥. 나는 안 믿는다냥.</p>
+</section>
+
+<section class="opener dark" data-part="제1부 · 종로 외곽" data-num="3" data-title="잠긴 방송국" data-tag="마이크가 안 꺼진 3분" data-zone="종로"></section>
+<section class="chapter" data-title="잠긴 방송국">
+  <p>스피커가 아직 열두 초마다 같은 방송을 튼다. 기계가 어디서 돌고 있다는 소리다.</p>
+  <p>주조정실은 잠겨 있다. 앞마당에 놈들이 진을 쳤다. 붉은 왕관 표식이다. 유리발톱.</p>
+  <p>정리하는 동안 누가 나와 같은 놈들을 쏘고 있었다. 더블배럴이다. 소리가 다르다.</p>
+  <p>담벼락 뒤에서 붉은 털이 나온다. 총구가 나를 향해 있다가 내려간다.</p>
+  <span class="who juhong">주홍</span>
+  <p class="say first">손 내려. 나도 그 방송 듣고 왔어.</p>
+  <p class="say">열두 초마다 같은 잡음. 나는 그걸 여섯 동네에서 들었어.</p>
+  <p class="say">고장 나서 그러는 게 아니야. 누가 반복하라고 시켜 놓은 거지.</p>
+  <p class="say">안에 마지막 송출 기록이 있어. 뭘 읽었는지 거기 남아 있을 거야.</p>
+  <p class="say">나 주홍이야. 하수구에서 오래 혼자 살았어.</p>
+  <p class="say">그러니까 나한테 뭐 기대하지 마.</p>
+  <p class="say">들어가. 밖은 내가 볼게.</p>
+  <p>주조정실 열쇠는 앞마당 놈들이 갖고 있었다. 이름은 없고 직책만 찍혀 있다. 야간 송출 담당.</p>
+  <p>마지막까지 마이크 앞에 앉아 있던 사람이 있었다.</p>
+  <div class="doc"><span class="doc-t">마지막 송출 기록</span><p>대피 안내가 나온다. 우리가 아는 그거다. 101동부터, 짐은 두고.</p><p>안내가 끝나고 마이크가 안 꺼졌다. 3분이 그대로 녹음돼 있다.</p><p>종이 넘기는 소리. 의자 끄는 소리.</p><p>그리고 사람 목소리 하나. 방송용이 아니다. 혼잣말이다.</p><p>「…이제 몇 명 남았지.」</p></div>
+  <p>사람 목소리를 반년 만에 들었다.</p>
+  <p>사람들은 우리가 말하는 걸 몰랐다. 안 들은 거지. 우리는 사람 말을 다 들었는데.</p>
+  <p>방송을 튼 사람은 마지막까지 저기 앉아 있었다. 그 사람도 세고 있었다. 몇 명이 못 들어갔을까.</p>
+  <p class="beat"></p>
+  <p class="where">쉘터 · 저녁</p>
+  <p>녹음을 튼다. 마당에 애들이 모여 앉았다. 사람 목소리는 다들 오랜만이다.</p>
+  <p>대피 안내가 끝나고 마이크가 안 꺼진 구간으로 넘어간다. 종이 넘기는 소리. 의자.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">꺼.</p>
+  <p>뭐라고 물었다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">꺼.</p>
+  <p>껐다. 마당이 조용해졌다. 사자가 자기가 크게 말한 걸 그제야 안다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">아니 그게 아니라, 애들 앞에서 사람 목소리 틀면 안 좋아. 밤에 잠 못 자.</p>
+  <p class="say">저번에도 그랬어. 하나가 사흘을 못 잤어.</p>
+  <p class="say">…밥 먹자. 오늘 국 있어.</p>
+  <p>밥을 다 먹을 때까지 사자는 계속 떠들었다. 정수기 얘기, 벨트 얘기, 애들이 신발을 아무 데나 벗어 놓는다는 얘기.</p>
+  <p>그날 밤 얘기는 안 했다.</p>
+  <p class="beat"></p>
+  <p>문 앞에 주홍이 와 있었다. 안 들어온다.</p>
+  <span class="who juhong">주홍</span>
+  <p class="say first">너 여기 사는구나.</p>
+  <p class="say">나 저 안에 안 들어가. 밥 준다고 다 좋은 놈은 아니거든.</p>
+  <p>사자를 아냐고 물었다.</p>
+  <span class="who juhong">주홍</span>
+  <p class="say first">…그 노란 놈, 너한테 잘해 주지. 밥도 주고 이름도 적어 주고.</p>
+  <p class="say">나한테도 그랬어.</p>
+  <p>그러고 갔다.</p>
+</section>
+
+<!-- ── 제2부 · 남대문 ───────────────────────────────────── -->
+<section class="opener dark" data-part="제2부 · 남대문 폐시장" data-num="4" data-title="몰래 채워 두는 밥" data-tag="새벽마다 채워지는 상자" data-zone="남대문"></section>
+<section class="chapter" data-title="몰래 채워 두는 밥">
+  <p>행상인이 그랬다. 남대문에 사료가 돈다고. 우린 굶는데.</p>
+  <p>시장 한복판에 천막이 세 겹이다. 바람 막으려고 친 게 아니다. 숨기려고.</p>
+  <p>천막 쪽에서 냄새가 난다. 썩은 냄새가 아니다. 먹을 수 있는 냄새.</p>
+  <p>좌판 밑으로 작은 발자국이 천막까지 이어진다. 사람이 아니다. 고양이. 같은 발자국이 밤마다 여길 지나갔다.</p>
+  <p>뒤집힌 손수레 뒤에 마른 고양이가 있다. 손수레를 지키고 있다. 뭘 지키는지는 자기도 모르는 얼굴로.</p>
+  <span class="who">마른 고양이</span>
+  <p class="say first">거, 거기 손대지 마.</p>
+  <p class="say">반년째 누가 채워 놔. 새벽마다 조금씩.</p>
+  <p class="say">채우는 걸 본 적은 없어.</p>
+  <p class="say">발자국만 남아. 고양이 발자국이야.</p>
+  <div class="doc"><span class="doc-t">천막 밑 상자</span><p>상자를 열었다. 전부 사료다. 사람 음식은 없다.</p><p>바닥에 배급표. 날짜가 오늘까지 찍혀 있다.</p></div>
+  <div class="choice"><span class="q">이 배급을 어떻게 할까.</span><span class="opt">전부 가져간다<i>통조림 확보</i></span><span class="opt on">절반은 남겨 둔다<i>미끼를 그대로 둔다</i></span></div>
+  <p>상자가 비면 채우던 놈이 눈치챈다. 절반만. 나는 아직 그놈을 못 봤다.</p>
+  <p>누가 반년째 고양이들 밥을 대고 있다. 사료만 있고 사람 음식은 없다. 고양이만 골라서 먹인다.</p>
+  <p>반년치를 쌓아 두려면 창고가 있어야 한다. …시장에서 제일 큰 창고부터 본다.</p>
+  <p class="beat"></p>
+  <p class="where">쉘터 · 새벽</p>
+  <p>일찍 깼다. 사자가 없다.</p>
+  <p>망루 애한테 물으니 물 받으러 갔다고 한다. 아침 여섯 시에 사자는 자리에 있었다. 물통은 비어 있었다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">일찍 일어났네. 밥 아직 멀었어.</p>
+  <p class="say">사료는 먹었어? 한 줌.</p>
+  <p class="say">맛없는 거 알아. 나도 알아. 그냥 먹어.</p>
+  <p>왜 먹어야 되냐고 다시 물었다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">…왜냐고는 묻지 마.</p>
+</section>
+
+<section class="opener dark" data-part="제2부 · 남대문 폐시장" data-num="5" data-title="나간 짐이 없는 창고" data-tag="반입만 있고 반출이 없다" data-zone="남대문"></section>
+<section class="chapter" data-title="나간 짐이 없는 창고">
+  <p>반년치 사료를 쌓아 두려면 자리가 있어야 한다. 시장에서 제일 큰 창고가 이거다.</p>
+  <p>셔터에 붉은 등이 아직 켜져 있다. 배터리로는 반년을 못 버틴다. 누가 전기를 댄다.</p>
+  <p>제어반을 누르면 셔터가 열린다. 열리는 동안 온 동네가 듣는다. 버틸 준비부터.</p>
+  <p>제어반 근처에 놈들 둘이 불을 쬐고 있다. 아직 나를 못 봤다. 둘이 나누는 말이 들린다.</p>
+  <span class="who">유리발톱 둘</span>
+  <p class="say first">그 창고 열쇠 누가 갖고 있대.</p>
+  <p class="say">몰라. 새벽마다 채워 놓고 가는 놈 있다던데.</p>
+  <p class="say">문이 왜 안에서 잠겨 있냐고.</p>
+  <p class="say">그만해. 그거 생각하면 잠 안 와.</p>
+  <p>제어반을 누른다. 셔터가 비명처럼 올라간다. 온 동네가 온다. 주홍의 산탄총이 내 왼쪽에서 두 번 운다.</p>
+  <div class="doc"><span class="doc-t">창고 안</span><p>장부가 있다. 반입만 빼곡하고 반출은 한 줄도 없다.</p><p>들어온 건 전부 짐이다. 가방, 신발, 지갑.</p><p>신발 상자 하나에 매직으로 적혀 있다. 101동 302호.</p><p>열어 본다. 신발 한 켤레. 아직 흙이 묻어 있다.</p></div>
+  <p>사람들 짐은 전부 여기 있다. 방송이 그랬다. 짐은 두고 오라고. 정말 다 두고 갔다.</p>
+  <p>여기 전기가 아직 들어온다. 반년 동안 누가 셔터를 잠가 뒀다.</p>
+  <p>…열쇠 가진 놈이 있다. 그놈이 사료도 채운다.</p>
+  <p class="beat"></p>
+  <p class="where">쉘터 · 밤</p>
+  <p>신발 상자를 내밀었다. 사자가 안 받는다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">거기 놔.</p>
+  <p>한참 있다가 한 번 더 말한다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">…거기 놓으라고.</p>
+  <p>그러고 밥 얘기를 한다. 국이 어떻고, 내일 뭘 하고, 누가 어디를 다쳤고.</p>
+  <p>그날 밤 사자는 안 잤다. 등도 안 껐다.</p>
+</section>
+
+<section class="opener dark" data-part="제2부 · 남대문 폐시장" data-num="6" data-title="새벽에 오는 것" data-tag="털리지 않은 금고" data-zone="남대문"></section>
+<section class="chapter" data-title="새벽에 오는 것">
+  <p>시장 사무실 금고가 아직 안 털렸다. 이 도시에서 그건 이상하다.</p>
+  <p>안 턴 게 아니다. 못 연 거다. 인장이 없으면 안 열린다. 인장은 놈들 손에 있다. 뺏는다.</p>
+  <p>인장을 쥐고 사무실로 돌아오자 주홍이 문틀에 기대 있다. 기다렸다는 얼굴이다.</p>
+  <span class="who juhong">주홍</span>
+  <p class="say first">인장 찾았네. 그럼 하나 말해 줄게.</p>
+  <p class="say">나 어제 새벽에 여기 있었어. 사료 채우는 놈 봤어.</p>
+  <p class="say">안전모 쓰고 있더라. 창고 열쇠도 갖고 있고.</p>
+  <p class="say">누군지 알겠지.</p>
+  <p class="say">아직 나도 몰라. 밥 준다고 나쁜 놈은 아니니까.</p>
+  <p class="say">열어. 뒤는 내가 볼게.</p>
+  <div class="doc"><span class="doc-t">금고 안 · 열쇠 한 벌</span><p>금고 안에 돈은 없다. 열쇠 한 벌이다.</p><p>종로 집결지 셔터 열쇠. 꼬리표가 붙어 있다.</p><p>세 개짜리 고리인데 하나가 비어 있다.</p></div>
+  <div class="choice"><span class="q">이 열쇠를 어떻게 할까.</span><span class="opt on">그대로 들고 나간다<i>기록 보관</i></span><span class="opt">자물쇠째 부순다<i>추적을 끊는다</i></span></div>
+  <p>비어 있는 고리 하나. 그게 어디 있는지 알아야 한다. 그대로 들고 나간다.</p>
+  <p>종로 집결지 셔터 열쇠가 세 개였다. 하나가 없다. 그날 밤 그 셔터를 내린 놈이 그 하나를 갖고 있다.</p>
+  <p>새벽에 사료를 채우는 놈은 안전모를 썼다고 했다.</p>
+  <p class="beat"></p>
+  <p class="where">쉘터 · 밤</p>
+  <p>사자가 먼저 말을 꺼냈다. 내가 묻기 전에.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">주홍이 뭐라 그러디.</p>
+  <p class="say">봤겠지. 새벽에.</p>
+  <p class="say">…먹이는 게 죄냐?</p>
+  <p>사자가 목소리를 높인 건 그때가 처음이다. 마당에 있던 애들이 다 돌아봤다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">…미안. 소리 질렀네.</p>
+  <p class="say">밥 먹어. 식으면 맛없어.</p>
+  <p>왜 우리 애들 것만 안 채우고 남대문까지 가느냐고 물었다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">거기 애들은 아무도 안 챙기니까.</p>
+  <p class="say">…그게 다야. 딴 뜻 없어.</p>
+</section>
+
+<!-- ── 제3부 · 을지로 ───────────────────────────────────── -->
+<section class="opener dark" data-part="제3부 · 을지로 지하구역" data-num="7" data-title="아직 들어오는 전기" data-tag="이 동네만 켜져 있다" data-zone="을지로"></section>
+<section class="chapter" data-title="아직 들어오는 전기">
+  <p>쉘터 등이 자꾸 나간다. 전기가 어디로 새는지.</p>
+  <p>이 동네만 전기가 들어온다. 지하상가 형광등이 아직 켜져 있다. 누가 이 동네만 골라서 전기를 남겼다.</p>
+  <p>골목마다 배전반. 셋 다 불이 들어온다.</p>
+  <div class="doc"><span class="doc-t">1번 배전반 · 쪽지</span><p>「3구역까지만 전기를 넣을 것」</p></div>
+  <p>3구역은 지상이 아니다. 지하.</p>
+  <p>긴 통로 끝. 형광등이 깜빡이는 리듬이 열두 초다. 스피커와 같은 박자다.</p>
+  <p>종단함에서 기록을 뜯는다. 남겨 둔 회로가 전부 한 방향으로 모인다. 남겨 둔 전기가 전부 지하 선로로 들어간다.</p>
+  <p>사람 없는 도시에서 반년 넘게 누가 지하철 선로에 전기를 댔다. 선로에 전기가 온다는 건 그 위로 아직 뭔가 다닌다는 거다.</p>
+  <p class="beat"></p>
+  <p class="where">쉘터 · 밤</p>
+  <span class="who saja">사자</span>
+  <p class="say first">을지로 밑은 어두워. 등 챙겨 가.</p>
+  <p class="say">나는 어두운 데 싫어해. 그래서 여기 등 안 꺼.</p>
+  <p class="say">전기 아깝다고 애들이 뭐라 하는데, 그래도 안 꺼.</p>
+  <p>등은 정말 밤새 켜져 있다. 발전기 소리도. 처음 온 날 쇠문 너머로 들었던 그 소리다.</p>
+</section>
+
+<section class="opener dark" data-part="제3부 · 을지로 지하구역" data-num="8" data-title="무엇을 실었나" data-tag="바퀴 자국이 여러 겹" data-zone="을지로"></section>
+<section class="chapter" data-title="무엇을 실었나">
+  <p>선로 위로 뭔가 다녔다. 선로에서 바퀴 자국이 옆 공방까지 이어진다.</p>
+  <p>공방 문은 안에서 잠겼다. 제어반을 누르면 열린다. 열리는 동안 시끄럽다. 버틸 준비부터.</p>
+  <p>공방 바닥에 바퀴 자국이 여러 겹이다. 여기서 수레를 만들었다. 자국이 크다. 사람을 실을 크기.</p>
+  <p>열릴 때까지 버틴다. 어둠 속에서 놈들이 온다. 주홍이 뒤에서 소리친다. 적이야, 이쪽으로 온다.</p>
+  <div class="doc"><span class="doc-t">수레 도면 뭉치</span><p>걷지 못하는 사람을 눕혀서 싣는 크기다.</p><p>옆에 손으로 적어 놨다. 「업고 내려올 것」</p></div>
+  <p>사람들은 지하까지 제 발로 내려왔다. 여기서부터 수레에 실려 갔다.</p>
+  <p>걷지 못하는 사람들이 있었다. 그 사람들이 마지막까지 남았다.</p>
+  <p>…마지막 수레가 언제 갔는지 본다.</p>
+  <p class="beat"></p>
+  <p class="where">쉘터 · 밤</p>
+  <p>수레 도면을 펼쳐 놓자 사자가 오래 봤다. 「업고 내려올 것」에서 손이 멈춘다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">…그날 밤에 나 종로에 있었어.</p>
+  <p>거기서 멈춘다. 그리고 다른 얘기를 시작한다. 캣닢 생산량이 어떻고, 3조가 요즘 늦고, 애들이 국을 남기고.</p>
+  <p>나는 아무것도 안 물었다.</p>
+</section>
+
+<section class="opener dark" data-part="제3부 · 을지로 지하구역" data-num="9" data-title="마지막 운행" data-tag="탑승 27 · 잔여 9" data-zone="을지로"></section>
+<section class="chapter" data-title="마지막 운행">
+  <p>수레가 다녔으면 마지막이 언제였는지 적혀 있을 거다. 지하 관제실에 운행 일지가 통째로 남아 있다고 주홍이 그랬다.</p>
+  <p>오늘은 숫자 하나만 알면 된다.</p>
+  <p>관제실은 잠겨 있고 문 앞에 적들이 진을 쳤다. 열쇠는 그놈들한테. 뺏는다.</p>
+  <div class="doc"><span class="doc-t">운행 일지 · 마지막 장</span><p>운행 일지. 열두 번. 전부 같은 선로.</p><p>마지막 운행 시각이 적혀 있다. 그날 밤 열한 시 사십 분.</p><p>그 밑에 손으로 눌러 쓴 한 줄.</p><p>「탑승 27 · 잔여 9」</p></div>
+  <p>아홉 명이 못 탔다.</p>
+  <p>역무실 번호는 27에서 멈춰 있었다. 그 뒤로 아홉이 더 있었다는 소리다. 그 아홉은 셔터 앞에 서 있었다.</p>
+  <p>관제실 밖에 주홍이 서 있다. 내 얼굴을 보고 다 안 것 같다.</p>
+  <span class="who juhong">주홍</span>
+  <p class="say first">봤지. 아홉.</p>
+  <p class="say">그 아홉이 왜 못 탔는지 알아? 셔터가 내려갔거든.</p>
+  <p class="say">누가 내렸는지는 아직 몰라. 아직은.</p>
+  <p class="say">용산 봉쇄선에 가면 그날 무전이 남아 있을 거야. 군은 무전을 다 녹음해.</p>
+  <p class="say">먼저 가서 기다릴게.</p>
+  <p class="say">…나 요즘 쉘터 밥이 잘 안 넘어가.</p>
+  <p class="beat"></p>
+  <p class="where">쉘터 · 그날 밤</p>
+  <p>밥그릇이 앞에 놓인다. 국물이 있다. 손을 안 댄다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">밥 안 먹냐.</p>
+  <p class="say">안 먹을 거면 말을 해. 괜히 데워 놨잖아.</p>
+  <p class="say">…먹어. 식는다.</p>
+  <p>사자는 내 가방을 안 본다. 운행 일지가 삐져나와 있는데도.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">밖에서 무슨 얘기 들었는지 안 물어볼게.</p>
+  <p class="say">…안 물어보는 게 낫지?</p>
+  <p>먹었다. 넘어갔다. 그게 제일 이상했다.</p>
+</section>
+
+<!-- ── 제4부 · 용산 ─────────────────────────────────────── -->
+<section class="opener dark" data-part="제4부 · 용산 봉쇄선" data-num="10" data-title="통과 인원 0" data-tag="검문소 단말 두 대" data-zone="용산"></section>
+<section class="chapter" data-title="통과 인원 0">
+  <p>그날 아홉 명이 남았다. 그 아홉은 어디로 갔을까.</p>
+  <p>봉쇄선이 그날 닫혔다. 군이 몰랐을 리 없다.</p>
+  <p>검문소 두 곳에 단말이 아직 켜져 있다. 통과 기록이 남았을 거다.</p>
+  <p>트인 길 위로 정예 병력이 감시한다. 엄폐물을 끼고 움직인다. 여기 놈들은 종로 놈들과 다르다. 군복이 아직 군복이다.</p>
+  <div class="doc"><span class="doc-t">1번 검문소 · 마지막 줄</span><p>통과 인원 0.</p></div>
+  <p>봉쇄선은 사람이 밖으로 못 나가게 막고 있었다.</p>
+  <p>봉쇄선 반대편. 먼 거리 사선. 주홍이 먼저 와서 기다리고 있었다. 말은 안 했다. 총만 들었다.</p>
+  <p>기록함을 챙긴다. 사람들이 어느 문으로 들어갔는지가 시각까지 적혀 있다.</p>
+  <p>군은 아무도 밖으로 안 내보냈다. 막기만 한 게 아니다. 도시 안쪽으로 몰았다. 지하 입구 쪽으로.</p>
+  <p>군이 왜. 군대는 명령서 없이 안 움직인다.</p>
+  <p class="beat"></p>
+  <p class="where">쉘터 · 밤</p>
+  <span class="who saja">사자</span>
+  <p class="say first">요즘 잠을 설쳐. 나이 먹으면 새벽에 깨.</p>
+  <p class="say">너도 자는 얼굴이 안 편하더라.</p>
+  <p class="say">오늘은 좀 자.</p>
+</section>
+
+<section class="opener dark" data-part="제4부 · 용산 봉쇄선" data-num="11" data-title="총구의 방향" data-tag="안쪽을 겨눈 총" data-zone="용산"></section>
+<section class="chapter" data-title="총구의 방향">
+  <p>군은 사람들을 안쪽으로 몰았다. 그럼 총은 어디를 겨눴을까.</p>
+  <p>검문 기록 끝에 경계 명령서 번호. 원본은 탄약고 금고. 명령서를 보려면 탄약고 봉인부터 뜯어야 한다. 뜯는 동안 시끄럽다.</p>
+  <p>탄약고를 지키라는 명령이 아직 안 취소됐다. 명령을 내린 사람은 이미 없는데. 지키라고 한 게 탄약이 아니었던 모양이다.</p>
+  <p>풀릴 때까지 버틴다. 붉은 이름표를 단 놈이 온다. 개머리판에 「총구」라고 새겼다. 부하들이 그렇게 부른다.</p>
+  <span class="who">총구</span>
+  <p class="say first">군은 안쪽을 겨눴지. 나도 그렇다.</p>
+  <p>놈은 끝까지 안쪽을 겨눴다. 그래서 죽었다.</p>
+  <div class="doc"><span class="doc-t">경계 명령서</span><p>경계 대상이 무기가 아니라 도시 안쪽 주소로 적혀 있다.</p></div>
+  <p>총구가 바깥이 아니라 안을 향해 있었다. 사람들이 도망 못 가게.</p>
+  <p>그날 밤 무전이 사령부에 남아 있을 거다. …셔터를 누가 내렸는지 거기 있다.</p>
+</section>
+
+<section class="opener dark" data-part="제4부 · 용산 봉쇄선" data-num="12" data-title="마지막 교신" data-tag="사십 초의 셔터 소리" data-zone="용산"></section>
+<section class="chapter" data-title="마지막 교신">
+  <p>군은 그날 무전을 다 녹음했다. 종로 집결지에서 온 마지막 교신이 사령부 금고에 있다.</p>
+  <p>금고는 인증표가 있어야 열린다. 인증표는 정예 병력이 지키는 구역에. 뺏는다.</p>
+  <div class="doc"><span class="doc-t">금고 안 · 마지막 교신</span><p>금고 안에 무기는 없다. 녹음 하나다.</p><p>그날 밤 열한 시 삼십팔 분. 종로 집결지.</p><p>「종로 집결지입니다. 더는 수용이 안 됩니다.」</p><p>「밖에 몇 명이나 남았습니까.」</p><p>「…아직 있습니다.」</p><p>「닫으세요.」</p><p>셔터 내려가는 소리가 사십 초쯤 이어지고 녹음이 끊긴다.</p></div>
+  <p>누가 닫으라고 했고, 누가 닫았다.</p>
+  <p>금고실 밖. 주홍이 벽에 등을 대고 앉아 있다. 총을 무릎에 놓았다. 처음 보는 자세다.</p>
+  <span class="who juhong">주홍</span>
+  <p class="say first">봤지. 이제 내가 왜 그놈을 쫓는지 말해 줄게.</p>
+  <p class="say">그 아홉 명 중에 우리 집 사람이 있어.</p>
+  <p class="say">나한테 밥 주던 사람. 나 안고 자던 사람이야.</p>
+  <p class="say">셔터 앞까지 갔는데 못 들어갔어.</p>
+  <p class="say">나는 그거 내린 놈 보러 간다. 너는 네 볼일 봐.</p>
+  <p>주홍은 일어나서 갔다. 붙잡지 않았다. 붙잡을 말이 없었다.</p>
+  <p class="beat"></p>
+  <p class="where">쉘터 · 등이 켜진 밤</p>
+  <p>녹음을 들려줬다. 사자는 끝까지 들었다. 이번엔 끄라고 안 했다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">…내가 내렸어.</p>
+  <p class="say">더는 못 받는다고, 닫으라고 하길래.</p>
+  <p class="say">밖에 아직 있다고 말은 했어. 했는데도 닫으라고 해서.</p>
+  <p class="say">아홉 명이었어. 내가 셌어. 두 번 셌어.</p>
+  <p>사자가 안전모를 벗는다. 벗은 걸 처음 봤다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">나 101동 살았어. 302호.</p>
+  <p class="say">우리 집 사람이 줄 뒤쪽에 있었어.</p>
+  <p class="say">…네가 가져온 그 신발 상자. 우리 집 거야.</p>
+  <p class="say">짐은 다 걷어 갔어. 들어간 사람 것도, 못 들어간 사람 것도.</p>
+  <p class="say">그래서 그거 봐도 아무것도 몰라.</p>
+  <p class="say">…그 아홉 안에 있었는지 없었는지, 나는 아직도 몰라.</p>
+  <p class="say">가서 보면 되잖아. 그렇지.</p>
+  <p class="say">…반년째 그 소리를 하고 있어.</p>
+  <p>그날 밤 사자는 남산 얘기를 했다. 오염 수치가 높아서 아무도 못 올라간다고. 자기가 몇 번 가 봤다고.</p>
+  <p>몇 번이나 갔냐고 물었다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">…세지도 않았어.</p>
+</section>
+
+<!-- ── 제5부 · 남산 ─────────────────────────────────────── -->
+<section class="opener dark" data-part="제5부 · 남산 핵심부" data-num="13" data-title="거짓 수치" data-tag="관측기 세 대" data-zone="남산"></section>
+<section class="chapter" data-title="거짓 수치">
+  <p>사람들은 이 산 어딘가로 들어갔다. 지도에서 남산은 오염 구역이다. 그래서 아무도 안 올라온다.</p>
+  <p>초입에 오염 관측기 세 개. 세 개를 맞춰야 원본 수치가 읽힌다. 그 숫자가 진짜인지부터.</p>
+  <div class="doc"><span class="doc-t">관측기 · 원본 자료</span><p>수치가 두 벌이다. 표시용 하나, 실제 하나.</p><p>실제 수치는 종로보다 낮다.</p></div>
+  <p>누가 숫자를 고쳤다. 위험하다고 거짓말을 해서 아무도 못 올라오게 했다.</p>
+  <p>관측기 밑에 빈 통조림 깡통이 굴러다닌다. 우리 쉘터에서 쓰는 거다.</p>
+  <p>누가 여기까지 몇 번을 왔다 갔다. 여기까지 와서, 매번 돌아갔다.</p>
+  <p>개활지를 짧게 건넌다. 산 위의 놈들은 다른 데 놈들과 다르다. 여기까지 온 고양이는 네가 처음이라고, 붉은 이름표가 말했다. 불씨라고 했다. 이제는 재다.</p>
+</section>
+
+<section class="opener dark" data-part="제5부 · 남산 핵심부" data-num="14" data-title="아직 돌아가는 기계" data-tag="예약된 열세 번째" data-zone="남산"></section>
+<section class="chapter" data-title="아직 돌아가는 기계">
+  <p>오염 수치는 가짜였다.</p>
+  <p>관제탑 문이 잠겨 있다. 옆 표지에 제염 라인이 돌아야 열린다고 적혀 있다. 제어반을 누르면 라인이 돈다. 도는 동안 여기 서서 버틴다.</p>
+  <p>기계가 돈다. 사람이 사라진 뒤로도 계속 예약이 걸려 있었다.</p>
+  <p>다 돌 때까지 버틴다. 스무 초가 한 시간 같다.</p>
+  <p>보관함이 열린다. 관제탑 맨 위층 문을 여는 열쇠. 열쇠 밑에 예약표.</p>
+  <div class="doc"><span class="doc-t">제염 라인 · 예약표</span><p>열세 번째 운행. 예약됨.</p><p>인원: (비어 있음)</p></div>
+  <p>제염 라인이 아직 예약된 채로 돈다. 인원 칸은 비어 있다.</p>
+  <p>…아직 아홉 명을 기다리고 있다.</p>
+</section>
+
+<section class="opener dark" data-part="제5부 · 남산 핵심부" data-num="15" data-title="문" data-tag="관제탑 맨 위층" data-zone="남산"></section>
+<section class="chapter" data-title="문">
+  <p>여기가 끝이다. 맨 위층에서 지하가 보인다고 했다. 그 아홉 명이 어떻게 됐는지 거기서 안다.</p>
+  <p>문은 코드로 잠겨 있다. 코드는 중무장한 놈들한테. 뺏는다.</p>
+  <p>계단 위에서 놈이 기다리고 있었다. 펌프 산탄총. 등에 무전기가 여러 대 매달려 있다. 전부 꺼져 있다.</p>
+  <span class="who">빈 무전</span>
+  <p class="say first">무전은 내가 끊었다.</p>
+  <p class="say">신호 따라온 거냐. 잘 왔다.</p>
+  <p>다리를 건넌 뒤로 라디오가 왜 조용했는지, 이제 안다. 놈은 코드를 품에 안고 죽었다.</p>
+  <p class="beat"></p>
+  <p>계단 끝에 주홍이 앉아 있었다. 총을 들고 있다. 나를 보고도 안 일어난다.</p>
+  <span class="who juhong">주홍</span>
+  <p class="say first">먼저 봐.</p>
+  <p class="say">…나는 못 보겠어.</p>
+  <div class="doc"><span class="doc-t">관제탑 맨 위층</span><p>화면 하나에 지하 선로 전체가 떠 있다.</p><p>열두 번의 운행이 전부 남산 아래 한 곳으로 들어갔다.</p><p>인원이 떠 있다. 죽은 게 아니다. 살아서 자고 있다.</p><p>숫자를 센다. 스물일곱이 아니다.</p><p><b>서른여섯</b>이다.</p></div>
+  <p>못 탄 아홉도 안에 있다. 다른 입구로 들어갔다.</p>
+  <p>자리는 모자라지 않았다. 그날 밤 셔터를 내릴 필요가 없었다.</p>
+  <p>…아무도 밖에 안 남았다. 셔터를 내린 놈만 빼고.</p>
+  <p>주홍이 내 얼굴을 보더니 총을 내려놓는다. 그러고 화면 앞으로 걸어간다. 오래 본다. 아무 말도 안 한다.</p>
+  <div class="choice"><span class="q">사자한테 뭐라고 할까.</span><span class="opt on">그대로 말한다<i>돌아가서 다 말한다</i></span><span class="opt">데리고 온다<i>말은 안 하고 여기까지 끌고 온다</i></span></div>
+  <p>돌아가서 그대로 말한다. 자리는 모자라지 않았다고. 아홉 명 다 안에 있다고.</p>
+  <p>…믿든 안 믿든 그건 그다음 문제다.</p>
+</section>
+
+<section class="opener dark" data-part="끝" data-num="" data-title="돌아온 밤" data-tag="쉘터 · 새벽" data-zone="집"></section>
+<section class="chapter" data-title="돌아온 밤">
+  <p>등이 켜져 있다. 발전기 소리. 밥이 데워져 있다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">왔냐. …앉아. 밥 데워 놨어.</p>
+  <p class="say">얼굴이 왜 그래.</p>
+  <p class="say">…말해. 무슨 말 하려는지 대충 알아.</p>
+  <p>말했다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">서른여섯?</p>
+  <p class="say">아니야. 스물일곱이야. 내가 셌어.</p>
+  <p class="say">아홉 명이 못 들어갔어. 셔터 앞에 서 있었어. 내가 봤어.</p>
+  <p class="say">…내가 내렸으니까.</p>
+  <p class="say">더는 못 받는다고, 닫으라고 하길래.</p>
+  <p class="say">밖에 아직 있다고 말은 했어. 했는데도 닫으라고 해서.</p>
+  <p class="say">반년 동안 그 아홉 얼굴을 세면서 살았어.</p>
+  <p>사자가 말을 멈춘다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">…다른 문으로 들어갔다고?</p>
+  <p>고개를 끄덕였다.</p>
+  <p>사자는 한참을 아무 말도 안 했다. 국이 다 식었다. 이번엔 식는다고 안 했다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">먼지야.</p>
+  <p>이름을 부른 건 처음이다. 첫날 수첩에 적어 놓고 반년을 안 불렀다.</p>
+  <span class="who saja">사자</span>
+  <p class="say first">가자. 나 좀 데려가 줘.</p>
+  <p class="say">혼자는 못 가겠어.</p>
+  <p class="beat"></p>
+  <p>안전모를 쓴다. 공구 벨트를 맨다. 쉘터 문 앞에서 한 번 멈춘다.</p>
+  <p>사자가 쉘터 밖으로 나오는 걸 나는 그날 처음 봤다.</p>
+  <p class="end">GREY DAWN</p>
+</section>
+
+<!-- ── 부록 ─────────────────────────────────────────────── -->
+<section class="opener dark" data-part="부록" data-num="" data-title="사자의 기록" data-tag="쉘터에서 주운 여섯 장" data-zone="기록"></section>
+<section class="chapter" data-title="사자의 기록">
+  <h3>사자의 기록</h3>
+  <div class="doc"><span class="doc-t">01 · 절차</span><p>사자는 뭐든 먼저 숫자로 적는다. 부품 세 개, 주민 한 명, 통조림 여덟 개. 사람 수만 두 번 센다. 한 번 세고, 잠깐 있다가 다시 센다.</p></div>
+  <div class="doc"><span class="doc-t">02 · 수량</span><p>캣닢 생산량을 하루 단위로 적는다. 장부 양식이 사람 있던 시절 것과 똑같다. 아파트 관리사무소에서 쓰던 서식이다.</p></div>
+  <div class="doc"><span class="doc-t">03 · 자물쇠</span><p>창고 자물쇠를 손으로 만져 보고 고개를 끄덕인다. 열쇠 없이 여는 법도 안다. 어디서 배웠냐고 물으면 딴 얘기를 한다.</p></div>
+  <div class="doc"><span class="doc-t">04 · 재고</span><p>창고에 라벨 없는 상자가 몇 개 있다. 목록에도 없다. 열어 보면 전부 사료다. 사람 음식은 한 봉지도 없다.</p></div>
+  <div class="doc"><span class="doc-t">05 · 새벽</span><p>새벽에 자리를 비운다. 물 받으러 간다고 한다. 물통은 늘 비어서 돌아온다. 대신 발에 시장 흙이 묻어 있다.</p></div>
+  <div class="doc"><span class="doc-t">06 · 거점</span><p>이곳을 늘 「거점」이라고 부른다. 집이라고 부른 적은 없다. 수첩 첫 장에 「집」이라고 적힌 주소가 하나 있다. 101동이다.</p></div>
+</section>
+
+<section class="opener dark" data-part="부록" data-num="" data-title="그날 밤" data-tag="주워 모은 기록" data-zone="기록"></section>
+<section class="chapter" data-title="그날 밤">
+  <h3>그날 밤</h3>
+  <div class="doc"><span class="doc-t">서울 최종 방역령 · 찢어진 대피 포스터</span><p>「‘회색 새벽’ 긴급 조치를 알립니다. 오늘 20시부터 한강의 모든 다리를 막습니다. 지하철 운행을 멈춥니다. 집에서 기다리십시오. 다음 방송을 기다리십시오.」</p><p>포스터 아래쪽은 찢겨 나갔다. 사람은 며칠 만에 죽었다. 고양이는 한 마리도 앓지 않았다.</p></div>
+  <div class="doc"><span class="doc-t">수의사 윤 박사의 마지막 기록</span><p>「시험용 항바이러스제가 사료 공장 라인으로 들어갔습니다. 승인은 나지 않았습니다.」</p><p>(7초 동안 기록이 끊겼다.)</p><p>「길고양이들은 괜찮습니다. 고양이들은 괜찮습니다. 중요한 것은 그게 아닙니다.」</p><p>「누가 밸브를 열었는지 알아야 합니다.」</p></div>
+  <div class="doc"><span class="doc-t">27에서 멈춘 번호 · 종로역</span><p>역무실 모니터에 대피 호명 번호가 27에서 멈춰 있다. 다음 번호를 부르는 버튼은 눌리지 않았다. 승강장 셔터는 안에서 잠겨 있었다.</p></div>
+  <div class="doc"><span class="doc-t">탑승 27 · 잔여 9 · 을지로 관제실</span><p>마지막 운행은 그날 밤 열한 시 사십 분. 그 밑에 손으로 눌러 쓴 한 줄. 「탑승 27 · 잔여 9」</p></div>
+  <div class="doc"><span class="doc-t">마지막 교신 · 용산 사령부</span><p>「종로 집결지입니다. 더는 수용이 안 됩니다.」 「밖에 몇 명이나 남았습니까.」 「…아직 있습니다.」 「닫으세요.」</p><p>셔터 내려가는 소리가 사십 초쯤 이어지고 녹음이 끊긴다.</p></div>
+  <div class="doc"><span class="doc-t">서른여섯 · 남산 관제탑</span><p>열두 번의 운행이 전부 남산 아래 한 곳으로 들어갔고, 그 안에 서른여섯 명이 자고 있다.</p><p>그날 밤 셔터 앞에서 돌아선 아홉 명도 다른 입구로 들어갔다. 자리는 모자라지 않았다.</p></div>
+</section>
+</div>
+
+<script>
+(() => {
+  const book = document.getElementById('book');
+  const slotL = document.getElementById('base-l');
+  const slotR = document.getElementById('base-r');
+  const leaf = document.getElementById('leaf');
+  const leafFront = leaf.querySelector('.front');
+  const leafBack = leaf.querySelector('.back');
+  const measure = document.getElementById('measure');
+  const measureContent = measure.querySelector('.content');
+  const ground = document.getElementById('ground-shadow');
+  const source = document.getElementById('source');
+  const folioNow = document.getElementById('folio-now');
+  const bar = document.querySelector('#bar i');
+  const chapterNow = document.getElementById('chapter-now');
+  const tocdlg = document.getElementById('tocdlg');
+
+  let pages = [];        // {kind, cls, html, runhead, firstBlock, chapterIndex}
+  let chapters = [];     // {title, part, num, page}
+  let spread = 0;
+  let perSpread = 2;
+  let busy = false;
+  let fontStep = 1;
+  const FS = [15.5, 17, 18.5, 20.5];
+  const isSingle = () => window.matchMedia('(max-width: 760px)').matches;
+  const maxSpread = () => Math.ceil(pages.length / perSpread) - 1;
+
+  // ── 원고 → 블록 번호 ─────────────────────────────
+  const sections = [...source.querySelectorAll('section')];
+  let serial = 0;
+  sections.forEach(sec => { if (sec.classList.contains('chapter')) [...sec.children].forEach(el => el.dataset.b = String(serial++)); });
+
+  const blankPage = (cls, html) => ({ kind: 'blank', cls, html: html || '', runhead: '', firstBlock: null, chapterIndex: chapters.length - 1 });
+
+  // ── 차례 행을 원고에 심는다 (직전 조판의 페이지 번호로) ──
+  const tocSection = source.querySelector('.toc-page');
+  function seedTocRows() {
+    tocSection.querySelectorAll('.toc-row').forEach(el => el.remove());
+    let lastPart = null;
+    chapters.forEach(ch => {
+      if (ch.part !== lastPart) { lastPart = ch.part; const p = document.createElement('p'); p.className = 'toc-row part'; p.innerHTML = `<span class="t">${ch.part}</span>`; tocSection.appendChild(p); }
+      const p = document.createElement('p'); p.className = 'toc-row'; p.dataset.page = String(ch.page);
+      p.innerHTML = `<span class="n">${ch.num ? ch.num + '장' : ''}</span><span class="t">${ch.title}</span><span class="dots"></span><span class="p">${ch.page}</span>`;
+      tocSection.appendChild(p);
+    });
+  }
+
+  // ── 페이지 조립 ──────────────────────────────────
+  function paginate(keepBlock) {
+    layout();           // 1차: 차례 행 수만 맞춘다
+    layout(keepBlock);  // 2차: 확정된 페이지 번호로 다시 짠다 (행 수가 같아 배치가 같다)
+  }
+  let laidOutAt = 0; // 마지막 조판 때의 페이지 높이 — 0이면 아직 못 짠 것
+  function layout(keepBlock) {
+    seedTocRows();
+    perSpread = isSingle() ? 1 : 2;
+    book.classList.toggle('single', perSpread === 1);
+    measureContent.innerHTML = '';
+    if (measureContent.clientHeight < 60 || measureContent.clientWidth < 60) { laidOutAt = 0; return; }
+    laidOutAt = measureContent.clientHeight;
+    pages = []; chapters = [];
+    let current = null;
+    const ensureRight = () => { if (perSpread === 2 && pages.length % 2 === 0) pages.push(blankPage('blank', '<div class="mark"></div>')); };
+    if (perSpread === 2) pages.push(blankPage('endpaper dark'));
+
+    sections.forEach(sec => {
+      if (sec.classList.contains('special')) {
+        pages.push({ kind: 'special', cls: sec.className.replace('special', '').trim(), html: sec.innerHTML, runhead: '', firstBlock: null, chapterIndex: chapters.length - 1, srcSection: sec });
+        return;
+      }
+      if (sec.classList.contains('opener')) {
+        ensureRight();
+        current = { title: sec.dataset.title, part: sec.dataset.part || '', num: sec.dataset.num || '', page: pages.length };
+        chapters.push(current);
+        const num = current.num ? `<div class="num">제 ${current.num} 장</div>` : '';
+        pages.push({ kind: 'special', cls: 'opener dark', runhead: '', firstBlock: null, chapterIndex: chapters.length - 1,
+          html: `<div class="zone">${sec.dataset.zone || ''}</div><div class="part">${current.part}</div>${num}<h2>${current.title}</h2><div class="tag">${sec.dataset.tag || ''}</div>` });
+        return;
+      }
+      // 흐르는 본문 — 한 블록씩 재 보며 넘친 자리에서 장을 끊는다
+      const runhead = current ? current.title : '';
+      let lastWho = null, lastWhoCls = '';
+      let buf = [];
+      const flush = () => {
+        if (!buf.length) return;
+        pages.push({ kind: 'text', cls: '', html: buf.map(b => b.outerHTML).join(''), runhead, firstBlock: buf[0].dataset.b ?? buf[1]?.dataset.b ?? null, chapterIndex: chapters.length - 1 });
+        buf = []; measureContent.innerHTML = '';
+      };
+      [...sec.children].forEach(src => {
+        if (src.classList.contains('who')) { lastWho = src.textContent; lastWhoCls = src.className; }
+        const clone = src.cloneNode(true);
+        measureContent.appendChild(clone);
+        if (measureContent.scrollHeight > measureContent.clientHeight + 1 && buf.length) {
+          measureContent.removeChild(clone);
+          let carried = null;
+          if (buf[buf.length - 1].classList.contains('who')) { carried = buf.pop(); measureContent.removeChild(measureContent.lastChild); }
+          flush();
+          if (carried) { measureContent.appendChild(carried); buf.push(carried); }
+          else if (clone.classList.contains('say') && !clone.classList.contains('first') && lastWho) {
+            const w = document.createElement('span'); w.className = lastWhoCls; w.textContent = lastWho;
+            measureContent.appendChild(w); buf.push(w); clone.classList.add('cont');
+          }
+          measureContent.appendChild(clone);
+        }
+        buf.push(clone);
+      });
+      flush();
+    });
+    if (perSpread === 2 && pages.length % 2 === 1) pages.push(blankPage('blank', '<div class="mark"></div>'));
+
+    buildToc();
+    if (keepBlock != null) {
+      const idx = pages.findIndex(p => p.firstBlock != null && Number(p.firstBlock) >= Number(keepBlock));
+      spread = Math.floor((idx === -1 ? pages.length - 1 : idx) / perSpread);
+    }
+    spread = Math.max(0, Math.min(spread, maxSpread()));
+    render();
+  }
+
+  function pageEl(index, side) {
+    const p = pages[index];
+    const el = document.createElement('div');
+    el.className = `page ${side}` + (p ? (p.cls ? ' ' + p.cls : '') : ' blank');
+    if (!p) { el.innerHTML = '<div class="content"></div>'; return el; }
+    const dark = /\bdark\b/.test(p.cls);
+    const outerLeft = side === 'left' && perSpread === 2;
+    const run = p.kind === 'text' ? `<div class="runhead"><span>${outerLeft ? '그레이 던' : p.runhead}</span><span>${outerLeft ? p.runhead : ''}</span></div>` : '';
+    const folio = (p.kind === 'text' || (p.kind === 'special' && !dark)) ? `<div class="folio">${index}</div>` : '';
+    el.innerHTML = `<div class="content">${p.html}</div>${run}${folio}`;
+    return el;
+  }
+
+  function render() {
+    const li = spread * perSpread, ri = li + 1;
+    if (perSpread === 2) { slotL.hidden = false; slotL.replaceChildren(pageEl(li, 'left')); slotR.replaceChildren(pageEl(ri, 'right')); }
+    else { slotL.hidden = true; slotL.replaceChildren(); slotR.replaceChildren(pageEl(li, 'right')); }
+    const total = pages.length - 1;
+    folioNow.textContent = perSpread === 2 ? `${li}–${Math.min(ri, total)} / ${total}` : `${li} / ${total}`;
+    bar.style.width = `${Math.round((li / Math.max(1, total)) * 100)}%`;
+    const ch = chapters[pages[li]?.chapterIndex] ?? chapters[pages[ri]?.chapterIndex];
+    chapterNow.textContent = ch ? `${ch.part ? ch.part + ' · ' : ''}${ch.title}` : '';
+    try { localStorage.setItem('greydawn.block', String(pages[li]?.firstBlock ?? pages[ri]?.firstBlock ?? '')); } catch (e) {}
+  }
+
+  // ── 낱장 준비 ─────────────────────────────────────
+  function setupLeaf(dir) {
+    const li = spread * perSpread;
+    leaf.className = dir > 0 ? 'fwd' : 'bwd';
+    leaf.style.transition = 'none';
+    const blankBack = () => { const el = document.createElement('div'); el.className = 'page right'; el.innerHTML = '<div class="content"></div>'; return el; };
+    if (perSpread === 2) {
+      if (dir > 0) { leafFront.replaceChildren(pageEl(li + 1, 'right')); leafBack.replaceChildren(pageEl(li + 2, 'left')); slotR.replaceChildren(pageEl(li + 3, 'right')); }
+      else { leafFront.replaceChildren(pageEl(li, 'left')); leafBack.replaceChildren(pageEl(li - 1, 'right')); slotL.replaceChildren(pageEl(li - 2, 'left')); }
+    } else {
+      if (dir > 0) { leafFront.replaceChildren(pageEl(li, 'right')); leafBack.replaceChildren(blankBack()); slotR.replaceChildren(pageEl(li + 1, 'right')); }
+      else { leafFront.replaceChildren(pageEl(li - 1, 'right')); leafBack.replaceChildren(blankBack()); }
+    }
+    for (const f of [leafFront, leafBack]) { const s = document.createElement('div'); s.className = 'shade'; f.appendChild(s); }
+    leaf.hidden = false;
+    setAngle(restAngle(dir));
+  }
+  const restAngle = dir => (perSpread === 2 || dir > 0) ? 0 : -180;
+  const doneAngle = dir => perSpread === 2 ? (dir > 0 ? -180 : 180) : (dir > 0 ? -180 : 0);
+
+  function setAngle(deg) {
+    leaf.style.transform = `rotateY(${deg}deg)`;
+    const k = Math.sin(Math.min(1, Math.abs(deg) / 180) * Math.PI);
+    leaf.querySelectorAll('.shade').forEach(s => s.style.opacity = String(k * 0.9));
+    ground.style.opacity = String(perSpread === 2 ? k * 0.7 : 0);
+  }
+
+  function animateTo(deg, dir, completed) {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      leaf.style.transition = '';
+      leaf.classList.add('anim');
+      let done = false;
+      const finish = () => {
+        if (done) return; done = true;
+        leaf.removeEventListener('transitionend', finish);
+        leaf.classList.remove('anim'); leaf.hidden = true; ground.style.opacity = '0';
+        if (completed) spread += dir;
+        busy = false; render();
+      };
+      leaf.addEventListener('transitionend', finish);
+      setAngle(deg);
+      setTimeout(finish, 900);
+    }));
+  }
+  function canFlip(dir) { return !busy && !(dir > 0 && spread >= maxSpread()) && !(dir < 0 && spread <= 0); }
+  function flip(dir) { if (!canFlip(dir)) return; busy = true; setupLeaf(dir); animateTo(doneAngle(dir), dir, true); }
+  function goTo(pageIndex) { spread = Math.max(0, Math.min(maxSpread(), Math.floor(pageIndex / perSpread))); render(); }
+
+  // ── 입력 ─────────────────────────────────────────
+  window.addEventListener('keydown', e => {
+    if (tocdlg.open) return;
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); flip(1); }
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); flip(-1); }
+    if (e.key === 'Home') goTo(0);
+    if (e.key === 'End') goTo(pages.length - 1);
+  });
+
+  let drag = null, dragged = false;
+  book.addEventListener('pointerdown', e => {
+    if (busy || e.button !== 0) return;
+    const r = book.getBoundingClientRect();
+    const dir = (e.clientX - r.left) > r.width / 2 ? 1 : -1;
+    if (!canFlip(dir)) return;
+    drag = { dir, x0: e.clientX, w: r.width, started: false, deg: restAngle(dir), last: e.clientX, lastT: performance.now(), vel: 0, id: e.pointerId };
+    dragged = false;
+  });
+  window.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x0;
+    if (!drag.started) {
+      if (Math.abs(dx) < 8) return;
+      if ((drag.dir > 0 && dx > 0) || (drag.dir < 0 && dx < 0)) { drag = null; return; }
+      drag.started = true; dragged = true; busy = true; book.classList.add('dragging');
+      setupLeaf(drag.dir);
+      try { book.setPointerCapture(drag.id); } catch (err) {}
+    }
+    const span = perSpread === 2 ? drag.w / 2 : drag.w;
+    const t = Math.max(-1, Math.min(1, dx / span));
+    let deg;
+    if (perSpread === 2) deg = drag.dir > 0 ? Math.min(0, t * 180) : Math.max(0, t * 180);
+    else deg = drag.dir > 0 ? Math.min(0, t * 180) : Math.min(0, -180 + Math.max(0, t) * 180);
+    const now = performance.now();
+    drag.vel = (e.clientX - drag.last) / Math.max(1, now - drag.lastT); drag.last = e.clientX; drag.lastT = now;
+    drag.deg = deg; setAngle(deg);
+  });
+  const endDrag = () => {
+    if (!drag) return;
+    const d = drag; drag = null; book.classList.remove('dragging');
+    if (!d.started) return;
+    const progress = Math.abs(d.deg - restAngle(d.dir)) / 180;
+    const fling = d.dir > 0 ? d.vel < -0.6 : d.vel > 0.6;
+    const complete = progress > 0.35 || fling;
+    animateTo(complete ? doneAngle(d.dir) : restAngle(d.dir), d.dir, complete);
+    setTimeout(() => dragged = false, 60);
+  };
+  window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', endDrag);
+
+  book.addEventListener('click', e => {
+    if (dragged || busy) return;
+    const row = e.target.closest('.toc-row[data-page]');
+    if (row) { goTo(Number(row.dataset.page)); return; }
+    const r = book.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width;
+    if (x > 0.72) flip(1); else if (x < 0.28) flip(-1);
+  });
+
+  // ── 차례 ─────────────────────────────────────────
+  function buildToc() {
+    const make = () => {
+      const ol = document.createElement('ol');
+      let lastPart = null;
+      chapters.forEach(ch => {
+        if (ch.part !== lastPart) { lastPart = ch.part; const li = document.createElement('li'); li.className = 'part'; li.innerHTML = `<span class="t">${ch.part}</span>`; ol.appendChild(li); }
+        const li = document.createElement('li');
+        li.innerHTML = `<span class="n">${ch.num ? ch.num + '장' : ''}</span><span class="t">${ch.title}</span><span class="dots"></span><span class="p">${ch.page}</span>`;
+        li.addEventListener('click', () => { goTo(ch.page); if (tocdlg.open) tocdlg.close(); });
+        ol.appendChild(li);
+      });
+      return ol;
+    };
+    document.getElementById('toc-list').replaceChildren(make());
+  }
+  document.getElementById('toc-btn').addEventListener('click', () => tocdlg.showModal());
+  document.getElementById('toc-close').addEventListener('click', () => tocdlg.close());
+  tocdlg.addEventListener('click', e => { if (e.target === tocdlg) tocdlg.close(); });
+
+  // ── 글자 크기 / 다시 짜기 ─────────────────────────
+  let bootKeep = null;
+  const keepMarker = () => (laidOutAt ? (pages[spread * perSpread]?.firstBlock ?? pages[spread * perSpread + 1]?.firstBlock ?? null) : bootKeep);
+  function applyFont() {
+    document.documentElement.style.setProperty('--fs', FS[fontStep] + 'px');
+    paginate(keepMarker());
+    try { localStorage.setItem('greydawn.fs', String(fontStep)); } catch (e) {}
+  }
+  document.getElementById('fs-plus').addEventListener('click', () => { fontStep = Math.min(FS.length - 1, fontStep + 1); applyFont(); });
+  document.getElementById('fs-minus').addEventListener('click', () => { fontStep = Math.max(0, fontStep - 1); applyFont(); });
+  let resizeT;
+  const relayout = () => { clearTimeout(resizeT); resizeT = setTimeout(() => paginate(keepMarker()), laidOutAt ? 180 : 30); };
+  window.addEventListener('resize', relayout);
+  if (window.ResizeObserver) new ResizeObserver(() => { if (booted) relayout(); }).observe(book);
+  let booted = false;
+  if (document.fonts) document.fonts.addEventListener('loadingdone', () => { clearTimeout(resizeT); resizeT = setTimeout(() => paginate(keepMarker()), 60); });
+
+  // ── 시작 ─────────────────────────────────────────
+  function boot() {
+    let keep = null;
+    try {
+      fontStep = Math.max(0, Math.min(FS.length - 1, Number(localStorage.getItem('greydawn.fs') ?? 1)));
+      const b = localStorage.getItem('greydawn.block'); if (b) keep = b;
+    } catch (e) { fontStep = 1; }
+    bootKeep = keep;
+    document.documentElement.style.setProperty('--fs', FS[fontStep] + 'px');
+    booted = true;
+    paginate(keep);
+  }
+  const fontsReady = document.fonts
+    ? Promise.race([
+        Promise.all(['17px "Gowun Batang"', 'bold 17px "Gowun Batang"', '17px "Song Myung"', '12px "Noto Sans KR"'].map(f => document.fonts.load(f).catch(() => null))),
+        new Promise(res => setTimeout(res, 2500)),
+      ])
+    : Promise.resolve();
+  fontsReady.then(boot);
+  window.__book = { get pages() { return pages; }, get spread() { return spread; }, get busy() { return busy; }, get perSpread() { return perSpread; }, flip, goTo, paginate };
+})();
+</script>
+</body>
+</html>
