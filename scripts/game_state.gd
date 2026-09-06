@@ -1043,7 +1043,7 @@ const MILESTONE_UNLOCKS := {
 	},
 	"craft_shotgun": {
 		"title": "산탄총 제작 해금",
-		"body": "더블배럴 설계도 조각을 전부 맞췄다. 작업대에서 참치 헌터를 직접 만들 수 있다.",
+		"body": "더블배럴 잔해 3개를 다 모았다. 작업대에서 참치 헌터를 직접 만들 수 있다.",
 		"requires_blueprint": "double_barrel",
 	},
 	"sealed_access": {
