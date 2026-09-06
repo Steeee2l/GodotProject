@@ -1999,6 +1999,98 @@ const CHAINS := {
 }
 
 
+# ── 마지막 출정 ────────────────────────────────────────────────
+#
+# CHAINS 밖에 따로 둔다. 남산 체인의 4단계로 넣으면 is_zone_main_chain_complete가
+# 이 판을 끝내야 true가 되고, 그러면 이 판을 여는 사자의 고백이 영영 안 뜬다
+# (고백이 체인 완주를 조건으로 하기 때문). 그래서 체인이 아니라 별도 판이다.
+#
+# 회수물이 없다. 들고 나오는 게 아니라 데리고 가는 판이라서, 마지막 지점을
+# 밟는 순간 MainMissionChain이 FinalJourney로 넘긴다(stage["ending"]).
+const FINAL_MISSION := {
+	"id": "namsan_final_walk",
+	"zone_id": "namsan_core",
+	"title": "같이 가는 길",
+	"type": "relay",
+	"ending": true,
+	"cinematics": {
+		# 반년 만에 문 밖으로 나온 사람의 첫 마디. 설명은 한 줄도 없다 —
+		# 그가 무슨 말을 하는지가 곧 그가 어떤 상태인지다.
+		"intro": [
+			{"mode": "event"},
+			{"type": "wait", "duration": 0.4},
+			{"type": "focus_player", "hold": 0.8},
+			{
+				"type": "lines",
+				"speaker": "사자",
+				"title": "같이 가는 길",
+				"portrait": PORTRAIT_SAJA_PATH,
+				"lines": [
+					"어. 밖이네.",
+					"…밖이 이렇게 밝았나. 아니다, 지금 밤이지. 내가 무슨 소릴 하는 거야.",
+					"신발. 나 신발 신고 나왔나. …신었네. 됐어.",
+					"관제탑 지나서 위로 가면 된다며.",
+					"{name:아/야}. 천천히 가. 나 반년을 앉아만 있었어.",
+				],
+			},
+		],
+	},
+	"points": [
+		{
+			"step_title": "마지막 출정 · 남산 초입 0/3",
+			"detail": "TAB 지도 확인 → 사자를 데리고 초입 차단기까지 간다",
+			"label": "차단기 넘기",
+			"map_label": "남산 초입 차단기",
+			"prop": "convoy_cache",
+			"color": "#a8d488",
+			"hold": 2.0,
+			"distance": 40.0,
+			"separation": 36.0,
+			"complete_notice": "초입 통과 · 사자가 뒤따라온다",
+			"complete_monologue": [
+				"사자가 자꾸 뒤를 본다. 아무도 안 따라오는데.",
+				"그런데 갈림길에서는 안 묻는다.",
+				"…길을 안다. 처음 오는 놈이 아니다.",
+			],
+		},
+		{
+			"step_title": "쌓인 깡통 자리 · 1/3",
+			"detail": "제염 라인 옆, 깡통이 쌓인 자리를 지나간다",
+			"label": "쌓인 깡통 확인",
+			"map_label": "쌓인 깡통",
+			"prop": "pharmacy_cache",
+			"color": "#e7a847",
+			"hold": 2.4,
+			"distance": 48.0,
+			"separation": 40.0,
+			"complete_notice": "깡통 무더기 확인 · 지하 입구 위치 확보",
+			"complete_monologue": [
+				"빈 깡통이 한 무더기다. 우리 쉘터에서 쓰는 거다.",
+				"하루 하나씩이면 반년 치다.",
+				"…사자가 여기까지 밥을 가져다 놨다. 밖에 아홉이 있다고 믿고.",
+			],
+		},
+		{
+			"step_title": "지하 입구 · 2/3",
+			"detail": "중무장 경계를 지나 지하 입구까지 사자를 데려간다 · 경보 주의",
+			"label": "지하 입구까지 데려가기",
+			"map_label": "남산 지하 입구 · 중무장 경계",
+			"prop": "sealed_cargo",
+			"color": "#e2c15f",
+			"hold": 3.0,
+			"distance": 52.0,
+			"separation": 42.0,
+			"guards": 8,
+			"alarm": true,
+		},
+	],
+}
+
+
+static func get_final_mission() -> Dictionary:
+	return FINAL_MISSION.duplicate(true)
+
+
 static func has_chain(zone_id: String) -> bool:
 	return CHAINS.has(zone_id)
 

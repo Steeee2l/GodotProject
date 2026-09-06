@@ -451,6 +451,29 @@ var juhong_radio_loss_count: int = 0
 
 func is_companion_raid_active() -> bool:
 	return companion_unlocked and companion_enabled
+# ── 마지막 출정(2026-09-06) ────────────────────────────────────
+# 남산 체인을 끝내면 사자가 고백하고 "나 좀 데려가 줘"로 끝난다. 그 부탁을
+# 들은 다음에야 쉘터 브리핑에 '마지막 출정'이 뜬다 — 체인 완주만으로 열면
+# 아직 부탁하지도 않은 사람을 데리고 나가는 판이 된다.
+#   unlocked   고백을 봤다(브리핑에 버튼이 뜬다)
+#   run        지금 나가 있는 판이 그 판이다(사자 동행·마지막 미션 데이터)
+#   ending_seen 문 앞까지 갔다 왔다 = 클리어. 클리어 뒤에도 게임은 계속 돈다.
+const FINAL_RAID_ZONE := "namsan_core"
+var final_raid_unlocked: bool = false
+var final_raid_run: bool = false
+var ending_seen: bool = false
+var saja_epilogue_seen: bool = false
+
+
+func is_final_raid_available() -> bool:
+	return final_raid_unlocked and is_zone_main_chain_complete(FINAL_RAID_ZONE)
+
+
+func mark_ending_seen() -> void:
+	if ending_seen:
+		return
+	ending_seen = true
+	save_persistent_state()
 # 행상인 최초 입장 자기소개(게임 전체 1회) 노출 여부.
 var merchant_intro_seen: bool = false
 var saja_second_run_intro_seen: bool = false
@@ -1928,6 +1951,23 @@ const SAJA_CHATTER := {
 			"…밥은 먹고 가.",
 		]},
 	],
+	# 문 앞에 다녀온 뒤. 같은 사람인데 말끝이 달라진다 — 그게 후일담의 전부다.
+	"after": [
+		{"title": "숫자", "lines": [
+			"요새 뭐 세는 걸 안 해.",
+			"…아니다. 통조림은 세지. 그건 세야 돼.",
+		]},
+		{"title": "문", "lines": [
+			"남산 그 문 말이야.",
+			"언젠가 안에서 열겠지.",
+			"그때까진 여기 밥이나 하고 있을게.",
+		]},
+		{"title": "주홍", "lines": [
+			"주홍이가 나한테 말 걸더라.",
+			"미안하단 말은 안 하더라. 안 해도 돼.",
+			"…나도 안 했어.",
+		]},
+	],
 }
 
 
@@ -1942,7 +1982,9 @@ func _completed_main_zone_count() -> int:
 func _build_saja_chatter_event() -> Dictionary:
 	var completed := _completed_main_zone_count()
 	var stage_key := "early"
-	if completed >= 3:
+	if ending_seen:
+		stage_key = "after"
+	elif completed >= 3:
 		stage_key = "late"
 	elif completed >= 1:
 		stage_key = "mid"
@@ -1986,6 +2028,21 @@ func get_pending_shelter_story_event() -> Dictionary:
 				"없으면 없다고 할 건데, 그래도 일단 말은 해.",
 				"어디서 왔어? …됐어 됐어. 안 궁금해. 궁금한데 안 궁금해.",
 				"자는 덴 저기. 발 닦고 들어가. 거기 어제 닦았어.",
+			],
+		}
+	# 문 앞에 다녀온 다음 첫 복귀 — 후일담 한 번. 다른 무엇보다 먼저 나온다.
+	if ending_seen and not saja_epilogue_seen:
+		return {
+			"id": "saja_epilogue",
+			"speaker": "사자",
+			"title": "그다음 날",
+			# 후일담은 짧게. 그가 달라진 건 딱 하나 — 밤에 다시 잠들 수 있게 됐다.
+			"lines": [
+				"왔냐. 밥부터. 데워 놨어.",
+				"나 어제 잠 잘 잤어.",
+				"…아니다. 세 시에 깼어. 근데 다시 잤어. 그건 처음이야.",
+				"깡통은 이제 안 챙겨. 창고에 그냥 둬.",
+				"가긴 어딜 가. 여기 식구가 몇인데.",
 			],
 		}
 	# 주홍 합류 — 생환 3회째. 사자를 의심하는 인물이 내 출정에 붙는 순간이라
@@ -2174,10 +2231,15 @@ func mark_shelter_story_event_seen(event_id: String) -> void:
 		saja_seen_story_cargo_count = recovered_story_cargo_ids.size()
 	elif event_id.begins_with("saja_subway_"):
 		saja_seen_subway_stage = subway_story_stage
+	elif event_id == "saja_epilogue":
+		saja_epilogue_seen = true
 	elif event_id.begins_with("saja_main_chain_"):
 		var chain_zone_id := event_id.trim_prefix("saja_main_chain_")
 		if not saja_seen_main_mission_zones.has(chain_zone_id):
 			saja_seen_main_mission_zones.append(chain_zone_id)
+		# 고백을 끝까지 들은 순간이 '마지막 출정'의 해금 지점이다.
+		if chain_zone_id == FINAL_RAID_ZONE:
+			final_raid_unlocked = true
 	elif event_id.begins_with("saja_chatter_"):
 		# id = saja_chatter_{stage}_{index} — 이번 복귀 소진 + 그 단계 인덱스 전진.
 		saja_chatter_serial_seen = shelter_return_serial
@@ -5785,6 +5847,10 @@ func save_persistent_state() -> bool:
 		"juhong_radio_return_pending": juhong_radio_return_pending,
 		"juhong_radio_loss_count": juhong_radio_loss_count,
 		"merchant_intro_seen": merchant_intro_seen,
+		"final_raid_unlocked": final_raid_unlocked,
+		"final_raid_run": final_raid_run,
+		"ending_seen": ending_seen,
+		"saja_epilogue_seen": saja_epilogue_seen,
 		"saja_second_run_intro_seen": saja_second_run_intro_seen,
 		"saja_seen_resident_count": saja_seen_resident_count,
 		"saja_seen_boss_kills": saja_seen_boss_kills,
@@ -6058,6 +6124,15 @@ func load_persistent_state() -> bool:
 	juhong_radio_return_pending = bool(data.get("juhong_radio_return_pending", false))
 	juhong_radio_loss_count = maxi(0, int(data.get("juhong_radio_loss_count", 0)))
 	merchant_intro_seen = bool(data.get("merchant_intro_seen", false))
+	# 마지막 출정 플래그가 없던 구세이브는 전부 false — 남산을 이미 끝냈다면
+	# 다음 복귀에 고백 대사가 다시 뜨지 않으므로, 체인 완주 세이브는 고백을
+	# 이미 본 것으로 보고 해금해 준다(엔딩이 영영 막히지 않게).
+	final_raid_unlocked = bool(
+		data.get("final_raid_unlocked", saja_seen_main_mission_zones.has(FINAL_RAID_ZONE))
+	)
+	final_raid_run = bool(data.get("final_raid_run", false))
+	ending_seen = bool(data.get("ending_seen", false))
+	saja_epilogue_seen = bool(data.get("saja_epilogue_seen", false))
 	saja_second_run_intro_seen = bool(data.get("saja_second_run_intro_seen", false))
 	saja_seen_resident_count = maxi(0, int(data.get("saja_seen_resident_count", 0)))
 	saja_seen_boss_kills = maxi(0, int(data.get("saja_seen_boss_kills", 0)))
@@ -6302,6 +6377,10 @@ func reset_run() -> void:
 	contract_agent_intro_seen = false
 	saja_intro_seen = false
 	merchant_intro_seen = false
+	final_raid_unlocked = false
+	final_raid_run = false
+	ending_seen = false
+	saja_epilogue_seen = false
 	saja_second_run_intro_seen = false
 	saja_seen_resident_count = 0
 	saja_seen_boss_kills = 0

@@ -403,6 +403,9 @@ var cover_system := CoverSystem.new()
 # class_name 대신 preload: 새 파일의 전역 클래스 캐시가 없는 --script 콜드 스타트에서도
 # main.gd가 컴파일돼야 한다(헤드리스 프로브 규약).
 var companion_system := preload("res://scripts/raid/companion.gd").new()
+# 마지막 출정 — 사자 동행 대사·문 앞 연출·엔딩 화면. 판 골격은 main_mission이
+# 그대로 쥐고, 이 모듈은 그 위에 얹히는 서사만 맡는다.
+var final_journey := preload("res://scripts/raid/final_journey.gd").new()
 # 전투 숙련도 — 이번 판 헤드샷 수·1회성 레슨(판 안에서 예고 종류별 1회).
 var run_headshots := 0
 var mastery_lessons_shown: Dictionary = {}
@@ -621,6 +624,7 @@ func _ready() -> void:
 	weapon_combat.attach(self)
 	cover_system.attach(self)
 	companion_system.attach(self)
+	final_journey.attach(self)
 	can_throw.attach(self)
 	deployables.attach(self)
 	enemy_chatter.attach(self)
@@ -722,6 +726,8 @@ func _ready() -> void:
 	raid_entry_grace_until_msec = Time.get_ticks_msec() + 40000
 	# 주홍 소환 — 해금+동행 토글이 켜져 있을 때만, 스폰 직후(오프닝·건물 내부 제외).
 	companion_system.spawn_if_active()
+	# 사자 소환 — 마지막 출정 판에서만. 그는 싸우지 않고 따라오며 말한다.
+	companion_system.spawn_saja_if_final_run()
 
 
 func _snap_camera_to_player() -> void:
@@ -1017,6 +1023,7 @@ func _physics_process(delta: float) -> void:
 	deployables.update(delta)
 	enemy_chatter.update(delta)
 	companion_system.update(delta)
+	final_journey.update(delta)
 	_update_fire_button_context()
 	_update_combat_feedback_overlay()
 	if perception_system:

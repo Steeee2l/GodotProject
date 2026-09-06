@@ -37,6 +37,11 @@ const JUHONG_ANIMATION_ROOT := "res://assets/characters/juhong"
 const JUHONG_PORTRAIT_PATH := "res://assets/characters/juhong/down_idle-frame-0.png"
 const JUHONG_ACCENT := Color("#41e0c9")
 
+# 사자 — 마지막 출정에만 붙는 비전투 동행.
+const SAJA_ANIMATION_ROOT := "res://assets/characters/saja"
+const SAJA_PORTRAIT_PATH := "res://assets/characters/saja/down_idle-frame-0.png"
+const SAJA_ACCENT := Color("#e2c15f")
+
 # 어그로 — 경보 적의 표적 선택에 주홍 포함: 적당 1회 40% 확률로 주홍을 문다.
 # enemy.gd는 손대지 않는다(set_combat_target 공개 API만 사용).
 const AGGRO_ROLL_INTERVAL := 1.5
@@ -59,6 +64,7 @@ const DOWN_SATURATION := 0.26
 
 var host: Node
 var juhong: JuhongBody
+var saja: SajaBody
 
 # 플레이어 소생만 판당 1회 — 주홍 소생은 무제한(45s 안에 [F]만 하면 된다).
 var player_revive_used := false
@@ -147,6 +153,46 @@ func _play_field_intro() -> void:
 			if is_juhong_alive():
 				juhong.bark("앞장 서. 네 뒤는 내가 봐 줄게. 공짜는 아니야.")
 		)
+
+
+# ── 사자 동행(마지막 출정 전용) ────────────────────────────────
+# 주홍과 같은 모듈에 두되 몸은 따로다. 사자는 싸우지 않는다 — 반년을 문 안에서만
+# 산 사람이라 총도 안 들고, 적의 표적도 되지 않는다(충돌 레이어 0). 따라오고,
+# 말하고, 그게 전부다. 죽지 않는다는 뜻이기도 하다 — 데려가는 게 목적인 판에서
+# 동행이 유탄에 죽으면 그건 실패가 아니라 사고다.
+
+
+func spawn_saja_if_final_run() -> void:
+	if is_saja_alive():
+		return
+	if not GameState.final_raid_run:
+		return
+	if host == null or not is_instance_valid(host.player):
+		return
+	saja = SajaBody.new()
+	saja.host = host
+	host.add_child(saja)
+	var spawn_origin: Vector3 = host.player.global_position + Vector3(-1.7, 0.0, 1.4)
+	var world: Node = host.get_node_or_null("World")
+	if world != null and world.has_method("find_nearest_physically_open_position"):
+		spawn_origin = world.call(
+			"find_nearest_physically_open_position", spawn_origin, 0.58, [host.player.get_rid()]
+		)
+	saja.global_position = Vector3(spawn_origin.x, 0.0, spawn_origin.z)
+
+
+func is_saja_alive() -> bool:
+	return saja != null and is_instance_valid(saja)
+
+
+func saja_bark(line: String) -> void:
+	if not is_saja_alive() or line.is_empty():
+		return
+	# 말풍선은 speech_bubble 경유(규약). 이름 토큰은 여기서 푼다 — 말풍선은
+	# 대사창이 아니라 Label3D라 자동으로 치환되지 않는다.
+	SPEECH_BUBBLE.show_line(
+		saja, GameState.apply_player_name(line), SPEECH_BUBBLE.TONE_ALLY, 3.4, 2.05
+	)
 
 
 func is_active() -> bool:
@@ -1742,3 +1788,207 @@ class JuhongBody:
 		health_bar_background.visible = ratio < 0.999 and not downed and not retreated
 		health_bar_fill.visible = health_bar_background.visible
 		health_bar_fill.region_rect = Rect2(0, 0, maxf(1.0, 70.0 * ratio), 8)
+
+
+# ── 사자 본체 ──────────────────────────────────────────────────
+
+
+class SajaBody:
+	extends CharacterBody3D
+
+	const DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
+	const DIRECTION_STATES := {
+		"n": "up", "ne": "up_right", "e": "right", "se": "down_right",
+		"s": "down", "sw": "down_left", "w": "left", "nw": "up_left",
+	}
+	# 플레이어(5.2)보다 살짝 느리다 — "천천히 가, 나 반년을 앉아만 있었어"가
+	# 대사로만 남으면 거짓말이 된다. 대신 너무 벌어지면 순간이동으로 붙인다.
+	const WALK_SPEED := 4.9
+	const FOLLOW_STOP := 2.0
+	const FOLLOW_RESUME := 2.7
+	const TELEPORT_DISTANCE := 26.0
+
+	var host: Node
+	var sprite: AnimatedSprite3D
+	var name_label: Label3D
+	var facing := "s"
+	var motion_state := "idle"
+	var lagged_player_position := Vector3.INF
+
+
+	func _ready() -> void:
+		name = "SajaCompanion"
+		add_to_group("companion")
+		# 적의 표적 레이어(PLAYER_LAYER)에 들어가지 않는다 — 사자는 맞지 않는다.
+		collision_layer = 0
+		collision_mask = COLLISION_PROFILES.WORLD_MOVEMENT_LAYER
+		var collision := CollisionShape3D.new()
+		var shape := CapsuleShape3D.new()
+		shape.radius = 0.32
+		shape.height = 1.3
+		collision.shape = shape
+		add_child(collision)
+
+		sprite = AnimatedSprite3D.new()
+		sprite.name = "SajaSprite"
+		sprite.sprite_frames = _create_sprite_frames()
+		sprite.position = Vector3(0, 0.48, 0)
+		sprite.pixel_size = 0.0092
+		sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		sprite.shaded = false
+		sprite.transparent = true
+		sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
+		sprite.no_depth_test = true
+		sprite.render_priority = 30
+		add_child(sprite)
+
+		name_label = Label3D.new()
+		name_label.name = "SajaNameLabel"
+		name_label.text = "사자"
+		name_label.font = BARK_FONT
+		name_label.font_size = 28
+		name_label.pixel_size = 0.005
+		name_label.position = Vector3(0, 1.92, 0)
+		name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		name_label.no_depth_test = true
+		name_label.render_priority = 120
+		name_label.modulate = CompanionSystem.SAJA_ACCENT
+		name_label.outline_modulate = Color(0.05, 0.04, 0.02, 0.94)
+		name_label.outline_size = 8
+		add_child(name_label)
+		_play_animation()
+
+
+	func _physics_process(delta: float) -> void:
+		if host == null or not is_instance_valid(host.get("player")):
+			velocity = Vector3.ZERO
+			return
+		# 조작이 잠기는 국면(시네마틱·추출 전환·사망 연출)엔 그 자리에 선다.
+		if (
+			bool(host.get("extraction_transition_active"))
+			or bool(host.get("player_death_sequence_active"))
+			or (host.has_method("is_cinematic_active") and bool(host.call("is_cinematic_active")))
+		):
+			velocity = Vector3.ZERO
+			_set_motion_state("idle")
+			return
+		_update_follow(delta)
+		move_and_slide()
+
+
+	func _update_follow(delta: float) -> void:
+		var player: CharacterBody3D = host.player
+		if lagged_player_position == Vector3.INF:
+			lagged_player_position = player.global_position
+		# 지연 lerp — 목표점이 한 박자 늦게 따라온다(그림자처럼 붙지 않게).
+		lagged_player_position = lagged_player_position.lerp(
+			player.global_position, 1.0 - exp(-3.0 * delta)
+		)
+		var straight := player.global_position - global_position
+		straight.y = 0.0
+		# 지형에 끼거나 뒤처져 화면 밖으로 사라지면 데려가는 판이 성립하지 않는다.
+		# 눈에 안 보이는 거리까지 벌어지면 조용히 플레이어 뒤로 옮겨 붙인다.
+		if straight.length() > TELEPORT_DISTANCE:
+			global_position = Vector3(
+				player.global_position.x - 1.5, global_position.y, player.global_position.z + 1.2
+			)
+			lagged_player_position = player.global_position
+			velocity = Vector3.ZERO
+			return
+		var offset := lagged_player_position - global_position
+		offset.y = 0.0
+		var distance := offset.length()
+		var moving := distance > (FOLLOW_STOP if motion_state == "walk" else FOLLOW_RESUME)
+		if moving and distance > 0.01:
+			var direction := _steer_around_obstacles(offset / distance)
+			velocity = direction * WALK_SPEED
+			if direction.length_squared() > 0.01:
+				_set_facing_from_world_direction(direction)
+			_set_motion_state("walk")
+		else:
+			velocity = Vector3.ZERO
+			_set_motion_state("idle")
+			if straight.length_squared() > 0.04:
+				_set_facing_from_world_direction(straight.normalized())
+
+
+	func _steer_around_obstacles(desired_direction: Vector3) -> Vector3:
+		# 주홍의 조향 스캔 간이판 — 캐시 없이 각도 후보만 훑는다(전투가 없어 충분).
+		if desired_direction.length_squared() <= 0.01:
+			return Vector3.ZERO
+		var desired := desired_direction.normalized()
+		for angle in [0.0, 26.0, -26.0, 52.0, -52.0, 84.0, -84.0]:
+			var candidate := desired.rotated(Vector3.UP, deg_to_rad(angle))
+			if _is_steering_direction_clear(candidate, 2.6 if is_zero_approx(angle) else 2.0):
+				return candidate
+		return desired
+
+
+	func _is_steering_direction_clear(direction: Vector3, probe_distance: float) -> bool:
+		var from := global_position + Vector3(0, 0.32, 0)
+		var query := PhysicsRayQueryParameters3D.create(
+			from,
+			from + direction.normalized() * probe_distance,
+			COLLISION_PROFILES.WORLD_MOVEMENT_LAYER
+		)
+		query.exclude = [get_rid()]
+		return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+
+
+	func _set_facing_from_world_direction(world_direction: Vector3) -> void:
+		if world_direction.length_squared() <= 0.01:
+			return
+		var screen_direction := Vector2(
+			world_direction.x - world_direction.z,
+			world_direction.x + world_direction.z
+		).normalized()
+		var angle := fposmod(rad_to_deg(atan2(screen_direction.x, -screen_direction.y)), 360.0)
+		var index := int(round(angle / 45.0)) % DIRECTION_NAMES.size()
+		_set_facing(DIRECTION_NAMES[index])
+
+
+	func _set_facing(next_facing: String) -> void:
+		if facing == next_facing:
+			return
+		facing = next_facing
+		_play_animation()
+
+
+	func _set_motion_state(next_state: String) -> void:
+		if motion_state == next_state:
+			return
+		motion_state = next_state
+		_play_animation()
+
+
+	func _play_animation() -> void:
+		if sprite != null and sprite.sprite_frames != null:
+			sprite.play("%s_%s" % [motion_state, facing])
+
+
+	func _create_sprite_frames() -> SpriteFrames:
+		var frames := SpriteFrames.new()
+		frames.remove_animation("default")
+		for direction_name in DIRECTION_NAMES:
+			_add_file_animation(frames, direction_name, "idle", 4.0)
+			_add_file_animation(frames, direction_name, "walk", 8.0)
+		return frames
+
+
+	func _add_file_animation(
+		frames: SpriteFrames, direction_name: String, state_name: String, speed: float
+	) -> void:
+		var animation_name := "%s_%s" % [state_name, direction_name]
+		frames.add_animation(animation_name)
+		frames.set_animation_loop(animation_name, true)
+		frames.set_animation_speed(animation_name, speed)
+		var direction_prefix: String = DIRECTION_STATES[direction_name]
+		for frame_index in 4:
+			var texture_path := "%s/%s_%s-frame-%d.png" % [
+				CompanionSystem.SAJA_ANIMATION_ROOT, direction_prefix, state_name, frame_index
+			]
+			var texture := load(texture_path) as Texture2D
+			if texture == null:
+				push_error("Missing saja animation frame: %s" % texture_path)
+				continue
+			frames.add_frame(animation_name, texture)

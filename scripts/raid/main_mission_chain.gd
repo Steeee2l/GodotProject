@@ -87,7 +87,12 @@ func attach(owner_node: Node) -> void:
 
 func is_cinematic_active() -> bool:
 	# event 모드(조작 잠금·일시정지)만 true. 바크 모드는 조작을 막지 않는다.
-	return cinematic.is_active()
+	# 마지막 출정의 문 앞 연출과 엔딩 화면도 같은 잠금을 써야 한다. main.gd의
+	# 조작 잠금 게이트가 이 함수 하나를 열한 곳에서 보고 있어, 판정을 여기 모은다.
+	if cinematic.is_active():
+		return true
+	var journey = host.get("final_journey") if host != null else null
+	return journey != null and journey.is_cinematic_active()
 
 
 func is_bark_active() -> bool:
@@ -101,6 +106,11 @@ func is_bark_active() -> bool:
 func setup(world: ProceduralCityMap) -> void:
 	host.hud.build_jackpot_hud()
 	zone_id = str(GameState.selected_raid_zone)
+	# 마지막 출정 — 체인 진행도와 무관한 별도 판이라 어느 분기보다 먼저 잡는다.
+	# 회수물이 없으므로 아래 운반 복원 분기에 걸릴 일도 없어야 한다.
+	if GameState.final_raid_run:
+		_setup_final_mission(world)
+		return
 	# 이어하기: 이미 회수물을 들고 있는 판(시체 회수 등)은 운반 상태로 복원한다.
 	if not GameState.raid_special_cargo.is_empty():
 		_adopt_stage_from_carried_cargo()
@@ -136,6 +146,26 @@ func setup(world: ProceduralCityMap) -> void:
 			_spawn_point(index)
 	_apply_step_presentation(0)
 	_spawn_point_guards(world)
+	_play_stage_cinematic("intro")
+
+
+func _setup_final_mission(world: ProceduralCityMap) -> void:
+	# 사자를 데리고 문까지 가는 판. 골격은 relay 그대로 쓰고, 다른 것은 둘뿐이다 —
+	# 회수물이 없고(들고 나오는 게 아니라 데려가는 판), 마지막 지점이 엔딩이다.
+	stage = MAIN_MISSION_CATALOG.get_final_mission()
+	zone_id = str(stage.get("zone_id", zone_id))
+	# 체인 진행도를 올릴 단계가 아니라는 표식. settle()은 회수물이 없어 그냥 나간다.
+	stage_index = -1
+	repeat_recovery = false
+	points = MAIN_MISSION_CATALOG.get_stage_points(stage)
+	point_index = 0
+	has_key = false
+	state = "running"
+	_resolve_point_positions(world)
+	_spawn_point(0)
+	_apply_step_presentation(0)
+	_spawn_point_guards(world)
+	host.final_journey.begin(point_positions)
 	_play_stage_cinematic("intro")
 
 
@@ -407,13 +437,17 @@ func handle_point(point_node: Node3D) -> void:
 
 
 func _finish_point(index: int, point: Dictionary) -> void:
+	# 마지막 출정의 마지막 지점 = 문 앞. 여기서만 축하 연출을 건너뛴다 —
+	# 팡파레 뒤에 사자의 마지막 장면이 오면 그 장면이 죽는다.
+	var is_ending_point := bool(stage.get("ending", false)) and index >= points.size() - 1
 	# 거점 하나를 끝낼 때마다 크게 축하한다(유저 요청) — 메인 체인의 한 걸음이
 	# 토스트 한 줄로 지나가면 진행감이 죽는다. 상세는 여전히 토스트·독백이 맡는다.
-	host.mission_celebration.celebrate(
-		str(point.get("map_label", "메인 임무 거점")),
-		"메인 임무 %d/%d 지점 확보" % [index + 1, points.size()],
-		"메인 임무"
-	)
+	if not is_ending_point:
+		host.mission_celebration.celebrate(
+			str(point.get("map_label", "메인 임무 거점")),
+			"메인 임무 %d/%d 지점 확보" % [index + 1, points.size()],
+			"메인 임무"
+		)
 	var notice := str(point.get("complete_notice", ""))
 	if not notice.is_empty():
 		host._show_field_notice(notice)
@@ -432,6 +466,11 @@ func _finish_point(index: int, point: Dictionary) -> void:
 			)
 		if bool((points[point_index] as Dictionary).get("alarm", false)):
 			_begin_alarm()
+	if bool(stage.get("ending", false)):
+		host.final_journey.on_point_reached(index)
+	if is_ending_point:
+		host.final_journey.play_ending()
+		return
 	_play_stage_cinematic("point_%d" % index)
 
 

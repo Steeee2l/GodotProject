@@ -288,6 +288,9 @@ var raid_zone_loot_chips: HFlowContainer
 var raid_zone_info_chips: HFlowContainer
 var raid_zone_launch_button: Button
 var raid_zone_resupply_button: Button
+# 마지막 출정 — 남산을 고르고, 사자의 고백을 본 뒤에만 뜨는 별도 버튼.
+var raid_zone_final_button: Button
+var final_raid_confirm_layer: CanvasLayer
 var auto_paused_for_background := false
 var raid_launch_in_progress := false
 var inventory_ui: Control
@@ -4859,13 +4862,29 @@ func _open_raid_zone_select() -> void:
 	raid_zone_resupply_button.tooltip_text = "장착 무기 탄약 90발과 구급약 2개까지 창고에서 꺼냅니다."
 	raid_zone_resupply_button.pressed.connect(_quick_resupply_for_raid, CONNECT_DEFERRED)
 	detail_column.add_child(raid_zone_resupply_button)
-	# 출정 — 큰 주 버튼 하나. 글자는 "출정"뿐, 구역 이름은 위 제목이 말한다.
+	# 출정 줄 — 평소엔 큰 주 버튼 하나. 사자가 데려가 달라고 한 뒤(남산 선택 시)에만
+	# 같은 줄 오른쪽에 '마지막 출정'이 붙고 평소 출정이 보조로 내려간다.
+	# 위아래로 쌓지 않는 이유: 720px 화면에서 브리핑 판이 넘쳐 버튼이 잘렸다.
+	var launch_row := HBoxContainer.new()
+	launch_row.name = "RaidZoneLaunchRow"
+	launch_row.add_theme_constant_override("separation", 8)
+	detail_column.add_child(launch_row)
+	# 출정 — 글자는 "출정"뿐, 구역 이름은 위 제목이 말한다.
 	raid_zone_launch_button = SHELTER_THEME.primary_button("출정")
 	raid_zone_launch_button.name = "RaidZoneLaunchButton"
 	raid_zone_launch_button.custom_minimum_size.y = 56
+	raid_zone_launch_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	raid_zone_launch_button.add_theme_font_size_override("font_size", SHELTER_THEME.TYPE_SECTION + 1)
 	raid_zone_launch_button.pressed.connect(_launch_selected_raid_zone, CONNECT_DEFERRED)
-	detail_column.add_child(raid_zone_launch_button)
+	launch_row.add_child(raid_zone_launch_button)
+	raid_zone_final_button = SHELTER_THEME.primary_button("사자를 데리고 나간다")
+	raid_zone_final_button.name = "RaidZoneFinalLaunchButton"
+	raid_zone_final_button.custom_minimum_size.y = 56
+	raid_zone_final_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	raid_zone_final_button.size_flags_stretch_ratio = 2.4
+	raid_zone_final_button.visible = false
+	raid_zone_final_button.pressed.connect(_open_final_raid_confirm, CONNECT_DEFERRED)
+	launch_row.add_child(raid_zone_final_button)
 	SHELTER_THEME.enter(panel)
 
 	# 재출정 마찰 줄이기: 지난번에 갔던 구역을 기억해 미리 선택해 둔다.
@@ -5188,7 +5207,38 @@ func _select_raid_zone_preview(zone_id: String) -> void:
 		if unlocked
 		else ("키카드 필요" if needs_keycard else "Tier %d에서 해금" % required_tier)
 	)
+	_refresh_final_raid_button(zone_id, unlocked)
 	_refresh_raid_zone_map_markers()
+
+
+func _refresh_final_raid_button(zone_id: String, unlocked: bool) -> void:
+	# 남산을 고르고, 사자의 고백을 이미 들었을 때만. 그 전에는 이 자리에
+	# 아무것도 없다 — 아직 아무도 데려가 달라고 하지 않았다.
+	if not is_instance_valid(raid_zone_final_button):
+		return
+	var available := (
+		unlocked and zone_id == GameState.FINAL_RAID_ZONE and GameState.is_final_raid_available()
+	)
+	raid_zone_final_button.visible = available
+	# 민트 주 버튼이 둘이면 어느 쪽이 어느 쪽인지 눈이 못 고른다. 사자가 부탁한
+	# 뒤에는 그쪽이 주 행동이고, 평소 출정은 표면색 보조로 내려간다.
+	if is_instance_valid(raid_zone_launch_button):
+		if available:
+			SHELTER_THEME.style_secondary(raid_zone_launch_button)
+		else:
+			SHELTER_THEME.style_primary(raid_zone_launch_button)
+		raid_zone_launch_button.add_theme_font_size_override(
+			"font_size", SHELTER_THEME.TYPE_BODY if available else SHELTER_THEME.TYPE_SECTION + 1
+		)
+	if not available:
+		return
+	# 이미 다녀온 판이면 같은 자리를 다시 갈 수는 있되, 처음처럼 말하지 않는다.
+	if GameState.ending_seen:
+		raid_zone_final_button.text = "사자와 다시 간다"
+		raid_zone_final_button.tooltip_text = "그 문 앞까지 다시 간다."
+	else:
+		raid_zone_final_button.text = "사자를 데리고 나간다"
+		raid_zone_final_button.tooltip_text = "사자가 데려가 달라고 했다. 되돌리는 길은 없다."
 
 
 func _refresh_raid_zone_map_markers() -> void:
@@ -5315,12 +5365,76 @@ func _launch_raid_zone(zone_id: String) -> void:
 	_confirm_launch_raid_zone(zone_id)
 
 
-func _confirm_launch_raid_zone(zone_id: String) -> void:
+func _open_final_raid_confirm() -> void:
+	# 확인은 딱 한 번. 되돌릴 수 없는 판이라 습관으로 누르는 손을 한 번 멈춰 세운다.
+	if raid_launch_in_progress or is_instance_valid(final_raid_confirm_layer):
+		return
+	if not GameState.is_final_raid_available():
+		_show_raid_launch_error("아직 아무도 데려가 달라고 하지 않았습니다.")
+		return
+	final_raid_confirm_layer = CanvasLayer.new()
+	final_raid_confirm_layer.name = "FinalRaidConfirmLayer"
+	final_raid_confirm_layer.layer = 72
+	add_child(final_raid_confirm_layer)
+	final_raid_confirm_layer.add_child(SHELTER_THEME.dim_backdrop())
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	final_raid_confirm_layer.add_child(center)
+	var panel := PanelContainer.new()
+	panel.name = "FinalRaidConfirmPanel"
+	panel.add_theme_stylebox_override("panel", SHELTER_THEME.modal_style())
+	var viewport_size := get_viewport().get_visible_rect().size
+	panel.custom_minimum_size.x = minf(460.0, maxf(280.0, viewport_size.x - 40.0))
+	center.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	panel.add_child(box)
+	box.add_child(SHELTER_THEME.modal_header(
+		"사자를 데리고 나간다",
+		"",
+		_close_final_raid_confirm,
+		"마지막 출정"
+	))
+	for line in [
+		"남산 꼭대기, 지하 입구까지 사자를 데려간다.",
+		"사자는 총을 안 든다. 지키는 건 네 몫이다.",
+		"여기서 나가면 되돌리는 길은 없다.",
+	]:
+		var body := SHELTER_THEME.label(str(line), SHELTER_THEME.TYPE_BODY, SHELTER_THEME.TEXT_DIM)
+		body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		box.add_child(body)
+	var confirm := SHELTER_THEME.primary_button("데리고 나간다")
+	confirm.name = "FinalRaidConfirmButton"
+	confirm.custom_minimum_size.y = 52
+	confirm.pressed.connect(_launch_final_raid, CONNECT_DEFERRED)
+	box.add_child(confirm)
+	var cancel := SHELTER_THEME.secondary_button("아직.")
+	cancel.name = "FinalRaidCancelButton"
+	cancel.pressed.connect(_close_final_raid_confirm, CONNECT_DEFERRED)
+	box.add_child(cancel)
+	SHELTER_THEME.enter(panel)
+
+
+func _close_final_raid_confirm() -> void:
+	if is_instance_valid(final_raid_confirm_layer):
+		final_raid_confirm_layer.queue_free()
+	final_raid_confirm_layer = null
+
+
+func _launch_final_raid() -> void:
+	_close_final_raid_confirm()
+	_confirm_launch_raid_zone(GameState.FINAL_RAID_ZONE, true)
+
+
+func _confirm_launch_raid_zone(zone_id: String, final_run: bool = false) -> void:
 	if raid_launch_in_progress:
 		return
 	if not GameState.select_raid_zone(zone_id):
 		_show_raid_launch_error("선택한 구역에 진입할 수 없습니다.")
 		return
+	# 마지막 출정 여부는 매 출정마다 여기서 다시 정해진다 — 평소 출정으로
+	# 나가면 자동으로 꺼진다(지난 판의 깃발이 남아 사자가 따라나오는 사고 방지).
+	GameState.final_raid_run = final_run
 	raid_launch_in_progress = true
 	# 성공했으면 이전 거부 사유는 지운다.
 	if is_instance_valid(raid_zone_detail_requirement):
@@ -5328,6 +5442,8 @@ func _confirm_launch_raid_zone(zone_id: String) -> void:
 	if is_instance_valid(raid_zone_launch_button):
 		raid_zone_launch_button.disabled = true
 		raid_zone_launch_button.text = "출정 준비 중..."
+	if is_instance_valid(raid_zone_final_button):
+		raid_zone_final_button.disabled = true
 	GameState.confirm_raid_loadout(zone_id)
 	GameState.start_new_raid()
 	# 다음 브리핑에서 "지난 출정 이후"를 계산할 기준점을 여기서 찍는다.
@@ -5346,6 +5462,8 @@ func _change_to_raid_scene() -> void:
 	if is_instance_valid(raid_zone_launch_button):
 		raid_zone_launch_button.disabled = false
 		raid_zone_launch_button.text = "출정"
+	if is_instance_valid(raid_zone_final_button):
+		raid_zone_final_button.disabled = false
 
 
 func _show_raid_launch_error(message: String) -> void:
@@ -5373,6 +5491,8 @@ func _close_raid_zone_select() -> void:
 	raid_zone_info_chips = null
 	raid_zone_detail_requirement = null
 	raid_zone_resupply_button = null
+	_close_final_raid_confirm()
+	raid_zone_final_button = null
 	raid_zone_launch_button = null
 
 
@@ -5775,7 +5895,12 @@ func _input(event: InputEvent) -> void:
 		return
 	if raid_zone_ui_open:
 		if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
-			_close_raid_zone_select()
+			# 확인 창이 떠 있으면 그것부터 닫는다 — ESC 한 번에 브리핑까지
+			# 통째로 닫히면 "취소"가 아니라 "나가기"가 된다.
+			if is_instance_valid(final_raid_confirm_layer):
+				_close_final_raid_confirm()
+			else:
+				_close_raid_zone_select()
 		return
 	if merchant_ui_open:
 		if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
