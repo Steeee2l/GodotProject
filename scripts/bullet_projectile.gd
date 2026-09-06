@@ -1,8 +1,16 @@
 extends Area3D
 
 const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
+const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
+# 프로필을 주지 않은 탄(적·동행·포탑)의 기본값. WeaponSystem.DEFAULT_PROJECTILE_PROFILE과
+# 같은 수치이며, 여기 상수는 프로필 조회 전 초기값으로만 쓴다.
 const SPEED := 46.0
 const MAX_LIFETIME := 1.15
+# 심지(가장 안쪽 발광층) 대비 바깥 두 겹의 배율. 기본 프로필(0.045 × 0.54)에
+# 곱하면 옛 예광탄 치수(0.18/0.10/0.045 × 0.88/0.70/0.54)가 그대로 나온다.
+const GLOW_WIDTH_RATIOS := [4.0, 2.22, 1.0]
+const GLOW_LENGTH_RATIOS := [1.63, 1.30, 1.0]
+const GLOW_ENERGIES := [1.8, 4.0, 7.5]
 const PROJECTILE_COLLISION_RADIUS := 0.26
 const DEFAULT_TARGET_HIT_RADIUS := 0.62
 # 총알이 최소 이만큼 날아가기 전에는 피해를 주지 않는다. 총구에서 나오자마자
@@ -14,6 +22,14 @@ const ARM_DISTANCE := 0.85
 const FRIENDLY_ARM_DISTANCE := 0.4
 
 var direction := Vector3.FORWARD
+# ── 무기 개성 ────────────────────────────────────────────────────────
+# 어떤 총에서 나온 탄인지. 발사부가 이 값을 심어 주면 _ready에서
+# WeaponSystem.get_projectile_profile으로 굵기·길이·색·속도·트레일을 읽는다.
+# 값은 전부 weapon_system.gd 한 곳에 산다 — 여기엔 적용만 있다.
+var weapon_id := ""
+var projectile_profile: Dictionary = {}
+var speed := SPEED
+var max_lifetime := MAX_LIFETIME
 var source_body: Node3D
 # 통과할 몸체(엄폐 사격 — 붙어 있는 엄폐물). 스윕 레이·영역 진입 모두 무시한다.
 var ignored_body_rids: Array[RID] = []
@@ -54,13 +70,18 @@ func _ready() -> void:
 	collision_mask = COLLISION_PROFILES.PROJECTILE_MASK
 	monitoring = true
 	body_entered.connect(_on_body_entered)
+	_resolve_projectile_profile()
 	_build_neon_projectile()
 	last_motion_origin = global_position
 	spawn_position = global_position
 
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(0.22, 0.18, 0.48)
+	# 판정 상자도 눈에 보이는 굵기를 따라간다 — 산탄 덩어리는 실제로 두툼하고
+	# K2의 가는 탄은 가늘다. 다만 하한을 두어 "보이는데 안 맞는" 일은 없게 한다.
+	var body_width := maxf(0.22, float(projectile_profile.get("width", 0.045)) * 4.4)
+	var body_length := maxf(0.30, float(projectile_profile.get("length", 0.54)) * 0.9)
+	shape.size = Vector3(body_width, body_width * 0.82, body_length)
 	collision.shape = shape
 	add_child(collision)
 
@@ -71,31 +92,51 @@ func _ready() -> void:
 	look_at(global_position + direction, Vector3.UP)
 
 
+func _resolve_projectile_profile() -> void:
+	# 발사부가 프로필을 직접 심었으면 그대로, 무기 id만 줬으면 무기 정의에서 읽는다.
+	# 둘 다 없으면 기본 프로필 — 옛 예광탄과 완전히 같은 모양이라 적·동행·포탑
+	# 탄은 이번 변경에 영향을 받지 않는다.
+	if projectile_profile.is_empty():
+		if weapon_id.is_empty():
+			projectile_profile = WEAPON_SYSTEM.DEFAULT_PROJECTILE_PROFILE.duplicate(true)
+		else:
+			projectile_profile = WEAPON_SYSTEM.get_projectile_profile(weapon_id)
+	speed = maxf(4.0, float(projectile_profile.get("speed", SPEED)))
+	max_lifetime = maxf(0.1, float(projectile_profile.get("lifetime", MAX_LIFETIME)))
+
+
+func _projectile_palette() -> Array[Color]:
+	# 적탄은 총이 무엇이든 붉은 계열로 고정한다 — 화면에서 "내 탄 / 남의 탄"을
+	# 가르는 신호는 무기 개성보다 우선한다. 대신 굵기·길이·속도는 프로필을 따른다.
+	if hostile:
+		return [Color("#ff240e"), Color("#ff4b16"), Color("#fff0d0")]
+	return [
+		Color(str(projectile_profile.get("outer_color", "#ff9a12"))),
+		Color(str(projectile_profile.get("mid_color", "#ffc52e"))),
+		Color(str(projectile_profile.get("core_color", "#fff7b0"))),
+	]
+
+
 func _build_neon_projectile() -> void:
-	var glow_colors := (
-		[Color(1.0, 0.08, 0.02, 0.12), Color(1.0, 0.22, 0.04, 0.38), Color(1.0, 0.82, 0.55, 1.0)]
-		if hostile
-		else [Color(1.0, 0.46, 0.02, 0.12), Color(1.0, 0.68, 0.04, 0.42), Color(1.0, 0.96, 0.68, 1.0)]
-	)
-	var emissions := (
-		[Color("#ff240e"), Color("#ff4b16"), Color("#fff0d0")]
-		if hostile
-		else [Color("#ff9a12"), Color("#ffc52e"), Color("#fff7b0")]
-	)
-	var widths := [0.18, 0.10, 0.045]
-	var lengths := [0.88, 0.70, 0.54]
-	var energies := [1.8, 4.0, 7.5]
-	for layer_index in widths.size():
+	var emissions := _projectile_palette()
+	var glow_alphas := [0.12, 0.40, 1.0]
+	var core_width := maxf(0.006, float(projectile_profile.get("width", 0.045)))
+	var core_length := maxf(0.06, float(projectile_profile.get("length", 0.54)))
+	var glow_energy := maxf(0.1, float(projectile_profile.get("glow_energy", 1.0)))
+	for layer_index in 3:
 		var material := StandardMaterial3D.new()
 		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		material.albedo_color = glow_colors[layer_index]
+		material.albedo_color = Color(emissions[layer_index], glow_alphas[layer_index])
 		material.emission_enabled = true
 		material.emission = emissions[layer_index]
-		material.emission_energy_multiplier = energies[layer_index]
+		material.emission_energy_multiplier = float(GLOW_ENERGIES[layer_index]) * glow_energy
 		material.no_depth_test = layer_index < 2
 		var mesh := BoxMesh.new()
-		mesh.size = Vector3(widths[layer_index], widths[layer_index], lengths[layer_index])
+		var layer_width := core_width * float(GLOW_WIDTH_RATIOS[layer_index])
+		mesh.size = Vector3(
+			layer_width, layer_width, core_length * float(GLOW_LENGTH_RATIOS[layer_index])
+		)
 		mesh.material = material
 		var glow_layer := MeshInstance3D.new()
 		glow_layer.name = "ProjectileGlow%d" % layer_index
@@ -103,18 +144,22 @@ func _build_neon_projectile() -> void:
 		glow_layer.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(glow_layer)
 
+	var trail_color := (
+		Color("#ff3218") if hostile else Color(str(projectile_profile.get("trail_color", "#ffc62e")))
+	)
+	var trail_scale := maxf(0.2, float(projectile_profile.get("trail_scale", 1.0)))
 	var trail_material := StandardMaterial3D.new()
 	trail_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	trail_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	trail_material.vertex_color_use_as_albedo = true
-	trail_material.albedo_color = Color(1.0, 0.2, 0.04, 0.75) if hostile else Color(1.0, 0.72, 0.08, 0.75)
+	trail_material.albedo_color = Color(trail_color, 0.75)
 	trail_material.emission_enabled = true
-	trail_material.emission = Color("#ff3218") if hostile else Color("#ffc62e")
+	trail_material.emission = trail_color
 	trail_material.emission_energy_multiplier = 4.2
 	trail_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	trail_material.no_depth_test = true
 	var trail_quad := QuadMesh.new()
-	trail_quad.size = Vector2(0.09, 0.09)
+	trail_quad.size = Vector2(0.09, 0.09) * trail_scale
 	trail_quad.material = trail_material
 	var trail_process := ParticleProcessMaterial.new()
 	trail_process.direction = Vector3(0, 0, 1)
@@ -125,15 +170,17 @@ func _build_neon_projectile() -> void:
 	trail_process.scale_min = 0.35
 	trail_process.scale_max = 1.0
 	var trail_gradient := Gradient.new()
-	trail_gradient.set_color(0, Color(1.0, 0.82, 0.28, 0.74) if not hostile else Color(1.0, 0.28, 0.12, 0.74))
-	trail_gradient.set_color(1, Color(1.0, 0.3, 0.02, 0.0))
+	trail_gradient.set_color(0, Color(trail_color, 0.74))
+	trail_gradient.set_color(1, Color(trail_color.darkened(0.35), 0.0))
 	var trail_ramp := GradientTexture1D.new()
 	trail_ramp.gradient = trail_gradient
 	trail_process.color_ramp = trail_ramp
 	var trail := GPUParticles3D.new()
 	trail.name = "NeonTrail"
-	trail.amount = 22
-	trail.lifetime = 0.16
+	# 트레일 밀도도 무기 개성이다 — MP5는 얇게(초당 열세 발이 화면을 덮지 않게),
+	# AK/AKM은 두껍게. 성능도 여기서 갈린다.
+	trail.amount = maxi(1, int(projectile_profile.get("trail_amount", 22)))
+	trail.lifetime = maxf(0.02, float(projectile_profile.get("trail_lifetime", 0.16)))
 	trail.randomness = 0.35
 	trail.local_coords = false
 	trail.visibility_aabb = AABB(Vector3(-4, -4, -4), Vector3(8, 8, 8))
@@ -144,7 +191,7 @@ func _build_neon_projectile() -> void:
 
 func _physics_process(delta: float) -> void:
 	last_motion_origin = global_position
-	var next_position := global_position + direction * SPEED * delta
+	var next_position := global_position + direction * speed * delta
 	var exclusions: Array[RID] = []
 	if is_instance_valid(source_body) and source_body is CollisionObject3D:
 		exclusions.append((source_body as CollisionObject3D).get_rid())
@@ -163,7 +210,7 @@ func _physics_process(delta: float) -> void:
 		return
 	global_position = next_position
 	lifetime += delta
-	if lifetime >= MAX_LIFETIME:
+	if lifetime >= max_lifetime:
 		queue_free()
 
 
@@ -439,7 +486,14 @@ func _spawn_impact_flash() -> void:
 	impact.name = "ProjectileImpact"
 	get_parent().add_child(impact)
 	impact.global_position = global_position
-	var color := Color("#ff3d1f") if hostile else Color("#ffd33d")
+	# 착탄 링도 그 총의 색으로 — 산탄의 주황 링과 K2의 백청 링이 눈에 다르게 남는다.
+	var color := (
+		Color("#ff3d1f")
+		if hostile
+		else Color(str(projectile_profile.get("mid_color", "#ffd33d")))
+	)
+	# 굵은 탄일수록 링도 크게(기본 굵기 0.045 = 배율 1.0).
+	var impact_scale := clampf(float(projectile_profile.get("width", 0.045)) / 0.045, 0.7, 2.1)
 	var material := StandardMaterial3D.new()
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -449,8 +503,8 @@ func _spawn_impact_flash() -> void:
 	material.emission_energy_multiplier = 5.5
 	material.no_depth_test = true
 	var ring_mesh := TorusMesh.new()
-	ring_mesh.inner_radius = 0.055
-	ring_mesh.outer_radius = 0.10
+	ring_mesh.inner_radius = 0.055 * impact_scale
+	ring_mesh.outer_radius = 0.10 * impact_scale
 	ring_mesh.rings = 12
 	ring_mesh.ring_segments = 8
 	ring_mesh.material = material

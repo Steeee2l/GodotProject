@@ -110,7 +110,11 @@ const WEAPONS := {
 		"player_knockback": 0.85,
 		"penetration_count": 0,
 		"durability_loss": 0.12,
-		"reload_time": 2.8,
+		# 2.8 → 3.3. 방아쇠 한 번이 약실 두 발을 한꺼번에 비우게 되면서(FIRE_FEEL
+		# shots_per_trigger=2) 옛 "0.58초 텀 + 2.8초 장전" 3.38초 주기가 2.8초로
+		# 짧아졌다. 탄창당 화력은 그대로 두고 주기만 되돌린 값이다(3.3s ≒ 3.38s).
+		# 이 3.3초가 더블배럴의 대가다 — 쏘고 나면 온전히 무방비다.
+		"reload_time": 3.3,
 		"sound_radius": 58.0,
 	},
 	# ── 무기 사다리(2·3단) ─────────────────────────────────────────
@@ -201,6 +205,186 @@ const WEAPONS := {
 		"sound_radius": 58.0,
 	},
 }
+
+# ══════════════════════════════════════════════════════════════════
+# 무기 개성 — 투사체 프로필 · 발사 손맛
+# ══════════════════════════════════════════════════════════════════
+# 예전에는 일곱 자루가 전부 같은 예광탄을 같은 속도로 뱉고, 같은 셰이크로
+# 화면을 흔들었다. 차이가 숫자(피해·연사)뿐이라 "상황에 따라 다른 총을
+# 들고 나갈" 이유가 없었다. 여기 두 표가 그 차이를 만든다 —
+# 값은 반드시 이 파일 한 곳에만 산다(bullet_projectile / weapon_combat는
+# get_projectile_profile / get_fire_feel로 읽기만 한다).
+
+# ── 투사체 프로필 ─────────────────────────────────────────────
+# width/length는 '심지'(가장 안쪽 발광층) 치수다. 바깥 두 겹은
+# bullet_projectile이 고정 비율로 부풀린다 — 기본값은 옛 예광탄과 완전히
+# 같은 모양이라, 프로필을 주지 않는 탄(적·동행·포탑)은 지금 그대로 보인다.
+const DEFAULT_PROJECTILE_PROFILE := {
+	"speed": 46.0,
+	"lifetime": 1.15,
+	"width": 0.045,
+	"length": 0.54,
+	# 심지 → 중간 → 바깥 순서로 밝기가 떨어진다.
+	"core_color": "#fff7b0",
+	"mid_color": "#ffc52e",
+	"outer_color": "#ff9a12",
+	"trail_color": "#ffc62e",
+	"trail_amount": 22,
+	"trail_lifetime": 0.16,
+	"trail_scale": 1.0,
+	"glow_energy": 1.0,
+}
+
+const PROJECTILE_PROFILES := {
+	# 권총 — 짧고 선명한 백금색 점. 느리지도 빠르지도 않게, 한 발이 또렷하게 보인다.
+	"m1911": {
+		"speed": 52.0, "lifetime": 0.72, "width": 0.040, "length": 0.40,
+		"core_color": "#ffffff", "mid_color": "#ffe9a8", "outer_color": "#ffb43a",
+		"trail_color": "#ffd98a", "trail_amount": 10, "trail_lifetime": 0.10,
+		"trail_scale": 0.8, "glow_energy": 1.15,
+	},
+	# 기관단총 — 작고 잦은 옅은 탄. 하나하나는 가볍지만 초당 열세 개가 흐른다.
+	# 트레일을 얇게 깎은 건 연출이자 성능이다(13발/초 × 22입자는 화면을 덮는다).
+	"mp5": {
+		"speed": 56.0, "lifetime": 0.60, "width": 0.028, "length": 0.34,
+		"core_color": "#f4fffb", "mid_color": "#b6ffd8", "outer_color": "#4fe0a0",
+		"trail_color": "#8ff0c4", "trail_amount": 7, "trail_lifetime": 0.075,
+		"trail_scale": 0.65, "glow_energy": 0.9,
+	},
+	# AK — 길고 묵직한 호박색 예광. 이 총의 정체성은 "적은 발수, 큰 한 방"이라
+	# 탄 자체가 느리고 굵어서 날아가는 게 보여야 한다.
+	"ak47": {
+		"speed": 44.0, "lifetime": 1.15, "width": 0.062, "length": 0.95,
+		"core_color": "#fff3c0", "mid_color": "#ffab20", "outer_color": "#ff7a08",
+		"trail_color": "#ffa61e", "trail_amount": 26, "trail_lifetime": 0.19,
+		"trail_scale": 1.25, "glow_energy": 1.2,
+	},
+	# AKM — 같은 7.62지만 한 뼘 더 길고 더 붉다. 사다리를 오른 게 눈에 보여야 한다.
+	"akm": {
+		"speed": 44.0, "lifetime": 1.15, "width": 0.068, "length": 1.05,
+		"core_color": "#fff0b0", "mid_color": "#ff9412", "outer_color": "#ff5a04",
+		"trail_color": "#ff8c14", "trail_amount": 28, "trail_lifetime": 0.20,
+		"trail_scale": 1.3, "glow_energy": 1.28,
+	},
+	# K2 — 가늘고 아주 빠른 백청색. 쏘면 이미 닿아 있다. 소총 사다리 안에서도
+	# 색이 완전히 갈려야 "다른 총"으로 읽힌다.
+	"k2": {
+		"speed": 68.0, "lifetime": 0.85, "width": 0.034, "length": 1.15,
+		"core_color": "#ffffff", "mid_color": "#9fe4ff", "outer_color": "#2f9dff",
+		"trail_color": "#7fd4ff", "trail_amount": 16, "trail_lifetime": 0.12,
+		"trail_scale": 0.85, "glow_energy": 1.45,
+	},
+	# 더블배럴 — 짧고 굵은 주황 덩어리. 예광이 아니라 '날아가는 쇳덩이'다.
+	# 유효 사거리 6.5m / 최대 15m라 수명 0.5초면 충분하다.
+	"double_barrel": {
+		"speed": 36.0, "lifetime": 0.50, "width": 0.115, "length": 0.30,
+		"core_color": "#fff2d0", "mid_color": "#ff8a2a", "outer_color": "#ff3d05",
+		"trail_color": "#ff6a1e", "trail_amount": 9, "trail_lifetime": 0.09,
+		"trail_scale": 1.1, "glow_energy": 1.3,
+	},
+	# 펌프 — 같은 12게이지지만 덩어리가 조금 작고 밝다(한 발씩 여섯 번의 리듬).
+	"pump_shotgun": {
+		"speed": 38.0, "lifetime": 0.50, "width": 0.092, "length": 0.28,
+		"core_color": "#fff6de", "mid_color": "#ffa347", "outer_color": "#ff5c14",
+		"trail_color": "#ff8330", "trail_amount": 8, "trail_lifetime": 0.085,
+		"trail_scale": 1.0, "glow_energy": 1.15,
+	},
+}
+
+# ── 발사 손맛 ─────────────────────────────────────────────────
+# 화면 셰이크(진폭은 월드 단위 — 보간 뒤에 얹는다) · 화면 펀치 · 머즐 플래시 ·
+# 연기/탄피 · 한 번의 방아쇠에 나가는 발수 · 무기 무게가 걸음에 주는 계수.
+const DEFAULT_FIRE_FEEL := {
+	"shots_per_trigger": 1,
+	# 방아쇠 한 번에 여러 발이 나갈 때, 총열별로 벌려 주는 각(부채꼴로 읽히게).
+	"volley_spread_bias_deg": 0.0,
+	"camera_shake": 0.10,
+	"camera_shake_time": 0.10,
+	"camera_punch": 0.11,
+	"muzzle_flash_scale": 1.0,
+	"muzzle_flash_color": "#ffb347",
+	"muzzle_flash_energy": 3.0,
+	"muzzle_spark_count": 6,
+	"smoke_puffs": 2,
+	"shell_color": "#d9a441",
+	# 총의 무게가 걸음을 붙잡는 계수. 굼뜨되 답답하면 안 된다 — 하한 0.9.
+	"move_speed_multiplier": 1.0,
+	# 사격 뒤 기계 동작 소리(펌프 슬라이드). 초 단위 지연, 0이면 없음.
+	"action_sound_delay": 0.0,
+	"action_sound_id": "",
+}
+
+const FIRE_FEEL := {
+	"m1911": {
+		"camera_shake": 0.085, "camera_shake_time": 0.08, "camera_punch": 0.10,
+		"muzzle_flash_scale": 0.85, "muzzle_flash_color": "#ffd9a0",
+		"muzzle_flash_energy": 2.6, "muzzle_spark_count": 5, "smoke_puffs": 1,
+		"move_speed_multiplier": 1.06,
+	},
+	"mp5": {
+		"camera_shake": 0.055, "camera_shake_time": 0.06, "camera_punch": 0.06,
+		"muzzle_flash_scale": 0.7, "muzzle_flash_color": "#cfffe6",
+		"muzzle_flash_energy": 2.2, "muzzle_spark_count": 4, "smoke_puffs": 1,
+		"move_speed_multiplier": 1.04,
+	},
+	"ak47": {
+		"camera_shake": 0.115, "camera_shake_time": 0.10, "camera_punch": 0.13,
+		"muzzle_flash_scale": 1.05, "muzzle_flash_color": "#ffab35",
+		"muzzle_flash_energy": 3.2, "muzzle_spark_count": 7, "smoke_puffs": 2,
+		"move_speed_multiplier": 0.96,
+	},
+	"akm": {
+		"camera_shake": 0.125, "camera_shake_time": 0.105, "camera_punch": 0.14,
+		"muzzle_flash_scale": 1.12, "muzzle_flash_color": "#ff9328",
+		"muzzle_flash_energy": 3.4, "muzzle_spark_count": 7, "smoke_puffs": 2,
+		"move_speed_multiplier": 0.94,
+	},
+	"k2": {
+		"camera_shake": 0.095, "camera_shake_time": 0.09, "camera_punch": 0.11,
+		"muzzle_flash_scale": 0.92, "muzzle_flash_color": "#a8dcff",
+		"muzzle_flash_energy": 3.0, "muzzle_spark_count": 6, "smoke_puffs": 1,
+		"move_speed_multiplier": 0.97,
+	},
+	# ── 더블배럴: 두 총열을 한 번에 비운다 ────────────────────────
+	# 방아쇠 한 번 = 약실 2발 = 펠릿 16개가 한 순간에. 그래서 화면이 크게 밀리고
+	# 고양이가 뒤로 밀리고, 그 대가로 3.3초 동안 완전히 무방비가 된다.
+	"double_barrel": {
+		"shots_per_trigger": 2,
+		"volley_spread_bias_deg": 3.4,
+		"camera_shake": 0.34, "camera_shake_time": 0.17, "camera_punch": 0.30,
+		"muzzle_flash_scale": 2.2, "muzzle_flash_color": "#ff8b2e",
+		"muzzle_flash_energy": 6.5, "muzzle_spark_count": 18, "smoke_puffs": 3,
+		"move_speed_multiplier": 0.90,
+	},
+	# ── 펌프: 반대 성격 ──────────────────────────────────────────
+	# 한 발씩 여섯 번. 매 발 뒤 0.22초에 슬라이드를 당기는 소리가 붙어
+	# "쏘고-철컥, 쏘고-철컥" 리듬이 손에 남는다.
+	"pump_shotgun": {
+		"camera_shake": 0.20, "camera_shake_time": 0.13, "camera_punch": 0.22,
+		"muzzle_flash_scale": 1.5, "muzzle_flash_color": "#ffa145",
+		"muzzle_flash_energy": 4.4, "muzzle_spark_count": 11, "smoke_puffs": 2,
+		"move_speed_multiplier": 0.92,
+		"action_sound_delay": 0.22, "action_sound_id": "shotgun_pump",
+	},
+}
+
+
+static func get_projectile_profile(weapon_id: String) -> Dictionary:
+	# 기본값 위에 무기별 차이만 덮는다 — 프로필이 없는 id는 옛 예광탄 그대로.
+	var profile := DEFAULT_PROJECTILE_PROFILE.duplicate(true)
+	var overrides: Dictionary = PROJECTILE_PROFILES.get(weapon_id, {})
+	for key in overrides:
+		profile[key] = overrides[key]
+	return profile
+
+
+static func get_fire_feel(weapon_id: String) -> Dictionary:
+	var feel := DEFAULT_FIRE_FEEL.duplicate(true)
+	var overrides: Dictionary = FIRE_FEEL.get(weapon_id, {})
+	for key in overrides:
+		feel[key] = overrides[key]
+	return feel
+
 
 # ── 무기 가족 사다리 ──────────────────────────────────────────
 # 같은 가족 안에서 "하위 → 상위" 순서. 상위 무기를 처음 손에 넣는 순간

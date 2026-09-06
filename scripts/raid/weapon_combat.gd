@@ -122,7 +122,17 @@ func _fire_ak47() -> void:
 		return
 	if host._weapon_jammed():
 		return
-	host.magazine_ammo -= 1
+	# ── 무기 개성 ─────────────────────────────────────────────────
+	# 이 총이 화면·손·귀에 어떻게 도착하는지는 전부 weapon_system.FIRE_FEEL이
+	# 정한다(셰이크·펀치·머즐·연기·탄피·방아쇠당 발수). 여기엔 적용만 있다.
+	var feel := WEAPON_SYSTEM.get_fire_feel(host.equipped_weapon_id)
+	# 더블배럴 — 방아쇠 한 번에 두 총열을 한꺼번에 비운다. 약실에 한 발밖에
+	# 없으면 한 발만(그만큼 반동·셰이크도 줄어든다).
+	var shots_per_trigger := maxi(1, int(feel.get("shots_per_trigger", 1)))
+	var shots := mini(shots_per_trigger, host.magazine_ammo)
+	# 총열을 덜 비운 발사는 손맛도 그만큼만 — 완전 비례는 너무 약해서 하한 0.62.
+	var volley_ratio := lerpf(0.62, 1.0, float(shots) / float(shots_per_trigger))
+	host.magazine_ammo -= shots
 	GameState.magazine_ammo = host.magazine_ammo
 	if host.field_missions._active_field_mission_requires_silence():
 		host.field_mission_noise_breached = true
@@ -134,37 +144,53 @@ func _fire_ak47() -> void:
 	if host.weapon_sprite:
 		host._play_weapon_directional_animation("fire")
 	var pellet_count := int(host.weapon_stats.get("pellet_count", 1))
-	for pellet_index in pellet_count:
-		var spread_angle: float = host.weapon_random.randf_range(-host.weapon_spread_deg, host.weapon_spread_deg)
-		var shot_direction := aim_direction.rotated(Vector3.UP, deg_to_rad(spread_angle)).normalized()
-		_spawn_weapon_projectile(shot_direction, pellet_index)
-	host.weapon_durability = maxf(0.0, host.weapon_durability - float(host.weapon_stats.get("durability_loss", 0.06)))
+	var volley_bias := float(feel.get("volley_spread_bias_deg", 0.0))
+	var projectile_index := 0
+	for barrel_index in shots:
+		# 나란히 붙은 두 총열은 살짝 벌어져 나간다 — 한 뭉치가 아니라
+		# 겹친 부채꼴 두 겹으로 읽혀야 "두 발이 동시에" 보인다.
+		var barrel_bias := 0.0
+		if shots > 1 and volley_bias > 0.0:
+			barrel_bias = lerpf(-volley_bias, volley_bias, float(barrel_index) / float(shots - 1))
+		for _pellet in pellet_count:
+			var spread_angle: float = host.weapon_random.randf_range(
+				-host.weapon_spread_deg, host.weapon_spread_deg
+			)
+			var shot_direction := aim_direction.rotated(
+				Vector3.UP, deg_to_rad(spread_angle + barrel_bias)
+			).normalized()
+			_spawn_weapon_projectile(shot_direction, projectile_index)
+			projectile_index += 1
+	host.weapon_durability = maxf(
+		0.0,
+		host.weapon_durability - float(host.weapon_stats.get("durability_loss", 0.06)) * float(shots)
+	)
 	GameState.weapon_durability = host.weapon_durability
 	host.weapon_spread_deg = minf(
-		host.weapon_spread_deg + float(host.weapon_stats.get("spread_per_shot_deg", 1.0)),
+		host.weapon_spread_deg + float(host.weapon_stats.get("spread_per_shot_deg", 1.0)) * float(shots),
 		float(host.weapon_stats.get("max_spread_deg", 14.0))
 	)
 	if host.has_method("break_raid_entry_grace"):
 		host.break_raid_entry_grace()
-	_apply_weapon_recoil(aim_direction)
+	_apply_weapon_recoil(aim_direction, shots)
 	# 엄폐 중 사격 = 0.5s 노출(내밀고 쏘고 다시 숨는 리듬 — 엄폐 v2).
 	if host.get("cover_system") != null:
 		host.cover_system.notify_player_fired()
-	# 발사 반동을 화면에도 싣는다(화면 킥). 산탄(다연발)은 더 묵직하게.
-	# 셰이크가 카메라에 제대로 도달하게 고친 뒤(main._update_camera_follow) 다시
-	# 잡은 값 — 랜덤 흔들림 + 쏜 방향 반대로 밀리는 펀치 두 겹이다.
-	# 0.032는 직교 사이즈 28 기준 화면 1픽셀 미만이라 반동이 전혀 안 읽혔다
-	# (유저 신고: "발사할 때 반동이 전혀 느껴지지 않아"). 처치 때 느껴지던 건
-	# 셰이크가 아니라 히트스톱이었다. 발사는 3~5픽셀급으로 올린다 — 랜덤
-	# 흔들림은 짧게, 방향 펀치는 쏜 반대쪽으로 또렷하게.
-	var recoil_kick := 0.10 if pellet_count <= 1 else 0.17
-	host.camera_shake_time = maxf(host.camera_shake_time, 0.10)
-	host.camera_shake_strength = maxf(host.camera_shake_strength, recoil_kick)
+	# 발사 반동을 화면에도 싣는다(화면 킥). 셰이크가 카메라에 제대로 도달하게
+	# 고친 뒤(main._update_camera_follow) 잡은 값 — 랜덤 흔들림 + 쏜 방향
+	# 반대로 밀리는 펀치 두 겹이다. 진폭은 월드 단위(직교 사이즈 28 기준
+	# 0.032가 1픽셀 미만)라 MP5의 0.055는 잔진동, 더블배럴의 0.34는 한 방이다.
+	host.camera_shake_time = maxf(
+		host.camera_shake_time, float(feel.get("camera_shake_time", 0.10)) * volley_ratio
+	)
+	host.camera_shake_strength = maxf(
+		host.camera_shake_strength, float(feel.get("camera_shake", 0.10)) * volley_ratio
+	)
 	var punch_back := aim_direction
 	punch_back.y = 0.0
 	if punch_back.length_squared() > 0.01:
 		host.camera_punch_offset -= punch_back.normalized() * (
-			0.11 if pellet_count <= 1 else 0.20
+			float(feel.get("camera_punch", 0.11)) * volley_ratio
 		)
 	# 총성은 도시가 듣는다. 소음기를 달면 그만큼 덜 들린다.
 	var sound_scale := clampf(float(host.weapon_stats.get("sound_radius", 1.0)), 0.15, 2.0)
@@ -175,11 +201,38 @@ func _fire_ak47() -> void:
 			clampf(sound_scale, 0.0, 1.0)
 		)
 	)
-	_play_gunshot()
+	_play_gunshot(shots)
+	_queue_action_sound(feel)
 	host.bgm.notify_combat()
-	_spawn_muzzle_light(aim_direction)
-	_spawn_launch_fx(aim_direction)
+	_spawn_muzzle_light(aim_direction, feel, volley_ratio)
+	_spawn_launch_fx(aim_direction, feel, volley_ratio)
 	host._update_equipment_ui()
+
+
+func _queue_action_sound(feel: Dictionary) -> void:
+	# 펌프 산탄총의 "철컥" — 쏜 뒤 0.22초에 슬라이드를 당긴다. 더블배럴이
+	# "한 방 + 긴 침묵"이라면 펌프는 "쏘고-철컥"의 리듬이 정체성이다.
+	var action_id := str(feel.get("action_sound_id", ""))
+	if action_id.is_empty():
+		return
+	var delay := maxf(0.02, float(feel.get("action_sound_delay", 0.2)))
+	host.get_tree().create_timer(delay).timeout.connect(func() -> void:
+		# 판이 끝난 뒤(호스트 해제 후) 타이머가 늦게 발화할 수 있다.
+		if is_instance_valid(host):
+			SFX.play(action_id)
+	)
+
+
+func get_weapon_move_speed_multiplier() -> float:
+	# 총 무게가 걸음을 붙잡는 계수(FIRE_FEEL.move_speed_multiplier). 개성은
+	# "느리지만 한 방"이지 "답답함"이 아니라 하한 0.9로 묶는다.
+	if not host.has_ak:
+		return 1.0
+	return clampf(
+		float(WEAPON_SYSTEM.get_fire_feel(host.equipped_weapon_id).get("move_speed_multiplier", 1.0)),
+		0.9,
+		1.1
+	)
 
 
 func _spawn_weapon_projectile(direction: Vector3, pellet_index: int) -> void:
@@ -196,6 +249,9 @@ func _spawn_weapon_projectile(direction: Vector3, pellet_index: int) -> void:
 	projectile.name = "%sBullet_%d" % [host.equipped_weapon_id, pellet_index]
 	projectile.set_script(BULLET_PROJECTILE)
 	projectile.set("direction", direction)
+	# 무기 개성 — bullet_projectile이 이 id로 weapon_system의 투사체 프로필
+	# (굵기·길이·색·속도·트레일)을 읽는다. 값은 무기 정의 한 곳에만 산다.
+	projectile.set("weapon_id", host.equipped_weapon_id)
 	projectile.set("source_body", player)
 	# 엄폐 중이면 붙어 있는 엄폐물을 내 총알이 통과한다(엄폐 사격의 핵심).
 	var cover_rid: RID = host.cover_system.get_cover_blocker_rid()
@@ -295,13 +351,20 @@ func _finish_reload() -> void:
 	host._update_equipment_ui()
 
 
-func _apply_weapon_recoil(aim_direction: Vector3) -> void:
+func _apply_weapon_recoil(aim_direction: Vector3, shots := 1) -> void:
 	var recoil_kick := float(host.weapon_stats.get("recoil_kick", 0.7)) * GameState.get_recoil_control_multiplier()
 	if host.loafing:
 		recoil_kick *= float(host.weapon_stats.get("loaf_recoil_multiplier", 1.0))
-	var knockback := float(host.weapon_stats.get("player_knockback", 0.15)) * recoil_kick
+	# 한 방아쇠에 여러 발이 나가면 넉백도 커진다. 발수에 정비례로 곱하면
+	# 더블배럴이 고양이를 날려 버리므로 발당 +70%만 얹는다(2발 = ×1.7).
+	var volley_multiplier := 1.0 + 0.7 * float(maxi(1, shots) - 1)
+	var knockback := (
+		float(host.weapon_stats.get("player_knockback", 0.15)) * recoil_kick * volley_multiplier
+	)
 	host.recoil_velocity -= aim_direction * knockback
-	host.recoil_reticle_offset += Vector2(host.weapon_random.randf_range(-5.0, 5.0), -11.0) * recoil_kick
+	host.recoil_reticle_offset += (
+		Vector2(host.weapon_random.randf_range(-5.0, 5.0), -11.0) * recoil_kick * volley_multiplier
+	)
 
 
 func _update_weapon_ballistics(delta: float, is_moving: bool) -> void:
@@ -408,31 +471,63 @@ func _get_weapon_muzzle_position(world_direction: Vector3) -> Vector3:
 	return weapon_origin + world_direction * WEAPON_MUZZLE_FORWARD_DISTANCE + Vector3(0, 0.02, 0)
 
 
-func _spawn_muzzle_light(direction: Vector3) -> void:
+func _spawn_muzzle_light(direction: Vector3, feel: Dictionary, volley_ratio := 1.0) -> void:
+	# 머즐 플래시 — 총구가 뱉는 빛의 크기·색·밝기가 무기마다 다르다.
+	# 더블배럴은 반경 ×2.2에 6.5 에너지로 한 프레임 화면을 주황으로 물들인다.
+	var scale := maxf(0.2, float(feel.get("muzzle_flash_scale", 1.0)) * volley_ratio)
 	var flash := OmniLight3D.new()
-	flash.light_color = Color("#ffb347")
-	flash.light_energy = 3.0
-	flash.omni_range = 2.2
+	flash.light_color = Color(str(feel.get("muzzle_flash_color", "#ffb347")))
+	flash.light_energy = float(feel.get("muzzle_flash_energy", 3.0)) * volley_ratio
+	flash.omni_range = 2.2 * scale
 	flash.position = player.position + direction * 0.8 + Vector3(0, 0.2, 0)
 	host.add_child(flash)
-	host.get_tree().create_timer(0.045).timeout.connect(flash.queue_free)
+	# 큰 총일수록 빛이 조금 더 오래 남는다(0.045 ~ 0.09초).
+	host.get_tree().create_timer(clampf(0.045 * scale, 0.03, 0.09)).timeout.connect(flash.queue_free)
 
 
-func _spawn_launch_fx(direction: Vector3) -> void:
+func _spawn_launch_fx(direction: Vector3, feel: Dictionary, volley_ratio := 1.0) -> void:
 	var origin := player.position + direction * 0.86 + Vector3(0, 0.18, 0)
-	host._spawn_particle_burst(origin, direction, Color("#ffd98a"), 6, 0.09, 2.0, 4.2, 0.04, 0.12)
-	host._spawn_smoke_cloud(origin, direction)
-	host.get_tree().create_timer(0.055).timeout.connect(func() -> void:
-		# 판이 끝난 뒤(호스트 해제 후) 타이머가 늦게 발화할 수 있다.
-		if is_instance_valid(host):
-			host._spawn_smoke_cloud(origin + direction * 0.08, direction)
+	var scale := maxf(0.2, float(feel.get("muzzle_flash_scale", 1.0)) * volley_ratio)
+	# 총구 불꽃 — 개수와 크기가 총의 덩치를 말한다.
+	host._spawn_particle_burst(
+		origin,
+		direction,
+		Color(str(feel.get("muzzle_flash_color", "#ffd98a"))),
+		maxi(2, roundi(float(feel.get("muzzle_spark_count", 6)) * volley_ratio)),
+		0.09,
+		2.0 * scale,
+		4.2 * scale,
+		0.04 * scale,
+		0.12 * scale
 	)
+	# 탄피 — 오른쪽으로 튀는 짧은 황동 신호. 큰 총일수록 크게 튄다.
+	var side := Vector3(-direction.z, 0.0, direction.x)
+	if side.length_squared() > 0.001:
+		host._spawn_particle_burst(
+			origin, side.normalized() + Vector3(0, 0.55, 0),
+			Color(str(feel.get("shell_color", "#d9a441"))),
+			maxi(1, int(feel.get("shots_per_trigger", 1))),
+			0.34, 1.4 * scale, 2.6 * scale, 0.03 * scale, 0.07 * scale
+		)
+	# 연기 — 겹수는 무기가 정한다. MP5는 한 겹(초당 열세 번 뿜으면 화면이
+	# 연기밭이 된다), 산탄총은 세 겹으로 총구 앞이 한동안 뿌옇게 남는다.
+	var smoke_puffs := maxi(0, int(feel.get("smoke_puffs", 2)))
+	if smoke_puffs > 0:
+		host._spawn_smoke_cloud(origin, direction)
+	for puff_index in range(1, smoke_puffs):
+		host.get_tree().create_timer(0.055 * float(puff_index)).timeout.connect(func() -> void:
+			# 판이 끝난 뒤(호스트 해제 후) 타이머가 늦게 발화할 수 있다.
+			if is_instance_valid(host):
+				host._spawn_smoke_cloud(origin + direction * 0.08 * float(puff_index), direction)
+		)
 
 
-func _play_gunshot() -> void:
-	# 플레이어 총성 — 장착 무기 구경별(권총/소총/산탄) 합성음. 자기 총은 2D로
-	# 또렷하게, 적 총성은 enemy.gd가 같은 뱅크를 3D 위치로 낮춰 쓴다.
-	SFX.play_weapon_shot(host.equipped_weapon_id)
+func _play_gunshot(shots := 1) -> void:
+	# 플레이어 총성 — 장착 무기별 소리(권총/소총/산탄, 무기마다 피치가 다르다).
+	# 자기 총은 2D로 또렷하게, 적 총성은 enemy.gd가 같은 뱅크를 3D 위치로 낮춰 쓴다.
+	# shots를 넘기는 이유는 더블배럴뿐 — 양총열을 한 번에 비웠을 때만 전용
+	# "두 발" 소리가 난다(한 발만 남아 쐈다면 짧은 산탄 소리).
+	SFX.play_weapon_shot(host.equipped_weapon_id, Vector3.INF, 0.0, shots)
 
 
 func _get_current_fire_direction() -> Vector3:

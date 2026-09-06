@@ -80,7 +80,13 @@ func _run() -> void:
 	assert(equipped_weapon_overlay.z_index < survivor_overlay.z_index)
 	assert(main_scene.get("hud").player_world_health_bar != null)
 	var compact_health_bar := main_scene.get("hud").player_world_health_bar as Control
-	assert(compact_health_bar.size == Vector2(48, 7))
+	# 하드코딩 48x7이었다 — UI 재도색(b84e88f)으로 72x6이 되면서 이 판정만 낡아
+	# 테스트가 여기서 멈췄다. 치수는 HUD 정의를 읽는다(다음 재도색에도 안 깨지게).
+	var raid_hud_script: Script = load("res://scripts/hud/raid_hud.gd")
+	assert(compact_health_bar.size == Vector2(
+		float(raid_hud_script.PLAYER_HEALTH_BAR_WIDTH),
+		float(raid_hud_script.PLAYER_HEALTH_BAR_HEIGHT)
+	))
 	assert(compact_health_bar.get_node_or_null("Background") is Panel)
 	assert(compact_health_bar.get_node_or_null("Fill") is Panel)
 	assert(main_scene.get("hud").damage_vignette_material != null)

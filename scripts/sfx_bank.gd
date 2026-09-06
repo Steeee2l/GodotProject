@@ -28,6 +28,12 @@ const SAMPLES := {
 		preload("res://assets/audio/weapons/mg_shot_b.wav"),
 		preload("res://assets/audio/weapons/mg_shot_c.wav"),
 	],
+	# 산탄총 — 새 녹음이 없어 있는 소스(mg_shot_a/b)를 가공했다. 피치를 크게
+	# 낮춰(리샘플) 총구를 키우고 저역 붐·긴 잔향 꼬리를 얹은 파일이다. 생성기는
+	# tmp/build_shotgun_samples.gd. 트랜지언트가 실제 녹음이라 소총 옆에서
+	# 합성 티가 나지 않으면서, 피치·길이가 확실히 갈려 귀로 구분된다.
+	"shotgun_shot": [preload("res://assets/audio/weapons/shotgun_shot.wav")],
+	"shotgun_double_shot": [preload("res://assets/audio/weapons/shotgun_double.wav")],
 	"reload_start": [preload("res://assets/audio/weapons/reload_start.wav")],
 	"reload_end": [preload("res://assets/audio/weapons/reload_end.wav")],
 }
@@ -45,7 +51,12 @@ const SOUNDS := {
 	# ── 총성 3구경 ──
 	"pistol_shot": {"bus": "SFX", "volume_db": -9.0, "pitch_jitter": 0.08, "min_interval_ms": 0, "unit_size": 8.0, "max_distance": 60.0},
 	"rifle_shot": {"bus": "SFX", "volume_db": -10.5, "pitch_jitter": 0.08, "min_interval_ms": 0, "unit_size": 9.0, "max_distance": 70.0},
-	"shotgun_shot": {"bus": "SFX", "volume_db": -1.5, "pitch_jitter": 0.06, "min_interval_ms": 0, "unit_size": 10.0, "max_distance": 80.0},
+	# 산탄총은 이제 가공한 실제 녹음이라 합성음 시절의 보정 볼륨(-1.5)이 필요 없다.
+	"shotgun_shot": {"bus": "SFX", "volume_db": -7.5, "pitch_jitter": 0.06, "min_interval_ms": 0, "unit_size": 10.0, "max_distance": 80.0},
+	# 더블배럴 전용 — 두 총열이 한 번에 터지는 소리(더 낮고 0.86초로 길다).
+	"shotgun_double_shot": {"bus": "SFX", "volume_db": -5.0, "pitch_jitter": 0.05, "min_interval_ms": 0, "unit_size": 11.0, "max_distance": 90.0},
+	# 펌프 슬라이드 "철컥" — 쏘고 0.22초 뒤. 더블배럴의 침묵과 대비되는 리듬.
+	"shotgun_pump": {"bus": "SFX", "volume_db": -12.0, "pitch_jitter": 0.05, "min_interval_ms": 60, "unit_size": 6.0, "max_distance": 30.0},
 	# ── 명중 ──
 	"hit_enemy": {"bus": "SFX", "volume_db": -8.0, "pitch_jitter": 0.08, "min_interval_ms": 0, "unit_size": 7.0, "max_distance": 40.0},
 	"hit_player": {"bus": "SFX", "volume_db": -4.5, "pitch_jitter": 0.06, "min_interval_ms": 60, "unit_size": 7.0, "max_distance": 40.0},
@@ -151,12 +162,27 @@ static func play(id: String, world_position: Vector3 = Vector3.INF, volume_offse
 	return true
 
 
-static func play_weapon_shot(weapon_id: String, world_position: Vector3 = Vector3.INF, volume_offset_db: float = 0.0) -> bool:
+static func play_weapon_shot(
+	weapon_id: String,
+	world_position: Vector3 = Vector3.INF,
+	volume_offset_db: float = 0.0,
+	shots := 1
+) -> bool:
 	# WeaponSystem.WEAPONS의 무기 id → 구경별 총성. 적·플레이어 공용.
-	return play(shot_sound_for_weapon(weapon_id), world_position, volume_offset_db, shot_pitch_for_weapon(weapon_id))
+	# shots는 "이번 방아쇠에 몇 발이 나갔는지" — 더블배럴의 양총열 동시 발사만
+	# 전용 소리를 쓴다. 적은 한 발씩 쏘므로 기본값 1이면 짧은 산탄 소리가 난다.
+	return play(
+		shot_sound_for_weapon(weapon_id, shots),
+		world_position,
+		volume_offset_db,
+		shot_pitch_for_weapon(weapon_id)
+	)
 
 
-static func shot_sound_for_weapon(weapon_id: String) -> String:
+static func shot_sound_for_weapon(weapon_id: String, shots := 1) -> String:
+	if weapon_id == "double_barrel":
+		# 두 총열을 한 번에 비웠을 때만 그 소리를 쓴다(0.86초, 더 낮다).
+		return "shotgun_double_shot" if shots >= 2 else "shotgun_shot"
 	match weapon_id:
 		"m1911":
 			# .45 권총 — 한 발씩 끊어 치는 짧은 소리.
@@ -165,8 +191,11 @@ static func shot_sound_for_weapon(weapon_id: String) -> String:
 			# 9mm 기관단총 — 권총 소리로는 연사가 안 들린다. 연사 총성을 피치만
 			# 올려 쓴다(구경이 작으니 더 날카롭게).
 			return "rifle_shot"
-		"double_barrel", "pump_shotgun", "rocket_launcher":
-			# 산탄 — 넓게 퍼지는 저음 + 긴 꼬리. 로켓 발사는 같은 소리를 낮춰 쓴다.
+		"rocket_launcher":
+			# 로켓 발사 — 더블배럴의 긴 폭발음을 크게 낮춰 쓴다.
+			return "shotgun_double_shot"
+		"pump_shotgun":
+			# 펌프 — 한 발씩. 짧고 조금 더 밝다(뒤에 슬라이드 "철컥"이 붙는다).
 			return "shotgun_shot"
 		_:
 			# 7.62 소총(AK) — 묵직한 저음 바디. 미지정 무기의 기본값.
@@ -174,9 +203,18 @@ static func shot_sound_for_weapon(weapon_id: String) -> String:
 
 
 static func shot_pitch_for_weapon(weapon_id: String) -> float:
+	# 같은 샘플이라도 총마다 미세하게 다르게 들려야 한다. 구경이 클수록 낮게,
+	# 총열이 짧고 빠를수록 높게 — 같은 7.62 삼형제도 여기서 갈린다.
 	match weapon_id:
+		"m1911": return 1.0
 		"mp5": return 1.22
-		"rocket_launcher": return 0.72
+		"ak47": return 1.0
+		# AKM은 한 뼘 더 묵직하게, K2는 총열이 길고 날카롭게.
+		"akm": return 0.94
+		"k2": return 1.09
+		"double_barrel": return 0.96
+		"pump_shotgun": return 1.06
+		"rocket_launcher": return 0.62
 		_: return 1.0
 
 
@@ -334,6 +372,8 @@ static func _synthesize(id: String) -> PackedFloat32Array:
 		"pistol_shot": return _synth_pistol_shot()
 		"rifle_shot": return _synth_rifle_shot()
 		"shotgun_shot": return _synth_shotgun_shot()
+		"shotgun_double_shot": return _synth_shotgun_double_shot()
+		"shotgun_pump": return _synth_shotgun_pump()
 		"hit_enemy": return _synth_hit_enemy()
 		"hit_player": return _synth_hit_player()
 		"melee_swing": return _synth_melee_swing()
@@ -460,6 +500,63 @@ static func _synth_shotgun_shot() -> PackedFloat32Array:
 		if time > 0.29:
 			slap += wide_pass * exp(-(time - 0.29) * 9.0) * 0.16
 		buffer[index] = tanh((blast + body + boom + tail + slap) * 1.35)
+	return buffer
+
+
+static func _synth_shotgun_double_shot() -> PackedFloat32Array:
+	# 더블배럴 폴백(녹음 샘플이 없을 때만 쓰인다). 두 총열이 14ms 어긋나 터지고,
+	# 더 낮은 붐과 1.4배 긴 꼬리가 남는다 — 펌프 한 발과 반드시 구분돼야 한다.
+	var duration := 0.86
+	var buffer := _new_buffer(duration)
+	var rng := _rng(33013)
+	var wide_pass := 0.0
+	var tail_pass := 0.0
+	for index in buffer.size():
+		var time := float(index) / MIX_RATE
+		var noise := rng.randf_range(-1.0, 1.0)
+		wide_pass += (noise - wide_pass) * 0.11
+		tail_pass += (noise - tail_pass) * 0.045
+		var blast := wide_pass * exp(-time * 16.0) * 1.15
+		# 두 번째 총열 — 14ms 뒤, 살짝 낮게.
+		var second := 0.0
+		if time > 0.014:
+			second = wide_pass * exp(-(time - 0.014) * 15.0) * 0.95
+		var body := sin(TAU * 58.0 * time * (1.0 - time * 0.28)) * exp(-time * 4.6) * 1.2
+		var boom := sin(TAU * 96.0 * time) * exp(-time * 9.0) * 0.55
+		var tail := tail_pass * exp(-maxf(0.0, time - 0.05) * 2.4) * 1.4
+		var slap := 0.0
+		if time > 0.10:
+			slap += wide_pass * exp(-(time - 0.10) * 12.0) * 0.32
+		if time > 0.22:
+			slap += wide_pass * exp(-(time - 0.22) * 9.0) * 0.24
+		if time > 0.40:
+			slap += wide_pass * exp(-(time - 0.40) * 7.0) * 0.17
+		buffer[index] = tanh((blast + second + body + boom + tail + slap) * 1.3)
+	return buffer
+
+
+static func _synth_shotgun_pump() -> PackedFloat32Array:
+	# 펌프 슬라이드 "철컥" — 금속 두 겹(당김 → 밀어넣음). 총성이 아니라
+	# 기계 소리라 저역이 거의 없고 짧다.
+	var duration := 0.26
+	var buffer := _new_buffer(duration)
+	var rng := _rng(33023)
+	var metal := 0.0
+	for index in buffer.size():
+		var time := float(index) / MIX_RATE
+		var noise := rng.randf_range(-1.0, 1.0)
+		metal += (noise - metal) * 0.82
+		# 당김 — 사각거리는 금속 마찰.
+		var pull := metal * exp(-time * 52.0) * 0.8
+		var pull_ring := sin(TAU * 1850.0 * time) * exp(-time * 60.0) * 0.28
+		# 밀어넣음 — 0.10초 뒤 "철컥" 하고 잠긴다.
+		var push := 0.0
+		var push_ring := 0.0
+		if time > 0.10:
+			var late := time - 0.10
+			push = metal * exp(-late * 44.0) * 0.95
+			push_ring = sin(TAU * 1180.0 * late) * exp(-late * 38.0) * 0.42
+		buffer[index] = tanh((pull + pull_ring + push + push_ring) * 1.35)
 	return buffer
 
 
