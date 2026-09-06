@@ -22,13 +22,16 @@ extends RefCounted
 # blueprint_shard_case_chance: 봉인 보급함·잠긴 장비 상자가 조각 1개를 남길 확률(40%).
 # 러버밴딩 없음: 모든 확률은 존 티어 상수다. 조각의 '종류'만 "이미 완성한 레시피
 # 제외(미완성 우선)"로 고른다 — 확률이 아니라 낭비를 줄이는 선택.
-# ── 귀중품 존 가치 배율(대개편 3단계) ─────────────────────────────
+# ── 귀중품 존 가치 배율(존 리듬 재조정 2026-09-06) ─────────────────
 # 귀중품 base_value는 존 1 기준이다. 상위 존의 같은 귀중품이 같은 값이면 출정 수입이 존을 따라
-# 크지 않아(존1 869 → 존5 6.7K/판) 후반 강화(수억~수십억)에서 출정이 '이유'가 못 됐다.
-# 존 티어마다 ×1/×2/×4/×10/×25 — 러버밴딩 아님, 전부 존 상수. _materialize_item이 base_value에
+# 크지 않아 후반 강화(수억~수십억)에서 출정이 '이유'가 못 됐다.
+# ×1/×2/×4/×10/×25(대개편 3단계)로도 쉘터 수입(티어마다 ×5~7)을 못 따라가
+# 티어 5 실측 출정:쉘터 ≈ 1:14였다 — ×1/×3/×8/×20/×50으로 올려, 위험 정산 존 배율
+# (GameState.RISK_PAYOUT_STAGE_MULTIPLIER)과 합쳐 판당 수입이 존마다 ×3~4 뛰게 한다
+# (출정:idle ≈ 1:2 밴드 복원). 러버밴딩 아님, 전부 존 상수. _materialize_item이 base_value에
 # 곱하고, 판 가치 캡(field/enemy/total_value_cap)도 같은 배율로 늘린다 — 캡은 존1 기준 숫자라
-# 그대로 두면 ×25 귀중품 하나가 캡을 넘겨 등록이 거부된다(get_stage_value_cap).
-const VALUABLE_STAGE_MULTIPLIER := {1: 1.0, 2: 2.0, 3: 4.0, 4: 10.0, 5: 25.0}
+# 그대로 두면 ×50 귀중품 하나가 캡을 넘겨 등록이 거부된다(get_stage_value_cap).
+const VALUABLE_STAGE_MULTIPLIER := {1: 1.0, 2: 3.0, 3: 8.0, 4: 20.0, 5: 50.0}
 
 const STAGE_PROFILES := {
 	1: {
@@ -433,7 +436,7 @@ const ITEM_CATALOG := {
 		"base_value": 300, "slot_size": 1, "rarity_tier": 2, "minimum_stage": 1,
 	},
 	"shelter_roster": {
-		"loot_type": "valuable", "display_name": "대피소 명단",
+		"loot_type": "valuable", "display_name": "대피소 순번표",
 		"base_value": 380, "slot_size": 1, "rarity_tier": 3, "minimum_stage": 2,
 	},
 	"military_freq": {

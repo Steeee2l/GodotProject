@@ -39,7 +39,9 @@ func _run() -> void:
 	assert(is_zero_approx(float(stage_one_supply.get("average_weapons", 1.0))))
 	assert(is_zero_approx(float(stage_four_supply.get("average_weapons", 1.0))))
 	assert(float(stage_one_supply.get("average_ammo", 0.0)) >= 40.0)
-	assert(float(stage_one_supply.get("average_ammo", 999.0)) <= 70.0)
+	# [현행화 2026-09-06] 상한 70 → 150: 탄약 넉넉화(36c9496)·가방 무제한(3b82e65) 이후
+	# 존1 필드 탄약이 판당 ≈120으로 자리 잡았다(HEAD 실측과 동일 — 이 밴드가 낡아 있었다).
+	assert(float(stage_one_supply.get("average_ammo", 999.0)) <= 150.0)
 	# 확정 픽업 12 + 컨테이너 통조림(옷 더미는 방어구 대신 소지품이 들어와 식량 비중이
 	# 조금 줄었다) — 22 이상이면 "먹고 던질 만큼"이다.
 	assert(float(stage_one_supply.get("average_canned_food", 0.0)) >= 22.0)

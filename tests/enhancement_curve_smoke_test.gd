@@ -3,11 +3,12 @@ extends SceneTree
 # 대개편 3단계(시뮬 재조정안) 스모크 테스트 — 헤드리스.
 #   godot --headless --path . --script res://tests/enhancement_curve_smoke_test.gd
 #
-# ① 강화 비용 3구간 지수 — K2 누적(강화+돌파 고철) +30 ≈ 11.4M · +50 ≈ 213M · +99 ≈ 8.9B (±10%)
-# ② T3 방어구 세트(3피스) +99 누적 ≈ 5.0B (±10%) · 방어구 기본 비용 400(T1 400 / T2 600 / T3 880)
+# ① 강화 비용 구간 지수 — 구간 성장 함수는 WEAPON_ENHANCEMENT_SEGMENTS 정의값으로 검증,
+#    K2 누적(강화+돌파 고철)은 존 리듬 재조정(2026-09-06) 밴드 ±10%
+# ② T3 방어구 세트(3피스) +99 누적 밴드(±10%) · 방어구 기본 비용 400(T1 400 / T2 600 / T3 880)
 # ③ 꾹꾹이 생산기 최대 Lv 8 — Lv8 비용 150M/캣닢 12M · 배율 1.9^7 · Lv9 없음
 # ④ 오버클럭 비용 900×1.5^L / 캣닢 60×1.5^L — Lv20 2,992,730 / 199,515
-# ⑤ 귀중품 존 가치 ×{1,2,4,10,25} — 존5 금니 480×25 = 12000 · 판 가치 캡도 같은 배율 · 환전 원장
+# ⑤ 귀중품 존 가치 — 배율은 LOOT_ECONOMY.VALUABLE_STAGE_MULTIPLIER 정의값으로 검증 · 판 가치 캡 · 환전 원장
 # ⑥ 돌파 비용 — [개정 2026-08-29] 고철 단독({"scrap": 그 단계 강화비 ×3}), 인장·부품 요구 폐지
 # ⑦ 돌파 정체성 보너스 판정 — +30 관통 +1 · +50 탄창 +25%/장전 −15% · +70 엘리트 배율 · +90 환급
 #    방어구 +30 넉백 · +50 피격 후 가드 · +70 피로 · +90 시큐어 슬롯
@@ -40,6 +41,21 @@ func _within(value: float, expected: float, tolerance: float) -> bool:
 
 func _fmt(v: float) -> String:
 	return str(game_state.call("format_compact_number", v))
+
+
+func _expected_growth(level: int, segments: Array) -> float:
+	# 세그먼트 정의([상한, 배율])에서 기대 성장을 독립 계산 — 구현(_segmented_growth)과
+	# 같은 정의를 다른 코드로 읽어, 정의값이 바뀌어도 어서션이 낡지 않는다.
+	var growth := 1.0
+	var previous_cap := 0
+	for segment in segments:
+		var cap := int((segment as Array)[0])
+		var rate := float((segment as Array)[1])
+		growth *= pow(rate, float(clampi(level, previous_cap, cap) - previous_cap))
+		previous_cap = cap
+		if level <= cap:
+			break
+	return growth
 
 
 func _run() -> void:
@@ -114,21 +130,24 @@ func _armor_cumulative(base_id: String, target: int) -> float:
 # ── ① 무기 비용 3구간 ─────────────────────────────────────────
 func _check_cost_curve() -> void:
 	game_state.call("reset_run")
-	# 구간 성장 함수 자체
-	var growth45 := float(GAME_STATE_SCRIPT._segmented_growth(45, GAME_STATE_SCRIPT.WEAPON_ENHANCEMENT_SEGMENTS))
-	_check(absf(growth45 - pow(1.28, 30.0) * pow(1.10, 15.0)) < growth45 * 1e-6, "① _segmented_growth(45) = 1.28^30×1.10^15")
-	var growth75 := float(GAME_STATE_SCRIPT._segmented_growth(75, GAME_STATE_SCRIPT.WEAPON_ENHANCEMENT_SEGMENTS))
-	_check(absf(growth75 - pow(1.28, 30.0) * pow(1.10, 30.0) * pow(1.055, 15.0)) < growth75 * 1e-6, "① _segmented_growth(75) 3구간 곱")
-	_check(is_equal_approx(float(GAME_STATE_SCRIPT._segmented_growth(0, GAME_STATE_SCRIPT.WEAPON_ENHANCEMENT_SEGMENTS)), 1.0), "① level 0 → ×1")
-	# +1~30은 예전 곡선과 동일(900×factor×1.28^L)
+	# 구간 성장 함수 자체 — 세그먼트 정의값에서 기대치를 독립 계산해 대조.
+	var weapon_segments: Array = GAME_STATE_SCRIPT.WEAPON_ENHANCEMENT_SEGMENTS
+	for probe in [45, 75]:
+		var got := float(GAME_STATE_SCRIPT._segmented_growth(int(probe), weapon_segments))
+		var want := _expected_growth(int(probe), weapon_segments)
+		_check(absf(got - want) < got * 1e-6, "① _segmented_growth(%d) = 정의 구간 곱 (%.1f)" % [int(probe), want])
+	_check(is_equal_approx(float(GAME_STATE_SCRIPT._segmented_growth(0, weapon_segments)), 1.0), "① level 0 → ×1")
+	# +10 비용 = 900×factor(ak47 1.55)×seg1^10 — 존 여정 구간(+1~30)은 첫 세그먼트 단일 지수.
+	var seg1_rate := float((weapon_segments[0] as Array)[1])
 	var levels: Dictionary = game_state.get("weapon_enhancement_levels")
 	levels["ak47"] = 10
-	_check(int(game_state.call("get_weapon_enhancement_cost", "ak47")) == roundi(900.0 * 1.55 * pow(1.28, 10.0)), "① +10 비용은 기존 곡선 그대로")
+	_check(int(game_state.call("get_weapon_enhancement_cost", "ak47")) == roundi(900.0 * 1.55 * pow(seg1_rate, 10.0)), "① +10 비용 = 900×1.55×%.2f^10" % seg1_rate)
 	levels["ak47"] = 60
 	var cost60 := int(game_state.call("get_weapon_enhancement_cost", "ak47"))
 	levels["ak47"] = 61
 	var cost61 := int(game_state.call("get_weapon_enhancement_cost", "ak47"))
-	_check(absf(float(cost61) / float(cost60) - 1.055) < 0.002, "① +61 구간 배율 1.055 (got %.4f)" % (float(cost61) / float(cost60)))
+	var expected_step := _expected_growth(61, weapon_segments) / _expected_growth(60, weapon_segments)
+	_check(absf(float(cost61) / float(cost60) - expected_step) < 0.002, "① +61 구간 배율 %.3f (got %.4f)" % [expected_step, float(cost61) / float(cost60)])
 	levels["ak47"] = 0
 	# K2 누적(강화+돌파 고철)
 	var k2_30 := _weapon_cumulative("k2", 30)
@@ -139,9 +158,10 @@ func _check_cost_curve() -> void:
 	var total99: float = k2_99["scrap"] + k2_99["bt_scrap"]
 	print("  K2 cumulative +30 %s | +50 %s | +99 %s (seal %d · gear %d · alloy %d · basic %d)" % [
 		_fmt(total30), _fmt(total50), _fmt(total99), k2_99["seal"], k2_99["gear"], k2_99["alloy"], k2_99["basic"]])
-	_check(_within(total30, 11.4e6, 0.10), "① K2 +30 누적 ≈ 11.4M (got %s)" % _fmt(total30))
-	_check(_within(total50, 213e6, 0.10), "① K2 +50 누적 ≈ 213M (got %s)" % _fmt(total50))
-	_check(_within(total99, 8.9e9, 0.10), "① K2 +99 누적 ≈ 8.9B (got %s)" % _fmt(total99))
+	# 존 리듬 재조정(2026-09-06) 설계 밴드 — 상수 옆 주석(K2 누적 1.6M/124M/32.2B)과 한 몸.
+	_check(_within(total30, 1.6e6, 0.10), "① K2 +30 누적 ≈ 1.6M (got %s)" % _fmt(total30))
+	_check(_within(total50, 124e6, 0.10), "① K2 +50 누적 ≈ 124M (got %s)" % _fmt(total50))
+	_check(_within(total99, 32.2e9, 0.10), "① K2 +99 누적 ≈ 32.2B (got %s)" % _fmt(total99))
 	# [개정 2026-08-29] 강화는 고철 단독 — 부품 비용 함수는 어느 단계에서든 {}를 돌려준다.
 	# (옛 "일반 3종×n + 기어" 표 어서션은 폐지된 현실이라 빈 딕셔너리 검증으로 바꿨다.)
 	for probe_level in [10, 40, 80]:
@@ -164,7 +184,7 @@ func _check_armor_curve() -> void:
 	for base_id in ["military_vest", "military_helmet", "assault_boots"]:
 		set_total += _armor_cumulative(base_id, 99)
 	print("  T3 set +99 cumulative %s" % _fmt(set_total))
-	_check(_within(set_total, 5.0e9, 0.10), "② T3 세트 +99 누적 ≈ 5.0B (got %s)" % _fmt(set_total))
+	_check(_within(set_total, 19.4e9, 0.10), "② T3 세트 +99 누적 ≈ 19.4B (got %s)" % _fmt(set_total))
 	var piece30 := _armor_cumulative("military_vest", 30)
 	_check(piece30 < 4.0e6, "② T3 한 피스 +30 누적 < 4M (got %s)" % _fmt(piece30))
 	sections_done.append("②")
@@ -223,19 +243,25 @@ func _check_valuable_stage_value() -> void:
 	game_state.call("reset_run")
 	var random := RandomNumberGenerator.new()
 	random.seed = 7
-	var expected := {1: 1.0, 2: 2.0, 3: 4.0, 4: 10.0, 5: 25.0}
+	# 배율 자체는 LOOT_ECONOMY.VALUABLE_STAGE_MULTIPLIER 정의값으로 검증 — 배율 표가
+	# 재조정돼도(존 리듬 개편 등) 이 어서션은 "적용이 됐는가"만 본다.
+	var expected: Dictionary = LOOT_ECONOMY.VALUABLE_STAGE_MULTIPLIER
+	_check(expected.size() == 5 and float(expected[1]) == 1.0, "⑤ 존 배율 표: 존 5개 · 존1 = ×1 기준")
+	for stage in range(2, 6):
+		_check(float(expected[stage]) > float(expected[stage - 1]), "⑤ 존 배율 단조 증가 (존%d)" % stage)
 	for stage in expected.keys():
 		var definition: Dictionary = LOOT_ECONOMY._materialize_item("gold_tooth", int(stage), random)
 		var data: Dictionary = definition.get("data", {})
 		_check(int(data.get("base_value", 0)) == roundi(480.0 * float(expected[stage])), "⑤ 존%d 금니 가치 480×%s = %d" % [int(stage), str(expected[stage]), int(data.get("base_value", 0))])
+	var mult5 := float(expected[5])
 	var stage5: Dictionary = LOOT_ECONOMY._materialize_item("gold_tooth", 5, random)
-	_check(int(LOOT_ECONOMY.get_definition_value(stage5)) == 12000, "⑤ 존5 total_value 12000")
+	_check(int(LOOT_ECONOMY.get_definition_value(stage5)) == roundi(480.0 * mult5), "⑤ 존5 total_value %d" % roundi(480.0 * mult5))
 	# 판 가치 캡도 같은 배율 — 존5 귀중품 하나가 캡에 막히지 않는다
-	_check(int(LOOT_ECONOMY.get_stage_value_cap(5, "field_value_cap")) == 17000 * 25, "⑤ 존5 field_value_cap ×25")
+	_check(int(LOOT_ECONOMY.get_stage_value_cap(5, "field_value_cap")) == roundi(17000.0 * mult5), "⑤ 존5 field_value_cap ×%s" % str(mult5))
 	_check(int(LOOT_ECONOMY.get_stage_value_cap(1, "field_value_cap")) == 3600, "⑤ 존1 캡 그대로")
 	game_state.call("reset_raid_supply_counters")
 	_check(bool(LOOT_ECONOMY.try_register_loot(game_state, stage5, "field", 5)), "⑤ 존5 귀중품 등록(캡 통과)")
-	# 환전 원장 — 존4 출정에서 주운 금니는 ×10으로 환전된다
+	# 환전 원장 — 존4 출정에서 주운 금니는 존4 배율로 환전된다
 	game_state.call("reset_run")
 	game_state.set("selected_raid_zone", "sealed_zone")
 	var zone_ids: Array = game_state.call("get_raid_zone_ids")
@@ -247,14 +273,15 @@ func _check_valuable_stage_value() -> void:
 		_check(false, "⑤ 존4 구역 id를 찾지 못함")
 	else:
 		game_state.set("selected_raid_zone", stage4_zone)
+		var unit4 := roundi(480.0 * float(expected[4]))
 		_check(int(game_state.call("get_current_raid_stage_tier")) == 4, "⑤ 현재 출정 존 티어 4 (%s)" % stage4_zone)
 		_check(bool(game_state.call("try_add_raid_item", "valuable", "gold_tooth", 2)), "⑤ 존4에서 금니 2개 획득")
-		_check(int(game_state.call("get_valuable_total_value")) == 480 * 10 * 2, "⑤ 환전 가치 480×10×2 = %d" % int(game_state.call("get_valuable_total_value")))
+		_check(int(game_state.call("get_valuable_total_value")) == unit4 * 2, "⑤ 환전 가치 480×%s×2 = %d" % [str(expected[4]), int(game_state.call("get_valuable_total_value"))])
 		game_state.call("remove_raid_bag_item", "valuable", "gold_tooth", 1)
-		_check(int(game_state.call("get_valuable_total_value")) == 480 * 10, "⑤ 1개 버리면 원장도 절반")
+		_check(int(game_state.call("get_valuable_total_value")) == unit4, "⑤ 1개 버리면 원장도 절반")
 		var scrap_before := int(game_state.get("scrap"))
 		var sold: Dictionary = game_state.call("sell_all_valuables")
-		_check(int(sold.get("scrap", 0)) == 4800 and int(game_state.get("scrap")) == scrap_before + 4800, "⑤ 환전 4800 고철")
+		_check(int(sold.get("scrap", 0)) == unit4 and int(game_state.get("scrap")) == scrap_before + unit4, "⑤ 환전 %d 고철" % unit4)
 		_check((game_state.get("valuable_value_ledger") as Dictionary).is_empty(), "⑤ 환전 후 원장 비움")
 	# 구세이브(원장 없음)는 카탈로그 값으로 환산
 	game_state.call("reset_run")

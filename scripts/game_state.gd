@@ -491,14 +491,21 @@ const ARMOR_FAMILY_LADDER := {
 	"feet": ["patched_sneakers", "tactical_boots", "assault_boots"],
 }
 const ARMOR_FAMILY_FACTORS := [1.0, 1.5, 2.2]
-# ── 강화 비용 곡선: 3구간 지수(대개편 3단계 · 시뮬 재조정, tmp/econ_model.py) ──
-# 단일 지수(무기 ×1.28 / 방어구 ×1.26)는 +40 17.7M → +60 2.6B → +99 36T로 터져
-# 60대 이후가 사실상 없는 구간이었다. 구간별로 꺾는다:
-#   무기  +1~30 ×1.28 · +31~60 ×1.10 · +61~99 ×1.055  → K2 누적(돌파 포함) +30 11.4M · +50 213M · +99 8.9B
-#   방어구 +1~30 ×1.26 · +31~60 ×1.09 · +61~99 ×1.045 → T3 세트(3피스) +99 ≈ 5.0B
+# ── 강화 비용 곡선: 4구간 지수(존 리듬 재조정 2026-09-06, tmp/income_sim.gd 실측) ──
+# 예전 3구간(+1~30 ×1.28)은 존 여정 구간이 너무 가팔랐다 — 존 수입이 존마다 ×3~4
+# 뛰는데 +10 묶음 비용은 ×11.8씩 뛰어, 존2부터 "출정 몇 판으론 강화 찔끔"이 됐다
+# (실측: 존2 진입 시 +10→+20이 15판, 존4는 40판). 구간을 다시 꺾는다:
+#   +1~30  = 존 여정 구간(완만): 존 t 진입 시점의 +10 묶음이 그 존 출정 2~4판.
+#   +31~50 = 쉘터 인프라 구간(가파름): 생산기 Lv(×1.9)·주민 급증이 미는 구간이라
+#            지수 비용이어도 "다음 버튼"이 계속 눌린다.
+#   +51~99 = 장기 완만 구간: 오버클럭·풀 주민 보너스로 서서히.
+#   무기  +1~30 ×1.18 · +31~50 ×1.27 · +51~70 ×1.12 · +71~99 ×1.065
+#         → K2 누적(돌파 포함) +30 1.6M · +50 124M · +99 32.2B
+#   방어구 +1~30 ×1.17 · +31~50 ×1.25 · +51~70 ×1.11 · +71~99 ×1.055
+#         → T3 세트(3피스) +99 ≈ 19.4B (무기의 절반 남짓 유지)
 # [상한 레벨, 그 구간의 단계당 배율] — _segmented_growth가 구간별 pow를 곱한다.
-const WEAPON_ENHANCEMENT_SEGMENTS := [[30, 1.28], [60, 1.10], [99, 1.055]]
-const ARMOR_ENHANCEMENT_SEGMENTS := [[30, 1.26], [60, 1.09], [99, 1.045]]
+const WEAPON_ENHANCEMENT_SEGMENTS := [[30, 1.18], [50, 1.27], [70, 1.12], [99, 1.065]]
+const ARMOR_ENHANCEMENT_SEGMENTS := [[30, 1.17], [50, 1.25], [70, 1.11], [99, 1.055]]
 const ARMOR_ENHANCEMENT_BASE_COST := 400.0  # 600 → 400: 세 슬롯을 같이 키우는 방어구는 한 피스가 무기의 ~1/2.
 # 돌파 단계 간격 — +10, +20, …, +90에서 한 번씩.
 const BREAKTHROUGH_STEP := 10
@@ -967,8 +974,34 @@ const RESIDENT_REROLL_MAX_COST := 5
 # 했다). 주민은 두 경로로만 늘어난다: 출정 후송(구조)과 자연 유입.
 # 자연 유입: 티어가 높을수록, 이미 사는 고양이가 많을수록 소문이 빨리 퍼진다.
 # 오프라인 정산에도 붙지만 SHELTER_OFFLINE_MAX_SECONDS(8h) 상한을 그대로 쓴다.
-const RESIDENT_DRIFT_PER_TIER_HOUR := 0.5
-const RESIDENT_DRIFT_PER_RESIDENT_HOUR := 0.02
+# [상향 2026-09-06] 0.5/0.02 → 2.0/0.05: 티어 4~5 수용량(300·900)이 옛 유입률로는
+# 수십 시간이 걸려 "주민이 폭발적으로 늘어난다"가 화면에 안 보였다. 주민 비례 항이
+# 복리(고양이가 고양이를 부른다)라 새 티어 진입 → 빠르게 빠글빠글 → 만원의 리듬이 선다.
+const RESIDENT_DRIFT_PER_TIER_HOUR := 2.0
+const RESIDENT_DRIFT_PER_RESIDENT_HOUR := 0.05
+
+# ── 북적임 보너스(주민 수 구간 생산 배율, 2026-09-06 신설) ────────
+# 배치 체감(크라우딩)은 좌석 16배 인플레에서 강화 곡선을 지켰지만, 그 대가로
+# "주민이 늘어도 수입이 밋밋하다"를 남겼다 — 주민 수가 문턱을 넘을 때마다
+# 꾹꾹이 라인 전체에 계단 배율을 얹어 "쉘터가 커졌다"를 숫자로도 돌려준다.
+# 문턱은 티어별 수용량(8/30/100/300/900)에 맞춘 계단: 티어업 → 유입 폭증 → 문턱
+# 돌파 → 수입 점프가 한 호흡이 된다. 착즙(캣닢)에는 안 붙는다 — 캣닢은 피버
+# 전용이라 싱크가 없어, 폭주하면 피버 충전만 싸져서 균형이 무너진다.
+# [완화 2026-09-06] 최상단 4.5/6.0 → 4.0/5.0: 꼭대기 6.0이면 엔드게임 idle이
+# 출정 수입을 1:30으로 지배했다(실측 tmp/income_sim.gd). 계단의 '보임'(초·중반
+# 문턱)은 그대로 두고 최상단만 깎아 1:22까지 좁힌다 — 남은 지배는 위험 정산
+# 존 배율 상향(RISK_PAYOUT_STAGE_MULTIPLIER)이 마저 줄인다.
+const RESIDENT_THRONG_BONUSES := {10: 1.5, 30: 2.0, 100: 3.0, 300: 4.0, 700: 5.0}
+
+
+func get_resident_throng_multiplier() -> float:
+	# 현재 주민 수가 넘은 가장 높은 문턱의 배율(중첩 곱이 아니라 계단 조회).
+	var count := rescued_workers
+	var bonus := 1.0
+	for threshold in RESIDENT_THRONG_BONUSES.keys():
+		if count >= int(threshold):
+			bonus = maxf(bonus, float(RESIDENT_THRONG_BONUSES[threshold]))
+	return bonus
 
 const CATNIP_BOOST_COST := 900
 const CATNIP_BOOST_DURATION_SECONDS := 600
@@ -3707,6 +3740,7 @@ func get_worker_production_per_second(worker_id: String, production_kind: String
 				* scratcher_multiplier
 				* get_production_multiplier()
 				* get_scratcher_crowding_factor()
+				* get_resident_throng_multiplier()
 			)
 		"catnip":
 			if not is_shelter_facility_unlocked("catnip_scraper"):
@@ -3843,7 +3877,14 @@ func get_base_scrap_per_hour() -> float:
 			* scratcher_multiplier
 		)
 	# 배치 체감은 라인 합계에 한 번만 곱한다(주민별 계산과 같은 값).
-	return total_per_second * get_scratcher_crowding_factor() * 3600.0
+	# 북적임 보너스도 여기(합계)와 주민별 경로 양쪽에 같은 값으로 곱는다 —
+	# 머리 위 생산 팝업의 합이 실제 시급과 어긋나면 안 된다(스모크 테스트 검증 항목).
+	return (
+		total_per_second
+		* get_scratcher_crowding_factor()
+		* get_resident_throng_multiplier()
+		* 3600.0
+	)
 
 
 func get_scrap_per_second() -> float:
@@ -4119,8 +4160,10 @@ func process_shelter_progress() -> Dictionary:
 
 
 func get_current_raid_stage_tier() -> int:
-	# 선택(진행) 중인 출정 존의 스테이지 티어 — 귀중품 존 가치 배율의 기준.
-	return LOOT_ECONOMY.get_stage_for_zone(get_raid_zone())
+	# 선택(진행) 중인 출정 존의 스테이지 티어 — 귀중품 존 가치 배율·위험 정산 존 배율의 기준.
+	# get_stage_for_zone은 옛 컨테이너 표 호환으로 4에서 멈춘다 — 남산(존5)의 귀중품·정산이
+	# 존4 값으로 깎이면 안 되므로 1~5를 그대로 주는 gear 판을 쓴다(조각 풀과 같은 이유).
+	return LOOT_ECONOMY.get_gear_stage_for_zone(get_raid_zone())
 
 
 func get_valuable_unit_value(valuable_id: String, stage_tier: int = -1) -> int:
@@ -4155,13 +4198,28 @@ func get_valuable_total_count() -> int:
 	return count
 
 
+# ── 위험 정산 존 배율(존 리듬 재조정 2026-09-06) ─────────────────
+# 예전 정산(1000+180/킬)은 존과 무관한 평면이라, 쉘터 수입이 티어마다 ×5~7 뛰는 동안
+# 출정 수입은 킬 수(24→60)만큼만 늘었다 — 실측(tmp/income_sim.gd) 티어 5에서 출정:쉘터
+# ≈ 1:14. "열심히 벌어서 강화한다"가 성립하려면 출정 수입도 존 지수를 타야 한다.
+# 러버밴딩 아님: 배율은 전부 존 티어 상수다(장비·플레이어 상태 무관).
+# 귀중품 존 배율(VALUABLE_STAGE_MULTIPLIER ×1/3/8/20/50)과 합쳐 판당 수입이
+# 존마다 ×3~4 — 진입 직후 +10 강화 묶음(2~4판)의 분모가 되는 눈금이다.
+# 존1이 1.0이 아니라 1.3인 이유: 존2 묶음(2~4판)이 요구하는 존2 수입 밑에서
+# 존1→존2 성장률을 ×4 밴드 안으로 끌어내리는 밑단 보정(실측 12.5K → 51.4K/판).
+const RISK_PAYOUT_STAGE_MULTIPLIER := {1: 1.3, 2: 4.0, 3: 8.0, 4: 25.0, 5: 55.0}
+
+
 func grant_extraction_risk_payout(kills: int, pressure_level: int, reward_multiplier: float) -> int:
 	# 출정 자체가 진행 통화를 벌게 한다. 예전에는 고철이 거의 전부 쉘터
 	# 수동 생산에서 나와, 중반부터 출정이 "심부름"이 되고 진행은 대기가 됐다.
-	# 오래 버티고(긴장도) 싸운(킬) 대가를 고철로 직접 준다.
+	# 오래 버티고(긴장도) 싸운(킬) 대가를 고철로 직접 준다 — 존이 깊을수록 크게.
 	var base := 1000 + maxi(0, kills) * 180
+	var stage_multiplier := float(
+		RISK_PAYOUT_STAGE_MULTIPLIER.get(get_current_raid_stage_tier(), 1.0)
+	)
 	var risk := 1.0 + float(clampi(pressure_level, 0, 3)) * 0.6
-	var payout := roundi(float(base) * risk * maxf(1.0, reward_multiplier))
+	var payout := roundi(float(base) * stage_multiplier * risk * maxf(1.0, reward_multiplier))
 	scrap += payout
 	return payout
 
@@ -4493,11 +4551,9 @@ func get_weapon_enhancement_cost(weapon_id: String) -> int:
 		"akm": weapon_factor = 1.7
 		"pump_shotgun": weapon_factor = 1.5
 		"k2": weapon_factor = 2.0
-	# ×1.11 → ×1.28(+1~30) → 3구간(대개편 3단계). 쉘터 수입이 지수(생산기 Lv당 ×1.9, 주민 수)로
-	# 크는데 강화 비용은 완만해 티어 3쯤엔 한 시간 수입으로 +40을 찍었다 — 싱크가 아니라
-	# 파워 폭주 경로였다. 반대로 ×1.28 단일 지수는 +60 이후가 영원히 닿지 않는 구간이었다.
-	# WEAPON_ENHANCEMENT_SEGMENTS: +10 10.6K, +30 1.5M(×1.28) → +31~60 ×1.10 → +61~99 ×1.055.
-	# '항상 다음 버튼이 있지만 공짜는 아닌' 인크리멘탈 곡선.
+	# 곡선은 WEAPON_ENHANCEMENT_SEGMENTS(4구간, 상수 옆 주석 참조)가 정의한다.
+	# 핵심 약속: 존 t 진입 직후의 +10 묶음 = 그 존 출정 2~4판 — "새 존이 강화를 해소"하는
+	# 리듬을 이 곡선과 존별 출정 수입(RISK_PAYOUT_STAGE_MULTIPLIER·귀중품 존 배율)이 같이 지킨다.
 	return maxi(900, roundi(900.0 * weapon_factor * _segmented_growth(level, WEAPON_ENHANCEMENT_SEGMENTS)))
 
 
@@ -4557,8 +4613,8 @@ func try_enhance_weapon(weapon_id: String) -> bool:
 
 # ── 방어구 +99 강화 ─────────────────────────────────────────────
 # 무기와 같은 규칙(부품 단계·돌파)이되 비용 곡선은 400×가족계수(T1 1.0/T2 1.5/T3 2.2)
-# ×ARMOR_ENHANCEMENT_SEGMENTS(+1~30 ×1.26 · +31~60 ×1.09 · +61~99 ×1.045) — 무기보다
-# 완만하다. 세 슬롯을 같이 키워야 하므로(T3 세트 +99 ≈ 5.0B ≈ K2 +99의 절반 남짓).
+# ×ARMOR_ENHANCEMENT_SEGMENTS(4구간, 상수 옆 주석 참조) — 무기보다 완만하다.
+# 세 슬롯을 같이 키워야 하므로(T3 세트 +99 ≈ 19.4B ≈ K2 +99의 절반 남짓).
 # 키는 기본 id(레벨 접미사 없음). 보유(가방·창고·장착 어디든) 중인 방어구만 강화된다.
 
 

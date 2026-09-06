@@ -752,6 +752,10 @@ func _build_resource_strip() -> Control:
 		)
 		chip.name = "ResourceChip_%s" % resource_key
 		chip.tooltip_text = "%s x%s" % [_resource_name(resource_key), GameState.format_compact_number(_owned_resource(resource_key))]
+		# 테스트·튜토리얼이 찾는 ResourceIcon_/ResourceValue_ 이름 규약(생산기·착즙기
+		# 모듈과 동일)을 지킨다 — 재도색 때 여기만 빠져 있었다.
+		for icon_node in chip.find_children("*", "TextureRect", true, false):
+			icon_node.name = "ResourceIcon_%s" % resource_key
 		var value_label := chip.get_meta("label") as Label
 		value_label.name = "ResourceValue_%s" % resource_key
 		value_label.autowrap_mode = TextServer.AUTOWRAP_OFF

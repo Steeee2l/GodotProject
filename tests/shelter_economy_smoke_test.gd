@@ -1,5 +1,7 @@
 extends SceneTree
 
+var failed := false
+
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -554,10 +556,20 @@ func _run() -> void:
 	if not bool(game_state.call("try_upgrade_shelter_tier")):
 		_fail("shelter tier upgrade failed")
 	# 티어 2 표는 인크리멘탈 개편으로 5/10/20/35/50 → 8/30/100/300/900이 됐다.
-	# 좌석도 함께 열렸고(꾹꾹이 14 · 스크래핑 6), 수입은 배치 체감이 눌러 준다.
-	if int(game_state.call("get_resident_capacity")) != 30 or int(game_state.call("get_scratcher_worker_slots")) != 14 or int(game_state.call("get_catnip_worker_slots")) != 6:
+	# [현행화 2026-09-06] 좌석 = 티어 기본(꾹꾹이 14 · 스크래핑 6) + 시설 Lv 보너스
+	# (2026-08-30 "확장 버튼이 좌석 +1" 수정) — 위에서 생산기·착즙기를 올렸으므로
+	# 그 레벨만큼 더한 기대치로 검사한다.
+	var expected_kneading_slots := 14 + maxi(0, int(game_state.get("scratcher_bank_level")) - 1)
+	var expected_catnip_slots := 6 + maxi(0, int(game_state.get("catnip_scraper_level")) - 1)
+	if (
+		int(game_state.call("get_resident_capacity")) != 30
+		or int(game_state.call("get_scratcher_worker_slots")) != expected_kneading_slots
+		or int(game_state.call("get_catnip_worker_slots")) != expected_catnip_slots
+	):
 		_fail("tier 2 capacity table is inconsistent")
 
+	if failed:
+		return
 	print("SHELTER_ECONOMY_OK scrap=%d catnip=%d durability=%.1f workers=%d" % [
 		game_state.get("scrap"),
 		game_state.get("catnip"),
@@ -568,6 +580,9 @@ func _run() -> void:
 
 
 func _fail(message: String) -> void:
+	# quit()은 프레임 끝에서야 실제로 끝난다 — 뒤에서 quit(0)이 코드를 덮어써
+	# 실패가 초록으로 둔갑하던 버그(티어 2 표 검사에서 실제로 일어났다)를 플래그로 막는다.
+	failed = true
 	push_error(message)
 	quit(1)
 
@@ -577,7 +592,10 @@ func _assert_compact_close_button(scope: Node, context: String) -> void:
 	if close == null:
 		_fail("%s close button is missing" % context)
 		return
-	if not close.text.is_empty() or close.custom_minimum_size.x > 44.0 or close.custom_minimum_size.y > 44.0:
+	# [현행화 2026-09-06] 쉘터 디자인 언어(ShelterTheme.close_button)는 둥근 40px에
+	# 글자 "×" 하나다 — 아이콘 전용 강제는 재도색(d53b346) 이전 규약. 컴팩트(≤44px)와
+	# "긴 문구 금지"만 지킨다.
+	if not (close.text.is_empty() or close.text == "×") or close.custom_minimum_size.x > 44.0 or close.custom_minimum_size.y > 44.0:
 		_fail("%s close button must be a compact icon-only control" % context)
 
 
