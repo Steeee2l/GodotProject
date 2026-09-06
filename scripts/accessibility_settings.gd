@@ -23,7 +23,7 @@ const LANGUAGES := [
 
 # 화면 언어. 기본은 한국어이고, 영어는 assets/locale/ui.csv의 en 열을 쓴다.
 # 키가 한국어 원문이라 ko에서는 원문이 그대로 돌아온다(기존 동작·테스트 유지).
-var language := "ko"
+var language := ""  # 빈 값 = 아직 고른 적 없음(첫 실행) → OS 언어를 따른다
 var ui_scale := 1.0
 var combat_text_scale := 1.0
 var camera_shake_scale := 0.75
@@ -424,10 +424,21 @@ func _add_language_row(parent: VBoxContainer) -> void:
 
 
 func _apply_locale() -> void:
-	# project.godot의 locale/test가 시작 로케일을 ko로 고정하고, 저장된 선택이 그 위에 얹힌다.
+	# 우선순위: 유저가 고른 값 > OS 언어 > 한국어.
+	# project.godot의 locale/test가 시작 로케일을 ko로 고정하므로(테스트 결정성),
+	# 실제 화면 언어는 여기서 정해 얹는다.
 	if language != "ko" and language != "en":
-		language = "ko"
+		language = _detect_os_language()
 	TranslationServer.set_locale(language)
+
+
+func _detect_os_language() -> String:
+	# 저장된 선택이 없을 때만 부른다. 한국어 계열이면 ko, 그 밖은 전부 en —
+	# 지원 언어가 둘뿐이라 "모르면 영어"가 한국어를 강요하는 것보다 낫다.
+	var os_locale := str(OS.get_locale()).to_lower()
+	if os_locale.begins_with("ko"):
+		return "ko"
+	return "en"
 
 
 func _rebuild_ui() -> void:
