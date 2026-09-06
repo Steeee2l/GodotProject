@@ -21,7 +21,7 @@ const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/maga
 # 통조림은 재료가 아니다 — 투척 소모품 겸 훈련 재화로 갈라지며 레시피에서 빠졌고,
 # 그 몫은 고철(통조림 1 ≈ 70, 100 단위 반올림)로 접어 넣었다.
 # ── 2026-08 경제 코어: 장비는 여기서만 생긴다 ──
-# 무기 7종·방어구 9종 전부 레시피. 해금은 설계도 조각 3/3(gear_id 기준, GameState.
+# 무기 7종·방어구 9종 전부 레시피. 해금은 잔해 3/3(gear_id 기준, GameState.
 # is_blueprint_unlocked), 보유 중이면 "제작됨 · 영구 보유"로 재제작 불가(1개 영구).
 # 비용은 존별 수입(T1 ~7K/h · T2 ~43K/h · T3 ~260K/h · T4 ~1.1M/h · T5 ~5M/h)에 맞춰
 # "그 존 도달 후 1~3시간" 선: 고철 + 일반 부품, 존3부터 정밀 기어, 존4부터 군용 합금.
@@ -1577,7 +1577,7 @@ func _build_locked_card_blocks(entry: Dictionary) -> Array[Control]:
 	flow.add_theme_constant_override("h_separation", 8)
 	flow.add_theme_constant_override("v_separation", 6)
 	panel.add_child(flow)
-	flow.add_child(_cost_pair("설계도 조각", "%d / %d" % [shards, GameState.BLUEPRINT_SHARDS_REQUIRED], shards >= GameState.BLUEPRINT_SHARDS_REQUIRED))
+	flow.add_child(_cost_pair("잔해", "%d / %d" % [shards, GameState.BLUEPRINT_SHARDS_REQUIRED], shards >= GameState.BLUEPRINT_SHARDS_REQUIRED))
 	var cost := _effective_cost(recipe)
 	for key_value in cost.keys():
 		var key := str(key_value)
@@ -2224,7 +2224,7 @@ func _refresh_detail_panel() -> void:
 			mini(shard_have, shard_need),
 			shard_need,
 			SHELTER_THEME.ACCENT if shard_have >= shard_need else DANGER,
-			"%d개를 모으면 이 설계도가 열립니다 · %s에서 나옵니다" % [
+			"부서진 것 %d개를 긁어모아 쓸만한 하나를 조립합니다 · %s에서 나옵니다" % [
 				shard_need, _blueprint_source_text(shard_gear_id),
 			]
 		))
@@ -2248,7 +2248,7 @@ func _refresh_detail_panel() -> void:
 	# 같은 문장을 붉은 글씨로 한 번 더 쓰면 화면만 시끄러워진다.
 	if craft.disabled:
 		var reason := _recipe_list_subtitle(recipe)
-		if not str(recipe.get("gear_id", "")).is_empty() and reason.begins_with("설계도 조각"):
+		if not str(recipe.get("gear_id", "")).is_empty() and reason.begins_with("잔해"):
 			reason = ""
 		if not reason.is_empty():
 			var reason_label := SHELTER_THEME.label("잠긴 이유: %s" % reason, SHELTER_THEME.TYPE_CAPTION + 1, DANGER)
@@ -2979,8 +2979,8 @@ func _craft_action_icon(recipe: Dictionary) -> String:
 
 func _resource_icon(key: String) -> Texture2D:
 	match key:
-		# 설계도 조각 — 종이(기록) 아이콘. 다른 재료와 같은 줄 문법으로 보여준다.
-		"blueprint_shard": return UI_ICONS.get_icon("lore", 48, Color("#8fd3c4"))
+		# 잔해 — 부서진 물건 더미. 다른 재료와 같은 줄 문법으로 보여준다.
+		"blueprint_shard": return UI_ICONS.get_icon("loot", 48, Color("#9fb0a8"))
 		"scope_lens": return SCOPE_LENS_TEXTURE
 		"rubber_gasket": return RUBBER_GASKET_TEXTURE
 		"magazine_spring": return MAGAZINE_SPRING_TEXTURE
@@ -3174,7 +3174,7 @@ func _result_stat_line(recipe: Dictionary) -> String:
 func _resource_name(key: String) -> String:
 	match key:
 		"blueprint_shard":
-			return "설계도 조각"
+			return "잔해"
 		"scrap":
 			return "고철"
 		"catnip":

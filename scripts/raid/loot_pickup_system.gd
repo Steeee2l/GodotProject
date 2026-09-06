@@ -356,7 +356,7 @@ func _collect_nearby_ammo() -> void:
 			if progression_item_id.begins_with(LOOT_ECONOMY.BLUEPRINT_SHARD_PREFIX):
 				var recipe_id := progression_item_id.trim_prefix(LOOT_ECONOMY.BLUEPRINT_SHARD_PREFIX)
 				toast_text = "%s +%d · %s" % [
-					str(host.nearby_ammo_pickup.get_meta("display_name", "설계도 조각")),
+					str(host.nearby_ammo_pickup.get_meta("display_name", "잔해")),
 					amount,
 					str(GameState.get_blueprint_progress_text(recipe_id)),
 				]

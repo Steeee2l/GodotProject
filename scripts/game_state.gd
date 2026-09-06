@@ -1028,17 +1028,17 @@ const MILESTONE_UNLOCKS := {
 	# 키(craft_rifle 등)는 옛 세이브의 unlocked_milestones와 호환되게 그대로 둔다.
 	"craft_rifle": {
 		"title": "기관단총 제작 해금",
-		"body": "MP5 설계도 조각을 전부 맞췄다. 작업대에서 MP5를 만들 수 있다.",
+		"body": "MP5 잔해 3개를 다 모았다. 작업대에서 MP5를 만들 수 있다.",
 		"requires_blueprint": "mp5",
 	},
 	"craft_akm": {
 		"title": "AKM 개조 해금",
-		"body": "AKM 설계도 조각을 전부 맞췄다. 작업대에서 AKM 개조형을 만들 수 있다. AK의 강화를 60% 이어받는다.",
+		"body": "AKM 잔해 3개를 다 모았다. 작업대에서 AKM 개조형을 만들 수 있다. AK의 강화를 60% 이어받는다.",
 		"requires_blueprint": "akm",
 	},
 	"craft_pump": {
 		"title": "펌프 산탄총 해금",
-		"body": "펌프 산탄총 설계도 조각을 전부 맞췄다. 작업대에서 만들 수 있다. 참치 헌터의 강화를 60% 이어받는다.",
+		"body": "펌프 산탄총 잔해 3개를 다 모았다. 작업대에서 만들 수 있다. 참치 헌터의 강화를 60% 이어받는다.",
 		"requires_blueprint": "pump_shotgun",
 	},
 	"craft_shotgun": {
@@ -4993,7 +4993,10 @@ func is_blueprint_recipe_complete(recipe_id: String) -> bool:
 
 
 func get_blueprint_progress_text(recipe_id: String) -> String:
-	return "설계도 조각 %d/%d" % [mini(get_blueprint_shard_count(recipe_id), BLUEPRINT_SHARDS_REQUIRED), BLUEPRINT_SHARDS_REQUIRED]
+	# 2026-09-06: "설계도 조각"은 왜 도면이 정확히 세 조각으로 찢겨 흩어졌는지
+	# 설명하지 못했다. 이 세계는 설계가 아니라 물건이 남은 세계다 — 부서진 물건
+	# 셋을 긁어모아 쓸만한 하나를 조립한다. 아이템 id는 세이브 호환으로 그대로 둔다.
+	return "잔해 %d/%d" % [mini(get_blueprint_shard_count(recipe_id), BLUEPRINT_SHARDS_REQUIRED), BLUEPRINT_SHARDS_REQUIRED]
 
 
 func _migrate_legacy_blueprints() -> Array[String]:
@@ -5395,8 +5398,14 @@ func is_contract_chain_finished() -> bool:
 	return str(get_contract_state().get("status", "")) == "finished"
 
 
+# 도시 의뢰가 열리는 시점 — 살아 돌아온 횟수. 첫 판(오프닝 직후)은 배우는 판이라
+# 비우고, 두 번째 복귀부터 반복 목표를 준다. 예전에는 계약 체인을 전부 끝내야
+# 열려서, 반복 목표가 가장 필요한 초·중반엔 없고 콘텐츠가 끝난 뒤에야 나왔다.
+const CITY_COMMISSION_MIN_RETURNS := 2
+
+
 func roll_city_commission() -> void:
-	if not is_contract_chain_finished():
+	if survived_return_count < CITY_COMMISSION_MIN_RETURNS and not is_contract_chain_finished():
 		city_commission = {}
 		return
 	# 결정론: 같은 복귀 차수에는 같은 의뢰. 최고 해금 존 티어로 난이도를 잡는다.
