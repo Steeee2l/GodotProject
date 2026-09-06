@@ -11,6 +11,7 @@ class_name DebugMenu
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const OPENING_SCENE_PATH := "res://scenes/opening_sequence.tscn"
+const DEBUG_GATE := preload("res://scripts/hud/debug_gate.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const PANEL_WIDTH := 340.0
 const CHEAT_AMOUNT := 9_999_999
@@ -35,24 +36,29 @@ func setup(host_node: Node) -> void:
 
 
 func _build_open_button() -> void:
-	# 좌하단 상시 버튼 — 모바일에는 9키가 없다. 작고 흐릿하게 둬서 평소
-	# 플레이에는 거슬리지 않게 한다.
+	# 모바일 진입점 — 폰에는 0키가 없다. 예전엔 좌하단에 "DEV"라고 적힌 알약이라
+	# 빌드를 받은 사람 누구나 눌러 봤다. 이제 우상단 가방 버튼 옆 구석에 글자
+	# 없는 작은 점 하나로 두고, 눌러도 코드 창이 먼저 선다(아는 사람만 연다).
 	open_button = Button.new()
 	open_button.name = "DebugOpenButton"
-	open_button.text = "DEV"
+	open_button.text = ""
+	open_button.tooltip_text = ""
 	open_button.focus_mode = Control.FOCUS_NONE
-	# 작은 알약 — 표면색 채움, 민트 글자.
-	HudStyle.style_pill(open_button, false)
-	open_button.add_theme_color_override("font_color", HudStyle.ACCENT)
-	open_button.add_theme_color_override("font_hover_color", HudStyle.ACCENT)
-	open_button.add_theme_color_override("font_pressed_color", HudStyle.ACCENT)
-	open_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	open_button.offset_left = 14.0
-	open_button.offset_top = -52.0
-	open_button.offset_right = 74.0
-	open_button.offset_bottom = -14.0
-	open_button.modulate.a = 0.72
-	open_button.pressed.connect(func() -> void: toggle())
+	var dot := HudStyle.flat(HudStyle.TEXT_FAINT, 999)
+	open_button.add_theme_stylebox_override("normal", dot)
+	open_button.add_theme_stylebox_override("hover", dot)
+	open_button.add_theme_stylebox_override("pressed", HudStyle.flat(HudStyle.ACCENT, 999))
+	open_button.add_theme_stylebox_override("focus", dot)
+	# 우상단 — 가방 버튼 위쪽 모서리. 손가락이 닿는 크기(28)는 지키되 눈에는 안 띈다.
+	open_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	open_button.offset_left = -34.0
+	open_button.offset_top = 10.0
+	open_button.offset_right = -12.0
+	open_button.offset_bottom = 32.0
+	open_button.modulate.a = 0.22
+	open_button.pressed.connect(func() -> void:
+		DEBUG_GATE.request(self, func() -> void: toggle())
+	)
 	add_child(open_button)
 
 

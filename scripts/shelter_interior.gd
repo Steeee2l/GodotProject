@@ -1,6 +1,7 @@
 extends Node3D
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
+const DEBUG_GATE := preload("res://scripts/hud/debug_gate.gd")
 # 쉘터 UI 디자인 언어(이름 짓기 화면 기준) — 스탯 패널·목표 카드·안내는 이 토큰만 쓴다.
 # class_name 대신 preload: 헤드리스 테스트에는 전역 클래스 캐시가 없다.
 const SHELTER_THEME := preload("res://scripts/hud/shelter_theme.gd")
@@ -5734,11 +5735,15 @@ func _create_cat_frames() -> SpriteFrames:
 
 
 func _input(event: InputEvent) -> void:
-	# 9 = 개발자 메뉴. 어떤 모달보다 먼저 본다.
+	# 0 = 개발자 메뉴(코드 잠금). 어떤 모달보다 먼저 본다. 필드와 같은 입구다.
 	if event is InputEventKey and event.pressed and not event.echo:
 		var debug_key := (event as InputEventKey).keycode
-		if debug_key == KEY_9 and debug_menu != null and is_instance_valid(debug_menu):
-			debug_menu.call("toggle")
+		if (
+			(debug_key == KEY_0 or debug_key == KEY_KP_0)
+			and debug_menu != null
+			and is_instance_valid(debug_menu)
+		):
+			DEBUG_GATE.request(self, func() -> void: debug_menu.call("toggle"))
 			get_viewport().set_input_as_handled()
 			return
 	if contract_story_open:

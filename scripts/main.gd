@@ -109,6 +109,7 @@ const INTERACTION_TARGETING := preload("res://scripts/interaction_targeting.gd")
 const RAID_ITEM_ECONOMY := preload("res://scripts/raid_item_economy.gd")
 const RAID_EVENT_DIRECTOR := preload("res://scripts/raid_event_director.gd")
 const GameOverScreen := preload("res://scripts/hud/game_over_screen.gd")
+const DEBUG_GATE := preload("res://scripts/hud/debug_gate.gd")
 const LoreReader := preload("res://scripts/hud/lore_reader.gd")
 const RaidHud := preload("res://scripts/hud/raid_hud.gd")
 const MainMissionChain := preload("res://scripts/raid/main_mission_chain.gd")
@@ -7576,11 +7577,14 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and not event.echo:
 		var key_event := event as InputEventKey
 		var key := key_event.keycode if key_event.keycode != 0 else key_event.physical_keycode
-		# 9 = 개발자 메뉴. 다른 어떤 게이트보다 먼저 본다 — 죽었든 창이 떠
-		# 있든 열려야 디버깅 도구로 쓸모가 있다(모바일은 좌하단 DEV 버튼).
-		if key == KEY_9 and key_event.pressed:
+		# 0 = 개발자 메뉴(코드 잠금). 다른 어떤 게이트보다 먼저 본다 — 죽었든
+		# 창이 떠 있든 열려야 디버깅 도구로 쓸모가 있다.
+		# 예전에는 9키가 그냥 열렸고 0키는 전체 초기화였다. 빌드를 공개해도
+		# 도구는 나만 쓰려고 입구를 0키 하나로 합치고 뒤에 코드를 세웠다
+		# (초기화는 메뉴 안 항목으로 들어가 있다). 모바일은 가방 버튼 옆 표식 없는 점.
+		if (key == KEY_0 or key == KEY_KP_0) and key_event.pressed:
 			if debug_menu != null and is_instance_valid(debug_menu):
-				debug_menu.call("toggle")
+				DEBUG_GATE.request(self, func() -> void: debug_menu.call("toggle"))
 			get_viewport().set_input_as_handled()
 			return
 		if key == KEY_ESCAPE and key_event.pressed and lore_reader.is_open():

@@ -42,11 +42,9 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if not (event is InputEventKey):
 		return
 	var key_event := event as InputEventKey
+	# 0키는 2026-09-06부터 개발자 메뉴(코드 잠금)의 입구다. 초기화는 그 메뉴 안에
+	# 항목으로 들어갔다 — 공개 빌드에서 키 하나로 세이브가 날아가면 안 된다.
 	if is_full_reset_shortcut(key_event):
-		# 키 하나로 확인 없이 세이브를 지우면 안 된다. 모바일 버튼과 같은
-		# 확인 다이얼로그를 거친다.
-		get_viewport().set_input_as_handled()
-		_show_reset_confirmation()
 		return
 	# 1번(쉘터 즉시 이동)은 치트라 디버그 빌드 전용 — 릴리스에서 0번만 살린다.
 	if not OS.is_debug_build():
@@ -74,6 +72,9 @@ func _build_mobile_reset_ui() -> void:
 	reset_button.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	reset_button.size = Vector2(96, 38)
 	reset_button.position = Vector2(-110, 10)
+	# 공개 빌드에서 아무나 누를 수 있는 초기화 버튼은 두지 않는다 — 개발자 메뉴
+	# 안으로 들어갔다. 노드는 남기고(테스트·확인 다이얼로그 경로 재사용) 숨긴다.
+	reset_button.visible = false
 	reset_button.focus_mode = Control.FOCUS_NONE
 	reset_button.add_theme_font_override("font", FONT)
 	reset_button.add_theme_font_size_override("font_size", 13)
