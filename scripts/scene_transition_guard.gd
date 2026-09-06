@@ -5,12 +5,19 @@ signal transition_finished(target_path: String)
 signal transition_failed(target_path: String, error_code: int)
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
+const HudStyle := preload("res://scripts/hud/hud_style.gd")
+
+const PROGRESS_WIDTH := 260.0
+const PROGRESS_HEIGHT := 5.0
 
 var active := false
 var target_scene_path := ""
 var fallback_scene_path := ""
 var fade: ColorRect
 var status_label: Label
+var progress_track: Panel
+var progress_fill: Panel
+var progress_tween: Tween
 
 
 func _ready() -> void:
@@ -53,9 +60,56 @@ func _apply_orientation_scale() -> void:
 	status_label.add_theme_font_override("font", FONT)
 	status_label.add_theme_font_size_override("font_size", 15)
 	status_label.add_theme_color_override("font_color", Color("#b8cac2"))
+	status_label.add_theme_font_override("font", HudStyle.bold())
 	status_label.modulate.a = 0.0
 	status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(status_label)
+	_build_progress_bar()
+
+
+func _build_progress_bar() -> void:
+	# 화면 정중앙(상태 문구 바로 위)에 얇은 트랙 하나. 본편 언어대로 테두리 없이
+	# 표면색 트랙 + 민트 채움, 모서리는 알약.
+	progress_track = Panel.new()
+	progress_track.name = "TransitionProgressTrack"
+	progress_track.set_anchors_preset(Control.PRESET_CENTER)
+	progress_track.offset_left = -PROGRESS_WIDTH * 0.5
+	progress_track.offset_right = PROGRESS_WIDTH * 0.5
+	progress_track.offset_top = 8.0
+	progress_track.offset_bottom = 8.0 + PROGRESS_HEIGHT
+	progress_track.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	progress_track.add_theme_stylebox_override(
+		"panel", HudStyle.flat(Color(HudStyle.SURFACE_RAISED, 0.85), 999)
+	)
+	progress_track.modulate.a = 0.0
+	add_child(progress_track)
+	progress_fill = Panel.new()
+	progress_fill.name = "TransitionProgressFill"
+	progress_fill.set_anchors_preset(Control.PRESET_LEFT_WIDE)
+	progress_fill.offset_left = 0.0
+	progress_fill.offset_right = 0.0
+	progress_fill.offset_top = 0.0
+	progress_fill.offset_bottom = 0.0
+	progress_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	progress_fill.add_theme_stylebox_override("panel", HudStyle.flat(HudStyle.ACCENT, 999))
+	progress_track.add_child(progress_fill)
+
+
+func _set_progress(ratio: float, duration: float) -> void:
+	# 실제 로드 진척률을 알 수 없는 구간(change_scene_to_file은 동기)이라,
+	# 단계별 목표치까지 시간으로 채운다. 뒤로 가지는 않게 최대값만 취한다.
+	if progress_track == null or progress_fill == null:
+		return
+	var target := clampf(ratio, 0.0, 1.0) * PROGRESS_WIDTH
+	if target <= progress_fill.offset_right:
+		return
+	if progress_tween != null and progress_tween.is_valid():
+		progress_tween.kill()
+	progress_tween = create_tween()
+	progress_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	progress_tween.tween_property(progress_fill, "offset_right", target, duration).set_trans(
+		Tween.TRANS_SINE
+	).set_ease(Tween.EASE_OUT)
 
 
 func transition_to(scene_path: String, fallback_path: String = "res://scenes/shelter_interior.tscn") -> bool:
@@ -71,11 +125,15 @@ func transition_to(scene_path: String, fallback_path: String = "res://scenes/she
 		game_state.call("save_persistent_state")
 	fade.mouse_filter = Control.MOUSE_FILTER_STOP
 	status_label.text = "상태 저장 중 · 이동 준비"
+	if progress_fill != null:
+		progress_fill.offset_right = 0.0
+	_set_progress(0.35, 0.3)
 	var tween := create_tween()
 	tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
 	tween.set_parallel(true)
 	tween.tween_property(fade, "color:a", 1.0, 0.3)
 	tween.tween_property(status_label, "modulate:a", 1.0, 0.2)
+	tween.tween_property(progress_track, "modulate:a", 1.0, 0.2)
 	tween.set_parallel(false)
 	tween.tween_callback(_commit_transition)
 	return true
@@ -91,16 +149,21 @@ func _commit_transition() -> void:
 		_finish_failed_transition(requested_path, error)
 		return
 	status_label.text = "불러오는 중"
+	_set_progress(0.75, 0.25)
 	call_deferred("_finish_successful_transition", requested_path)
 
 
 func _finish_successful_transition(requested_path: String) -> void:
 	await get_tree().process_frame
+	# 100%를 한 박자 보여 주고 나간다 — 막대가 중간에서 사라지면 실패로 읽힌다.
+	_set_progress(1.0, 0.16)
 	var tween := create_tween()
 	tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	tween.tween_interval(0.16)
 	tween.set_parallel(true)
 	tween.tween_property(fade, "color:a", 0.0, 0.42)
 	tween.tween_property(status_label, "modulate:a", 0.0, 0.18)
+	tween.tween_property(progress_track, "modulate:a", 0.0, 0.18)
 	tween.set_parallel(false)
 	tween.tween_callback(func() -> void:
 		fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -122,6 +185,7 @@ func _finish_failed_transition(requested_path: String, error: int) -> void:
 	tween.set_parallel(true)
 	tween.tween_property(fade, "color:a", 0.0, 0.35)
 	tween.tween_property(status_label, "modulate:a", 0.0, 0.35).set_delay(0.8)
+	tween.tween_property(progress_track, "modulate:a", 0.0, 0.35).set_delay(0.8)
 	tween.set_parallel(false)
 	tween.tween_callback(func() -> void:
 		fade.mouse_filter = Control.MOUSE_FILTER_IGNORE

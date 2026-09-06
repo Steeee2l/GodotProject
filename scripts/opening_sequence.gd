@@ -4,6 +4,7 @@ const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+const HudStyle := preload("res://scripts/hud/hud_style.gd")
 const COLLISION_PROFILES := preload("res://scripts/collision_profile_catalog.gd")
 const VEHICLE_CATALOG := preload("res://scripts/vehicle_catalog.gd")
 const VEHICLE_FOOTPRINT := preload("res://scripts/vehicle_footprint.gd")
@@ -36,16 +37,19 @@ const GAMEPLAY_PHASES := [
 	"tutorial_extract",
 ]
 # DIALOGUE_LINES 앞에서 몇 줄이 라디오(무전) 육성인가 — 화자 라벨이 이걸 본다.
-const RADIO_LINE_COUNT := 1
+# 조준선 사거리 — 인게임(main.gd)과 같은 48m. 막히면 그 지점에서 끊는다.
+const AIM_LASER_RANGE := 48.0
+const RADIO_LINE_COUNT := 4
 const DIALOGUE_LINES := [
-	# 첫 줄은 반드시 라디오 육성이다 — 설명 이전에 목소리부터 들려주는 훅.
-	# 앞 3줄(리빌 전) = 지금 벌어진 일, 뒤 3줄(리빌 후) = 그래서 어디로 가는가.
-	# 짧게, 현재형으로. "삼백 밤"·"밥은 식탁에" 같은 문어체 비유는 쓰지 않는다.
-	"들리나. 들리면 강을 건너와. 다리 끝에 문이 있다.",
-	"라디오가 말을 했다. 사람들이 사라진 뒤로 한 번도 안 켜졌던 라디오다.",
-	"그날 밤 무슨 일이 있었는지 모른다. 아침에 눈 떴더니 도시에 사람이 한 명도 없었다.",
-	"그런데 지금, 강 건너에서 누가 나를 부른다.",
-	"사람일까. 사람이면… 왜 하필 지금.",
+	# 설명 이전에 목소리부터 들려주는 훅. 이 무전을 켠 건 사자다 — 마지막에
+	# 그가 "혼자는 못 가겠어"라고 말할 때 여기로 되짚인다. 그래서 유창하면 안 된다.
+	# 더듬고, 딴소리하고, 스스로 말을 고친다. 문어체 비유는 쓰지 않는다.
+	"…이거 되나. 아, 되네. 되네 이거.",
+	"어, 누가 듣고 있으면. 아니 사람 말고. 아무나.",
+	"강 남쪽에 있으면 다리로 와. 북쪽 끝에 문 있어. 내가 열어 줄게.",
+	"…밤에 와. 낮엔 걔들 돌아다녀.",
+	"반년 만에 라디오가 켜졌다. 같은 말을 세 번 하고 끊겼다.",
+	"그날 밤 무슨 일이 있었는지 모른다. 아침에 눈 떴더니 도시에 사람이 없었다. 반년 동안 아무도 나를 안 불렀다.",
 	"총 한 자루, 통조림 두 개. 가서 본다.",
 ]
 
@@ -132,6 +136,7 @@ var dialogue_panel: PanelContainer
 var dialogue_text: Label
 var dialogue_typewriter: Typewriter
 var aim_laser: MeshInstance3D
+var aim_laser_mesh: BoxMesh
 var continue_label: Label
 var ammo_label: Label
 var magazine_label: Label
@@ -938,7 +943,7 @@ func _build_dialogue_ui(hud: CanvasLayer) -> void:
 	dialogue_panel.offset_right = dialogue_width * 0.5
 	dialogue_panel.offset_top = -318
 	dialogue_panel.offset_bottom = -192
-	dialogue_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.018, 0.024, 0.025, 0.94), Color("#9fc7b8"), 2, 6))
+	dialogue_panel.add_theme_stylebox_override("panel", HudStyle.modal())
 	hud.add_child(dialogue_panel)
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 28)
@@ -950,14 +955,14 @@ func _build_dialogue_ui(hud: CanvasLayer) -> void:
 	column.add_theme_constant_override("separation", 5)
 	margin.add_child(column)
 	dialogue_speaker_label = Label.new()
-	dialogue_speaker_label.add_theme_font_override("font", FONT)
-	dialogue_speaker_label.add_theme_font_size_override("font_size", 18)
+	dialogue_speaker_label.add_theme_font_override("font", HudStyle.bold())
+	dialogue_speaker_label.add_theme_font_size_override("font_size", HudStyle.TYPE_CAPTION)
 	column.add_child(dialogue_speaker_label)
 	_refresh_dialogue_speaker()
 	dialogue_text = Label.new()
 	dialogue_text.add_theme_font_override("font", FONT)
 	dialogue_text.add_theme_font_size_override("font_size", 24)
-	dialogue_text.add_theme_color_override("font_color", Color("#edf2ef"))
+	dialogue_text.add_theme_color_override("font_color", HudStyle.TEXT)
 	dialogue_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	dialogue_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.add_child(dialogue_text)
@@ -991,33 +996,21 @@ func _build_objective_ui(hud: CanvasLayer) -> void:
 	# 여백·글자를 줄이고 카드는 내용 높이에 맞춰 스스로 줄어들게 둔다.
 	objective_panel.offset_top = 62
 	objective_panel.offset_bottom = 144
-	objective_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.014, 0.021, 0.022, 0.94), Color("#79a994"), 1, 7))
+	objective_panel.add_theme_stylebox_override("panel", HudStyle.card())
 	hud.add_child(objective_panel)
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 16)
-	margin.add_theme_constant_override("margin_right", 16)
-	margin.add_theme_constant_override("margin_top", 8)
-	margin.add_theme_constant_override("margin_bottom", 8)
-	objective_panel.add_child(margin)
+	# HudStyle.card()가 안쪽 여백을 이미 들고 있다 — 여기서는 줄 간격만.
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 1)
-	margin.add_child(column)
-	objective_title = Label.new()
-	objective_title.add_theme_font_override("font", FONT)
-	objective_title.add_theme_font_size_override("font_size", 18)
-	objective_title.add_theme_color_override("font_color", Color("#f1d37c"))
+	column.add_theme_constant_override("separation", 2)
+	objective_panel.add_child(column)
+	# 본편 모달과 같은 문법: 민트 eyebrow("목표") → 굵은 흰 제목 → 회색 본문.
+	column.add_child(HudStyle.label("목표", HudStyle.TYPE_CAPTION, HudStyle.ACCENT, true))
+	objective_title = HudStyle.label("", HudStyle.TYPE_HEADING + 2, HudStyle.TEXT, true)
 	column.add_child(objective_title)
-	objective_detail = Label.new()
-	objective_detail.add_theme_font_override("font", FONT)
-	objective_detail.add_theme_font_size_override("font_size", 14)
-	objective_detail.add_theme_color_override("font_color", Color("#d4ded9"))
+	objective_detail = HudStyle.label("", HudStyle.TYPE_BODY, HudStyle.TEXT_DIM)
 	objective_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(objective_detail)
-	objective_progress = Label.new()
+	objective_progress = HudStyle.label("", HudStyle.TYPE_CAPTION, HudStyle.ACCENT, true)
 	objective_progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	objective_progress.add_theme_font_override("font", FONT)
-	objective_progress.add_theme_font_size_override("font_size", 13)
-	objective_progress.add_theme_color_override("font_color", Color("#80e4bd"))
 	column.add_child(objective_progress)
 	objective_panel.visible = false
 
@@ -1060,7 +1053,10 @@ func _build_status_ui(hud: CanvasLayer) -> void:
 	weapon_hud_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	weapon_hud_panel.position = Vector2(-356, -258) if touch_enabled else Vector2(-356, -154)
 	weapon_hud_panel.size = Vector2(326, 118)
-	weapon_hud_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.012, 0.018, 0.019, 0.94), Color("#8da997"), 2, 7))
+	weapon_hud_panel.add_theme_stylebox_override("panel", HudStyle.card())
+	# 오프닝은 장면이 주인공이다 — 우하단 총기 카드는 만들되 띄우지 않는다
+	# (아래 노드들을 참조하는 갱신 코드가 여럿이라 트리에서 빼진 않는다).
+	weapon_hud_panel.modulate.a = 0.0
 	hud.add_child(weapon_hud_panel)
 	var ammo_margin := MarginContainer.new()
 	ammo_margin.add_theme_constant_override("margin_left", 13)
@@ -1380,8 +1376,10 @@ func _build_aim_laser() -> void:
 	material.emission_energy_multiplier = 2.4
 	material.no_depth_test = true
 	var mesh := BoxMesh.new()
-	mesh.size = Vector3(0.045, 0.02, 11.0)
+	# 길이는 매 프레임 _update_aim_laser가 실제 사거리로 다시 잡는다(인게임과 동일).
+	mesh.size = Vector3(0.045, 0.02, AIM_LASER_RANGE)
 	mesh.material = material
+	aim_laser_mesh = mesh
 	aim_laser = MeshInstance3D.new()
 	aim_laser.name = "OpeningAimLaser"
 	aim_laser.mesh = mesh
@@ -1402,7 +1400,22 @@ func _update_aim_laser() -> void:
 		direction = _get_facing_world_direction()
 	direction = direction.normalized()
 	var origin := player.global_position + Vector3(0, 0.32, 0) + direction * 0.6
-	var mid := origin + direction * 5.5
+	# 인게임 조준선과 같은 규칙 — 48m까지 쏘고, 벽·적에 막히면 그 지점에서 끊는다.
+	# 예전에는 11m 막대를 그대로 눕혀서 오프닝만 조준선이 뭉툭하게 짧았다.
+	var end := origin + direction * AIM_LASER_RANGE
+	var query := PhysicsRayQueryParameters3D.create(
+		origin,
+		end,
+		COLLISION_PROFILES.ENEMY_LAYER | COLLISION_PROFILES.WORLD_PROJECTILE_LAYER
+	)
+	query.exclude = [player.get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if not hit.is_empty():
+		end = hit.get("position")
+	var distance := maxf(0.5, origin.distance_to(end))
+	if aim_laser_mesh != null:
+		aim_laser_mesh.size = Vector3(0.045, 0.02, distance)
+	var mid := origin.lerp(end, 0.5)
 	aim_laser.look_at_from_position(mid, mid + direction, Vector3.UP)
 
 
@@ -1459,7 +1472,7 @@ func _refresh_dialogue_speaker() -> void:
 	var is_radio := dialogue_index < RADIO_LINE_COUNT
 	dialogue_speaker_label.text = "무전 · 잡음 섞인 목소리" if is_radio else "나"
 	dialogue_speaker_label.add_theme_color_override(
-		"font_color", Color("#9fb6c9") if is_radio else Color("#d7b765")
+		"font_color", HudStyle.TEXT_DIM if is_radio else HudStyle.ACCENT
 	)
 
 
@@ -1751,8 +1764,8 @@ func _complete_tutorial_step(
 	if tutorial_transitioning:
 		return
 	tutorial_transitioning = true
-	objective_progress.text = "✓  %s" % completion_text
-	objective_progress.add_theme_color_override("font_color", Color("#9dffd2"))
+	objective_progress.text = "완료 · %s" % completion_text
+	objective_progress.add_theme_color_override("font_color", HudStyle.ACCENT)
 	get_tree().create_timer(delay).timeout.connect(func() -> void:
 		if restarting:
 			return
@@ -2056,7 +2069,7 @@ func _update_hud() -> void:
 		reload_bar.visible = reloading
 		reload_bar.value = 1.0 - clampf(reload_remaining / 1.25, 0.0, 1.0) if reloading else 1.0
 	if weapon_hud_panel:
-		weapon_hud_panel.visible = GAMEPLAY_PHASES.has(phase)
+		weapon_hud_panel.visible = false
 	if mobile_controls_root:
 		mobile_controls_root.visible = touch_enabled and GAMEPLAY_PHASES.has(phase)
 	if mobile_fire_button:

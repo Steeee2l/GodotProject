@@ -17,11 +17,13 @@ const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const TOUCH_SCROLL := preload("res://scripts/hud/touch_scroll.gd")
 
 # ── 색 ──
-const BG := Color("#0b0f12")            # 모달·큰 판 바탕(거의 불투명)
-const BG_DIM := Color(0.0, 0.0, 0.0, 0.72)  # 모달 뒤 딤
-const SURFACE := Color("#141a1e")       # 카드
-const SURFACE_RAISED := Color("#1b2227")  # 카드 안 카드 · 보조 버튼
-const SURFACE_HOVER := Color("#222a30")
+const BG := Color(0.043, 0.059, 0.071, 0.93)   # 모달·큰 판 바탕(뒤가 어렴풋이)
+# 딤이 0.72면 판을 반투명하게 만들어도 뒤에 검은 벽만 비친다 — 쉘터가 보이라고
+# 낮춘다. 판 자체(BG 0.93)가 글자 대비를 책임진다.
+const BG_DIM := Color(0.0, 0.0, 0.0, 0.52)     # 모달 뒤 딤
+const SURFACE := Color(0.078, 0.102, 0.118, 0.90)   # 카드
+const SURFACE_RAISED := Color(0.106, 0.133, 0.153, 0.92)  # 카드 안 카드 · 보조 버튼
+const SURFACE_HOVER := Color(0.133, 0.165, 0.188, 0.94)
 const HAIRLINE := Color("#243036")      # 아주 옅은 구분선(꼭 필요할 때만)
 const TEXT := Color("#eef2ee")
 const TEXT_DIM := Color("#8d9a94")
