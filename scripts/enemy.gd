@@ -56,7 +56,10 @@ const REINFORCEMENT_ICON_Y := 2.42
 # 않게 그보다 위에 둔다. 스탯은 존 티어(threat)만 따른다 — 러버밴딩 금지.
 const ELITE_ICON_Y := 3.04
 const ELITE_NAME_Y := 2.6
-const ELITE_SPRITE_SCALE := 1.18
+# 엘리트 체력바·표식 높이 — 덩치(스케일 1.24~1.34)가 커진 만큼 위로.
+const ELITE_HEALTH_BAR_Y := 2.06
+const ELITE_THREAT_MARKER_Y := 2.34
+const ELITE_SPRITE_SCALE := 1.24
 const ELITE_HEALTH_MULTIPLIER := 2.6
 const ELITE_DAMAGE_MULTIPLIER := 1.4
 const ELITE_SPEED_MULTIPLIER := 1.12
@@ -232,6 +235,19 @@ var player_visibility_factor := 1.0
 var health_bar_background: Sprite3D
 var health_bar_damage_trail: Sprite3D
 var health_bar_fill: Sprite3D
+# ── 체력바 3계층 + TTK 인지 색(2026-09-06) ─────────────────────────
+# size_class: 일반 < 엘리트(×1.6 높이·붉은 테두리) < 보스(가장 두툼).
+# tint: 플레이어의 현재 무기 실효 DPS로 처치 소요 초(TTK)를 추정해
+# 4초↑=주황(tough), 8초↑=붉은색(deadly). 스탯이 아니라 '표시'만 읽는 인지
+# UI라 플레이어 DPS를 봐도 러버밴딩 금지 규칙에 저촉되지 않는다.
+# 갱신은 스폰 직후 첫 프레임 + 2.5초 주기(무기 교체 반영) — 매 프레임 금지.
+var health_bar_size_class := "normal"
+var health_bar_tint := "default"
+var threat_tint_timer := 0.0
+const TTK_TOUGH_SECONDS := 4.0
+const TTK_DEADLY_SECONDS := 8.0
+# 플레이어 실효 DPS 캐시 — 판에 적이 40마리여도 무기 스탯 계산은 1.5초에 한 번.
+static var player_dps_cache: Dictionary = {"dps": 0.0, "expires_msec": 0}
 var reload_indicator: Sprite3D
 var detection_indicator: Sprite3D
 var magazine_size := 1
@@ -280,6 +296,8 @@ var opening_shot_pending := false
 var opening_pressure_time := 0.0
 # 엘리트 상태 — promote_to_elite()가 스폰 직후 한 번만 켠다.
 var elite := false
+# 실제 적용된 덩치 배율(카탈로그 프로필별 1.24~1.34) — 헤드샷 존 높이 계산에 쓴다.
+var elite_sprite_scale := 1.0
 var elite_damage_multiplier := 1.0
 # ── 존 단계·엔드게임 배율(2026-08-30) ─────────────────────────────
 # 플레이어 강화 곡선의 천장을 걷어내면서(무기 +25 이후 복리) 심층 존과
@@ -290,6 +308,9 @@ var elite_damage_multiplier := 1.0
 # 체력은 배율 그대로, 피해는 제곱근에 가깝게(0.42승) 완만히 올린다. 피해까지
 # 같이 부풀리면 심층에서 한 방에 죽어 '어려운 게 아니라 불공평한' 판이 된다.
 var power_scale := 1.0
+# 명시 피해 배율(존 티어 피해 테이블 — enemy_director.get_enemy_damage_scale).
+# 0 이하면 미지정: power_scale에서 0.42승으로 유도한다(구 호출부 호환).
+var power_damage_scale := -1.0
 const POWER_SCALE_DAMAGE_EXPONENT := 0.42
 # 피해 배율 상한. 체력은 수만까지 가도 되지만 적 한 발이 플레이어를 두 방에
 # 보내기 시작하면 그건 난이도가 아니라 사고다(방어구 감산 70%를 감안한 값).
@@ -376,9 +397,13 @@ func set_threat_level(value: float) -> void:
 	threat_level = clampf(value, 0.0, 1.0)
 
 
-func set_power_scale(value: float) -> void:
+func set_power_scale(value: float, damage_value: float = -1.0) -> void:
 	# 스폰 직후에만 부른다(enemy_director._spawn_enemy_squad). 이미 잡힌 체력을
 	# 같은 비율로 다시 세워, configure에 인자를 하나 더 다는 것과 같은 결과를 낸다.
+	# damage_value: 피해 배율을 명시적으로 줄 때(존 티어 피해 테이블). 생략하면
+	# 종전처럼 체력 배율에서 유도(0.42승)한다 — 기존 호출부(보스 엔드게임) 호환.
+	if damage_value > 0.0:
+		power_damage_scale = damage_value
 	var next_scale := maxf(0.1, value)
 	if is_equal_approx(next_scale, power_scale):
 		return
@@ -391,6 +416,9 @@ func set_power_scale(value: float) -> void:
 
 
 func get_power_damage_multiplier() -> float:
+	# 명시 피해 배율(존 티어 테이블)이 있으면 그것을, 없으면 체력 배율에서 유도.
+	if power_damage_scale > 0.0:
+		return minf(POWER_SCALE_DAMAGE_MAX, power_damage_scale)
 	if is_equal_approx(power_scale, 1.0):
 		return 1.0
 	return minf(POWER_SCALE_DAMAGE_MAX, pow(power_scale, POWER_SCALE_DAMAGE_EXPONENT))
@@ -410,6 +438,7 @@ func promote_to_elite(profile = null) -> void:
 	var health_multiplier := float(elite_profile.get("health", ELITE_HEALTH_MULTIPLIER))
 	var sprite_scale := float(elite_profile.get("scale", ELITE_SPRITE_SCALE))
 	elite = true
+	elite_sprite_scale = sprite_scale
 	elite_damage_multiplier = float(elite_profile.get("damage", ELITE_DAMAGE_MULTIPLIER))
 	elite_speed_multiplier = float(elite_profile.get("speed", ELITE_SPEED_MULTIPLIER))
 	health = roundi(float(health) * health_multiplier)
@@ -424,6 +453,36 @@ func promote_to_elite(profile = null) -> void:
 		shadow.scale = Vector3(sprite_scale, 1.0, sprite_scale)
 	if weapon_visual:
 		weapon_visual.scale *= sprite_scale
+	# 엘리트 체력바 — 일반보다 ~1.6배 두툼 + 붉은 테두리. 덩치가 커진 만큼
+	# 머리 위 표식들도 위로 밀어 스프라이트와 겹치지 않게 한다.
+	health_bar_size_class = "elite"
+	if health_bar_background != null:
+		health_bar_background.texture = _get_health_bar_texture(_health_bar_kind("background"))
+		health_bar_background.position.y = ELITE_HEALTH_BAR_Y
+	if health_bar_damage_trail != null:
+		health_bar_damage_trail.texture = _get_health_bar_texture(_health_bar_kind("damage"))
+		health_bar_damage_trail.position.y = ELITE_HEALTH_BAR_Y
+		_apply_health_bar_offset(health_bar_damage_trail)
+		_set_health_bar_ratio(health_bar_damage_trail, damage_trail_ratio)
+	if health_bar_fill != null:
+		health_bar_fill.texture = _get_health_bar_texture(_health_bar_kind("fill"))
+		health_bar_fill.position.y = ELITE_HEALTH_BAR_Y
+		_apply_health_bar_offset(health_bar_fill)
+		_set_health_bar_ratio(health_bar_fill, health_ratio)
+	# TTK 색은 승격으로 체력이 바뀌었으니 다음 프레임에 즉시 다시 계산한다.
+	health_bar_tint = "default"
+	threat_tint_timer = 0.0
+	# 충돌 캡슐도 덩치를 따라간다(각 개체가 _ready에서 자기 셰이프를 만든다 —
+	# 공유 아님). 근접 판정·탄 명중 반경(get_projectile_hit_radius)이 자연 연동.
+	var collision := get_node_or_null("CollisionShape3D") as CollisionShape3D
+	if collision != null and collision.shape is CapsuleShape3D:
+		var capsule := collision.shape as CapsuleShape3D
+		capsule.radius *= sprite_scale
+		capsule.height *= sprite_scale
+	if threat_marker != null:
+		threat_marker.position.y = ELITE_THREAT_MARKER_Y
+	if reload_indicator != null:
+		reload_indicator.position.y = ELITE_THREAT_MARKER_Y
 	# 위협 아이콘 — 경고 삼각형(ui_icon_factory "alert")을 붉게. stealth의
 	# 가시성 페이드(set_player_visibility_factor)에 안 넣어서 상시 표시된다.
 	elite_icon = Sprite3D.new()
@@ -1200,27 +1259,45 @@ func _update_vision_fan_visual() -> void:
 
 
 func _setup_enemy_health_bar() -> void:
-	health_bar_background = _create_health_bar_sprite("background", 0.0072, 112)
+	health_bar_background = _create_health_bar_sprite(_health_bar_kind("background"), 0.0072, 112)
 	health_bar_background.name = "HealthBarBackground"
 	health_bar_background.position.y = HEALTH_BAR_Y
 	add_child(health_bar_background)
-	health_bar_damage_trail = _create_health_bar_sprite("damage", 0.0072, 113)
+	health_bar_damage_trail = _create_health_bar_sprite(_health_bar_kind("damage"), 0.0072, 113)
 	health_bar_damage_trail.name = "HealthBarDamageTrail"
 	health_bar_damage_trail.position.y = HEALTH_BAR_Y
 	health_bar_damage_trail.centered = false
-	health_bar_damage_trail.offset = Vector2(-45, -4)
 	health_bar_damage_trail.region_enabled = true
+	_apply_health_bar_offset(health_bar_damage_trail)
 	add_child(health_bar_damage_trail)
-	health_bar_fill = _create_health_bar_sprite("fill", 0.0072, 114)
+	health_bar_fill = _create_health_bar_sprite(_health_bar_kind("fill"), 0.0072, 114)
 	health_bar_fill.name = "HealthBarFill"
 	health_bar_fill.position.y = HEALTH_BAR_Y
 	health_bar_fill.centered = false
-	health_bar_fill.offset = Vector2(-45, -4)
 	health_bar_fill.region_enabled = true
+	_apply_health_bar_offset(health_bar_fill)
 	add_child(health_bar_fill)
 	_set_health_bar_ratio(health_bar_damage_trail, 1.0)
 	_set_health_bar_ratio(health_bar_fill, 1.0)
 	_update_health_bar_visibility()
+
+
+func _health_bar_kind(role: String) -> String:
+	# 체력바 3계층 — 크기 계열(normal/elite/boss)이 텍스처 이름 접두가 된다.
+	if health_bar_size_class == "normal":
+		return role
+	return "%s_%s" % [health_bar_size_class, role]
+
+
+func _apply_health_bar_offset(bar: Sprite3D) -> void:
+	# centered=false 스프라이트의 좌상단 오프셋 — 텍스처 크기에서 계산한다.
+	# (예전엔 -45,-4 하드코딩이라 텍스처 크기를 바꾸면 바가 흘러내렸다.)
+	if bar == null or bar.texture == null:
+		return
+	bar.offset = Vector2(
+		-float(bar.texture.get_width()) * 0.5,
+		-float(bar.texture.get_height()) * 0.5
+	)
 
 
 func _setup_reload_indicator() -> void:
@@ -1490,9 +1567,48 @@ func _create_health_bar_sprite(kind: String, pixel_size: float, priority: int) -
 func _get_health_bar_texture(kind: String) -> Texture2D:
 	if health_bar_texture_cache.has(kind):
 		return health_bar_texture_cache[kind]
-	var width := 96 if kind == "background" else 90
-	var height := 14 if kind == "background" else 8
-	var radius := 6.0 if kind == "background" else 4.0
+	# kind = "[elite_|boss_]역할[_tough|_deadly]"
+	#   크기 계층: 일반(높이 14) → 엘리트(22, 붉은 테두리) → 보스(26 + 큰 pixel_size)
+	#   tough/deadly: '내 화력 대비 몇 초짜리 상대인가'(TTK) 인지 색 — fill 전용.
+	var size_class := "normal"
+	var role := kind
+	if role.begins_with("elite_"):
+		size_class = "elite"
+		role = role.trim_prefix("elite_")
+	elif role.begins_with("boss_"):
+		size_class = "boss"
+		role = role.trim_prefix("boss_")
+	var tint := "default"
+	if role.ends_with("_tough"):
+		tint = "tough"
+		role = role.trim_suffix("_tough")
+	elif role.ends_with("_deadly"):
+		tint = "deadly"
+		role = role.trim_suffix("_deadly")
+	var width := 96
+	var height := 14
+	var radius := 6.0
+	var border := 1.5
+	# 테두리 색이 곧 계급장 — 일반은 무채색, 엘리트는 이름표와 같은 붉은색,
+	# 보스는 밝은 회백색(금색 보더 금지 — 디자인 언어 규칙).
+	var border_color := Color(0.54, 0.59, 0.6, 0.92)
+	match size_class:
+		"elite":
+			width = 104 if role == "background" else 96
+			height = 22 if role == "background" else 14
+			radius = 7.0 if role == "background" else 5.0
+			border = 2.5
+			border_color = Color(1.0, 0.29, 0.23, 0.95)
+		"boss":
+			width = 128 if role == "background" else 118
+			height = 26 if role == "background" else 16
+			radius = 8.0 if role == "background" else 6.0
+			border = 2.5
+			border_color = Color(0.85, 0.88, 0.88, 0.95)
+		_:
+			width = 96 if role == "background" else 90
+			height = 14 if role == "background" else 8
+			radius = 6.0 if role == "background" else 4.0
 	var image := Image.create(width, height, false, Image.FORMAT_RGBA8)
 	image.fill(Color.TRANSPARENT)
 	for y in height:
@@ -1500,18 +1616,26 @@ func _get_health_bar_texture(kind: String) -> Texture2D:
 			if not _point_in_rounded_rect(Vector2(x + 0.5, y + 0.5), Vector2(width, height), radius):
 				continue
 			var color := Color("#171b1d")
-			if kind == "background":
-				var inner_point := Vector2(x - 1.5, y - 1.5)
-				var inside_inner := _point_in_rounded_rect(inner_point, Vector2(width - 3, height - 3), radius - 1.5)
-				color = Color(0.54, 0.59, 0.6, 0.92) if not inside_inner else Color(0.035, 0.045, 0.05, 0.92)
-			elif kind == "damage":
+			if role == "background":
+				var inner_point := Vector2(x - border, y - border)
+				var inside_inner := _point_in_rounded_rect(
+					inner_point, Vector2(width - border * 2.0, height - border * 2.0), radius - border
+				)
+				color = border_color if not inside_inner else Color(0.035, 0.045, 0.05, 0.92)
+			elif role == "damage":
 				color = Color(1.0, 0.31 + float(y) / float(height) * 0.12, 0.09, 0.96)
-			elif kind == "trail_white":
+			elif role == "trail_white":
 				# 보스 체력바의 감소분 잔상 — 흰색이라 "방금 깎인 양"이 한눈에 읽힌다.
 				color = Color(0.96, 0.96, 0.93, 0.96)
-			elif kind == "poise":
+			elif role == "poise":
 				# 보스 강인도(그로기까지 누적) 게이지 — 노랑. "때리면 뭔가 쌓인다".
 				color = Color(1.0, 0.84 - float(y) / float(height) * 0.1, 0.25, 0.98)
+			elif tint == "deadly":
+				# TTK 8초↑ — 위험 붉은색(#e06c5c 계열). "지금 화력으론 벽이다".
+				color = Color(0.88, 0.44 - float(y) / float(height) * 0.08, 0.36, 0.98)
+			elif tint == "tough":
+				# TTK 4초↑ — 주황(#e3bd67 계열). "오래 걸리는 상대다".
+				color = Color(0.89, 0.75 - float(y) / float(height) * 0.09, 0.4, 0.98)
 			else:
 				color = Color(0.19, 0.82 - float(y) / float(height) * 0.13, 0.38, 0.98)
 			image.set_pixel(x, y, color)
@@ -1540,6 +1664,7 @@ func _set_health_bar_ratio(bar: Sprite3D, ratio: float) -> void:
 func _update_enemy_health_bar(delta: float) -> void:
 	if health_bar_fill == null:
 		return
+	_update_threat_tint(delta)
 	if damage_trail_delay > 0.0:
 		damage_trail_delay = maxf(0.0, damage_trail_delay - delta)
 	else:
@@ -1572,6 +1697,72 @@ func _update_health_bar_visibility() -> void:
 			bar.visible = should_show and health_ratio > 0.001
 
 
+func _update_threat_tint(delta: float) -> void:
+	# 강적 인지 색 갱신 — 스폰 첫 프레임(타이머 0) + 2.5초 주기. 무기 교체·강화가
+	# 반영되는 데 최대 2.5초 걸리지만 그 정도면 충분하다(매 프레임 금지 규칙).
+	threat_tint_timer -= delta
+	if threat_tint_timer > 0.0:
+		return
+	threat_tint_timer = 2.5
+	var next_tint := "default"
+	var dps := _get_player_reference_dps()
+	if dps > 0.5:
+		var effective_health := float(max_health)
+		if elite or bool(get_meta("raid_boss", false)):
+			# 무기 돌파 +70의 엘리트 상대 보너스도 반영 — 이 색은 '내 기준 몇
+			# 초짜리 상대인가'라는 질문에 답하는 표시니까.
+			var game_state := get_node_or_null("/root/GameState")
+			if game_state != null:
+				effective_health /= maxf(
+					1.0, float(game_state.call("get_player_elite_damage_multiplier"))
+				)
+		var estimated_ttk := effective_health / dps
+		if estimated_ttk >= TTK_DEADLY_SECONDS:
+			next_tint = "deadly"
+		elif estimated_ttk >= TTK_TOUGH_SECONDS:
+			next_tint = "tough"
+	if next_tint == health_bar_tint:
+		return
+	health_bar_tint = next_tint
+	var fill_role := "fill"
+	if health_bar_tint != "default":
+		fill_role = "fill_%s" % health_bar_tint
+	health_bar_fill.texture = _get_health_bar_texture(_health_bar_kind(fill_role))
+	_apply_health_bar_offset(health_bar_fill)
+	_set_health_bar_ratio(health_bar_fill, health_ratio)
+
+
+func _get_player_reference_dps() -> float:
+	# 플레이어 장착 무기의 '지속 DPS'(탄창 비우기+재장전 1사이클) 근사.
+	# 오토로드 식별자 금지(--script 콜드 스타트 컴파일 캐스케이드) — 노드 경로 조회.
+	var now := Time.get_ticks_msec()
+	if now < int(player_dps_cache.get("expires_msec", 0)):
+		return float(player_dps_cache.get("dps", 0.0))
+	var dps := 0.0
+	var game_state := get_node_or_null("/root/GameState")
+	if game_state != null:
+		var equipped := str(game_state.get("equipped_weapon_id"))
+		if not equipped.is_empty() and bool(game_state.get("has_ak")):
+			var raw_mods = game_state.get("equipped_weapon_mods")
+			var typed_mods: Array[String] = []
+			if raw_mods is Array:
+				for mod in raw_mods:
+					typed_mods.append(str(mod))
+			var level := int(game_state.call("get_weapon_enhancement_level", equipped))
+			var stats := game_state.call(
+				"build_player_weapon_stats", equipped, typed_mods, level
+			) as Dictionary
+			var damage := float(stats.get("damage", 0.0))
+			var pellets := maxf(1.0, float(stats.get("pellet_count", 1.0)))
+			var interval := maxf(0.05, float(stats.get("fire_interval", 0.12)))
+			var magazine := maxf(1.0, float(stats.get("magazine_size", 30.0)))
+			var reload := maxf(0.0, float(stats.get("reload_time", 2.0)))
+			dps = damage * pellets * magazine / maxf(0.1, magazine * interval + reload)
+	player_dps_cache["dps"] = dps
+	player_dps_cache["expires_msec"] = now + 1500
+	return dps
+
+
 func _register_health_damage() -> void:
 	health_ratio = clampf(float(health) / float(maxi(1, max_health)), 0.0, 1.0)
 	damage_trail_ratio = maxf(damage_trail_ratio, health_ratio)
@@ -1587,7 +1778,8 @@ func get_projectile_hit_center() -> Vector3:
 func get_projectile_hit_radius() -> float:
 	# Keep the logical hit silhouette slightly wider than the feet collider so
 	# stationary actions such as reloading and radio calls remain dependable.
-	return 0.62
+	# 엘리트는 덩치만큼 실루엣도 넓다 — 커 보이는데 스치기만 하면 억울하다.
+	return 0.62 * (elite_sprite_scale if elite else 1.0)
 
 
 # ── 약점(헤드샷) 판정 기준 ─────────────────────────────────────────
@@ -1598,7 +1790,8 @@ func get_feet_world_y() -> float:
 
 
 func get_world_height() -> float:
-	return ENEMY_WORLD_HEIGHT * (ELITE_SPRITE_SCALE if elite else 1.0)
+	# 엘리트는 프로필이 준 실제 덩치 배율만큼 키가 크다 — 헤드샷 존도 같이 오른다.
+	return ENEMY_WORLD_HEIGHT * (elite_sprite_scale if elite else 1.0)
 
 
 func get_head_zone_ratio() -> float:
@@ -2468,9 +2661,14 @@ func _throw_grenade() -> void:
 	var grenade := Node3D.new()
 	grenade.name = "EnemyGrenade"
 	grenade.set_script(GRENADE_PROJECTILE)
+	# 수류탄도 존 티어·엘리트 배율을 탄다 — 탄환·근접만 오르고 폭발만 1티어
+	# 값이면 심층의 척탄병이 가장 무른 적이 된다.
+	var scaled_grenade_damage := maxi(1, roundi(
+		float(GRENADE_DAMAGE) * elite_damage_multiplier * get_power_damage_multiplier()
+	))
 	grenade.call(
 		"configure", self, target, start, grenade_target_position,
-		GRENADE_DAMAGE, GRENADE_BLAST_RADIUS, 2.45
+		scaled_grenade_damage, GRENADE_BLAST_RADIUS, 2.45
 	)
 	get_parent().add_child(grenade)
 	grenade.global_position = start

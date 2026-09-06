@@ -32,7 +32,7 @@ const POOLS := {
 		},
 		{
 			"id": "rust_fang", "name": "녹슨 이빨", "kind": "melee", "weapon": "",
-			"health": 3.0, "damage": 1.7, "speed": 1.18, "scale": 1.26,
+			"health": 3.0, "damage": 1.7, "speed": 1.18, "scale": 1.32,
 			"barks": {
 				"engage": ["뛰어. 내가 더 빠르다.", "냄새 좋다, 고양이."],
 				"hit": ["긁혔네. 더 해봐."],
@@ -127,7 +127,7 @@ const POOLS := {
 		},
 		{
 			"id": "fang", "name": "송곳니", "kind": "melee", "weapon": "",
-			"health": 3.8, "damage": 2.0, "speed": 1.22, "scale": 1.28,
+			"health": 3.8, "damage": 2.0, "speed": 1.22, "scale": 1.34,
 			"barks": {
 				"engage": ["뛰지 마. 더 재밌어지니까.", "이빨부터 간다."],
 				"hit": ["긁혔군."],
@@ -158,7 +158,7 @@ const POOLS := {
 		},
 		{
 			"id": "grey_hand", "name": "회색 손", "kind": "melee", "weapon": "",
-			"health": 4.2, "damage": 2.1, "speed": 1.22, "scale": 1.28,
+			"health": 4.2, "damage": 2.1, "speed": 1.22, "scale": 1.34,
 			"barks": {
 				"engage": ["손 하나면 충분하다.", "이 손으로 문을 잠갔다."],
 				"hit": ["아직 손은 멀쩡하다."],

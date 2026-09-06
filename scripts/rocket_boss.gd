@@ -8,10 +8,14 @@ const BOSS_DIRECTIONS := {
 	"n": "up", "ne": "up_right", "e": "right", "se": "down_right",
 	"s": "down", "sw": "down_left", "w": "left", "nw": "up_left",
 }
-const BOSS_SPRITE_POSITION := Vector3(0.0, 0.68, 0.0)
+# 보스 덩치 — 일반(0.0092)의 약 1.57배. 엘리트(최대 1.34배)와 실루엣이 확실히
+# 갈린다. 스프라이트 중심 = 발(-0.7) + 이미지 반높이(256×픽셀/2).
+const BOSS_SPRITE_PIXEL_SIZE := 0.0144
+const BOSS_SPRITE_POSITION := Vector3(0.0, 1.14, 0.0)
 const ROCKET_MAGAZINE_SIZE := 4
 const ROCKET_RELOAD_DURATION := 3.25
-const ROCKET_DAMAGE := 36
+# 36→42(2026-09-06 "보스가 쉽다"): 예고를 늘린 만큼 맞으면 확실히 아프게.
+const ROCKET_DAMAGE := 42
 const ROCKET_BLAST_RADIUS := 2.65
 const ROCKET_AIM_TIME := 0.58
 const ROCKET_SHOT_RECOVERY := 0.72
@@ -23,8 +27,30 @@ const MINE_PATTERN_RETREAT_DISTANCE := 10.2
 const MINE_PATTERN_APPROACH_DURATION := 0.42
 const MINE_PATTERN_RETREAT_DURATION := 0.5
 const MINE_DEPLOY_INTERVAL := 0.14
-const MINE_DAMAGE := 38
+const MINE_DAMAGE := 44
 const MINE_BLAST_RADIUS := 3.1
+# ── 존 티어별 패턴 변형(2026-09-06) ────────────────────────────────
+# 보스 1종(로켓 약탈대장)이 5개 존을 재탕하는 동안, 티어가 오르면 패턴이
+# '추가'된다 — 위로 갈수록 같은 보스가 다른 싸움이 되도록.
+#   T1  기본: 단발 로켓 · 후퇴로 차단 지뢰 반원 · 접근/이탈 대시
+#   T2+ 로켓 3연사 부채꼴(조준 예고가 더 길고 "!!") — 옆으로 크게 굴러야 산다
+#   T3+ 지뢰 반원 → 완전 포위 링(+3발) — 틈으로 굴러 나가거나 신관 0.32초 강행 돌파
+#   T4+ 분노(40%↓) 시 돌진+충격파 — 경로 화살표·도착점 원 예고, 경로에서 비켜야 함
+#   T5  2페이즈(50%↓): 호위 2 소환 + 패턴 가속(쿨다운·조준 ×0.78)
+# 피해도 티어를 따라 오른다 — 존 티어만 본다(러버밴딩 금지).
+const BOSS_TIER_DAMAGE := {1: 1.0, 2: 1.18, 3: 1.38, 4: 1.6, 5: 1.85}
+const VOLLEY_ROCKET_COUNT := 3
+const VOLLEY_FAN_DEGREES := 13.0
+# 3연사는 조준 예고가 1.4배 길다 — 더 아픈 패턴일수록 더 일찍 알려 준다.
+const VOLLEY_AIM_MULTIPLIER := 1.4
+const VOLLEY_MIN_DISTANCE := 9.0
+const CHARGE_WINDUP := 0.62
+const CHARGE_DASH_DURATION := 0.5
+const CHARGE_OVERSHOOT := 3.2
+const SHOCKWAVE_RADIUS := 3.2
+const SHOCKWAVE_DAMAGE := 30
+const PHASE_TWO_HEALTH_RATIO := 0.5
+const PHASE_TWO_PATTERN_SPEED := 0.78
 # 강인도: 매 피격 경직 대신, 최대 체력 대비 누적 피해가 문턱을 넘을 때만
 # 길게 그로기(보상 창). 총만 있으면 스턴락으로 무력화되던 문제의 해법.
 const POISE_BREAK_RATIO := 0.16
@@ -34,6 +60,17 @@ const ENRAGE_HEALTH_RATIO := 0.4
 # 위험도 하드캡 처형자(회수반)용 배율 — 기본 1.0, enemy_director가 처형자를
 # 만들 때만 올린다(36 → 약 65: 플레이어를 2~3방에 보내는 최후통첩 화력).
 var damage_multiplier := 1.0
+# ── 티어 패턴 상태(2026-09-06) ─────────────────────────────────────
+# boss_tier: 스폰 시 존의 stage_tier로 한 번 결정(러버밴딩 금지 — 이후 불변).
+var boss_tier := 1
+var tier_damage_scale := 1.0
+# 패턴 템포 — 2페이즈(티어 5·체력 50%)에서 0.78로 줄어 조준·쿨다운이 빨라진다.
+var pattern_speed := 1.0
+var phase_two_triggered := false
+var charge_cooldown := 0.0
+var charge_target_point := Vector3.ZERO
+# 3연사 부채꼴(티어 2+) — 조준 시작 때 정해 두고 발사 순간 소비한다.
+var volley_pending := false
 var boss_action := "combat"
 var boss_action_elapsed := 0.0
 var boss_action_duration := 0.0
@@ -77,14 +114,25 @@ func configure_rocket_boss(target_body: CharacterBody3D, initial_threat: float) 
 				"get_raid_zone", str(game_state.get("selected_raid_zone"))
 			) as Dictionary
 			zone_tier = clampi(int(zone.get("stage_tier", 1)), 1, 5)
-	# 보스 체력 곡선(2026-08-30 2차). 앞 세 티어는 완만한 선형(+62%/티어),
+	boss_tier = zone_tier
+	tier_damage_scale = float(BOSS_TIER_DAMAGE.get(zone_tier, 1.0))
+	# 보스 체력 곡선(2026-09-06 3차). 앞 세 티어는 완만한 선형(+85%/티어),
 	# 티어 4·5는 일반 적과 같은 단계 배율(×4.66/단계)을 그 위에 곱한다 —
 	# 기준이 갈리면 "잡몹보다 무른 보스"가 나온다.
-	#   t1 ×1.0(1,235~1,820 불변) · t2 ×1.62 · t3 ×2.24
-	#   t4 ×10.4(≈20,800) · t5 ×48.6(≈97,200)
-	# 존별 기대 강화(존4 +45 · 존5 +65)에서 둘 다 약 56발 — 두 탄창짜리 싸움이다.
-	var linear_multiplier := 1.0 + float(mini(zone_tier, 3) - 1) * 0.62
-	var stage_multiplier := pow(4.66, float(maxi(0, zone_tier - 3)))
+	#   t1 ×1.0(1,235~1,820 불변) · t2 ×1.85 · t3 ×2.7
+	#   t4 ×12.6(≈22,700) · t5 ×58.7(≈98,900)
+	# +62%→+85%(3차): 티어 패턴이 늘어난 만큼 싸움도 길어야 패턴이 다 나온다.
+	# 실측(boss_tier_sim) — 중반(을지로 AKM+25·명중 55%) 사격 20.9초, 회피·재장전
+	# 다운타임을 얹으면 보스전 30~35초. 존4·5도 기대 강화(+45/+65)에서 약 65발,
+	# 두 탄창 남짓이라 "잡몹보다 무른 보스"는 없다.
+	var linear_multiplier := 1.0 + float(mini(zone_tier, 3) - 1) * 0.85
+	# 4.66^(티어-3)은 일반 적과 기준을 맞추려던 식인데, 그 일반 적 배율 자체가
+	# 강화 곡선에 뒤처져 있었다(위 ENEMY_STAGE_HEALTH_MULTIPLIERS 주석 참조).
+	# 보스도 같은 증상 — 기대 장비 기준 T1 52발 · T2 70발 · T4 52발 · T5 52발로,
+	# 마지막 보스가 첫 보스와 같은 난이도였다. 최종장이 가장 어려워야 하므로
+	# T4는 T2·T3 수준(×1.35), T5는 그보다 위(×1.5)로 올린다.
+	const STAGE_MULTIPLIER := {1: 1.0, 2: 1.0, 3: 1.0, 4: 6.3, 5: 32.6}
+	var stage_multiplier := float(STAGE_MULTIPLIER.get(zone_tier, 1.0))
 	var tier_multiplier := linear_multiplier * stage_multiplier
 	# 기준: 유저 신고 "아무리 때려도 안 줄어든다". 예전 (2400+위협×1400)×(1+0.45×(티어-1))은
 	# 종로 2,610 / 남산 ~7,900 — AK+0 30dmg·실명중 50%면 첫 보스에만 3탄창 넘게 들었다.
@@ -110,30 +158,42 @@ func _ready() -> void:
 	add_to_group("rocket_boss")
 	sprite.sprite_frames = _create_boss_sprite_frames()
 	sprite.position = BOSS_SPRITE_POSITION
-	sprite.pixel_size = 0.0108
+	sprite.pixel_size = BOSS_SPRITE_PIXEL_SIZE
 	sprite.render_priority = 36
+	# 덩치(×1.33)를 따라 충돌 캡슐·그림자도 커진다 — 실루엣과 판정이 같이 간다.
 	var collision := get_node_or_null("CollisionShape3D") as CollisionShape3D
 	if collision != null and collision.shape is CapsuleShape3D:
 		var shape := collision.shape as CapsuleShape3D
-		shape.radius = 0.52
-		shape.height = 1.72
+		shape.radius = 0.64
+		shape.height = 2.2
 	if shadow != null:
-		shadow.scale = Vector3(1.45, 1.0, 1.45)
+		shadow.scale = Vector3(1.85, 1.0, 1.85)
+	# 체력바 3계층의 최상위 — 가장 두툼한 'boss' 텍스처(회백 테두리) + 큰 pixel_size.
+	health_bar_size_class = "boss"
 	for health_node in [health_bar_background, health_bar_damage_trail, health_bar_fill]:
 		if health_node != null:
-			health_node.position.y = 2.78
-			# 보스 바는 일반 적보다 1.5배 크게 — 멀리서도 "줄어드는 것"이 보여야 한다.
+			health_node.position.y = 3.4
+			# 보스 바는 일반 적보다 큰 pixel_size — 멀리서도 "줄어드는 것"이 보여야 한다.
 			health_node.pixel_size = 0.0108
+	if health_bar_background != null:
+		health_bar_background.texture = _get_health_bar_texture(_health_bar_kind("background"))
+	if health_bar_fill != null:
+		health_bar_fill.texture = _get_health_bar_texture(_health_bar_kind("fill"))
+		_apply_health_bar_offset(health_bar_fill)
+		_set_health_bar_ratio(health_bar_fill, health_ratio)
 	if health_bar_damage_trail != null:
 		# 감소분 잔상은 흰색, 0.4초 머문 뒤 따라 줄어든다(일반 적은 주황·0.28초).
-		health_bar_damage_trail.texture = _get_health_bar_texture("trail_white")
+		health_bar_damage_trail.texture = _get_health_bar_texture(_health_bar_kind("trail_white"))
+		_apply_health_bar_offset(health_bar_damage_trail)
+		_set_health_bar_ratio(health_bar_damage_trail, damage_trail_ratio)
 	damage_trail_delay_seconds = 0.4
 	_setup_poise_bar()
 	if reload_indicator != null:
-		reload_indicator.position.y = 3.12
+		reload_indicator.position.y = 3.9
 	if threat_marker != null:
-		threat_marker.position.y = 3.2
+		threat_marker.position.y = 3.78
 		threat_marker.font_size = 88
+	charge_cooldown = 3.5
 	_play_animation()
 
 
@@ -141,6 +201,7 @@ func _physics_process(delta: float) -> void:
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
 	boss_dash_cooldown = maxf(0.0, boss_dash_cooldown - delta)
 	mine_pattern_cooldown = maxf(0.0, mine_pattern_cooldown - delta)
+	charge_cooldown = maxf(0.0, charge_cooldown - delta)
 	_update_alert_marker(delta)
 	_update_enemy_health_bar(delta)
 	_update_boss_bars(delta)
@@ -212,6 +273,12 @@ func _physics_process(delta: float) -> void:
 		"mine_deploy":
 			_update_mine_deploy(delta, direction)
 			return
+		"charge_windup":
+			_update_charge_windup(delta)
+			return
+		"charge_dash":
+			_update_charge_dash(delta)
+			return
 		"aim":
 			_update_rocket_aim(delta, direction)
 			return
@@ -226,6 +293,18 @@ func _physics_process(delta: float) -> void:
 			_update_boss_reload(delta, direction)
 			return
 
+	# 티어 4+ 분노 돌진 — 경로 화살표·도착점 원을 먼저 그리고(0.62초) 관통 돌진,
+	# 도착점에서 충격파. 예고 시간 동안 경로에서 옆으로 비키는 게 정답이다.
+	if (
+		boss_tier >= 4
+		and _boss_enraged()
+		and charge_cooldown <= 0.0
+		and has_line_of_sight
+		and distance >= 4.5
+		and distance <= 20.0
+	):
+		_start_charge(direction, distance)
+		return
 	if (
 		mine_pattern_cooldown <= 0.0
 		and has_line_of_sight
@@ -243,7 +322,7 @@ func _physics_process(delta: float) -> void:
 		_start_boss_dash(dash_direction, dash_distance)
 		return
 	if has_line_of_sight and distance <= 25.0 and attack_cooldown <= 0.0:
-		_start_rocket_aim()
+		_start_rocket_aim(distance)
 		return
 
 	var movement_direction := direction
@@ -289,18 +368,18 @@ func _poise_threshold() -> float:
 
 func _setup_poise_bar() -> void:
 	# 체력바 바로 아래, 얇은 노란 게이지. 그로기 문턱까지 누적 피해가 쌓이는 게 보인다.
-	poise_bar_background = _create_health_bar_sprite("background", 0.0108, 112)
+	poise_bar_background = _create_health_bar_sprite(_health_bar_kind("background"), 0.0108, 112)
 	poise_bar_background.name = "PoiseBarBackground"
-	poise_bar_background.position.y = 2.62
+	poise_bar_background.position.y = 3.14
 	poise_bar_background.scale = Vector3(1.0, 0.42, 1.0)
 	add_child(poise_bar_background)
-	poise_bar_fill = _create_health_bar_sprite("poise", 0.0108, 114)
+	poise_bar_fill = _create_health_bar_sprite(_health_bar_kind("poise"), 0.0108, 114)
 	poise_bar_fill.name = "PoiseBarFill"
-	poise_bar_fill.position.y = 2.62
+	poise_bar_fill.position.y = 3.14
 	poise_bar_fill.scale = Vector3(1.0, 0.42, 1.0)
 	poise_bar_fill.centered = false
-	poise_bar_fill.offset = Vector2(-45, -4)
 	poise_bar_fill.region_enabled = true
+	_apply_health_bar_offset(poise_bar_fill)
 	add_child(poise_bar_fill)
 	_set_health_bar_ratio(poise_bar_fill, 0.0)
 
@@ -336,6 +415,7 @@ func _boss_enraged() -> bool:
 func _check_enrage() -> void:
 	# 체력 40% 이하: 조준이 빨라지고 지뢰·대시 간격이 줄어든다. 마무리
 	# 구간이 소모전이 아니라 가장 위험한 구간이 되도록.
+	_check_phase_two()
 	if enrage_triggered or not _boss_enraged():
 		return
 	enrage_triggered = true
@@ -348,18 +428,29 @@ func _check_enrage() -> void:
 	boss_dash_cooldown = minf(boss_dash_cooldown, 0.8)
 
 
-func _start_rocket_aim() -> void:
+func _start_rocket_aim(distance: float = 12.0) -> void:
 	boss_action = "aim"
 	boss_action_elapsed = 0.0
 	aim_line_shown = false
 	_clear_telegraphs()
-	boss_action_duration = ROCKET_AIM_TIME * (0.72 if _boss_enraged() else 1.0)
+	# 티어 2+ 3연사 부채꼴 — 멀리 있을 때(9m+) 탄창이 받쳐 주면 높은 확률로.
+	# 더 아픈 패턴이니 조준 예고가 1.4배 길고 표식도 "!!"다.
+	volley_pending = (
+		boss_tier >= 2
+		and magazine_ammo >= VOLLEY_ROCKET_COUNT
+		and distance >= VOLLEY_MIN_DISTANCE
+		and boss_rng.randf() < 0.65
+	)
+	var aim_time := ROCKET_AIM_TIME * (0.72 if _boss_enraged() else 1.0) * pattern_speed
+	if volley_pending:
+		aim_time *= VOLLEY_AIM_MULTIPLIER
+	boss_action_duration = aim_time
 	velocity = Vector3.ZERO
 	_set_motion_state("attack")
-	threat_marker.text = "!"
-	threat_marker.modulate = Color("#ff6a2d")
+	threat_marker.text = "!!" if volley_pending else "!"
+	threat_marker.modulate = Color("#ff4d2e") if volley_pending else Color("#ff6a2d")
 	threat_marker.visible = true
-	threat_marker.scale = Vector3.ONE * 1.6
+	threat_marker.scale = Vector3.ONE * (1.9 if volley_pending else 1.6)
 
 
 func _update_rocket_aim(delta: float, direction: Vector3) -> void:
@@ -369,19 +460,88 @@ func _update_rocket_aim(delta: float, direction: Vector3) -> void:
 	threat_marker.visible = true
 	threat_marker.scale = Vector3.ONE * (1.35 + sin(boss_action_elapsed * 18.0) * 0.16)
 	# 조준선 예고 — 사수와 같은 규격(발사 0.35s 전 깜빡이는 선 + 총구 반짝).
+	# 3연사는 그 위에 부채꼴 착탄 원 3개를 겹친다 — 어디로 굴러야 하는지 보이게.
 	var remaining := boss_action_duration - boss_action_elapsed
-	if not aim_line_shown and remaining <= RANGED_AIM_LINE_LEAD + 0.0001:
+	var aim_lead := RANGED_AIM_LINE_LEAD * (VOLLEY_AIM_MULTIPLIER if volley_pending else 1.0)
+	if not aim_line_shown and remaining <= aim_lead + 0.0001:
 		pending_attack_direction = direction
 		_show_aim_line_telegraph(remaining)
+		if volley_pending:
+			_show_volley_telegraph(direction, remaining)
 	if boss_action_elapsed < boss_action_duration:
 		return
 	threat_marker.visible = false
 	_clear_telegraphs()
-	_fire_rocket(direction)
+	if volley_pending:
+		_fire_rocket_volley(direction)
+	else:
+		_fire_rocket(direction)
+	volley_pending = false
 	boss_action = "recovery"
 	boss_action_elapsed = 0.0
 	boss_action_duration = ROCKET_SHOT_RECOVERY
-	attack_cooldown = ROCKET_SHOT_RECOVERY
+	attack_cooldown = ROCKET_SHOT_RECOVERY * pattern_speed
+
+
+func _volley_target_points(direction: Vector3) -> Array[Vector3]:
+	# 부채꼴 착탄점 — 가운데는 리드 사격, 좌우는 보스 기준 ±13도 회전.
+	var points: Array[Vector3] = []
+	var lead_position := global_position + direction * 12.0
+	if is_instance_valid(target):
+		lead_position = target.global_position + target.velocity * 0.24
+	lead_position.y = 0.1
+	var to_center := lead_position - global_position
+	to_center.y = 0.0
+	for index in VOLLEY_ROCKET_COUNT:
+		var fan_step := float(index) - float(VOLLEY_ROCKET_COUNT - 1) * 0.5
+		var angle := deg_to_rad(VOLLEY_FAN_DEGREES) * fan_step
+		var point := global_position + to_center.rotated(Vector3.UP, angle)
+		point.y = 0.1
+		points.append(point)
+	return points
+
+
+func _show_volley_telegraph(direction: Vector3, remaining: float) -> void:
+	if get_parent() == null:
+		return
+	for point in _volley_target_points(direction):
+		var circle := TELEGRAPH.show_landing_circle(
+			Vector3(point.x, get_feet_world_y(), point.z),
+			ROCKET_BLAST_RADIUS, maxf(0.05, remaining), get_parent()
+		)
+		if circle != null:
+			telegraph_nodes.append(circle)
+
+
+func _fire_rocket_volley(direction: Vector3) -> void:
+	if not is_instance_valid(target):
+		return
+	var points := _volley_target_points(direction)
+	for point in points:
+		if magazine_ammo <= 0:
+			break
+		magazine_ammo -= 1
+		rocket_shots_fired += 1
+		var aim_direction := point - global_position
+		aim_direction.y = 0.0
+		aim_direction = aim_direction.normalized() if aim_direction.length_squared() > 0.01 else direction
+		var rocket := Node3D.new()
+		rocket.name = "BossRocket_%d" % rocket_shots_fired
+		rocket.set_script(ROCKET_PROJECTILE)
+		rocket.call(
+			"configure", self, target,
+			global_position + aim_direction * 0.72 + Vector3(0.0, 1.18, 0.0),
+			point,
+			roundi(
+				float(ROCKET_DAMAGE) * damage_multiplier * tier_damage_scale
+				* get_power_damage_multiplier()
+			),
+			ROCKET_BLAST_RADIUS
+		)
+		get_parent().add_child(rocket)
+	_spawn_enemy_muzzle_flash(direction)
+	_play_enemy_gunshot()
+	_play_attack_feedback()
 
 
 func _fire_rocket(direction: Vector3) -> void:
@@ -399,7 +559,10 @@ func _fire_rocket(direction: Vector3) -> void:
 		"configure", self, target,
 		global_position + direction * 0.72 + Vector3(0.0, 1.18, 0.0),
 		lead_position,
-		roundi(float(ROCKET_DAMAGE) * damage_multiplier * get_power_damage_multiplier()),
+		roundi(
+			float(ROCKET_DAMAGE) * damage_multiplier * tier_damage_scale
+			* get_power_damage_multiplier()
+		),
 		ROCKET_BLAST_RADIUS
 	)
 	get_parent().add_child(rocket)
@@ -447,7 +610,7 @@ func _start_boss_dash(direction: Vector3, distance: float) -> void:
 	boss_dash_end.y = global_position.y
 	boss_dash_cooldown = (
 		boss_rng.randf_range(1.5, 2.3) if _boss_enraged() else boss_rng.randf_range(2.4, 3.6)
-	)
+	) * pattern_speed
 	_set_facing_from_world_direction(direction)
 	_set_motion_state("walk")
 
@@ -456,10 +619,14 @@ func _start_mine_pattern(direction: Vector3, distance: float) -> void:
 	mine_target_snapshot = target.global_position + target.velocity * 0.34
 	mine_target_snapshot.y = 0.1
 	mine_deploy_count = boss_rng.randi_range(5, 7) if _boss_enraged() else boss_rng.randi_range(4, 6)
+	# 티어 3+: 반원이 아니라 완전 포위 링(+3발) — 걸어 나갈 틈이 좁아진다.
+	# 틈으로 굴러 빠지거나, 신관 0.32초를 믿고 강행 돌파하는 게 답.
+	if boss_tier >= 3:
+		mine_deploy_count += 3
 	mines_deployed_this_pattern = 0
 	mine_pattern_cooldown = (
 		boss_rng.randf_range(5.5, 7.5) if _boss_enraged() else boss_rng.randf_range(8.5, 11.5)
-	)
+	) * pattern_speed
 	boss_action = "mine_approach"
 	boss_action_elapsed = 0.0
 	boss_action_duration = MINE_PATTERN_APPROACH_DURATION
@@ -526,8 +693,14 @@ func _deploy_boss_mine(index: int) -> void:
 	# 예전엔 플레이어 주변에 무작위로 흩뿌려서 그냥 걸어 나가면 그만이었다.
 	# 이제는 플레이어 뒤쪽 반원에 깔아 후퇴로를 끊는다. 앞으로 나오거나
 	# 지뢰 사이 틈을 노려 굴러 빠져나가야 한다.
+	# 티어 3+에선 반원이 아니라 완전 포위 링 — 등분 각으로 빙 두른다.
 	var away_from_boss := forward  # 보스 -> 플레이어 방향 = 플레이어의 후퇴 방향
 	var arc_angle := lerpf(-1.15, 1.15, fraction) + boss_rng.randf_range(-0.1, 0.1)
+	if boss_tier >= 3:
+		arc_angle = (
+			TAU * float(index) / float(maxi(1, mine_deploy_count))
+			+ boss_rng.randf_range(-0.08, 0.08)
+		)
 	var spread_direction := away_from_boss.rotated(Vector3.UP, arc_angle)
 	var spread_distance := boss_rng.randf_range(2.6, 4.4)
 	var landing_position := mine_target_snapshot + spread_direction * spread_distance
@@ -541,7 +714,10 @@ func _deploy_boss_mine(index: int) -> void:
 		target,
 		global_position + forward * 0.58 + Vector3(0.0, 0.92, 0.0),
 		landing_position,
-		roundi(float(MINE_DAMAGE) * damage_multiplier * get_power_damage_multiplier()),
+		roundi(
+			float(MINE_DAMAGE) * damage_multiplier * tier_damage_scale
+			* get_power_damage_multiplier()
+		),
 		MINE_BLAST_RADIUS
 	)
 	get_parent().add_child(mine)
@@ -572,6 +748,169 @@ func _update_boss_dash(delta: float) -> void:
 		else:
 			boss_action = "combat"
 			_set_motion_state("idle")
+
+
+# ── 티어 4+ 분노 돌진 + 충격파 ────────────────────────────────────
+func _start_charge(direction: Vector3, distance: float) -> void:
+	boss_action = "charge_windup"
+	boss_action_elapsed = 0.0
+	boss_action_duration = CHARGE_WINDUP * pattern_speed
+	charge_cooldown = boss_rng.randf_range(6.5, 9.0) * pattern_speed
+	velocity = Vector3.ZERO
+	charge_target_point = global_position + direction * (distance + CHARGE_OVERSHOOT)
+	charge_target_point.y = global_position.y
+	_set_facing_from_world_direction(direction)
+	_set_motion_state("attack")
+	threat_marker.text = "!!"
+	threat_marker.modulate = Color("#ff4d2e")
+	threat_marker.visible = true
+	threat_marker.scale = Vector3.ONE * 2.1
+	# 예고: 경로 바닥 화살표 + 도착점 충격파 반경 원. 예고 시간 + 돌진 시간
+	# 내내 떠 있는다 — "경로에서 비켜라"가 그림으로 읽히게.
+	_clear_telegraphs()
+	var hold := boss_action_duration + CHARGE_DASH_DURATION
+	var ground := get_feet_world_y()
+	var arrow := TELEGRAPH.show_dash_arrow(
+		Vector3(global_position.x, ground, global_position.z),
+		direction, hold, get_parent(), distance + CHARGE_OVERSHOOT
+	)
+	if arrow != null:
+		telegraph_nodes.append(arrow)
+	var circle := TELEGRAPH.show_landing_circle(
+		Vector3(charge_target_point.x, ground, charge_target_point.z),
+		SHOCKWAVE_RADIUS, hold, get_parent()
+	)
+	if circle != null:
+		telegraph_nodes.append(circle)
+	_notify_telegraph("boss_charge")
+	SFX.play("alert_sting", global_position)
+
+
+func _update_charge_windup(delta: float) -> void:
+	boss_action_elapsed += delta
+	velocity = Vector3.ZERO
+	threat_marker.visible = true
+	threat_marker.scale = Vector3.ONE * (1.8 + sin(boss_action_elapsed * 22.0) * 0.22)
+	var charge_direction := charge_target_point - global_position
+	charge_direction.y = 0.0
+	if charge_direction.length_squared() > 0.01:
+		_set_facing_from_world_direction(charge_direction.normalized())
+	if boss_action_elapsed < boss_action_duration:
+		return
+	boss_action = "charge_dash"
+	boss_action_elapsed = 0.0
+	boss_action_duration = CHARGE_DASH_DURATION
+	boss_dash_start = global_position
+	boss_dash_end = charge_target_point
+	threat_marker.visible = false
+	_set_motion_state("walk")
+
+
+func _update_charge_dash(delta: float) -> void:
+	boss_action_elapsed += delta
+	var progress := clampf(boss_action_elapsed / boss_action_duration, 0.0, 1.0)
+	# 돌진은 이즈-인 — 출발이 빨라야 '피했다'는 판단이 예고 시간에 갈린다.
+	var eased := 1.0 - pow(1.0 - progress, 2.0)
+	var desired_position := boss_dash_start.lerp(boss_dash_end, eased)
+	var collision := move_and_collide(desired_position - global_position)
+	if collision == null and progress < 1.0:
+		return
+	velocity = Vector3.ZERO
+	_clear_telegraphs()
+	_detonate_shockwave()
+	boss_action = "recovery"
+	boss_action_elapsed = 0.0
+	boss_action_duration = 0.7
+	attack_cooldown = 0.6
+	_set_motion_state("idle")
+
+
+func _detonate_shockwave() -> void:
+	# 도착점 충격파 — 예고 원(SHOCKWAVE_RADIUS)과 정확히 같은 반경. 속이지 않는다.
+	var shockwave_damage := roundi(
+		float(SHOCKWAVE_DAMAGE) * damage_multiplier * tier_damage_scale
+		* get_power_damage_multiplier()
+	)
+	if is_instance_valid(target):
+		var offset := target.global_position - global_position
+		offset.y = 0.0
+		var target_distance := offset.length()
+		if target_distance <= SHOCKWAVE_RADIUS:
+			var hit_direction := offset.normalized() if target_distance > 0.01 else Vector3.RIGHT
+			if target.has_method("take_hostile_hit"):
+				if target.get_method_argument_count("take_hostile_hit") >= 5:
+					target.call(
+						"take_hostile_hit", shockwave_damage, hit_direction,
+						self, global_position, "blast"
+					)
+				else:
+					target.call("take_hostile_hit", shockwave_damage, hit_direction, self)
+			elif target.has_method("take_hit"):
+				target.call("take_hit", shockwave_damage, hit_direction)
+	_spawn_hit_burst(Vector3.UP, Color("#ff9b45"), 24, 0.6)
+	_spawn_shockwave_ring()
+	# 지면 타격 굉음 — 산탄 저음이 폭발성 소리 중 가장 가깝다(SOUNDS에 전용 폭음 없음).
+	SFX.play("shotgun_shot", global_position, -2.0, 0.7)
+	_play_attack_feedback()
+
+
+func _spawn_shockwave_ring() -> void:
+	# 바닥에서 퍼지는 주황 링 — 충격파가 '거기까지 닿았다'를 잔상으로 남긴다.
+	if get_parent() == null:
+		return
+	var ring := MeshInstance3D.new()
+	ring.name = "BossShockwaveRing"
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.5
+	ring_mesh.outer_radius = 0.62
+	ring_mesh.rings = 48
+	ring_mesh.ring_segments = 8
+	var material := StandardMaterial3D.new()
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(1.0, 0.61, 0.27, 0.85)
+	material.emission_enabled = true
+	material.emission = Color("#ff9b45")
+	material.emission_energy_multiplier = 3.5
+	ring_mesh.material = material
+	ring.mesh = ring_mesh
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	get_parent().add_child(ring)
+	ring.global_position = Vector3(global_position.x, get_feet_world_y() + 0.06, global_position.z)
+	ring.scale = Vector3(0.3, 1.0, 0.3)
+	var tween := ring.create_tween().set_parallel(true)
+	var end_scale := SHOCKWAVE_RADIUS / 0.62
+	tween.tween_property(ring, "scale", Vector3(end_scale, 1.0, end_scale), 0.32).set_trans(
+		Tween.TRANS_QUAD
+	).set_ease(Tween.EASE_OUT)
+	tween.tween_property(ring, "transparency", 1.0, 0.34)
+	tween.chain().tween_callback(ring.queue_free)
+
+
+# ── 티어 5 · 2페이즈(체력 50%) ────────────────────────────────────
+func _check_phase_two() -> void:
+	# 호위 2명 소환 + 패턴 가속(×0.78). 소환은 enemy_director를 거친다 —
+	# 존 배율·메타·채터가 일반 스폰과 같은 길을 타야 한다.
+	if phase_two_triggered or boss_tier < 5:
+		return
+	if health > roundi(float(max_health) * PHASE_TWO_HEALTH_RATIO):
+		return
+	phase_two_triggered = true
+	pattern_speed = PHASE_TWO_PATTERN_SPEED
+	mine_pattern_cooldown = minf(mine_pattern_cooldown, 1.4)
+	boss_dash_cooldown = minf(boss_dash_cooldown, 0.6)
+	charge_cooldown = minf(charge_cooldown, 2.2)
+	_spawn_hit_burst(Vector3.UP, Color("#ff4d2e"), 28, 0.8)
+	threat_marker.text = "!!"
+	threat_marker.modulate = Color("#ff4d2e")
+	threat_marker.visible = true
+	threat_marker.scale = Vector3.ONE * 2.2
+	SFX.play("reinforce_alarm", global_position)
+	var scene := _raid_host()
+	if scene != null:
+		var director = scene.get("enemy_director")
+		if director != null and director.has_method("spawn_boss_guard_squad"):
+			director.call("spawn_boss_guard_squad", global_position, 2)
 
 
 func _create_boss_sprite_frames() -> SpriteFrames:
@@ -608,12 +947,12 @@ func _update_weapon_visual() -> void:
 	if weapon_visual == null:
 		return
 	var direction := facing_world_direction.normalized()
-	weapon_visual.position = direction * 0.58 + Vector3(0, 0.74, 0)
+	weapon_visual.position = direction * 0.72 + Vector3(0, 0.96, 0)
 	var screen_direction := Vector2(direction.x - direction.z, direction.x + direction.z).normalized()
 	weapon_visual.flip_h = screen_direction.x < -0.01
 	var source_angle := PI if weapon_visual.flip_h else 0.0
 	weapon_visual.rotation.z = wrapf(screen_direction.angle() - source_angle, -PI, PI)
-	weapon_visual.scale = Vector3.ONE * 0.92
+	weapon_visual.scale = Vector3.ONE * 1.18
 	weapon_visual.visible = not dying
 
 
@@ -639,16 +978,17 @@ func _play_hit_reaction(hit_direction: Vector3) -> void:
 
 
 func get_projectile_hit_center() -> Vector3:
-	return global_position + Vector3(0.0, 0.25, 0.0)
+	return global_position + Vector3(0.0, 0.35, 0.0)
 
 
 func get_projectile_hit_radius() -> float:
-	return 0.78
+	# 덩치(×1.33)를 따라 실루엣도 넓다 — 커 보이는데 스치기만 하면 억울하다.
+	return 0.94
 
 
 func get_world_height() -> float:
-	# 보스 스프라이트(0.0108×256)의 실제 몸 높이 — 일반 적(1.62)보다 크다.
-	return 2.1
+	# 보스 스프라이트(0.0144×256)의 실제 몸 높이 — 일반 적(1.62)·엘리트(~2.2)보다 크다.
+	return 2.8
 
 
 func get_head_zone_ratio() -> float:

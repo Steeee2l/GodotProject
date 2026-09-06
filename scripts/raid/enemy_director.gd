@@ -38,12 +38,31 @@ const DANGER_BOSS_TRIGGER := 0.5
 # ── 적 스탯 배율 손잡이(2026-08-30) ───────────────────────────────
 # 존 4부터 단계마다 ×4.66. 존 1~3은 킬 타이밍 튜닝 구간이라 건드리지 않는다.
 #
-# 4.66은 임의의 숫자가 아니다 — 존별 기대 강화 단계(존4 ≈ +45, 존5 ≈ +65)에서
-# 플레이어 피해가 존3(+25) 대비 각각 ×4.7, ×21.7이 된다. 적 체력을 같은 폭으로
-# 올려야 "3~4발에 하나"라는 교전 리듬이 존이 깊어져도 유지된다.
-#   존4 ×4.66(체력 941) · 존5 ×21.7(체력 4,383) · 엘리트는 여기에 ×2.6
-const ENEMY_STAGE_POWER_GROWTH := 4.66
-const ENEMY_STAGE_POWER_FLOOR := 3
+# 2026-09-06 개편: 지수식(4.66^(티어−3), 존 1~3 전부 ×1.0)을 명시적 티어
+# 테이블로 바꿨다. "존을 옮기면 그만큼 적이 강해진다"가 초·중반에도 읽혀야
+# 하는데, 예전엔 존 1→3의 성장이 configure의 위협 곡선(×1.2/티어)뿐이라
+# 이사해도 체감이 없었다.
+#
+# 값의 근거 — configure의 위협 기반 체력(84~202)과 곱해 '유효 체력'이
+# 티어당 약 ×1.5가 되도록 역산했고, 티어 4·5는 예전 지수식의 절대값
+# (941 / 4,383 부근)을 보존한다 — 그 앵커는 존별 기대 강화 단계
+# (존4 ≈ +45, 존5 ≈ +65)에서 플레이어 피해 ×4.7 / ×21.7과 맞물린 값이라
+# 흔들면 "3~4발에 하나"라는 심층 교전 리듬이 무너진다.
+#
+#   유효 체력(권총병 기준): 102 → 152 → 231 → 950 → 4,565
+#   유효 피해(AK 사수 기준): 10 → 12 → 16 → 24 → 43
+#
+# 피해는 체력보다 완만하게(티어당 ×1.15~1.4) — 체력은 벽이어도 되지만
+# 피해가 같은 폭으로 오르면 심층이 '어려운' 게 아니라 '불공평한' 판이 된다.
+# 엘리트 배율(elite_catalog)은 이 테이블 위에 곱해진다.
+# 2026-09-06 교차 검증 보정: 강화 곡선(weapon_system: +25 ×1.66 · +45 ×7.7 ·
+# +65 ×36)과 겹쳐 보니 T4·T5에서 "적이 강해지는" 방향이 뒤집혀 있었다. 기대
+# 장비(K2+45/+65) 기준 처치 탄수가 T1 3.4발 → T4 2.6발 → T5 2.6발로 오히려
+# 25% 쉬워졌다. 상위 존일수록 강해야 한다는 원칙(러버밴딩이 아니라 존 고정값)에
+# 맞춰 T4 ×1.33, T5 ×1.29를 얹어 탄수를 전 존 3.4~3.7발로 평탄화한다.
+# 존이 깊어지는 압박은 엘리트 수(1→3)와 호위 분대가 담당한다.
+const ENEMY_STAGE_HEALTH_MULTIPLIERS := {1: 1.0, 2: 1.22, 3: 1.55, 4: 7.2, 5: 30.0}
+const ENEMY_STAGE_DAMAGE_MULTIPLIERS := {1: 1.0, 2: 1.15, 3: 1.4, 4: 1.95, 5: 3.3}
 # 엔드게임: 위험도 100% 초과 체류 60초마다 +100%, 최대 +900%(×10).
 # 존5 최대치면 체력 43,830 — +99(피해 24,065) 플레이어의 종착 사냥터가 된다.
 const ENEMY_ENDGAME_RAMP_SECONDS := 60.0
@@ -181,17 +200,19 @@ func _zone_stage_tier() -> int:
 
 
 func get_enemy_power_scale() -> float:
-	# 적 스탯 배율 — 플레이어 강화 천장을 걷어낸 뒤(무기 +25 이후 복리) 심층
+	# 적 체력 배율 — 플레이어 강화 천장을 걷어낸 뒤(무기 +25 이후 복리) 심층
 	# 존과 엔드게임이 종잇장이 되지 않게 잡는 값이다.
 	#
-	# 러버밴딩 금지: 입력은 '어느 존인가'(required_tier)와 '얼마나 오래 버텼는가'
+	# 러버밴딩 금지: 입력은 '어느 존인가'(stage_tier)와 '얼마나 오래 버텼는가'
 	# (위험도 100% 초과 체류)뿐이다. 플레이어의 레벨·강화·장비는 보지 않는다.
-	#
-	#   존 1~3 : ×1.0 — 종로/남대문/을지로는 킬 타이밍이 튜닝된 구간이라 불변
-	#   존 4   : ×2.1  (K2 +40 ≈ ×3.45 피해와 맞물린다)
-	#   존 5   : ×4.4  (+55 ≈ ×7.2)
-	#   엔드게임: 위험도 100%를 넘겨 버틴 시간마다 계속 붙는다(상한 ×4)
 	return get_enemy_stage_scale() * get_enemy_endgame_scale()
+
+
+func get_enemy_damage_scale() -> float:
+	# 적 피해 배율 — 체력과 별도 테이블. 엔드게임 몫은 완만하게(0.42승)만
+	# 붙는다: 오래 버틴 벌은 '단단해진 도시'지 '한 방에 죽는 도시'가 아니다.
+	# 상한(×6)은 enemy.gd의 POWER_SCALE_DAMAGE_MAX가 마지막에 자른다.
+	return get_enemy_stage_damage_scale() * pow(get_enemy_endgame_scale(), 0.42)
 
 
 func get_enemy_stage_scale() -> float:
@@ -203,9 +224,17 @@ func get_enemy_stage_scale() -> float:
 	var zone_tier := clampi(
 		int(zone_data.get("stage_tier", zone_data.get("required_tier", 1))), 1, 5
 	)
-	return pow(
-		ENEMY_STAGE_POWER_GROWTH, float(maxi(0, zone_tier - ENEMY_STAGE_POWER_FLOOR))
+	return float(ENEMY_STAGE_HEALTH_MULTIPLIERS.get(zone_tier, 1.0))
+
+
+func get_enemy_stage_damage_scale() -> float:
+	if host == null:
+		return 1.0
+	var zone_data := host.raid_zone_data as Dictionary
+	var zone_tier := clampi(
+		int(zone_data.get("stage_tier", zone_data.get("required_tier", 1))), 1, 5
 	)
+	return float(ENEMY_STAGE_DAMAGE_MULTIPLIERS.get(zone_tier, 1.0))
 
 
 func get_enemy_endgame_scale() -> float:
@@ -419,7 +448,7 @@ func _spawn_enemy_squad(
 			spawn_position - squad_anchor
 		)
 		# 모든 스폰 경로가 이 함수를 지난다 — 존 단계·엔드게임 배율도 여기 한 곳에서.
-		enemy.call("set_power_scale", get_enemy_power_scale())
+		enemy.call("set_power_scale", get_enemy_power_scale(), get_enemy_damage_scale())
 		for metadata_key in metadata:
 			enemy.set_meta(str(metadata_key), metadata[metadata_key])
 		if order_position != Vector3.INF and enemy.has_method("receive_reinforcement_order"):
@@ -617,7 +646,7 @@ func spawn_initial_elites(world: ProceduralCityMap) -> void:
 			Vector3.ZERO,
 			str(profile.get("weapon", ""))
 		)
-		elite.call("set_power_scale", get_enemy_power_scale())
+		elite.call("set_power_scale", get_enemy_power_scale(), get_enemy_damage_scale())
 		if elite.has_method("promote_to_elite"):
 			elite.call("promote_to_elite", profile)
 		if elite.has_method("configure_patrol"):
@@ -1201,7 +1230,8 @@ func _spawn_rocket_boss_at(
 	var marker := Label3D.new()
 	marker.name = "BossMarker"
 	marker.text = "로켓 약탈대장"
-	marker.position = Vector3(0.0, 3.55, 0.0)
+	# 4.3: 보스 덩치 확대(스프라이트 ×1.33)에 맞춰 이름표도 위로 — 체력바(3.4)와 겹치지 않게.
+	marker.position = Vector3(0.0, 4.3, 0.0)
 	marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	marker.no_depth_test = true
 	marker.render_priority = 127
@@ -1215,6 +1245,28 @@ func _spawn_rocket_boss_at(
 	if is_instance_valid(host.tactical_map) and host.tactical_map.has_method("register_boss"):
 		host.tactical_map.call("register_boss", boss)
 	return boss
+
+
+func spawn_boss_guard_squad(anchor: Vector3, guard_count: int = 2) -> void:
+	# 보스 2페이즈(rocket_boss 티어 5, 체력 50%) 호위 소환 — 보스가 직접 부른다.
+	# 미션 웨이브처럼 '명시적 사건'이라 동시 교전 상한 게이트를 타지 않는다
+	# (_spawn_enemy_squad는 상한을 검사하지 않는다 — 게이트는 호출부 책임).
+	if host == null or player == null:
+		return
+	var world := host.get_node_or_null("World") as ProceduralCityMap
+	if world == null:
+		return
+	var kinds: Array[String] = []
+	for _index in maxi(1, guard_count):
+		kinds.append("pistol")
+	var zone_threat := clampf(float(host.raid_zone_data.get("threat", 0.0)), 0.0, 1.0)
+	var squad_anchor := world.find_nearest_physically_open_position(
+		anchor + Vector3(spawn_random.randf_range(-2.5, 2.5), 0.0, spawn_random.randf_range(-2.5, 2.5)),
+		0.62,
+		[player.get_rid()]
+	)
+	squad_anchor.y = 0.78
+	_spawn_enemy_squad(world, squad_anchor, kinds, zone_threat, player.global_position)
 
 
 func _spawn_test_boss_near_player() -> void:
@@ -1304,7 +1356,7 @@ func spawn_danger_enforcer(wave_index: int) -> void:
 	var enforcer := _spawn_rocket_boss_at(
 		spawn_position, 1.0, "DangerEnforcer_%d" % wave_index
 	)
-	# 로켓 36→약 65: 방어구를 감안해도 2~3방이면 눕는다(영파 방지 화력).
+	# 로켓 42×티어 배율×1.8 ≈ 76~140: 방어구를 감안해도 2~3방이면 눕는다(영파 방지 화력).
 	enforcer.set("damage_multiplier", 1.8)
 	var title := "회수반 처형자" if wave_index <= 1 else "회수반 처형자 %d호" % wave_index
 	var enforcer_marker := enforcer.get_node_or_null("BossMarker") as Label3D
