@@ -40,7 +40,9 @@ const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/maga
 # 재화 표기 규칙(유저 확정): 아이콘이 이미 이름을 말하는 재화는 이름 라벨을 쓰지
 # 않는다. 반대로 부품·재료(스코프 렌즈·정밀 기어…)는 아이콘만으로 못 알아보므로
 # 이름을 유지한다 — 아이콘도 이름도 없으면 무슨 비용인지 알 길이 없어진다.
-const ICON_ONLY_RESOURCES := ["scrap", "catnip", "canned_food", "churu"]
+# 이름 없이 아이콘만 쓰는 재화. 제작 비용 줄에서는 고철도 이름을 적는다 —
+# 첫 줄만 이름이 없어 "이 숫자가 뭐지"가 됐다(유저 지적).
+const ICON_ONLY_RESOURCES := ["catnip", "canned_food", "churu"]
 
 const RECIPES := {
 	"armor": [
@@ -609,7 +611,9 @@ func _build_header(stacked: bool) -> Control:
 	title_box.clip_contents = true
 	title_box.add_theme_constant_override("separation", 4)
 	top_row.add_child(title_box)
-	var eyebrow := SHELTER_THEME.eyebrow("%s · WORKBENCH %02d · SHELTER Lv.%d" % [GameState.player_name, GameState.shelter_workbench_level, GameState.shelter_tier])
+	# 예전엔 "먼지 · WORKBENCH 01 · SHELTER Lv.1" — 내 이름도 설비 번호도 여기서
+	# 쓸 일이 없다(유저: "이상한 정보"). 이 판이 뭘 하는 곳인지만 남긴다.
+	var eyebrow := SHELTER_THEME.eyebrow("제작과 강화 · 작업대 Lv.%d" % GameState.shelter_workbench_level)
 	eyebrow.name = "WorkbenchEyebrow"
 	eyebrow.autowrap_mode = TextServer.AUTOWRAP_OFF
 	eyebrow.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -741,13 +745,17 @@ func _build_resource_strip() -> Control:
 	strip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	strip.add_theme_constant_override("h_separation", 8)
 	strip.add_theme_constant_override("v_separation", 6)
-	# 항상 아이콘+수치만(2026-08-30 유저: "재화 표시를 컴팩트하게"). 이름은 툴팁.
-	# 통조림은 제작 재료가 아니므로 자원 띠에서 뺐다(플레이어 소모품).
-	# 캣닢도 뺐다(2026-08-29) — 캣닢 비용은 개조품 전용이었는데 개조 탭이 폐지됐다.
-	for key in ["scrap", "scope_lens", "rubber_gasket", "magazine_spring", "precision_gear", "military_alloy"]:
+	# 고철은 제목 옆 지갑 칩이 이미 말한다 — 같은 숫자를 두 번 띄우지 않는다(유저 지적).
+	# 이름도 같이 적는다: 아이콘만 있는 "x0" 칩 두 개가 무엇인지 아무도 몰랐다
+	# (정밀 기어를 노란 화살표로, 군용 합금을 자물쇠로 그리고 있었다).
+	# 통조림·캣닢은 제작 재료가 아니라 뺀 그대로.
+	for key in ["scope_lens", "rubber_gasket", "magazine_spring", "precision_gear", "military_alloy"]:
 		var resource_key := str(key)
 		var chip := SHELTER_THEME.chip(
-			"x%s" % GameState.format_compact_number(_owned_resource(resource_key)),
+			"%s %s" % [
+				_resource_name(resource_key),
+				GameState.format_compact_number(_owned_resource(resource_key)),
+			],
 			_resource_icon(resource_key)
 		)
 		chip.name = "ResourceChip_%s" % resource_key
@@ -1957,12 +1965,6 @@ func _build_recipe_list() -> Control:
 	column.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_theme_constant_override("separation", 8)
 	margin.add_child(column)
-	if not stacked:
-		# 강화 보드의 목록 제목("보유 장비 · 평생 귀속")과 같은 문법.
-		var list_title := SHELTER_THEME.caption("설계도 · 아직 만들지 않은 것만")
-		list_title.autowrap_mode = TextServer.AUTOWRAP_OFF
-		list_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		column.add_child(list_title)
 	# 카테고리 서브탭(알약) — 무기 / 방어구 / 중장비 / 보급품(유저: "카테고리별로 탭").
 	var subtabs := HBoxContainer.new()
 	subtabs.name = "WorkbenchCraftSubtabs"
@@ -2152,6 +2154,16 @@ func _refresh_detail_panel() -> void:
 	description.name = "WorkbenchRecipeDescription"
 	description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(description)
+	# 설명이 말해 주지 않는 수치(방어구 피해감소·무기 피해/연사·강화 이관)는
+	# 여기 한 줄로 붙인다. 예전에는 제작 버튼 위 '결과물' 카드가 이름·아이콘까지
+	# 다시 그리며 이 줄을 달고 있었다 — 위 카드와 세 번 겹쳤다.
+	var head_stat_line := _result_stat_line(recipe)
+	if not head_stat_line.is_empty():
+		var head_stats := SHELTER_THEME.caption(head_stat_line, SHELTER_THEME.ACCENT)
+		head_stats.name = "ResultPreviewStats"
+		head_stats.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		head_stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		head.add_child(head_stats)
 
 	var icon_card := PanelContainer.new()
 	icon_card.name = "WorkbenchResultCard"
@@ -2202,10 +2214,21 @@ func _refresh_detail_panel() -> void:
 	if _is_gear_recipe_owned(recipe):
 		cost_box.add_child(_label("제작됨 · 영구 보유 — 잃지 않으며 다시 만들 수 없습니다", 13, SHELTER_THEME.ACCENT))
 	elif not str(recipe.get("gear_id", "")).is_empty():
-		cost_box.add_child(_label(str(GameState.get_blueprint_progress_text(str(recipe.get("gear_id", "")))), 13, DIM))
+		# 예전엔 회색 글자 한 줄("설계도 조각 0/3")이라 재료인지 안내문인지 몰랐고,
+		# 같은 말이 아래 잠긴 이유에 또 나왔다. 다른 재료와 같은 행으로 올린다.
+		var shard_gear_id := str(recipe.get("gear_id", ""))
+		var shard_have := int(GameState.get_blueprint_shard_count(shard_gear_id))
+		var shard_need := int(GameState.BLUEPRINT_SHARDS_REQUIRED)
+		cost_box.add_child(_resource_row(
+			"blueprint_shard",
+			mini(shard_have, shard_need),
+			shard_need,
+			SHELTER_THEME.ACCENT if shard_have >= shard_need else DANGER,
+			"%d개를 모으면 이 설계도가 열립니다 · %s에서 나옵니다" % [
+				shard_need, _blueprint_source_text(shard_gear_id),
+			]
+		))
 
-	detail_box.add_child(_section("결과물"))
-	detail_box.add_child(_build_result_preview(recipe))
 
 	var craft := Button.new()
 	craft.text = _craft_action_text(recipe)
@@ -2221,8 +2244,12 @@ func _refresh_detail_panel() -> void:
 	action_host.add_child(craft)
 
 	# 버튼이 죽어 있으면 이유를 말한다 — 회색 버튼만 보여주는 건 UX가 아니다.
+	# 단, 설계도 조각이 유일한 잠금이면 위 재료 행이 이미 조각 수와 출처를 말한다.
+	# 같은 문장을 붉은 글씨로 한 번 더 쓰면 화면만 시끄러워진다.
 	if craft.disabled:
 		var reason := _recipe_list_subtitle(recipe)
+		if not str(recipe.get("gear_id", "")).is_empty() and reason.begins_with("설계도 조각"):
+			reason = ""
 		if not reason.is_empty():
 			var reason_label := SHELTER_THEME.label("잠긴 이유: %s" % reason, SHELTER_THEME.TYPE_CAPTION + 1, DANGER)
 			reason_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -2952,11 +2979,14 @@ func _craft_action_icon(recipe: Dictionary) -> String:
 
 func _resource_icon(key: String) -> Texture2D:
 	match key:
+		# 설계도 조각 — 종이(기록) 아이콘. 다른 재료와 같은 줄 문법으로 보여준다.
+		"blueprint_shard": return UI_ICONS.get_icon("lore", 48, Color("#8fd3c4"))
 		"scope_lens": return SCOPE_LENS_TEXTURE
 		"rubber_gasket": return RUBBER_GASKET_TEXTURE
 		"magazine_spring": return MAGAZINE_SPRING_TEXTURE
-		"precision_gear": return UI_ICONS.get_icon("upgrade", 48, Color("#e8d27a"))
-		"military_alloy": return UI_ICONS.get_icon("secure", 48, Color("#9fc3e0"))
+		# 화살표(upgrade)·자물쇠(secure)는 "강화"·"잠김"으로 읽힌다 — 부품답게 바꾼다.
+		"precision_gear": return UI_ICONS.get_icon("repair", 48, Color("#e8d27a"))
+		"military_alloy": return UI_ICONS.get_icon("armor", 48, Color("#9fc3e0"))
 		"artisan_seal": return UI_ICONS.get_icon("craft", 48, Color("#e2c06b"))
 		"762_fmj", "9mm_fmj", "12g_buckshot": return AMMO_TEXTURE
 		"scrap": return UI_ICONS.get_icon("scrap", 48, Color("#b9c4c2"))
@@ -2979,7 +3009,7 @@ func _resource_accent(key: String) -> Color:
 	return Color("#9ab4aa")
 
 
-func _resource_row(key: String, owned: int, needed: int, color: Color) -> Control:
+func _resource_row(key: String, owned: int, needed: int, color: Color, note: String = "") -> Control:
 	# 강화 보드의 WELL 행 문법. 재화(고철·캣닢)는 아이콘 + 수치만(이름은 툴팁),
 	# 부품·재료는 아이콘만으로 못 알아보니 이름을 유지한다 — 제작은 부품을 쓰는 게 맞다.
 	var well := PanelContainer.new()
@@ -3016,6 +3046,12 @@ func _resource_row(key: String, owned: int, needed: int, color: Color) -> Contro
 		name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 		name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		name_box.add_child(name_label)
+	# 이름만으로 뜻이 안 오는 재료는 한 줄로 설명한다(설계도 조각이 그랬다).
+	if not note.is_empty():
+		var note_label := SHELTER_THEME.caption(note, DIM)
+		note_label.name = "ResourceNote"
+		note_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		name_box.add_child(note_label)
 	# 어디에 있는 재료인지 밝힌다 — "창고에 있는데 왜 못 만드나"를 없앤다.
 	var stored := _stored_resource(key)
 	if stored > 0:
@@ -3080,44 +3116,6 @@ func _equipment_stat_line(equipment_id: String) -> String:
 	return " · ".join(parts)
 
 
-func _build_result_preview(recipe: Dictionary) -> Control:
-	# 제작 버튼 위 결과물 미리보기 — "뭘 만드는 건지"를 버튼 누르기 전에 본다.
-	var card := PanelContainer.new()
-	card.name = "WorkbenchResultPreview"
-	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	# 강화 카드 헤드와 같은 표면색 카드.
-	card.add_theme_stylebox_override("panel", _well_style())
-	var margin := _margin(0, 0, 0, 0)
-	card.add_child(margin)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	margin.add_child(row)
-	var icon := TextureRect.new()
-	icon.name = "ResultPreviewIcon"
-	icon.custom_minimum_size = Vector2(46, 46)
-	icon.texture = _recipe_icon(recipe)
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	row.add_child(icon)
-	var text_box := VBoxContainer.new()
-	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	text_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	text_box.add_theme_constant_override("separation", 2)
-	row.add_child(text_box)
-	var name_label := SHELTER_THEME.label(_result_text(recipe), SHELTER_THEME.TYPE_SECTION, TEXT, true)
-	name_label.name = "ResultPreviewName"
-	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	text_box.add_child(name_label)
-	var stat_line := _result_stat_line(recipe)
-	if not stat_line.is_empty():
-		var stat_label := SHELTER_THEME.caption(stat_line)
-		stat_label.name = "ResultPreviewStats"
-		# 이관 안내가 둘째 줄로 붙는다(\n) — 줄바꿈은 살리고 가로만 자른다.
-		stat_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-		stat_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		text_box.add_child(stat_label)
-	return card
 
 
 func _enhancement_transfer_preview(weapon_id: String) -> String:
@@ -3175,6 +3173,8 @@ func _result_stat_line(recipe: Dictionary) -> String:
 
 func _resource_name(key: String) -> String:
 	match key:
+		"blueprint_shard":
+			return "설계도 조각"
 		"scrap":
 			return "고철"
 		"catnip":

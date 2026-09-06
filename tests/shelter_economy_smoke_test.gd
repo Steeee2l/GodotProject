@@ -320,8 +320,11 @@ func _run() -> void:
 	if workbench_resource_strip == null:
 		_fail("workbench icon resource strip is missing")
 	# 통조림은 제작 재료에서 빠졌다(플레이어 소모품) — 자원 띠에 없어야 한다.
-	for resource_id in ["scrap", "scope_lens", "rubber_gasket", "magazine_spring"]:
+	# 고철도 뺐다(2026-09-06) — 제목 옆 지갑 칩이 같은 숫자를 이미 말한다.
+	for resource_id in ["scope_lens", "rubber_gasket", "magazine_spring"]:
 		_assert_resource_icon(workbench_resource_strip, str(resource_id), "workbench")
+	if workbench_resource_strip.find_child("ResourceIcon_scrap", true, false) != null:
+		_fail("workbench resource strip must not repeat the scrap wallet chip")
 	if workbench_resource_strip.find_child("ResourceIcon_canned_food", true, false) != null:
 		_fail("workbench resource strip must not list canned food any more")
 	workbench_panel = workbench_layer.find_child("WorkbenchPanel", true, false) as PanelContainer
@@ -349,11 +352,11 @@ func _run() -> void:
 		or armor_detail_scroll.size.y < 120.0
 	):
 		_fail("armor selection breaks the workbench detail layout")
-	# 결과물 미리보기(이름 + 핵심 스탯 1줄)는 제작 버튼 위에 항상 있어야 한다.
-	var result_preview := workbench_layer.find_child("WorkbenchResultPreview", true, false) as PanelContainer
+	# 핵심 스탯 한 줄은 레시피 설명 바로 밑에 있어야 한다(2026-09-06: 이름·아이콘을
+	# 다시 그리던 '결과물' 카드를 걷어내고 이 줄만 위로 올렸다).
 	var preview_stats := workbench_layer.find_child("ResultPreviewStats", true, false) as Label
-	if result_preview == null or preview_stats == null or not preview_stats.text.contains("피해감소"):
-		_fail("armor recipes must preview their damage reduction before crafting")
+	if preview_stats == null or not preview_stats.text.contains("피해감소"):
+		_fail("armor recipes must show their damage reduction next to the description")
 	# 제작대는 창고 재료도 보유로 친다 — 가방 0개 + 창고 2개면 "2"가 보여야 한다.
 	game_state.set("mod_component_inventory", {"rubber_gasket": 0, "scope_lens": 0, "magazine_spring": 0})
 	(game_state.get("storage_inventory") as Array).append({
@@ -393,12 +396,12 @@ func _run() -> void:
 	# 부품 행(고무 패킹 등)은 이름을 유지한다 — 아이콘만으로 못 알아보는 재료다.
 	var workbench_resource_amount := workbench_resource_row.find_child("ResourceAmount", true, false) as Label
 	if (
-		workbench_resource_row.find_child("ResourceName", true, false) != null
+		workbench_resource_row.find_child("ResourceName", true, false) == null
 		or workbench_resource_amount == null
 		or workbench_resource_amount.autowrap_mode != TextServer.AUTOWRAP_OFF
 		or workbench_resource_amount.custom_minimum_size.x < 100.0
 	):
-		_fail("workbench scrap cost row must be icon+amount only (name via tooltip)")
+		_fail("workbench scrap cost row must show its name next to the amount")
 	var workbench_part_row := workbench_layer.find_child("ResourceCost_rubber_gasket", true, false) as HBoxContainer
 	if workbench_part_row != null and workbench_part_row.find_child("ResourceName", true, false) == null:
 		_fail("workbench part cost rows must keep their name label")

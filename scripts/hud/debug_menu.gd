@@ -10,6 +10,7 @@ class_name DebugMenu
 # "디버그로는 되는데 실제로는 안 되는" 상태가 생겨 도구가 거짓말을 한다.
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
+const OPENING_SCENE_PATH := "res://scenes/opening_sequence.tscn"
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 const PANEL_WIDTH := 340.0
 const CHEAT_AMOUNT := 9_999_999
@@ -231,15 +232,14 @@ func _build_panel() -> void:
 		GameState.reset_run()
 		return "판 상태 초기화 — 쉘터로 나갔다 오면 반영"
 	)
-	_add_action("세이브 파일 삭제 후 새로 시작", func() -> String:
-		# 파일까지 지운다 — reset_run만으로는 다음 저장에 옛 값이 섞일 수 있다.
-		var save_path := str(GameState.persistence_path)
-		if FileAccess.file_exists(save_path):
-			DirAccess.remove_absolute(ProjectSettings.globalize_path(save_path))
-		GameState.reset_run()
-		GameState.save_persistent_state()
-		get_tree().change_scene_to_file("res://scenes/shelter_interior.tscn")
-		return "세이브 삭제 — 쉘터에서 새로 시작"
+	_add_action("전체 삭제 후 오프닝부터 새로 시작", func() -> String:
+		# 예전에는 여기서 reset_run만 부르고 쉘터로 보냈다 — 세이브는 지워졌는데
+		# 이름·주홍 해금·사자 첫 만남 같은 진행 플래그가 메모리에 남아 다시 저장됐고,
+		# 무엇보다 오프닝을 건너뛰어 "처음부터"가 처음이 아니었다.
+		# 설정 화면·쉘터 단축키와 같은 경로(reset_all_progress_for_opening)를 쓴다.
+		GameState.reset_all_progress_for_opening()
+		get_tree().call_deferred("change_scene_to_file", OPENING_SCENE_PATH)
+		return "전체 초기화 — 오프닝부터 다시 시작"
 	)
 
 	# 목록 맨 아래 닫기는 없앴다 — 헤더의 고정 닫기 버튼이 그 역할을 한다.
