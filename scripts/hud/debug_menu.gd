@@ -221,6 +221,15 @@ func _build_panel() -> void:
 				health_bar.value = GameState.player_health
 		return "체력 %d" % GameState.player_health
 	)
+	_add_action("엘리트 소환(눈앞)", func() -> String:
+		# 시각(덩치·붉은 이름표·두툼한 체력바)과 밸런스를 판 시작까지 기다리지 않고 본다.
+		if host == null or not host.has_method("_get_current_facing_world_direction"):
+			return "필드에서만 됩니다"
+		var director: Object = host.get("enemy_director")
+		if director == null or not director.has_method("spawn_test_elite_near_player"):
+			return "적 디렉터를 찾지 못했습니다"
+		return str(director.call("spawn_test_elite_near_player"))
+	)
 	_add_action("레벨 +5 (선택권 지급)", func() -> String:
 		GameState.pending_level_choices += 5
 		GameState.player_level += 5

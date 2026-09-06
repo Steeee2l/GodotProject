@@ -1314,6 +1314,60 @@ func _spawn_test_boss_near_player() -> void:
 	host._show_field_notice("테스트 보스 출현 · 로켓 약탈대장이 접근합니다.")
 
 
+func spawn_test_elite_near_player() -> String:
+	# DEV 전용 — 지금 존 단계의 이름 있는 엘리트 하나를 호위와 함께 눈앞에 세운다.
+	# 밸런스·시각(덩치·붉은 이름표·두툼한 체력바) 확인을 판 시작까지 기다리지 않게.
+	# 스폰 자리 찾기는 테스트 보스와 같은 규칙(정면 11~15m, 막히면 옆으로).
+	if host.player_health <= 0 or host.extraction_transition_active:
+		return "지금은 소환할 수 없습니다"
+	var world := host.get_node_or_null("World") as ProceduralCityMap
+	if world == null:
+		return "필드가 아닙니다"
+	var forward: Vector3 = host._get_current_facing_world_direction()
+	var side := Vector3(-forward.z, 0.0, forward.x)
+	var spawn_position := Vector3.INF
+	for offset in [forward * 11.0, forward * 12.0 + side * 4.0, forward * 12.0 - side * 4.0, forward * 15.0]:
+		var candidate := world.find_nearest_physically_open_position(
+			player.global_position + offset, 1.05, [player.get_rid()]
+		)
+		candidate.y = 0.78
+		if candidate.distance_to(player.global_position) < 7.0:
+			continue
+		spawn_position = candidate
+		break
+	if spawn_position == Vector3.INF:
+		return "엘리트 소환 실패 · 주변에 공간이 없습니다"
+	var stage_tier := LOOT_ECONOMY.get_stage_for_zone(host.raid_zone_data)
+	var profiles: Array[Dictionary] = ELITE_CATALOG.pick_profiles(stage_tier, 1, spawn_random)
+	if profiles.is_empty():
+		return "이 단계에는 엘리트 표가 없습니다"
+	var profile := profiles[0]
+	var zone_threat := clampf(float(host.raid_zone_data.get("threat", 0.0)), 0.0, 1.0)
+	# 호위 먼저 — 같은 squad_id로 붙어야 한 무리로 성립한다(초기 배치와 같은 규칙).
+	var escort_kinds: Array[String] = []
+	for _escort in ELITE_CATALOG.get_escort_count(stage_tier):
+		escort_kinds.append("pistol")
+	var escorts := _spawn_enemy_squad(world, spawn_position, escort_kinds, zone_threat, player.global_position)
+	var squad_id := enemy_squad_serial - 1 if not escorts.is_empty() else -1
+	var elite := _spawn_enemy(
+		str(profile.get("kind", "pistol")),
+		spawn_position,
+		zone_threat,
+		squad_id,
+		spawn_position,
+		Vector3.ZERO,
+		str(profile.get("weapon", ""))
+	)
+	elite.call("set_power_scale", get_enemy_power_scale(), get_enemy_damage_scale())
+	if elite.has_method("promote_to_elite"):
+		elite.call("promote_to_elite", profile)
+	if elite.has_method("receive_reinforcement_order"):
+		elite.call("receive_reinforcement_order", player.global_position)
+	return "%s 출현 · 호위 %d (단계 %d)" % [
+		str(profile.get("name", "엘리트")), escorts.size(), stage_tier,
+	]
+
+
 func spawn_chain_climax_boss() -> void:
 	# 메인 체인 마지막 회수 직후 — 구역 보스가 회수물을 되찾으러 온다.
 	# 탈출까지 들고 뛰는 길이 곧 보스전이 된다(잡든, 따돌리든).
